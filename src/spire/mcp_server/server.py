@@ -1,7 +1,11 @@
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
-tools. Run via `fastmcp dev src/spire/mcp_server/server.py`.
+tools over HTTP. Run with:
+
+    fastmcp run src/spire/mcp_server/server.py --transport http --port 3333
+
+Or from Python directly (entry-point at bottom).
 """
 
 from fastmcp import FastMCP
@@ -12,6 +16,8 @@ from spire.mcp_server.tools.suppliers import search_suppliers as _search_supplie
 
 
 PERSONA_NAME = "default_dev"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 3333
 
 mcp = FastMCP("spire")
 _persona = load_persona(PERSONA_NAME)
@@ -37,4 +43,4 @@ async def search_suppliers(
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
