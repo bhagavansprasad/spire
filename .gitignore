@@ -25,3 +25,4 @@ temp/
 .vscode/
 *.swp
 *.Zone.Identifier
+*.egg-info/
