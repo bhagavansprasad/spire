@@ -1,0 +1,20 @@
+# Spire persona configuration.
+#
+# Copy this file to personas.yaml and fill in real values.
+# personas.yaml is gitignored — never commit it.
+#
+# Each top-level key is a persona name, used as `spire run --persona <name>`.
+# At least one persona is required.
+
+default_dev:
+  base_url: "https://your-pod.oraclecloud.com"
+  username: "your.username@example.com"
+  password: "your-password-here"
+  auth_type: "basic"  # Only 'basic' supported in POC; 'oauth2' later.
+
+# Add more personas as needed for switching between pods:
+# qa_pod:
+#   base_url: "..."
+#   username: "..."
+#   password: "..."
+#   auth_type: "basic"
