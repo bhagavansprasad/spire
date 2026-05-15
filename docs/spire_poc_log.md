@@ -73,6 +73,82 @@ Master plan Phase 1 requires credentials stored in a password manager. Currently
 
 ---
 
-## Phase 2 — Single Endpoint Wrapped as a Tool  ⏳ PENDING
+## Phase 2a — Project Skeleton  ✅ DONE
+
+**Verified:** 2026-05-15
+**PR:** `phase-2a-skeleton` → `master` (merged)
+
+### What was built
+
+Empty file skeleton only — no executable code. Establishes the structure that Phase 2b/2c/2d will fill in.
+
+```
+spire/
+├── .gitignore
+├── LICENSE
+├── README.md
+├── personas.example.yaml
+├── requirements.txt              (empty; deps added per sub-phase)
+├── requirements-dev.txt          (empty)
+├── docs/
+│   └── spire_poc_log.md          (this file)
+├── src/
+│   └── spire/
+│       ├── __init__.py
+│       ├── config.py             (Phase 2b)
+│       ├── fusion/
+│       │   ├── __init__.py
+│       │   └── client.py         (Phase 2c)
+│       └── mcp_server/
+│           ├── __init__.py
+│           ├── server.py         (Phase 2d)
+│           └── tools/
+│               ├── __init__.py
+│               └── suppliers.py  (Phase 2d)
+└── tests/
+    ├── __init__.py
+    └── test_suppliers_tool.py    (Phase 2d)
+```
+
+### Decisions locked
+
+- **Layout:** src-layout (`src/spire/...`) — namespaced imports, forces install for tests to behave like real users
+- **Package manager:** plain pip with split `requirements.txt` / `requirements-dev.txt` — defer real tooling decision until needed
+- **Persona schema:** YAML, one persona per top-level key, fields = `base_url`, `username`, `password`, `auth_type`
+- **`pyproject.toml`:** removed for now — re-add when a build system is needed
+
+### `.gitignore` covers
+
+- Python artifacts (`__pycache__/`, `*.py[codz]`, `.pyre/`)
+- Virtualenvs (`.venv`, `venv/`, `env/`, `ENV/`)
+- Env files (`.env`, `.envrc`)
+- Project secrets (`personas.yaml`, `how-to-run.md`)
+- Scratch (`temp/`, `traces/`)
+- Editor / OS noise (`.DS_Store`, `.idea/`, `.vscode/`, `*.swp`, `*.Zone.Identifier`)
+
+### Exit criteria
+
+| Criterion | Status |
+|---|---|
+| Source tree matches src-layout plan | ✅ |
+| `personas.example.yaml` documents persona schema | ✅ |
+| `.gitignore` excludes secrets and scratch | ✅ |
+| Committed and merged via PR | ✅ |
+
+---
+
+## Phase 2b — Persona Loader  ⏳ PENDING
+
+Not started.
+
+---
+
+## Phase 2c — Fusion HTTP Client  ⏳ PENDING
+
+Not started.
+
+---
+
+## Phase 2d — Supplier Tool + MCP Server  ⏳ PENDING
 
 Not started.
