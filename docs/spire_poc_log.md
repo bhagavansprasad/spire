@@ -88,8 +88,8 @@ spire/
 ├── LICENSE
 ├── README.md
 ├── personas.example.yaml
-├── requirements.txt              (empty; deps added per sub-phase)
-├── requirements-dev.txt          (empty)
+├── requirements.txt
+├── requirements-dev.txt
 ├── docs/
 │   └── spire_poc_log.md          (this file)
 ├── src/
@@ -115,7 +115,6 @@ spire/
 - **Layout:** src-layout (`src/spire/...`) — namespaced imports, forces install for tests to behave like real users
 - **Package manager:** plain pip with split `requirements.txt` / `requirements-dev.txt` — defer real tooling decision until needed
 - **Persona schema:** YAML, one persona per top-level key, fields = `base_url`, `username`, `password`, `auth_type`
-- **`pyproject.toml`:** removed for now — re-add when a build system is needed
 
 ### `.gitignore` covers
 
@@ -176,9 +175,9 @@ Tests use `tmp_path` fixture + `unittest.mock.patch` to redirect `PERSONAS_FILE`
 `requirements-dev.txt`:
 - `pytest>=8`
 
-### `pyproject.toml` re-added
+### `pyproject.toml`
 
-Removed in 2a, restored in 2b for `pip install -e .` to work with src-layout. Minimal setuptools config — no build pipeline beyond what's needed for editable install.
+Minimal setuptools config — needed for `pip install -e .` to work with src-layout. Re-added after 2a deletion.
 
 ### `.gitignore` addition
 
@@ -230,7 +229,7 @@ async with FusionClient(persona) as client:
 - Happy path: hits real pod, asserts supplier shape (integration test)
 - Unsupported `auth_type` raises `ValueError` (unit test)
 
-Tests skip cleanly if `personas.yaml` is missing (CI / dev machines without credentials don't fail).
+Tests skip cleanly if `personas.yaml` is missing.
 
 ### Dependencies added
 
@@ -255,6 +254,66 @@ Tests skip cleanly if `personas.yaml` is missing (CI / dev machines without cred
 
 ---
 
-## Phase 2d — Supplier Tool + MCP Server  ⏳ PENDING
+## Phase 2d — Supplier Tool + MCP Server  ✅ DONE
+
+**Verified:** 2026-05-15
+**PR:** `phase-2d-supplier-tool` → `master`
+
+### What was built
+
+`src/spire/mcp_server/tools/suppliers.py` — plain async `search_suppliers(client, ...)` function. Tool logic decoupled from FastMCP registration.
+
+`src/spire/mcp_server/server.py` — FastMCP server. Loads `default_dev` persona at startup, registers `search_suppliers` as an MCP tool that opens a `FusionClient` per call.
+
+```python
+# Direct use (testing)
+from spire.mcp_server.tools.suppliers import search_suppliers
+items = await search_suppliers(client, supplier_name_contains="Lee", limit=5)
+
+# Via MCP (runtime)
+# fastmcp dev src/spire/mcp_server/server.py
+```
+
+### Design choices
+
+- **Tool function ≠ MCP registration.** Plain async function in `tools/`; `@mcp.tool()` wrapper in `server.py`. Tool can be unit-tested without FastMCP. Slight extra plumbing in `server.py`.
+- **Persona loaded once at server startup.** Single hardcoded `default_dev`. Multi-persona switching is a Phase 3+ concern.
+- **`country_code` filtering deferred to Phase 4.** Requires the `addresses` child resource — flagged tricky in the master plan. Out of scope for 2d.
+- **`supplier_name_contains` uses Fusion `q=` syntax:** `q=Supplier LIKE '%foo%'`.
+- **Return shape:** just the `items` list. Pagination wrapper (`count`, `hasMore`) dropped — LLM doesn't need it yet.
+
+### Tests
+
+`tests/test_suppliers_tool.py` — 2 integration tests:
+- Default search (no filter, limit=5) → list of 5 dicts, each with `SupplierId` and `Supplier`
+- Name filter (`"Lee"`) → at least one result, contains "Lee" in supplier name
+
+Both skip if `personas.yaml` missing. No FastMCP-in-test machinery; tool function called directly.
+
+### Manual verification
+
+```bash
+fastmcp dev src/spire/mcp_server/server.py
+```
+
+Opens FastMCP inspector — tool callable via UI. Manual confirmation step, not automated.
+
+### Dependencies added
+
+`requirements.txt`:
+- `fastmcp>=2`
+
+### Exit criteria
+
+| Criterion | Status |
+|---|---|
+| `search_suppliers` callable directly | ✅ |
+| `search_suppliers` callable via FastMCP | ✅ (manual verification) |
+| Integration tests pass against real pod | ✅ |
+| Tool returns supplier records | ✅ |
+
+---
+
+## Phase 3 — LangGraph Agent  ⏳ PENDING
 
 Not started.
