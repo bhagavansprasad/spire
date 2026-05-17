@@ -42,7 +42,7 @@ This prompt deliberately stresses:
 
 **Origin:** The SME's design — a more thoughtful version of "LLM generates the query, tool executes it."
 
-![Design 1: LLM + Reference Query Library + Validation + Tool](./spire_design_2_reference_library_validation_v4.svg)
+![Design 1: LLM + Reference Query Library + Validation + Tool](./spire_design_1_reference_library_validation.svg)
 
 ### Key characteristics
 
@@ -84,7 +84,7 @@ This is not a naive design. It is a real architecture used in production text-to
 
 **Origin:** The POC's baseline architecture — the version against which more sophisticated designs are measured.
 
-![Design 2: Direct Tool Orchestration (Agent Loop)](./spire_design_3_direct_tool_orchestration_v2.svg)
+![Design 2: Direct Tool Orchestration (Agent Loop)](./spire_design_2_direct_tool_orchestration.svg)
 
 ### Key characteristics
 
@@ -123,7 +123,7 @@ This is not a naive design. It is a real architecture used in production text-to
 
 **POC status:** Documented here as a meaningful conceptual step between Designs 2 and 4. The Knowledge Graph it introduces is incorporated into Design 4 rather than built as a separate POC phase. See section 9.
 
-![Design 3: Graph-Guided Orchestration](./spire_design_4_graph_guided_orchestration.svg)
+![Design 3: Graph-Guided Orchestration](./spire_design_3_graph_guided_orchestration.svg)
 
 ### What's in the Knowledge Graph
 
@@ -172,7 +172,7 @@ Stored in Oracle 26ai as a SQL Property Graph plus supporting relational tables:
 
 **POC status:** Built as the POC's full architecture. Compared head-to-head against Design 2 (baseline).
 
-![Design 4: Dynamic Orchestration](./spire_design_5_dynamic_orchestration_v3.svg)
+![Design 4: Dynamic Orchestration](./spire_design_4_dynamic_orchestration.svg)
 
 ### What this design adds
 
