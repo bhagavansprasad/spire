@@ -1,20 +1,21 @@
-# Spire persona configuration.
+# Spire persona configuration — example file.
 #
-# Copy this file to personas.yaml and fill in real values.
-# personas.yaml is gitignored — never commit it.
+# Copy this file to personas.yaml and fill in real credentials.
+# personas.yaml is gitignored; never commit it.
 #
-# Each top-level key is a persona name, used as `spire run --persona <name>`.
-# At least one persona is required.
+# Each persona groups all credentials a single environment needs:
+#   - fusion: Oracle Fusion REST API credentials (required)
+#   - oracle: Oracle Database credentials (optional until Dynamic
+#             Orchestration phases 03+ start using the KG)
 
 default_dev:
-  base_url: "https://your-pod.oraclecloud.com"
-  username: "your.username@example.com"
-  password: "your-password-here"
-  auth_type: "basic"  # Only 'basic' supported in POC; 'oauth2' later.
+  fusion:
+    base_url: "https://your-pod.example.oraclepdemos.com"
+    username: "service.account@example.com"
+    password: "your-fusion-password"
+    auth_type: "basic"
 
-# Add more personas as needed for switching between pods:
-# qa_pod:
-#   base_url: "..."
-#   username: "..."
-#   password: "..."
-#   auth_type: "basic"
+  oracle:
+    dsn: "localhost:1521/FREEPDB1"
+    username: "spire"
+    password: "your-oracle-password"

@@ -24,9 +24,9 @@ from spire.config import Persona
 
 class FusionClient:
     def __init__(self, persona: Persona):
-        if persona.auth_type != "basic":
+        if persona.fusion.auth_type != "basic":
             raise ValueError(
-                f"Unsupported auth_type '{persona.auth_type}'. "
+                f"Unsupported auth_type '{persona.fusion.auth_type}'. "
                 "Only 'basic' is supported in the POC."
             )
         self._persona = persona
@@ -34,8 +34,11 @@ class FusionClient:
 
     async def __aenter__(self) -> "FusionClient":
         self._client = httpx.AsyncClient(
-            base_url=self._persona.base_url,
-            auth=httpx.BasicAuth(self._persona.username, self._persona.password),
+            base_url=self._persona.fusion.base_url,
+            auth=httpx.BasicAuth(
+                self._persona.fusion.username,
+                self._persona.fusion.password,
+            ),
             headers={"Accept": "application/json"},
             timeout=30.0,
         )

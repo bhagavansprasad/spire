@@ -1,26 +1,38 @@
 """Tests for spire.config persona loader."""
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
-from spire.config import Persona, load_persona
+from spire.config import FusionCredentials, OracleCredentials, Persona, load_persona
 
 
 SAMPLE_YAML = """
 default_dev:
-  base_url: "https://example.oraclecloud.com"
-  username: "test@example.com"
-  password: "secret123"
-  auth_type: "basic"
+  fusion:
+    base_url: "https://example.oraclecloud.com"
+    username: "test@example.com"
+    password: "fusion-secret"
+    auth_type: "basic"
+  oracle:
+    dsn: "localhost:1521/FREEPDB1"
+    username: "spire"
+    password: "oracle-secret"
+
+fusion_only:
+  fusion:
+    base_url: "https://example.oraclecloud.com"
+    username: "test@example.com"
+    password: "fusion-secret"
+    auth_type: "basic"
 
 malformed:
-  base_url: "https://example.oraclecloud.com"
-  username: "test@example.com"
-  # password missing
-  auth_type: "basic"
+  fusion:
+    base_url: "https://example.oraclecloud.com"
+    username: "test@example.com"
+    # password missing
+    auth_type: "basic"
 """
 
 
@@ -33,13 +45,26 @@ def personas_file(tmp_path):
         yield path
 
 
-def test_load_valid_persona(personas_file):
+def test_load_persona_with_fusion_and_oracle(personas_file):
     persona = load_persona("default_dev")
     assert isinstance(persona, Persona)
-    assert persona.base_url == "https://example.oraclecloud.com"
-    assert persona.username == "test@example.com"
-    assert persona.password == "secret123"
-    assert persona.auth_type == "basic"
+    assert isinstance(persona.fusion, FusionCredentials)
+    assert persona.fusion.base_url == "https://example.oraclecloud.com"
+    assert persona.fusion.username == "test@example.com"
+    assert persona.fusion.password == "fusion-secret"
+    assert persona.fusion.auth_type == "basic"
+    assert isinstance(persona.oracle, OracleCredentials)
+    assert persona.oracle.dsn == "localhost:1521/FREEPDB1"
+    assert persona.oracle.username == "spire"
+    assert persona.oracle.password == "oracle-secret"
+
+
+def test_load_persona_fusion_only_oracle_is_none(personas_file):
+    """A persona without an `oracle:` block is still valid; oracle is None."""
+    persona = load_persona("fusion_only")
+    assert isinstance(persona, Persona)
+    assert isinstance(persona.fusion, FusionCredentials)
+    assert persona.oracle is None
 
 
 def test_unknown_persona_raises_key_error(personas_file):
