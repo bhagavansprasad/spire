@@ -277,3 +277,86 @@ Success criterion for v1: a Track B agent built on this schema scores meaningful
 Dynamic Orchestration 02 — Oracle 26ai Setup. Infrastructure-heavy (local Docker, persistence config, networking from WSL, `python-oracledb` wiring, first SQL Property Graph smoke test). Will likely break into sub-phases. To be scoped with approval gates when we start.
 
 ---
+
+## Dynamic Orchestration 02 — Oracle 26ai Setup  ✅ DONE
+
+**Verified:** 2026-05-18
+**Branches (two):**
+- `dynamic-orchestration/02-oracle-26ai-setup` — commit (a): persona refactor
+- `dynamic-orchestration/02-oracle-client` — commit (b): OracleClient + tests
+
+**Deliverables:**
+- `src/spire/oracle/client.py` (new) — async Oracle Database client
+- `tests/test_oracle_client.py` (new) — 3 tests
+- `src/spire/config.py` — Persona model refactored to nested shape
+- `src/spire/fusion/client.py` — call sites updated for nested persona
+- `personas.example.yaml` — new nested shape
+- `tests/test_config.py`, `tests/test_fusion_client.py` — updated
+- `requirements.txt` — `oracledb` declared as runtime dependency
+
+Phase 02 was scoped as "set up Oracle 26ai" but the Docker container was already running locally from prior work (Oracle AI Database 26ai Free Release 23.26.1.0.0, image `container-registry.oracle.com/database/free:latest`, PDB `FREEPDB1` mapped to host port 1521). So the phase reduced to: provision a clean SPIRE user, verify the AI features work, and wire the codebase to talk to the DB.
+
+### What was done before any code (DB-side smoke tests)
+
+Verified via `sqlplus` inside the running container — no code, no commits, just confirmation that the infrastructure could carry phases 03+:
+
+1. **Version check.** `SELECT banner_full FROM v$version` → `Oracle AI Database 26ai Free Release 23.26.1.0.0`. Confirmed the AI features (VECTOR, SQL Property Graph) are available.
+
+2. **SPIRE user provisioned** as a fresh schema (rather than reusing the existing `EA_APP` schema from prior POC work). Granted `CONNECT, RESOURCE, CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE, CREATE TYPE, CREATE TRIGGER, CREATE SYNONYM, CREATE PROPERTY GRAPH, CREATE MATERIALIZED VIEW`. Default tablespace USERS, unlimited quota. SYSTEM credentials used for the `CREATE USER` (and only for that — application work uses SPIRE).
+
+3. **VECTOR smoke test.** Created a table with `v VECTOR(3, FLOAT32)`, inserted `TO_VECTOR('[1.0, 2.0, 3.0]')`, read it back, dropped clean. Confirms phase 06's foundation works.
+
+4. **SQL Property Graph smoke test.** Created vertex and edge backing tables, ran `CREATE PROPERTY GRAPH … VERTEX TABLES (…) EDGE TABLES (…)`, queried with `SELECT * FROM GRAPH_TABLE(g MATCH (a)-[:Knows]->(b) COLUMNS (…))`, got the expected row, dropped clean. Confirms phases 03–05's foundation works.
+
+These smoke tests are not preserved as committed artifacts — they were one-shot diagnostics. The first real KG DDL will land in phase 03.
+
+### Commit (a) — persona refactor
+
+The existing `Persona` Pydantic model was flat (Fusion-only fields). Extending it for Oracle access meant a choice:
+
+- **Option A** — nested: `Persona.fusion.*` + `Persona.oracle.*`
+- **Option B** — two flat top-level personas: `default_dev_fusion`, `default_dev_oracle`
+
+Chose **A**: one environment = one persona, both credential sets paired by deployment context. Pydantic refactor is one-time pain; pays off when (if) we add per-customer personas later.
+
+`Persona.oracle` is optional (`OracleCredentials | None = None`) during transition — lets the refactor land without forcing every existing `personas.yaml` to grow an oracle block. Will become required once phases 03+ start using the KG.
+
+Call-site impact was narrower than expected: only `FusionClient` and two test files reach inside the persona. `server.py` and the five tool files pass the persona through unchanged. No agent/runner/tracing changes.
+
+Test count: 23 → 24 (one new test added: `test_load_persona_fusion_only_oracle_is_none`). All five Fusion integration tests still green against the live pod, confirming the refactor was structural-only.
+
+### Commit (b) — OracleClient
+
+Async client wrapping `oracledb`'s async API (`connect_async`, `AsyncConnection`, `await cur.execute`, `await cur.fetchall`). Mirrors `FusionClient`'s shape: persona-driven, async context manager, minimal surface.
+
+| Decision | Choice |
+|---|---|
+| Sync vs async | Async — matches `FusionClient`; no impedance mismatch |
+| Connection mode | Thin — pure Python, no Oracle Instant Client needed |
+| Surface | `execute(sql, params)` / `fetch_all(sql, params)` / `fetch_one(sql, params)` |
+| File location | `src/spire/oracle/client.py` (parallels `src/spire/fusion/client.py`) |
+| Constructor behavior | Raises `RuntimeError` if `persona.oracle is None` |
+| Test gating | Skipif `personas.yaml` missing (same gate as Fusion tests) |
+
+Smoke test in `test_oracle_client.py`: connect as SPIRE, `SELECT USER, SYS_CONTEXT('USERENV', 'CON_NAME') FROM DUAL`, assert round-trip returns `('SPIRE', 'FREEPDB1')`. Multi-row test confirms `fetch_all` shape. Unit test confirms the no-oracle-block rejection.
+
+Test count: 24 → 27 (three new). All green.
+
+### Known gaps / deferred work
+
+- **No DDL on the SPIRE schema yet.** v1 KG tables come in phase 03; vector tables come in phase 06. SPIRE is currently empty.
+- **No VECTOR usage from code.** Smoke test was done in `sqlplus`. Python-side VECTOR round-trip first happens in phase 06.
+- **No Property Graph usage from code.** Same — smoke test was `sqlplus`; first Python `GRAPH_TABLE` query in phase 04.
+- **SPIRE password lives in `personas.yaml` (gitignored) and the conversation log.** Same risk pattern as Fusion creds. To be revisited if/when secret hygiene becomes a Spire-level concern.
+
+### What carries forward to phase 03
+
+- `OracleClient` is the connection abstraction every later phase uses
+- The nested persona model is the configuration shape every later phase uses
+- The DB-side verification (VECTOR works, Property Graph works) is the basis for phase 03 not having to re-verify infrastructure
+
+### Honest framing
+
+This phase did less than the master plan implied because the Docker container was pre-existing. Calling that out so future phases don't assume each Track B phase will be similarly easy — phase 03 (KG Population) and phase 04 (Query Tools) will be the first real implementation work where the agent's behavior changes.
+
+---
