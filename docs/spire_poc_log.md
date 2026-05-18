@@ -360,3 +360,102 @@ Test count: 24 → 27 (three new). All green.
 This phase did less than the master plan implied because the Docker container was pre-existing. Calling that out so future phases don't assume each Track B phase will be similarly easy — phase 03 (KG Population) and phase 04 (Query Tools) will be the first real implementation work where the agent's behavior changes.
 
 ---
+
+## Dynamic Orchestration 03 — KG Population  ✅ DONE
+
+**Verified:** 2026-05-18
+**Branch:** `dynamic-orchestration/03-kg-population`
+**Deliverables:**
+- `docs/designs/kg_schema_v1.md` — revised
+- `docs/designs/kg_evaluation_framework.md` — new
+- `sql/kg/v1/` — 11 SQL files (5 CREATEs, 5 seeds, 1 drop script)
+- `tests/test_kg_metadata.py` — 8 integration tests
+- SPIRE schema in Oracle 26ai now contains the v1 KG: 82 rows across 5 tables
+
+### What this phase actually built
+
+Built the v1 Knowledge Graph as five flat metadata tables in Oracle 26ai. The KG holds entity declarations, relationship declarations, query patterns, and vocabulary lookups — **no instance business data**. Every factual answer the agent will eventually compose still comes from a live Fusion call; the KG is the navigation layer above Fusion, not a parallel data store.
+
+### What's in the KG
+
+| Table | Rows | What's in it |
+|---|---|---|
+| `kg_entity` | 5 | Supplier, Invoice, PurchaseOrder, Buyer, Address |
+| `kg_entity_field` | 27 | Projection contract per entity (which fields, what role) |
+| `kg_edge` | 4 | `HAS_INVOICE`, `HAS_ADDRESS`, `HAS_PURCHASE_ORDER`, `ASSIGNED_TO` |
+| `kg_pattern` | 4 | `no_Y_in_N_months`, `status_filter`, `country_filter_via_address`, `cross_pillar_lookup` |
+| `kg_vocabulary` | 42 | Country (16), PO status (8), entity synonyms (10), relationship phrases (8) |
+
+Total: 82 rows. Schema-sized, not pod-data-sized.
+
+### The schema doc revision (in-phase)
+
+Early in phase 03 the v1 schema doc had to be revised. Bhagavan pushed back on framing that implied the KG would store sample Fusion data. He was right: the KG holds *structural knowledge about Fusion*, not Fusion data. The revision:
+
+- New §1 ("What the KG Is, and What It Is Not") states the metadata-only rule explicitly
+- §3 (Entity Model) reframed: each entity is a *declaration* about a type, not a schema for storing instances
+- Country recategorized from "entity" to "vocabulary" (§5.1). Country has no endpoint and no instances; calling it an entity was a category error in v1.0.
+- `LOCATED_IN` edge dropped (was Address → Country). Country filtering is now a vocabulary-driven attribute filter (§4.3). Edge count: 5 → 4.
+- §8 (open questions) updated: the storage question is now answered (Oracle 26ai via OracleClient, phase 02).
+
+The substantive content (entity set, edge set, pattern set, lookup set) was preserved except for the Country recategorization.
+
+### Design decisions worth recording
+
+- **Five flat tables, no `CREATE PROPERTY GRAPH`.** v1 stores metadata as plain relational tables. The graph wrapper was deliberately deferred — phase 04's query tools will tell us whether `MATCH` queries help or whether plain SQL is enough. Cheaper to add the wrapper later than to commit prematurely.
+- **`kg_vocabulary` is one table for all four lookup kinds**, distinguished by `vocab_kind` with a check constraint. Uniform query shape: `WHERE vocab_kind=:k AND LOWER(term)=LOWER(:t)`. Alternative would have been four separate tables; rejected because the query patterns are identical.
+- **`kg_entity` primary key is `entity_name` (string)**, not a synthetic numeric ID. Same for `kg_edge.edge_name`, `kg_pattern.pattern_name`. Reason: names are stable, meaningful, and human-readable in queries.
+- **`kg_pattern.parameters` is JSON in a CLOB**, `kg_pattern.mechanics` is prose in a CLOB. JSON for parameters because phase 04 will parse it programmatically; prose for mechanics because the LLM reads it for context.
+- **Field roles are a controlled vocabulary** (8 values) via check constraint on `kg_entity_field.field_role`. Keeps the agent's job recognition, not free-text parsing.
+
+### The Track A bug, now encoded in data
+
+Track A's baseline crashed because the agent confused `supplier_number` (string, on the invoices endpoint) with `supplier_id` (numeric, on the PO endpoint). Tool docstrings alone failed to keep them straight.
+
+The KG now records this asymmetry explicitly in `kg_edge`:
+- `HAS_INVOICE` → `from_join_field='SupplierNumber'`, `to_join_field='SupplierNumber'`
+- `HAS_PURCHASE_ORDER` → `from_join_field='SupplierId'`, `to_join_field='SupplierId'`
+
+When phase 04's query tools read these fields, the agent gets the right join key from the KG instead of guessing from a tool description. Whether that's enough to fix the Track A crash will be measured in phase 08.
+
+### Test wiring (the bridge from Oracle to Spire code)
+
+`tests/test_kg_metadata.py` proves the KG is readable from Spire code via `OracleClient`. Eight tests covering: row counts, entity set, the `SupplierNumber`/`SupplierId` asymmetry, the cross-pillar marker on `ASSIGNED_TO`, FK correctness, country and status vocabularies, and the JSON-parseability of pattern parameters.
+
+The tests revealed a real lesson worth recording: oracledb's async driver returns CLOB columns as `AsyncLOB` handles whose `.read()` is itself a network round-trip. Reading them **must** happen inside the `async with OracleClient(...)` block, before the connection closes — otherwise the read raises `DPY-1001: not connected to database`. The test file documents this and provides a `_read_clob()` helper. Phase 04's query tools will inherit this pattern.
+
+### Evaluation framework (the answer to "how do we know the KG actually helps?")
+
+Bhagavan asked for "a framework which really tests the presence of KG and its value addition" and committed to fine-tuning until the result is honest. `docs/designs/kg_evaluation_framework.md` lands that framework in writing, before phases 04–07 are built — so the bar can't be moved retroactively.
+
+Three tiers:
+
+1. **Tier 1 — Headline measurement.** Same protocol as phase A.5: 5 runs of the reference prompt, same 7-step rubric, no mid-test fixes. Pre-committed bands: 1–2/7 = hypothesis failed; 3–4 = partial; 5–6 = material; 7 = strong but suspicious.
+2. **Tier 2 — Ablation.** Re-run with KG disabled. If KG-on and KG-off score the same, the KG didn't actually contribute — improvement came from elsewhere (system prompt, better tool descriptions, etc.). This is the single cheapest insurance against overstating the result.
+3. **Tier 3 — Failure-mode audit.** Three behavioral questions: did the agent actually consult the KG? Did the KG mislead in any run? Did the KG cost more than it gained (tool calls, tokens, wall time)?
+
+If any tier fails, the framework also defines an iteration loop with a 3-cycle time-box, to prevent moving-the-goalposts cycles.
+
+The framework explicitly names what it does *not* promise: it doesn't predict generalization beyond the reference prompt, doesn't control for LLM variance, doesn't measure user satisfaction or production latency.
+
+### Known gaps and deferred work
+
+- **No property graph (`CREATE PROPERTY GRAPH`) yet.** Deferred until phase 04 establishes whether `MATCH` queries help vs flat SQL.
+- **No VECTOR columns yet.** Embeddings come in phase 06.
+- **`cross_pillar_lookup` pattern** is recorded in the KG but flagged as the pattern I'm least confident about — only one instance in v1. Phase 04 may find it redundant and fold into the `ASSIGNED_TO` edge. v1.1 will revise if so.
+- **No reset/repopulate Python helper.** `sql/kg/v1/000_drop_all.sql` + the seed sequence is invoked via shell loop in the test file's docstring. If we end up resetting often during phase 04 development, a `scripts/reset_kg.sh` is worth adding.
+
+### What carries forward to phase 04
+
+- The five `kg_*` tables are the data layer phase 04's query tools sit on top of
+- The `_read_clob()` pattern for async CLOB reads
+- The evaluation framework — phase 04's tool design should anticipate Tier 3's audit (every KG consultation must be traceable to a measurable effect on a Fusion call)
+- `cross_pillar_lookup` open question — phase 04 decides keep or fold
+
+### Honest framing
+
+Three patterns are encoded as recommended data; one (`cross_pillar_lookup`) is encoded with a soft commitment to revisit. Five entities is the floor for the reference prompt — if a future prompt needs a sixth entity, the KG grows.
+
+The evaluation framework's most important property is that it commits to honest negative results. If phase 08 scores 1/7 again, that gets reported plainly. The POC isn't a sales pitch.
+
+---
