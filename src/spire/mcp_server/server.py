@@ -8,6 +8,7 @@ tools over HTTP. Run with:
 Tools currently exposed:
 - search_suppliers
 - search_invoices
+- search_purchase_orders
 """
 
 from fastmcp import FastMCP
@@ -15,6 +16,9 @@ from fastmcp import FastMCP
 from spire.config import load_persona
 from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.invoices import search_invoices as _search_invoices
+from spire.mcp_server.tools.purchase_orders import (
+    search_purchase_orders as _search_purchase_orders,
+)
 from spire.mcp_server.tools.suppliers import search_suppliers as _search_suppliers
 
 
@@ -74,6 +78,38 @@ async def search_invoices(
             supplier_number=supplier_number,
             supplier_name=supplier_name,
             invoice_date_after=invoice_date_after,
+            limit=limit,
+        )
+
+
+@mcp.tool()
+async def search_purchase_orders(
+    supplier_name: str | None = None,
+    supplier_id: int | None = None,
+    status: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """Search Oracle Fusion purchase orders.
+
+    Use this to find POs for a specific supplier, optionally filtered by
+    status. For "find open POs for supplier X" pass supplier_name or
+    supplier_id along with status="OPEN".
+
+    Args:
+        supplier_name: Substring match on Supplier name (LIKE). Use when
+            you have the supplier name as a string.
+        supplier_id: Exact SupplierId match (numeric). Get this from
+            search_suppliers if available.
+        status: Exact StatusCode match. Common values: "OPEN", "CLOSED",
+            "INCOMPLETE", "CANCELED".
+        limit: Max records to return.
+    """
+    async with FusionClient(_persona) as client:
+        return await _search_purchase_orders(
+            client,
+            supplier_name=supplier_name,
+            supplier_id=supplier_id,
+            status=status,
             limit=limit,
         )
 
