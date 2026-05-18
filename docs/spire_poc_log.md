@@ -224,3 +224,56 @@ Documentation-only phase. Two updates:
 | B.9 | Capture Comparative Results |
 
 B.1 is the natural next step.
+
+## Dynamic Orchestration 01 — KG Schema Design  ✅ DONE
+
+**Verified:** 2026-05-18
+**Deliverable:** `docs/designs/kg_schema_v1.md`
+**Branch:** `dynamic-orchestration/01-kg-schema-design`
+
+Design-only phase — no code, no infrastructure, no tests. Wrote the minimal Knowledge Graph schema that Track B's later phases will build on.
+
+### What was decided
+
+- **6 entities:** Supplier, Invoice, PurchaseOrder, Buyer, Address, Country
+- **5 typed edges:** `HAS_INVOICE`, `HAS_ADDRESS`, `LOCATED_IN`, `HAS_PURCHASE_ORDER`, `ASSIGNED_TO` (the last crosses FSCM → HCM)
+- **4 query patterns:** `no_Y_in_N_months`, `status_filter`, `country_filter_via_address`, `cross_pillar_lookup`
+- **4 lookup categories:** countries, PO statuses, entity terms, relationship phrases
+
+Sized to support the POC reference prompt (and no broader). Single-tenant, read-only, single-pod, storage-agnostic.
+
+### Key decisions
+
+- **Country and Address as separate entities, not Supplier attributes.** A supplier can have addresses in multiple countries; folding country into Supplier would model "a supplier has *a* country," which is wrong. Keeping them separate makes `country_filter_via_address` an explicit named pattern rather than a hidden assumption.
+- **`SupplierNumber` vs `SupplierId` asymmetry called out prominently (§3.1 and §3.4).** This is the parameter confusion that crashed runs 4 and 5 in the A.5 baseline. Edge definitions specify which join key Fusion exposes on which endpoint, so the agent reads it from the KG rather than from docstring archaeology.
+- **`ASSIGNED_TO` (PO → Buyer) flagged as cross-pillar.** The single most important relationship docstrings alone failed to convey in Track A. There is no `/fscmRestApi/.../buyers` endpoint; buyers are HCM workers via `publicWorkers`. KG makes this explicit.
+- **Country lookups held as static table (§5.1), not ingested from Fusion setup endpoints.** Ingestion is a later phase if needed; static is sufficient for the POC reference prompt.
+- **Storage decision deferred** to Dynamic Orchestration 02. The schema doc describes the *model*, not how it's stored.
+
+### Explicit non-goals (§6)
+
+Listed so later phases don't drift: per-tenant overlays, DFFs, setup-data ingestion, writes, multi-pod federation, currency conversion, historical/temporal modeling, approval/payment workflows, inverse/transitive relationships, cardinality enforcement, provenance.
+
+### Open questions deferred (§7)
+
+Five questions intentionally not resolved in v1:
+
+1. How does the agent match prompt clauses to patterns? (substring / LLM / embedding — Dynamic Orchestration 04 or 06)
+2. What's the contract between KG queries and the existing MCP tools? (Dynamic Orchestration 04)
+3. Where does the KG live physically? (Dynamic Orchestration 02)
+4. How is the KG kept in sync with the schema as it evolves?
+5. What's the error contract when a pattern can't be applied?
+
+None block Dynamic Orchestration 02. Items 1 and 2 will need answers before 04 and 05.
+
+### Honest framing
+
+The schema is deliberately thin. **The four patterns are the load-bearing claim** — entities and edges are bookkeeping; patterns are what the agent will actually consult. `cross_pillar_lookup` is the pattern I'm least confident in as named (only one instance in v1; may fold into the `ASSIGNED_TO` edge once Dynamic Orchestration 04 starts). The doc explicitly says "update — don't fork" so v1.1 can drop or refactor it without ceremony.
+
+Success criterion for v1: a Track B agent built on this schema scores meaningfully higher than the 1/7 Track A baseline on the reference prompt under the same rubric. If it scores 1/7 again, either the KG is too thin, the integration is wrong, or the hypothesis is wrong — and that's signal the POC needs to capture, not paper over.
+
+### What comes next
+
+Dynamic Orchestration 02 — Oracle 26ai Setup. Infrastructure-heavy (local Docker, persistence config, networking from WSL, `python-oracledb` wiring, first SQL Property Graph smoke test). Will likely break into sub-phases. To be scoped with approval gates when we start.
+
+---
