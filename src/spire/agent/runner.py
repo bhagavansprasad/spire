@@ -19,7 +19,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import streamablehttp_client
 
 from spire.agent.tracing import make_trace_logger, truncate_tool_result
 
@@ -65,7 +65,7 @@ async def run_agent(prompt: str) -> str:
     logger, trace_path = make_trace_logger()
     logger.info("agent_started", prompt=prompt, model=MODEL, trace_file=str(trace_path))
 
-    async with streamable_http_client(MCP_SERVER_URL) as (read, write, _):
+    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             logger.info("mcp_session_initialized", url=MCP_SERVER_URL)
