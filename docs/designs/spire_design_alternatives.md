@@ -242,6 +242,7 @@ Stored in Oracle 26ai as a SQL Property Graph plus supporting relational tables:
 | Time to first demo | ✅ Fast | ⚠️ Moderate | ⚠️ Slower | ❌ Slowest |
 | Production-readiness ceiling | ⚠️ Moderate | ⚠️ Moderate-high | ✅ High | ✅ Highest |
 | Operational complexity | ✅ Low | ⚠️ Moderate | ⚠️ Higher | ❌ Highest |
+| **Measured baseline on POC prompt (5 runs × 7-step rubric)** | n/a (not implemented) | **1/7** (Phase A.5; see `phase_a5_baseline_report.md`) | n/a (not implemented as separate track) | pending (Track B not started) |
 
 Legend: ✅ Strong, ⚠️ Conditional/partial, ❌ Absent or weak
 
@@ -307,6 +308,15 @@ This section documents which designs are built and which are documented as alter
 The original POC plan proposed three versions (baseline, KG, full). On reflection, that structure creates duplicate work: the KG built in version 2 is the same KG used in version 3. Building it twice as separate phases adds overhead without adding signal. By collapsing the KG work into Design 4's phases (Track B), the POC delivers the same architectural validation with less ceremony.
 
 The trade-off worth flagging: the original three-version structure made the "is the KG worth it?" question into its own measurable phase. The collapsed structure folds that question into Track B's overall build — meaning if Track B underperforms relative to Track A, attribution between "the KG didn't help" and "the embeddings didn't help" requires careful trace analysis. This is acceptable for a POC; in production, the KG and embeddings should be evaluated independently.
+
+### Measured results so far
+
+| Track | Status | Baseline score | Reference |
+|---|---|---|---|
+| Track A — Direct Tool Orchestration | ✅ Complete | 1/7 (5 runs, single rubric) | `phase_a5_baseline_report.md` |
+| Track B — Dynamic Orchestration | ⏳ Not started | pending | — |
+
+Track A's 1/7 baseline reflects honest discipline: no prompt engineering, no retries with corrections, no tool-description tweaks during the test. The agent reliably finds US suppliers and reliably fails to compose further. Failure patterns documented in the A.5 report. This is the comparison target Track B's runs will be measured against.
 
 ---
 
