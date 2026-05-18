@@ -33,6 +33,6 @@ async def test_get_suppliers_returns_records():
 @pytest.mark.asyncio
 async def test_unsupported_auth_type_raises():
     persona = load_persona("default_dev")
-    persona.auth_type = "oauth2"
+    persona.fusion.auth_type = "oauth2"
     with pytest.raises(ValueError, match="Unsupported auth_type"):
         FusionClient(persona)
