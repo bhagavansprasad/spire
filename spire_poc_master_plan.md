@@ -5,6 +5,30 @@
 **Status:** Planning complete. Phases approved through prior incremental review.
 **Companion document:** `docs/designs/spire_design_alternatives.md` describes the four architectural alternatives considered and explains why the POC builds two of them.
 
+**A note on scope: this POC is single-tenant.** Multi-tenancy (serving multiple isolated customer organizations from one deployed system) is a separate, post-POC concern and is not part of this plan.
+
+---
+
+## What Is Documented vs. What Is Implemented
+
+The companion design document describes **four** architectural alternatives. This POC implements **two** of them as build tracks.
+
+| # | Design | Documented in design doc | Implemented in this POC | Build track |
+|---|---|---|---|---|
+| 1 | LLM + Reference Query Library + Validation + Tool | ✅ Yes | ❌ No | — |
+| 2 | Direct Tool Orchestration (Agent Loop) | ✅ Yes | ✅ Yes | **Track A** (baseline) |
+| 3 | Graph-Guided Orchestration | ✅ Yes | ❌ Not as a separate track | (KG component built inside Track B) |
+| 4 | Dynamic Orchestration (KG + Embeddings) | ✅ Yes | ✅ Yes | **Track B** (full architecture) |
+
+**Summary:**
+- **2 tracks are built end-to-end** — Track A and Track B
+- **Track A** = Design 2 (baseline; tool orchestration only; no KG, no embeddings)
+- **Track B** = Design 4 (full architecture; includes both the KG and embedding-based dynamic tool retrieval)
+- **The KG built for Track B is the same KG that would have been built for Design 3** — building Design 3 as its own track would duplicate work
+- **Design 1 (SME's reference library) is documented but not built** — its limitations are well-understood and its natural evolution converges with Design 2
+
+The POC's central comparative question: *"Does the full architecture (Track B) meaningfully outperform the baseline (Track A) on a realistic prompt?"*
+
 ---
 
 ## Table of Contents
@@ -102,18 +126,18 @@ The POC builds two of the four architectures described in `docs/designs/spire_de
 | **Track A** | Design 2 — Direct Tool Orchestration | Baseline. LangGraph agent + MCP tools wrapping Fusion REST endpoints. No KG, no embeddings. |
 | **Track B** | Design 4 — Dynamic Orchestration | Full architecture. Adds Knowledge Graph (in Oracle 26ai SQL Property Graph) and embedding-based dynamic tool retrieval (in Oracle 26ai VECTOR storage). |
 
-**Two designs from the alternatives document are not built as separate POC phases:**
+**Two designs from the alternatives document are not built as separate POC tracks:**
 
 - **Design 1 (Reference Library + Validation)** — the SME's design. Documented for transparency but not built as a POC track. Its limitations (no agent loop, no error recovery, no multi-step reasoning) are well-understood and its natural evolution converges with Design 2.
 - **Design 3 (Graph-Guided Orchestration)** — the Knowledge Graph is built, but as a *component* of Track B, not as a separate version. Building it twice as a separate Design 3 phase plus a Design 4 phase would duplicate work without adding signal.
 
-The POC's central comparative question: *"Does the full architecture (Track B) meaningfully outperform the baseline (Track A) on a realistic prompt?"*
-
-**What gets cached or replicated:** Nothing. Spire stores **metadata** (table names, endpoint definitions, relationship structures, query patterns), **configuration** (pod URLs, encrypted credentials, custom DFF mappings), **audit logs** (who ran what, when), and **conversation history** (the prompts and queries themselves, not their results). **Customer transactional data never leaves the Fusion pod.** This is an architectural hard rule.
+**What gets cached or replicated:** Nothing. Spire stores **metadata** (table names, endpoint definitions, relationship structures, query patterns), **configuration** (pod URLs, encrypted credentials), **audit logs** (who ran what, when), and **conversation history** (the prompts and queries themselves, not their results). **Customer transactional data never leaves the Fusion pod.** This is an architectural hard rule.
 
 ---
 
 ## 5. Track A — Direct Tool Orchestration
+
+> **Implements Design 2 from the alternatives document. POC baseline.**
 
 The simplest architecture that actually solves the POC prompt: hand-picked MCP tools wrapping Fusion REST endpoints, an LLM that orchestrates them based on tool descriptions alone. Establishes the baseline against which Track B is measured.
 
@@ -386,6 +410,9 @@ Results flow back up; LLM composes natural-language answer
 
 ## 6. Track B — Dynamic Orchestration
 
+> **Implements Design 4 from the alternatives document. POC full architecture.**
+> **Includes both the Knowledge Graph (Design 3's contribution) and embedding-based dynamic tool retrieval (Design 4's addition).**
+
 The full architecture. Builds on Track A by adding two new capability layers — a Knowledge Graph (encoding entities, relationships, query patterns, and lookups) and embedding-based dynamic tool retrieval (enabling the tool catalog to scale beyond what fits in LLM context). Tests whether structured knowledge and dynamic retrieval together meaningfully outperform tool descriptions alone.
 
 ### Architecture sketch
@@ -416,10 +443,10 @@ Results back; LLM composes answer with KG context
 **What we reuse from Track A:** All Fusion tools, MCP server, agent skeleton, CLI, persona system, baseline report format.
 
 **What we add in Track B:**
-- Knowledge Graph stored in Oracle 26ai (SQL Property Graph)
-- Graph-query tools the agent can consult
-- Embeddings over the tool catalog (Oracle 26ai VECTOR)
-- Pre-LLM retrieval step that filters which tools enter context
+- Knowledge Graph stored in Oracle 26ai (SQL Property Graph) — the Design 3 component
+- Graph-query tools the agent can consult — the Design 3 component
+- Embeddings over the tool catalog (Oracle 26ai VECTOR) — the Design 4 addition
+- Pre-LLM retrieval step that filters which tools enter context — the Design 4 addition
 - Updates to the agent's prompt and flow
 
 ---
@@ -445,7 +472,7 @@ Results back; LLM composes answer with KG context
    - `buyer_resolution_from_po` (PO → Person traversal)
 5. **Define lookup values** — explicit mappings ("US" → 'US', "open PO" → composite condition).
 6. **Write the design document** at `docs/poc/kg_design.md`.
-7. **List what's OUT of scope** explicitly: no DFFs, no Party indirection, no BU/LE modeling, no invoice line-level data, no HCM entities, no GL/journals/ledgers.
+7. **List what's OUT of scope** explicitly: no invoice line-level data, no HCM entities, no GL/journals/ledgers, no items/inventory, no Business Unit/Legal Entity modeling.
 8. **Sanity-check by mental execution** of the POC prompt against the graph.
 
 **Out of scope:** Oracle 26ai work, SQL Property Graph syntax, code, populating data, agent integration.
@@ -485,7 +512,7 @@ Results back; LLM composes answer with KG context
 8. **Document setup gotchas** in `docs/runbooks/oracle_26ai_setup.md`.
 9. **Clean up test artifacts** — keep the runbook and connection module.
 
-**Out of scope:** Real KG data, vector storage (deferred to B.5), agent integration.
+**Out of scope:** Real KG data, vector storage (deferred to B.6), agent integration.
 
 **Exit criteria:**
 - Oracle 26ai confirmed healthy from WSL
@@ -668,7 +695,7 @@ Results back; LLM composes answer with KG context
 8. **Upgrade `find_pattern` to use embeddings** instead of substring matching.
 9. **Document the retrieval design** in `docs/poc/embeddings_design.md`.
 
-**Out of scope:** Per-tenant vector store isolation (production work); embedding past successful queries (could be added later); fine-tuning the embedding model.
+**Out of scope:** Embedding past successful queries (could be added later); fine-tuning the embedding model.
 
 **Exit criteria:**
 - Tool catalog embedded in Oracle 26ai VECTOR
@@ -837,8 +864,6 @@ Items deferred or unresolved at the time of this plan:
 
 **Pagination:** Single-page fetches with adjustable `limit` for the POC. Production needs proper pagination.
 
-**Multi-tenancy:** The POC uses a single tenant. Production requires per-tenant isolation of KG overlays, embeddings, audit logs, and credentials.
-
 **Result caching:** No caching in the POC. Whether to introduce caching is a production conversation.
 
 **Streaming and UI:** CLI-only for the POC. A web UI per the Spire vision is post-POC work.
@@ -852,6 +877,8 @@ Items deferred or unresolved at the time of this plan:
 **Attribution of Track B improvements:** As noted in section 7, the comparison doesn't cleanly isolate the contributions of the KG and the embeddings. A follow-up evaluation can disable one layer at a time if warranted.
 
 **Whether to add a Design 1 (Reference Library) baseline:** If the SME pushes for explicitly testing their proposed architecture, the POC plan can be reframed to include it as a third track. This would lengthen the POC but provide more evidence-based decision support.
+
+**Multi-tenancy:** Not in scope for this POC. When Spire moves toward production with multiple customer organizations, multi-tenancy becomes a major workstream (tenant isolation, per-tenant credentials, RBAC, observability, compliance). Roughly 3–4 months of focused engineering plus 3–6 months for SOC 2 if pursued. The single-tenant POC architecture is structured so it can be extended later without redesign.
 
 ---
 
