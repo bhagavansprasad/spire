@@ -1,0 +1,215 @@
+"""Integration tests for the KG metadata tables in Oracle.
+
+These verify that the v1 KG, populated by sql/kg/v1/*.sql, is readable
+from Spire code via OracleClient. They are not unit tests — they hit
+the real Oracle 26ai container and assume the seed scripts have run.
+
+If a test here fails, the most likely cause is that the SPIRE schema
+is empty or stale. To repopulate:
+
+    cd /home/bhagavan/pocs/spire
+    for f in sql/kg/v1/000_drop_all.sql sql/kg/v1/00{1,2,3,4,5}_create_*.sql \\
+             sql/kg/v1/0{06,07,08,09,10}_seed_*.sql; do
+      docker exec -i oracle26ai_db_bhagavan sqlplus -s spire/jnjnuh@FREEPDB1 < "$f"
+    done
+
+Skipped if personas.yaml is missing — same gate as the other
+integration tests.
+
+Note on CLOB columns:
+oracledb's async driver returns CLOB values as AsyncLOB *handles*,
+not as strings. Reading them goes back over the wire, which means
+the read must happen INSIDE the `async with OracleClient(...)` block,
+before the connection closes. Tests below follow this discipline.
+"""
+
+import json
+
+import pytest
+
+from spire.config import PERSONAS_FILE, load_persona
+from spire.oracle.client import OracleClient
+
+
+pytestmark = pytest.mark.skipif(
+    not PERSONAS_FILE.exists(),
+    reason="personas.yaml not found — skipping integration tests",
+)
+
+
+async def _read_clob(value) -> str:
+    """Coerce a possibly-CLOB column value to a Python str.
+
+    MUST be called while the OracleClient connection is still open
+    (i.e. inside the `async with` block that produced `value`).
+    AsyncLOB.read() is a network round-trip; closing the connection
+    first will raise DPY-1001 ("not connected to database").
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return await value.read()
+
+
+# ----- Counts and basic existence ------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_kg_entity_has_five_rows():
+    """v1 declares 5 entities: Supplier, Invoice, PurchaseOrder, Buyer, Address."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT entity_name FROM kg_entity ORDER BY entity_name"
+        )
+    names = [row[0] for row in rows]
+    assert names == ["Address", "Buyer", "Invoice", "PurchaseOrder", "Supplier"]
+
+
+@pytest.mark.asyncio
+async def test_kg_table_row_counts_match_v1():
+    """All 5 KG tables match the v1 row counts established in phase 03."""
+    persona = load_persona("default_dev")
+    expected = {
+        "kg_entity": 5,
+        "kg_entity_field": 27,
+        "kg_edge": 4,
+        "kg_pattern": 4,
+        "kg_vocabulary": 42,
+    }
+    async with OracleClient(persona) as oc:
+        for table, expected_count in expected.items():
+            row = await oc.fetch_one(f"SELECT COUNT(*) FROM {table}")
+            assert row is not None
+            assert row[0] == expected_count, f"{table}: expected {expected_count}, got {row[0]}"
+
+
+# ----- The asymmetry that crashed Track A ----------------------------
+
+
+@pytest.mark.asyncio
+async def test_edge_join_field_asymmetry_supplier_number_vs_supplier_id():
+    """The SupplierNumber-vs-SupplierId asymmetry is encoded correctly.
+
+    Track A's baseline runs 4 and 5 crashed because the agent passed
+    supplier_number to a tool that expects supplier_id (and vice versa).
+    The KG records the right join field per edge so phase 04+ tools
+    can read it instead of guessing.
+    """
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT edge_name, from_join_field, to_join_field "
+            "FROM kg_edge "
+            "WHERE edge_name IN ('HAS_INVOICE', 'HAS_PURCHASE_ORDER') "
+            "ORDER BY edge_name"
+        )
+    edges = {row[0]: (row[1], row[2]) for row in rows}
+    # HAS_INVOICE joins via SupplierNumber (the invoices endpoint exposes that, not SupplierId).
+    assert edges["HAS_INVOICE"] == ("SupplierNumber", "SupplierNumber")
+    # HAS_PURCHASE_ORDER joins via SupplierId (the PO endpoint exposes that, not SupplierNumber).
+    assert edges["HAS_PURCHASE_ORDER"] == ("SupplierId", "SupplierId")
+
+
+@pytest.mark.asyncio
+async def test_assigned_to_edge_crosses_pillars():
+    """ASSIGNED_TO encodes the FSCM->HCM cross-pillar lookup."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        row = await oc.fetch_one(
+            "SELECT from_entity, to_entity, from_join_field, to_join_field, notes "
+            "FROM kg_edge WHERE edge_name = 'ASSIGNED_TO'"
+        )
+        assert row is not None
+        from_entity, to_entity, from_field, to_field, notes = row
+        # Read CLOB-able fields inside the `async with` block.
+        notes_str = await _read_clob(notes)
+    # Plain assertions can happen after close — these are normal Python values.
+    assert from_entity == "PurchaseOrder"
+    assert to_entity == "Buyer"
+    assert from_field == "BuyerId"
+    assert to_field == "PersonId"
+    # The notes field must explicitly mention cross-pillar so the agent sees it.
+    assert "CROSS-PILLAR" in notes_str.upper()
+
+
+# ----- FK relationships -----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_supplier_has_four_projection_fields():
+    """FK from kg_entity_field to kg_entity works; Supplier has its
+    four declared projection fields (SupplierId, SupplierNumber,
+    Supplier, Status)."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT field_name FROM kg_entity_field "
+            "WHERE entity_name = 'Supplier' "
+            "ORDER BY field_name"
+        )
+    field_names = [row[0] for row in rows]
+    assert field_names == ["Status", "Supplier", "SupplierId", "SupplierNumber"]
+
+
+# ----- Vocabulary lookups --------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_country_vocabulary_resolves_us_aliases():
+    """All four US-aliasing terms resolve to canonical 'US'."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT term, canonical_value FROM kg_vocabulary "
+            "WHERE vocab_kind = 'country' AND canonical_value = 'US' "
+            "ORDER BY term"
+        )
+    terms = [row[0] for row in rows]
+    # Sort order: 'US' < 'USA' < 'United States' < 'United States of America' lexicographically.
+    assert terms == [
+        "US",
+        "USA",
+        "United States",
+        "United States of America",
+    ]
+    # Every row maps to canonical 'US'.
+    assert all(row[1] == "US" for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_po_status_open_synonyms():
+    """Both 'open' and 'active' map to StatusCode 'OPEN'."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT term, canonical_value FROM kg_vocabulary "
+            "WHERE vocab_kind = 'po_status' AND canonical_value = 'OPEN' "
+            "ORDER BY term"
+        )
+    by_term = {row[0]: row[1] for row in rows}
+    assert by_term == {"active": "OPEN", "open": "OPEN"}
+
+
+# ----- Patterns (parameters parse as JSON) ----------------------------
+
+
+@pytest.mark.asyncio
+async def test_no_y_in_n_months_pattern_has_parseable_parameters():
+    """kg_pattern.parameters is stored as a JSON string. It must parse,
+    and the no_Y_in_N_months pattern must declare X, Y, edge,
+    date_field, and N."""
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        row = await oc.fetch_one(
+            "SELECT parameters FROM kg_pattern "
+            "WHERE pattern_name = 'no_Y_in_N_months'"
+        )
+        assert row is not None
+        # Read CLOB inside the `async with` block; the connection must
+        # still be open when AsyncLOB.read() runs.
+        params_str = await _read_clob(row[0])
+    params = json.loads(params_str)
+    param_names = {p["name"] for p in params}
+    assert param_names == {"X", "Y", "edge", "date_field", "N"}
