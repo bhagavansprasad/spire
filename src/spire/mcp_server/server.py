@@ -7,6 +7,7 @@ tools over HTTP. Run with:
 
 Tools currently exposed:
 - search_suppliers
+- search_suppliers_by_country
 - search_invoices
 - search_purchase_orders
 - get_buyer
@@ -22,6 +23,9 @@ from spire.mcp_server.tools.purchase_orders import (
     search_purchase_orders as _search_purchase_orders,
 )
 from spire.mcp_server.tools.suppliers import search_suppliers as _search_suppliers
+from spire.mcp_server.tools.suppliers_by_country import (
+    search_suppliers_by_country as _search_suppliers_by_country,
+)
 
 
 PERSONA_NAME = "default_dev"
@@ -47,6 +51,32 @@ async def search_suppliers(
         return await _search_suppliers(
             client,
             supplier_name_contains=supplier_name_contains,
+            limit=limit,
+        )
+
+
+@mcp.tool()
+async def search_suppliers_by_country(
+    country: str,
+    limit: int = 25,
+) -> list[dict]:
+    """Find suppliers with at least one address in the given country.
+
+    Use this when the user asks about suppliers in a specific country
+    (e.g., "US suppliers", "suppliers in the UK"). Country is not a
+    field on the supplier record directly — it's matched against the
+    addresses child resource.
+
+    Args:
+        country: ISO-2 code (e.g., "US", "GB") or full name (e.g.,
+            "United States"). Three-letter codes like "USA" are not
+            supported — use "US" instead.
+        limit: Max records to return.
+    """
+    async with FusionClient(_persona) as client:
+        return await _search_suppliers_by_country(
+            client,
+            country=country,
             limit=limit,
         )
 
