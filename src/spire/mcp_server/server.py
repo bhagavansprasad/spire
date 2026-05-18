@@ -9,12 +9,14 @@ Tools currently exposed:
 - search_suppliers
 - search_invoices
 - search_purchase_orders
+- get_buyer
 """
 
 from fastmcp import FastMCP
 
 from spire.config import load_persona
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.buyer import get_buyer as _get_buyer
 from spire.mcp_server.tools.invoices import search_invoices as _search_invoices
 from spire.mcp_server.tools.purchase_orders import (
     search_purchase_orders as _search_purchase_orders,
@@ -112,6 +114,25 @@ async def search_purchase_orders(
             status=status,
             limit=limit,
         )
+
+
+@mcp.tool()
+async def get_buyer(buyer_id: int) -> dict | None:
+    """Look up a buyer (purchasing agent) by ID.
+
+    Buyer IDs come from purchase orders (the BuyerId field returned by
+    search_purchase_orders). This tool returns the buyer's name, email,
+    and username from the HCM workers system.
+
+    Args:
+        buyer_id: The numeric BuyerId from a purchase order.
+
+    Returns:
+        A dict with PersonId, DisplayName, FirstName, LastName, WorkEmail,
+        Username, and PersonNumber. Returns null if no buyer matches.
+    """
+    async with FusionClient(_persona) as client:
+        return await _get_buyer(client, buyer_id=buyer_id)
 
 
 if __name__ == "__main__":
