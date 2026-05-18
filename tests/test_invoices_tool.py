@@ -1,8 +1,4 @@
-"""Integration tests for the search_invoices tool.
-
-Calls the tool function directly with a real FusionClient. Skips if
-personas.yaml is missing.
-"""
+"""Integration tests for the search_invoices tool."""
 
 import pytest
 
@@ -25,7 +21,6 @@ async def test_search_invoices_no_filter():
     assert isinstance(items, list)
     assert len(items) > 0
     first = items[0]
-    # Projected field shape
     for field in ["InvoiceId", "InvoiceNumber", "InvoiceDate", "Supplier", "SupplierNumber"]:
         assert field in first
 
@@ -36,7 +31,6 @@ async def test_search_invoices_by_supplier_number():
     async with FusionClient(persona) as client:
         items = await search_invoices(client, supplier_number="1252", limit=10)
     assert isinstance(items, list)
-    # Every returned invoice should be for SupplierNumber 1252 (Lee Supplies)
     for item in items:
         assert item["SupplierNumber"] == "1252"
 
@@ -47,7 +41,6 @@ async def test_search_invoices_by_supplier_name():
     async with FusionClient(persona) as client:
         items = await search_invoices(client, supplier_name="Lee", limit=10)
     assert isinstance(items, list)
-    # Loose assertion — at least one result if Lee has invoices
     if items:
         assert any("Lee" in (item.get("Supplier") or "") for item in items)
 
@@ -62,6 +55,26 @@ async def test_search_invoices_with_date_filter():
             limit=5,
         )
     assert isinstance(items, list)
-    # If results came back, dates should all be on or after 2020-01-01
     for item in items:
+        assert item["InvoiceDate"] >= "2020-01-01"
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_composite_supplier_and_date():
+    """Verifies the client-side filter composition works:
+    Lee Supplies (1252) has a Feb 2024 invoice; combining the two filters
+    must surface it.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        items = await search_invoices(
+            client,
+            supplier_number="1252",
+            invoice_date_after="2020-01-01",
+            limit=10,
+        )
+    assert isinstance(items, list)
+    assert len(items) >= 1
+    for item in items:
+        assert item["SupplierNumber"] == "1252"
         assert item["InvoiceDate"] >= "2020-01-01"
