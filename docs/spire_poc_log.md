@@ -1,6 +1,8 @@
 # Spire POC — Working Log
 
-A single rolling log of POC progress. One section per phase. Curl commands, sample outputs (trimmed), and status live inline. Updated as work progresses.
+A single rolling log of POC progress. Phase numbering follows the master plan (`spire_poc_master_plan.md`): Track A is Direct Tool Orchestration, Track B is Dynamic Orchestration.
+
+Earlier entries in this log used bare numbering (Phase 1, 2a–2d, 3, 4). The log has been re-aligned to the master plan's lettered scheme (A.1, A.2, A.3, A.4, …) for consistency. Phase content is unchanged; only labels.
 
 ---
 
@@ -8,25 +10,18 @@ A single rolling log of POC progress. One section per phase. Curl commands, samp
 
 - **Pod:** `https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`
 - **Pod type:** Oracle Fusion demo pod (multi-pillar: FSCM + HCM)
-- **API version path:** `/fscmRestApi/resources/11.13.18.05/`
+- **API version paths:** `/fscmRestApi/resources/11.13.18.05/`, `/hcmRestApi/resources/11.13.18.05/`
 - **Auth:** Basic Auth
 - **Env vars used:** `FUSION_BASE_URL`, `FUSION_USERNAME`, `FUSION_PASSWORD`, `GEMINI_API_KEY`
-- **Credential storage:** Shell environment variables (see Phase 1 deviation note)
+- **Credential storage:** Shell environment variables + `personas.yaml` (see A.1 deviation note)
 
 ---
 
-## Phase 1 — Environment & Access Setup  ✅ DONE
+## Phase A.1 — Environment & Access Setup  ✅ DONE
 
 **Verified:** 2026-05-15
 
-### What was confirmed
-
-- Pod reachable, FSCM REST API enabled
-- Service account authenticates (Basic Auth)
-- `GET /suppliers` returns valid JSON
-- Call is repeatable (limit=1 and limit=5 both return 200)
-
-### Working command
+Confirmed pod reachable, FSCM REST API enabled, service account authenticates (Basic Auth), `GET /suppliers` returns valid JSON, call is repeatable.
 
 ```bash
 curl -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
@@ -34,234 +29,198 @@ curl -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
   -w "\nHTTP %{http_code}\n"
 ```
 
-### Sample response (trimmed)
+Returns 200 with real records (Lee Supplies, supplier #1252, etc).
 
-```json
-{
-  "items": [
-    {
-      "SupplierId": 300000047414503,
-      "Supplier": "Lee Supplies",
-      "SupplierNumber": "1252",
-      "Status": "ACTIVE",
-      "BusinessRelationship": "Spend Authorized",
-      "TaxpayerCountryCode": "US",
-      "CreationDate": "2013-11-07T20:14:36.428+00:00"
-    }
-  ],
-  "count": 1,
-  "hasMore": true,
-  "limit": 1,
-  "offset": 0
-}
+### Deviation
+
+Master plan A.1 requires credentials stored in a password manager. Currently held in shell env vars + `personas.yaml`. Owner accepts this risk; to be revisited if/when secret hygiene becomes a Spire-level concern.
+
+---
+
+## Phase A.2 — Single Endpoint Wrapped as a Tool  ✅ DONE
+
+**Verified:** 2026-05-15
+**Sub-phases:** A.2.a (skeleton) → A.2.b (persona loader) → A.2.c (HTTP client) → A.2.d (MCP server)
+
+### What was built
+
+Project skeleton, persona loader, async HTTP client, FastMCP server, one tool (`search_suppliers`).
+
+```
+spire/
+├── src/spire/
+│   ├── config.py                       (Persona loader, Pydantic-validated)
+│   ├── fusion/client.py                (FusionClient — async httpx wrapper)
+│   └── mcp_server/
+│       ├── server.py                   (FastMCP server, HTTP transport)
+│       └── tools/suppliers.py          (search_suppliers tool)
+└── tests/                              (config, fusion client, supplier tool tests)
 ```
 
-Full response also includes child resource links: `addresses`, `sites`, `contacts`, `businessClassifications`, `DFF` (custom fields), etc. The `addresses` child is relevant for Phase 4 (`search_suppliers_by_country`).
+### Locked decisions
 
-### Exit criteria
-
-| Criterion | Status |
-|---|---|
-| Service account authenticates | ✅ |
-| Manual GET returns valid JSON with supplier records | ✅ |
-| Credentials documented securely | ⚠️ See deviation below |
-| Call is reliably repeatable | ✅ |
-
-### Deviation from plan
-
-Master plan Phase 1 requires credentials stored in a password manager. Currently held in shell environment variables only. Owner accepts this risk; to be revisited if/when secret hygiene becomes a Spire-level concern.
-
----
-
-## Phase 2a — Project Skeleton  ✅ DONE
-
-**Verified:** 2026-05-15
-**PR:** `phase-2a-skeleton` → `master` (merged)
-
-### What was built
-
-Empty file skeleton — establishes the structure that Phase 2b/2c/2d fill in. src-layout under `src/spire/`. `tests/` skeleton. `.gitignore` covering Python artifacts, virtualenvs, env files, `personas.yaml`, `how-to-run.md`, `temp/`, `traces/`, editor noise. `personas.example.yaml` template.
-
-### Decisions locked
-
-- **Layout:** src-layout (`src/spire/...`)
-- **Package manager:** plain pip with split `requirements.txt` / `requirements-dev.txt`
-- **Persona schema:** YAML, fields = `base_url`, `username`, `password`, `auth_type`
-
----
-
-## Phase 2b — Persona Loader  ✅ DONE
-
-**Verified:** 2026-05-15
-**PR:** `phase-2b-persona-loader` → `master` (merged)
-
-### What was built
-
-`src/spire/config.py` — Pydantic-validated persona loader. Reads `personas.yaml`, returns named persona as `Persona` model.
-
-```python
-from spire.config import load_persona
-persona = load_persona("default_dev")
-```
-
-### Design choices
-
-- `auth_type` as plain `str` (no `Literal` restriction)
-- No caching — re-reads YAML per call
-- Exceptions bubble naturally (`FileNotFoundError`, `KeyError`, `ValidationError`)
-
-### Tests
-
-`tests/test_config.py` — 3 tests (happy path, unknown persona, malformed entry).
-
-### Dependencies
-
-`pydantic>=2,<3`, `pyyaml>=6`, `pytest>=8`. `pyproject.toml` restored for editable install.
-
----
-
-## Phase 2c — Fusion HTTP Client  ✅ DONE
-
-**Verified:** 2026-05-15
-**PR:** `phase-2c-fusion-client` → `master` (merged)
-
-### What was built
-
-`src/spire/fusion/client.py` — async HTTP client wrapping `httpx.AsyncClient` with persona-driven auth.
-
-```python
-async with FusionClient(persona) as client:
-    data = await client.get("/fscmRestApi/resources/11.13.18.05/suppliers", params={"limit": 5})
-```
-
-### Design choices
-
-- Hardcoded full paths (no URL builder yet)
-- GET only
-- Basic Auth only; other `auth_type` values raise `ValueError`
-- Errors bubble (`httpx.HTTPStatusError`)
-
-### Tests
-
-`tests/test_fusion_client.py` — integration test against real pod + unit test for unsupported auth.
-
-### Dependencies
-
-`httpx>=0.27`, `pytest-asyncio>=0.23`. `pyproject.toml`: `asyncio_mode = "auto"`.
-
----
-
-## Phase 2d — Supplier Tool + MCP Server  ✅ DONE
-
-**Verified:** 2026-05-15
-**PR:** `phase-2d-supplier-tool` → `master` (merged)
-
-### What was built
-
-`src/spire/mcp_server/tools/suppliers.py` — plain async `search_suppliers(client, ...)` function. Tool logic decoupled from FastMCP registration.
-
-`src/spire/mcp_server/server.py` — FastMCP server. Loads `default_dev` at startup, registers `search_suppliers`. Original implementation used stdio; updated to HTTP in Phase 3.
-
-### Design choices
-
+- src-layout (`src/spire/...`)
+- Plain pip with split `requirements.txt` / `requirements-dev.txt`
+- Persona schema: `base_url`, `username`, `password`, `auth_type` in YAML
 - Tool function decoupled from MCP registration (testable directly)
 - Persona loaded once at server startup
-- `country_code` filter deferred to Phase 4
-- `supplier_name_contains` via Fusion `q=` syntax
 - Returns `items` list directly (no pagination wrapper)
-
-### Tests
-
-`tests/test_suppliers_tool.py` — 2 integration tests against real pod.
-
-### Dependencies
-
-`fastmcp>=2`.
+- Async context manager for HTTP client lifecycle
+- Exceptions bubble naturally (no custom exception classes)
 
 ---
 
-## Phase 3 — LangGraph Agent  ✅ DONE
+## Phase A.3 — Connect LLM to the Single Tool  ✅ DONE
 
 **Verified:** 2026-05-15
-**PR:** `phase-3-agent` → `master`
 
-### What was built
+End-to-end agent: prompt → MCP HTTP → Gemini picks `search_suppliers` → tool runs → answer.
 
-First end-to-end agent. Reads a prompt, connects to the Spire MCP server over HTTP, lets Gemini pick `search_suppliers`, runs it, returns the answer. Built on LangGraph + `langchain-google-genai` + `langchain-mcp-adapters`.
+- `src/spire/agent/runner.py` — LangGraph single-pass graph (`START → assistant → tools → assistant → END`)
+- `src/spire/agent/tracing.py` — `structlog` → `traces/{timestamp}.jsonl` per run
+- `src/spire/agent/lg_utility.py` — graph viz helper
+- `scripts/ask.py`, `scripts/draw_graph.py`
+- MCP server converted from stdio to HTTP transport on `127.0.0.1:3333`
+- Integration test marked `@pytest.mark.integration`, skipped by default
 
-Originally planned as 3a (Gemini + direct tool calling) + 3b (LangGraph + MCP). Collapsed into a single phase after adopting a working LangGraph reference pattern — direct `google-genai` SDK was hitting Vertex AI and required OAuth, so we shifted to `langchain-google-genai` which uses the consumer API with an API key cleanly.
+### Key decisions
 
-### Components
-
-- `src/spire/agent/runner.py` — `run_agent(prompt)`. Single-pass graph: `START → assistant → tools → assistant → END`. `tools_condition` routes back to assistant after each tool call; terminates when assistant produces a final message with no tool calls.
-- `src/spire/agent/tracing.py` — `structlog` config. Each run writes a JSONL file to `traces/{ISO timestamp}.jsonl`. Events: `agent_started`, `mcp_session_initialized`, `tools_loaded`, `graph_built`, `message` (one per message in final state), `agent_finished`.
-- `src/spire/agent/lg_utility.py` — `save_graph_as_png` helper (only used by `scripts/draw_graph.py`).
-- `src/spire/mcp_server/server.py` — updated to run HTTP transport on `127.0.0.1:3333` instead of stdio.
-- `scripts/ask.py` — standalone driver. `python scripts/ask.py "..."`.
-- `scripts/draw_graph.py` — one-shot graph viz → `docs/agent_graph.png`.
-
-### Design choices
-
-- **HTTP MCP transport.** Two-terminal dev workflow.
-- **LangGraph from the start.** Reused proven pattern.
-- **`langchain-google-genai`, not `google-genai`.** Sidesteps Vertex AI / OAuth requirement.
+- **`langchain-google-genai`, not `google-genai`.** Direct `google-genai` SDK hit `aiplatform.googleapis.com` (Vertex AI) and required OAuth. The langchain wrapper uses the consumer Gemini API and accepts an API key cleanly.
 - **Model: `gemini-2.0-flash`.**
-- **System prompt hardcoded in `runner.py`.** Single source of truth.
-- **No MCP prompt loading.**
-- **Graph viz off by default.** Run `scripts/draw_graph.py` explicitly.
-- **Integration tests skipped by default** via `addopts = "-m 'not integration'"` in `pyproject.toml`. Run with `pytest -m integration`.
+- **HTTP MCP transport.** Two-terminal dev workflow.
+- **System prompt hardcoded in `runner.py`.**
 
-### Dev workflow
-
-Terminal 1:
-```bash
-python -m spire.mcp_server.server
-```
-
-Terminal 2:
-```bash
-export GEMINI_API_KEY=...   # or use GOOGLE_API_KEY if that's what langchain-google-genai expects in your env
-python scripts/ask.py "Find suppliers with 'Lee' in the name"
-```
-
-### Tests
-
-`tests/test_agent_runner.py` — 1 integration test, marked `@pytest.mark.integration`. Requires MCP server running + `GEMINI_API_KEY` set. Skipped by default; run with `pytest -m integration`.
-
-### Verified end-to-end
+### Verified
 
 ```
 $ python scripts/ask.py "Find suppliers with 'Lee' in the name"
 I found two suppliers with 'Lee' in the name: Lee Supplies and Lee Testing for UK BU.
 ```
 
-Trace shows correct flow: HumanMessage → AIMessage (tool call) → ToolMessage (Fusion response) → AIMessage (final answer).
+---
 
-### Dependencies
+## Phase A.4 — Add Remaining Tools One by One  ✅ DONE
 
-Added: `langchain-google-genai`, `langgraph`, `langchain-mcp-adapters`, `mcp`, `structlog`.
-Dropped: `google-genai` (Vertex routing issue).
+**Verified:** 2026-05-18
+**Sub-phases:** A.4.1, A.4.2, A.4.3, A.4.4 (each merged separately)
 
-### Known issues
+### Tools added
 
-- Deprecation warning: `streamablehttp_client` should be `streamable_http_client` in newer `mcp` releases. One-line fix; deferred to follow-up.
-- `Key 'additionalProperties' is not supported in schema, ignoring` warnings from Gemini when loading the MCP tool. Harmless; cosmetic.
+| Sub-phase | Tool | Endpoint | Notes |
+|---|---|---|---|
+| A.4.1 | `search_invoices` | `/fscmRestApi/.../invoices` | Filter by supplier_number, supplier_name, invoice_date_after |
+| A.4.2 | `search_purchase_orders` | `/fscmRestApi/.../purchaseOrders` | Filter by supplier_name, supplier_id, status |
+| A.4.3 | `get_buyer` | `/hcmRestApi/.../publicWorkers` | BuyerId → PersonId lookup |
+| A.4.4 | `search_suppliers_by_country` | `/fscmRestApi/.../suppliers?expand=addresses` | Country lives on child address resource |
 
-### Exit criteria
+### Major discoveries
 
-| Criterion | Status |
-|---|---|
-| Agent reads prompt and produces answer | ✅ |
-| Tool selection via LLM (not hardcoded) | ✅ |
-| MCP transport over HTTP | ✅ |
-| Tracing wired with structured output | ✅ |
-| Integration test passes | ✅ |
-| Default test suite remains green without external services | ✅ |
+**1. Fusion `q=` composite filter bug (A.4.2).** Single-clause filters work; composite `AND` filters fail silently or with HTTP 500 on `/invoices` and `/purchaseOrders`. Workaround applied to both tools: send the most selective single clause via `q=`, over-fetch up to `OVERFETCH_LIMIT=200`, filter remaining clauses in Python. SME consult sent on underlying syntax.
+
+**2. No FSCM `buyers` endpoint (A.4.3).** `/fscmRestApi/.../buyers` returns 404. Buyers are HCM workers; `BuyerId` maps to `PersonId` on `/hcmRestApi/.../publicWorkers`. Used `publicWorkers` (flat record) over `/workers?expand=names,emails`.
+
+**3. Suppliers have country on child address (A.4.4).** Used `expand=addresses`, filtered client-side for any matching address. A supplier with multiple-country addresses can match multiple — that's correct behavior.
+
+**4. Pod credential drift / OWSM policy lag.** REST APIs returned 401 with empty body for ~30 minutes mid-day while BPM kept 200. Resolved itself. Worth noting: empty-body 401 with `WWW-Authenticate: Basic realm="owsm"` is OWSM/server-side, not client.
+
+### Design patterns established
+
+- All tools project to a small subset of fields (avoid LLM context bloat)
+- Client-side filter composition where Fusion `q=` is unreliable
+- Tool function in `tools/<name>.py`; MCP registration in `server.py`
+- `dict | None` for singular lookups (`get_buyer`); `list[dict]` for searches
+
+### Tool catalog at end of A.4
+
+```
+search_suppliers              - search by name fragment
+search_suppliers_by_country   - filter by address country
+search_invoices               - search by supplier + date
+search_purchase_orders        - search by supplier + status
+get_buyer                     - look up buyer by ID
+```
+
+### Tests
+
+23 passing, 1 deselected (the agent integration test, requires MCP server).
 
 ---
 
-## Phase 4 — Additional Tools  ⏳ PENDING
+## Phase A.5 — End-to-End Test with the POC Prompt  ✅ DONE
 
-Not started. Adds `search_suppliers_by_country`, `search_invoices`, `search_purchase_orders`, `get_buyer` — the remaining tools needed for the reference prompt:
+**Verified:** 2026-05-18
+**Report:** `docs/phase_a5_baseline_report.md`
 
-> *Show me suppliers in US with no invoices in 6 months but with open purchase orders, including the buyer assigned to each.*
+Five runs of the reference prompt against the Track A agent. Rubric written before runs. No prompt engineering, no retries with corrections, no tool-description tweaks. Honest baseline.
+
+**Result: 1/7.** Agent reliably finds US suppliers; reliably fails to compose further.
+
+### Failure patterns
+
+1. **Premature termination (runs 1–3).** Agent calls `search_suppliers_by_country` once and stops. LangGraph loop supports iteration; the LLM didn't iterate.
+2. **Parameter confusion across tools (runs 4–5).** Agent called `search_purchase_orders(supplier_number='1252')` — a parameter that exists on `search_invoices` but not `search_purchase_orders`. Pydantic validation raised; LangGraph had no recovery; runs crashed.
+3. **No error recovery.** ToolException propagated through the graph unhandled.
+
+### What this baseline measures
+
+Composition, not execution. Each tool works individually (23/23 pytest passing). The agent struggles to chain 4+ tool calls based on docstrings alone. This is the gap Track B's KG is meant to close.
+
+### Discipline confirmation
+
+- Tool descriptions not edited mid-test ✓
+- Prompt unchanged across runs ✓
+- Failed runs not retried ✓
+- System prompt unchanged ✓
+- Parameter naming inconsistency NOT unified (would invalidate the baseline) ✓
+
+Full per-run details, trace tails, and verbatim outcomes in `docs/phase_a5_baseline_report.md`.
+
+---
+
+## Phase A.6 — Capture Baseline Results  ✅ DONE
+
+**Verified:** 2026-05-18
+
+Documentation-only phase. Two updates:
+
+1. **`docs/designs/spire_design_alternatives.md`** — added a "Measured baseline" row to the comparison table (`1/7` for Track A; `pending` for Track B; `n/a` for the two documented-only designs). Added a "Measured results so far" subsection in section 9 referencing the A.5 report.
+
+2. **`docs/spire_poc_log.md`** (this file) — re-aligned phase naming to the master plan (A.1, A.2, A.3, A.4, A.5, A.6) for consistency. Earlier entries used bare numbering (Phase 1, 2a–2d, 3, 4); content unchanged, only labels.
+
+### Track A status: complete
+
+| Phase | Status |
+|---|---|
+| A.1 | ✅ |
+| A.2 | ✅ (A.2.a–A.2.d) |
+| A.3 | ✅ |
+| A.4 | ✅ (A.4.1–A.4.4) |
+| A.5 | ✅ |
+| A.6 | ✅ |
+
+### What carries forward to Track B
+
+- The 5 MCP tools, the LangGraph runner, the persona loader, the Fusion HTTP client, the trace format, the test harness — all reused
+- The 1/7 baseline as the comparison target
+- The known-but-deliberately-unfixed parameter naming inconsistency (left in place to avoid invalidating the baseline; will be fixed if/when both tracks are re-evaluated under matched conditions)
+- The composite `q=` workaround pattern (will inform how KG-driven tools build their server-side queries)
+
+---
+
+## Track B — Dynamic Orchestration  ⏳ NOT STARTED
+
+9 phases per master plan:
+
+| Phase | Name |
+|---|---|
+| B.1 | Design the Minimal Knowledge Graph |
+| B.2 | Set Up Oracle 26ai for the Graph |
+| B.3 | Populate the Graph with the Minimal Model |
+| B.4 | Build the Graph Query Tools |
+| B.5 | Integrate the Graph into the Agent Flow |
+| B.6 | Add Embeddings for Dynamic Tool Retrieval |
+| B.7 | Integration Polish & Trace Visibility |
+| B.8 | End-to-End Test with the POC Prompt |
+| B.9 | Capture Comparative Results |
+
+B.1 is the natural next step.
