@@ -35,7 +35,8 @@ from spire.agent.prompts import build_system_prompt
 from spire.agent.tracing import make_trace_logger
 from spire.config import load_persona
 from spire.kg.loader import load_kg_context
-
+import logging
+logging.getLogger("langchain_google_genai").setLevel(logging.ERROR)
 
 MODEL = "gemini-2.0-flash"
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
