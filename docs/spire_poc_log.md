@@ -459,3 +459,245 @@ Three patterns are encoded as recommended data; one (`cross_pillar_lookup`) is e
 The evaluation framework's most important property is that it commits to honest negative results. If phase 08 scores 1/7 again, that gets reported plainly. The POC isn't a sales pitch.
 
 ---
+
+## Dynamic Orchestration 04 — KG Query Tools (B-lite)  ✅ DONE
+
+**Verified:** 2026-05-19
+**Branch:** `dynamic-orchestration/04-kg-query-tools`
+**Decision:** Option B-lite (static KG bundle in system prompt). See `docs/designs/agent_kg_integration.md` for the full design.
+
+### What "phase 04" turned out to mean
+
+The master plan named this phase "Build the Graph Query Tools." Under B-lite, there are no graph query tools — the KG is loaded once and embedded in the system prompt as markdown. So the phase reshaped: instead of designing an MCP tool surface for the agent to query the KG, the phase built a loader, a prompt-composition helper, an ablation switch, and the smoke tests to confirm the wiring works end-to-end.
+
+The name "KG Query Tools" no longer fits what's in this phase. Keeping the branch name and the master-plan number (04) for traceability, but everything described below is B-lite scaffolding, not query tools.
+
+### What was decided before code
+
+The phase opened with a design conversation about how the agent should consult the KG. Four options were considered:
+
+- **A** — KG as MCP tools the LLM can call
+- **B (full)** — pre-LLM planner builds a per-request KG context bundle
+- **B-lite** — static KG bundle loaded once, embedded in the system prompt
+- **C** — hybrid of A and B-lite
+
+Initial lean was A (cleanest ablation). Revised to B-lite after weighing Track A's failure evidence: Track A's 1/7 baseline failed because the LLM didn't recognize when it needed more information. Option A relies on exactly that recognition skill. B-lite bypasses the recognition problem by putting the KG content in front of the LLM whether it asks or not.
+
+The four options and the revision are captured in `docs/designs/agent_kg_integration.md`, committed as the first commit on this branch (alongside four PlantUML diagrams, one per option).
+
+### What was built
+
+**New code:**
+
+| File | Purpose |
+|---|---|
+| `src/spire/kg/__init__.py` | New `kg/` package, parallels `fusion/` and `oracle/` |
+| `src/spire/kg/loader.py` | `load_kg_context(persona)` — queries all 5 KG tables and formats them as a markdown bundle (~12.5K chars for v1) |
+| `src/spire/agent/prompts.py` | `SYSTEM_PROMPT_BASE` constant + `build_system_prompt(kg_context)` composer; extracted from `runner.py` for readability |
+
+**Modified:**
+
+| File | Change |
+|---|---|
+| `src/spire/agent/runner.py` | Imports prompt logic; adds `kg_enabled` parameter (default `True`); calls `load_kg_context` when enabled; logs `kg_context_loaded` or `kg_context_skipped` and `system_prompt_built` events |
+| `scripts/ask.py` | Adds `--no-kg` flag mapped to `kg_enabled=False` |
+
+**Tests:**
+
+| File | Tests | Type |
+|---|---|---|
+| `tests/test_prompts.py` | 6 | Pure unit (no DB, no MCP) |
+| `tests/test_kg_loader.py` | 8 | Integration (real Oracle, no MCP) |
+
+Total: 49 passed, 1 deselected (was 35 / 1; +14 new tests). All Track A's Fusion integration tests still green against the live pod.
+
+### Implementation decisions worth recording
+
+| Decision | Choice | Why |
+|---|---|---|
+| Bundle format | Markdown | Human-readable, LLMs work well with it from training, easy to debug visually |
+| Bundle location | System prompt | The system prompt is where instructions live; KG knowledge is reference instructions for how to think about Fusion |
+| Code location | `src/spire/kg/` | Parallels `fusion/` and `oracle/`; KG is its own conceptual layer |
+| Ablation switch | `run_agent(prompt, kg_enabled=True)` parameter | Most explicit; visible at call site; trivial to test both modes |
+| Load frequency | Per `run_agent()` call | Spire runs one call per CLI invocation; no module-level state, easier to test; ~50ms per load is fine |
+| Long prompts | Extracted to `prompts.py` | Easier to read code when prompt strings aren't inline |
+| `SYSTEM_PROMPT_BASE` | Lightly revised to mention the KG | Pointer sentence in the base; used for both KG-on and KG-off so ablation isolates only the KG content |
+
+### Bundle composition
+
+The `load_kg_context` function produces a markdown document with four top-level sections:
+
+1. **Entities** — markdown table (5 rows), followed by per-entity sub-sections with field projection details
+2. **Edges (Relationships)** — markdown table (4 rows), followed by per-edge details including traversal hints and notes
+3. **Query Patterns** — prose blocks for each of the 4 patterns; includes shape, parameters (as JSON code block), mechanics (as numbered steps), and worked example
+4. **Vocabulary** — grouped by `vocab_kind`; markdown table per kind
+
+The notes columns from `kg_edge` are included prominently — this is where the SupplierNumber-vs-SupplierId asymmetry and the cross-pillar caveat for `ASSIGNED_TO` live.
+
+For v1 the bundle is ~12,480 chars (~3,000 Gemini tokens). Well within context limits.
+
+### Smoke test — end-to-end works in both modes
+
+Ran the simple prompt "Find suppliers with 'Lee' in the name" both with and without KG:
+
+- **KG-enabled** (`python scripts/ask.py "..."`): system prompt 13,140 chars (base + KG bundle); answer correct ("Lee Supplies and Lee Testing for UK BU")
+- **KG-disabled** (`python scripts/ask.py --no-kg "..."`): system prompt 653 chars (base only); answer correct (same)
+
+Trace files confirm `kg_enabled` flows through to the logger and the loader runs (or doesn't) based on the flag.
+
+Honest observation: for a single-step prompt, both modes produce the same answer. That's expected — the KG isn't supposed to help when there's nothing structural to figure out. The real test is the multi-step reference prompt, which happens in phase 08.
+
+### Implications for subsequent phases
+
+| Phase | Impact |
+|---|---|
+| 05 — Agent Integration | Substantially absorbed by this phase. Under B-lite, integration *is* the system prompt change. Phase 05 became a multi-step verification step (see below). |
+| 06 — Embeddings | Open. B-lite doesn't need embeddings for v1 (the full bundle fits in context). If Tier 1 evaluation surfaces "LLM glaze" on the dense system prompt, phase 06 might introduce embedding-based selection of which KG content to include. Defer decision until Tier 1 results. |
+| 07 — Integration Polish & Trace Visibility | Existing trace events from this phase (`kg_enabled`, `kg_context_loaded`, `system_prompt_built`) give phase 07 something to build on. |
+| 08 — End-to-end Test | Tier 1 measurement of the evaluation framework. 5 runs of the reference prompt with `kg_enabled=True`. Same rubric, same protocol as A.5. |
+| 09 — Comparative Results | Tier 2 ablation. 5 more runs of the reference prompt with `kg_enabled=False`. Delta between phase 08 and the ablation = the KG's contribution. |
+
+### Known gaps and deferred work
+
+- **The "Key 'additionalProperties' is not supported in schema, ignoring" warnings** still appear (cosmetic, from langchain-google-genai parsing MCP tool schemas). Suppression landed as a separate small commit directly to master (`f062d36`, "Supressing logs"). Not done as a branched PR — process drift acknowledged.
+- **No trace-inspection tooling yet.** Addressed in phase 07.
+- **`cross_pillar_lookup` pattern still in v1.** Phase 03 flagged this as the pattern least confident about. Phase 04 didn't have a reason to drop it; phase 05 verification didn't exercise it explicitly. Whether the agent uses it gets measured in phase 08.
+- **The bundle is always the full v1 KG.** No per-prompt filtering. If we discover the LLM glazes over the 13K-char prompt, phase 06 (embeddings) or a smaller hand-crafted bundle becomes the fix.
+
+### Process notes
+
+Phase 04 had two process issues worth recording for honest history:
+
+1. **Log entry placement.** The phase 04 log entry was generated as a snippet file (`docs/log_snippet_dynamic_orchestration_04.md`) and accidentally committed to master as a standalone file instead of being spliced into `docs/spire_poc_log.md`. Phase 07 cleaned this up by deleting the stray file and regenerating the full log. Going forward, log entries are delivered as a regenerated full `docs/spire_poc_log.md`, not snippets — the snippet pattern caused log misplacement twice (here and after phase 01).
+2. **Log-suppression commit went direct-to-master.** No branch, no PR, no conversation gate. Flagged at the time as process drift; allowed to stand.
+
+### Honest framing
+
+Phase 04 was much smaller than the master plan anticipated. The "query tools" name implied a substantial tool layer; under B-lite there are no new tools. The phase built scaffolding (loader, prompt composition, ablation switch) and tests, and that's it. ~536 lines of code across the new files.
+
+This is consistent with the architectural decision. B-lite was chosen because the smallest engineering surface was the right answer, not because it would make phase 04 cheap. The phase being cheap is a consequence of the decision being right, not a problem.
+
+The real measurement of whether the B-lite choice was right happens in phase 08 and the Tier 2 ablation.
+
+---
+
+## Dynamic Orchestration 05 — Multi-step Verification  ✅ DONE
+
+**Verified:** 2026-05-19
+**No new commits, no branch.** Verification-only phase using existing tooling.
+
+### Why phase 05 reshaped
+
+Under B-lite (chosen in phase 04), the master plan's phase 05 — "Integrate the Graph into the Agent Flow" — is substantially already done. The KG is in the system prompt on every `kg_enabled=True` run; there's no separate integration step left to build.
+
+Rather than skip the phase number, repurposed it: do a **shake-out verification** with a multi-step prompt before phase 08 commits to the formal 5-run measurement. Phase 08 explicitly forbids mid-test fixes, so this was the last clean window to catch wiring issues, prompt-format problems, or surprising LLM behavior.
+
+### Protocol
+
+- One prompt: "Find suppliers in US with open purchase orders, and tell me the buyer for each."
+- Exercises 3 of 4 KG patterns: `country_filter_via_address`, `status_filter`, `cross_pillar_lookup`. Deliberately omits `no_Y_in_N_months` (negation; the hardest pattern).
+- 2 runs per condition (KG-on, KG-off). 4 runs total.
+- No scoring against a rubric. Observation only.
+- No iteration on the prompt or the bundle format between runs.
+
+### What was observed
+
+| Run | Mode | Outcome | Tool calls | Notes |
+|---|---|---|---|---|
+| 1 | KG-on | Full answer, 9 suppliers with POs + buyers; correctly noted US Gas and Electric has no open POs | ~16 calls | Used `supplier_id` correctly throughout |
+| 2 | KG-on | Full answer, same 9 + buyers | ~14 calls (parallel batches) | Batched PO lookups and buyer lookups in parallel — multiple `tool_calls` per AIMessage |
+| 3 | KG-off | **Empty answer.** Agent called `search_suppliers_by_country("US")` once and stopped | **1 call** | Reproduces Track A's premature-termination failure mode |
+| 4 | KG-off | Partial answer (3 suppliers); used `supplier_name` for PO lookups instead of `supplier_id`; mentioned tangential details (email, username) not asked for | Many | Reproduces Track A's parameter-confusion failure mode |
+
+The KG-enabled runs cleanly composed the multi-step task; the KG-disabled runs reproduced both Track A failure modes.
+
+### Honest framing
+
+This is not a measurement. It's a 2-vs-2 sanity check on one prompt, with a non-deterministic model. The signal is encouraging — the agent in KG-on runs used `supplier_id` (the numeric join key the KG explicitly declares for `HAS_PURCHASE_ORDER`), while the KG-off agent used `supplier_name` (the wrong field). That's exactly the asymmetry the KG was built to fix.
+
+But:
+- 2 runs per condition is far below the 5-run sample phase 08 will use
+- Gemini variance is real — a single ablation run can over- or under-represent the actual baseline
+- The agent's claimed buyer-supplier assignments weren't verified against ground truth
+- The reference prompt (which includes negation) wasn't tested
+
+What this phase actually accomplished: confirmed the wiring works end-to-end with a multi-step prompt, confirmed the KG content is reaching the LLM as expected (system prompt 13,140 chars with KG, 653 without), confirmed there are no obvious bugs to fix before phase 08.
+
+### What carries forward
+
+- Phase 08's 5-run protocol can proceed against the reference prompt without code changes
+- Phase 07 inherited a clear use case for trace-inspection tooling: making this kind of comparison readable at scale
+- The observation that KG-off agents in this verification reproduced both Track A failure modes is captured here for the phase 09 write-up
+
+---
+
+## Dynamic Orchestration 07 — Integration Polish & Trace Visibility  ✅ DONE
+
+**Verified:** 2026-05-19
+**Branch:** `dynamic-orchestration/07-integration-polish`
+
+**Deliverables:**
+- `scripts/inspect_trace.py` — trace inspection tool
+- `tests/test_inspect_trace.py` — 17 unit tests
+- `docs/log_snippet_dynamic_orchestration_04.md` — **deleted** (stray file from phase 04 mistake; canonical phase 04 entry now lives in this log file)
+- `docs/spire_poc_log.md` — regenerated with phase 04, 05, 07 entries
+
+### What this phase actually built
+
+Phase 06 (embeddings) was skipped per the design doc — defer until phase 08 shows we need it. Phase 07 was therefore the last engineering phase before the formal measurement.
+
+The phase had two purposes: ship tooling that makes phase 08's trace inspection sustainable, and clean up the small messes that had accumulated. No agent behavior changes. No new tools for the LLM. No `runner.py` changes.
+
+### `scripts/inspect_trace.py`
+
+Reads a JSONL agent trace and produces a human-readable summary. Defaults to the most recent trace in `traces/` if no path is given (`python scripts/inspect_trace.py`); accepts an explicit path for comparing specific runs.
+
+Two output modes:
+- **Default text format** — header (prompt, kg_enabled, model, duration, tool count), tool calls grouped by LLM turn (single-call vs parallel-batch visible at a glance), final answer (truncated to 500 chars unless `--full`), termination status
+- **`--json`** — structured JSON for any future scripting against multiple traces
+
+Termination heuristics:
+- "completed normally" — agent_finished event present, non-empty answer
+- "premature termination" — agent_finished present, but ≤1 tool call AND empty answer (matches Track A failure mode 1)
+- "crashed mid-run" — no agent_finished event
+- "completed but produced no answer" — agent_finished present, multiple tool calls, but empty answer
+
+Args are formatted with sorted keys, so identical tool calls render identically across runs — useful when comparing traces side by side.
+
+### Tests
+
+`tests/test_inspect_trace.py` — 17 pure unit tests using synthetic JSONL fixtures. No live agent, no DB, no MCP. Covers parsing, termination heuristics, both output formats, and CLI integration.
+
+Test count: 49 → 66 passed, 1 deselected (+17 new).
+
+### Smoke test against a real trace
+
+Ran the script against one of the phase 05 traces (`2026-05-19T05-45-03-108221.jsonl`, the KG-disabled run 4). The output surfaced — at a glance — what took several minutes to spot in raw JSONL: the agent used `supplier_name="..."` (string) instead of `supplier_id=...` (numeric) for PO lookups in turns 5–7. That's the parameter-confusion failure mode the KG is meant to prevent.
+
+This is exactly what the tool is for: making structural failures visible in phase 08 without manual JSONL grepping.
+
+### Cleanup landed in the same commit
+
+- Deleted `docs/log_snippet_dynamic_orchestration_04.md` — the stray snippet file that was misplaced into the repo root during phase 04 instead of being spliced into `docs/spire_poc_log.md`. Its content has been folded into this log under the phase 04 section.
+
+### What was intentionally NOT changed
+
+- `runner.py` — no changes. Agent behavior is locked for phase 08.
+- The `additionalProperties` warnings — already suppressed via `f062d36`, no further work.
+- The KG bundle format — frozen at the v1 shape used in phases 04 and 05.
+- The system prompt — frozen.
+- The Fusion tools — frozen.
+
+Phase 08's protocol forbids mid-test fixes; freezing everything before phase 08 starts is the discipline that makes phase 08 honest.
+
+### What carries forward to phase 08
+
+- `scripts/inspect_trace.py` is the standard tool for examining each of the 5 measurement runs
+- The `--json` mode lets phase 09's comparative write-up scripted against the trace data if useful
+- The Track A baseline report (`docs/phase_a5_baseline_report.md`) is the reference format for what phase 08's report should look like
+
+### Honest framing
+
+Phase 07 was small, as expected — pure tooling. The interesting thing wasn't the script (a few hundred lines of pretty straightforward Python); it was what the script revealed when pointed at the phase 05 traces. The KG-on runs showed clean multi-step composition; the KG-off runs showed both Track A failure modes. That observation is what justifies running phase 08 next.
+
+---
