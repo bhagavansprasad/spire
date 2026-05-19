@@ -1,0 +1,77 @@
+@startuml option_b_kg_planning_step
+title Option B — KG consultation as pre-LLM planning step
+
+actor User
+participant "ask.py\n(CLI)" as CLI
+participant "LangGraph\nagent loop" as Agent
+participant "Planner\n(new, Python)" as Planner
+participant "LLM\n(Gemini)" as LLM
+participant "MCP server" as MCP
+participant "Fusion tools" as FusionTools
+participant "OracleClient" as OracleClient
+participant "FusionClient" as FusionClient
+participant "Oracle 26ai\n(SPIRE)" as Oracle
+participant "Fusion REST" as FusionPod
+
+User -> CLI : reference prompt
+CLI -> Agent : run_agent(prompt)
+
+== Planning phase (no LLM yet) ==
+Agent -> Planner : plan(prompt)
+note right of Planner
+  Identify what KG knowledge
+  this prompt needs.
+  Options for how:
+  - keyword match on vocabulary
+  - first-pass LLM call to extract
+  - embedding similarity (phase 06)
+end note
+
+Planner -> OracleClient : SELECT * FROM kg_vocabulary\nWHERE term IN (...prompt tokens)
+OracleClient -> Oracle : SQL
+Oracle --> OracleClient : vocab matches
+Planner -> OracleClient : SELECT * FROM kg_entity\nWHERE entity_name IN (...)
+OracleClient -> Oracle : SQL
+Oracle --> OracleClient : entity rows
+Planner -> OracleClient : SELECT * FROM kg_edge\nWHERE from_entity IN (...) OR to_entity IN (...)
+Oracle --> OracleClient : edge rows
+Planner -> OracleClient : SELECT * FROM kg_pattern WHERE ...
+Oracle --> OracleClient : pattern rows
+OracleClient --> Planner : all KG context
+Planner -> Planner : format as structured context bundle
+
+Planner --> Agent : KG context bundle (text/JSON)
+
+== Execution phase (LLM-driven, Fusion tools only) ==
+Agent -> MCP : load_mcp_tools()
+MCP --> Agent : Fusion tools (NO KG tools here)
+
+Agent -> LLM : system_prompt + KG_bundle + user_prompt + Fusion tools
+LLM --> Agent : tool_call: search_suppliers_by_country("US")
+note right of LLM
+  LLM already knows "US" → "US"
+  and the join field gotchas
+  from the bundle. No KG tool
+  calls needed.
+end note
+
+Agent -> MCP : invoke search_suppliers_by_country
+MCP -> FusionTools : ...
+FusionTools -> FusionClient : GET /suppliers?expand=addresses
+FusionClient -> FusionPod : HTTPS
+FusionPod --> FusionClient : 25 suppliers
+FusionClient --> FusionTools : 25 suppliers
+FusionTools --> MCP : 25 suppliers
+MCP --> Agent : 25 suppliers
+Agent -> LLM : updated context
+
+note over LLM, Agent
+  More Fusion calls follow,
+  but every call is informed
+  by the upfront KG bundle.
+end note
+
+LLM --> Agent : final_answer
+Agent --> CLI : answer text
+CLI --> User : printed answer
+@enduml
