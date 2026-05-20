@@ -14,6 +14,12 @@ Heuristics:
 - "premature termination" = the agent finished with an empty answer AND
   made at most one tool call. Matches Track A baseline failure mode 1.
 - "crashed mid-run" = there is no agent_finished event in the trace.
+
+Note on content normalization:
+Some traces (those produced before runner.py's content normalizer landed,
+or with models that return structured content like gemini-2.5-pro) recorded
+answer_preview as a list-of-dicts instead of a string. The parser coerces
+to plain text defensively so old traces remain readable.
 """
 
 from __future__ import annotations
@@ -88,6 +94,27 @@ def _parse_ts(ts: str | None) -> datetime | None:
         return None
 
 
+def _normalize_content(raw) -> str:
+    """Coerce content from a trace event to a plain string.
+
+    Newer traces have plain-string answer_preview. Older traces (or those
+    produced by models like gemini-2.5-pro before the runner normalizer
+    landed) recorded answer_preview as a list of {"type": "text",
+    "text": "..."} dicts. This helper handles both.
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts = []
+        for block in raw:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    return str(raw)
+
+
 def parse_trace(path: Path) -> TraceSummary:
     """Read a trace file and produce a TraceSummary."""
     summary = TraceSummary(run_id=path.stem, trace_file=str(path))
@@ -124,7 +151,7 @@ def parse_trace(path: Path) -> TraceSummary:
 
         elif event_name == "agent_finished":
             summary.finished_at = _parse_ts(ev.get("timestamp"))
-            summary.final_answer = ev.get("answer_preview", "") or ""
+            summary.final_answer = _normalize_content(ev.get("answer_preview", ""))
             summary.completed_normally = True
 
     # Termination heuristics.

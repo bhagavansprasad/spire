@@ -2,7 +2,8 @@
 
 Connects to the Spire MCP server (must already be running on
 http://127.0.0.1:3333/mcp/), pulls tools via langchain-mcp-adapters,
-binds them to gemini-2.0-flash, and runs a single-pass graph:
+binds them to the configured Gemini model, and runs a single-pass
+graph:
 
     START -> assistant -> tools -> assistant -> END
 
@@ -35,12 +36,43 @@ from spire.agent.prompts import build_system_prompt
 from spire.agent.tracing import make_trace_logger
 from spire.config import load_persona
 from spire.kg.loader import load_kg_context
+
 import logging
+
 logging.getLogger("langchain_google_genai").setLevel(logging.ERROR)
 
-MODEL = "gemini-2.0-flash"
+
+# Model selection — see docs/spire_poc_log.md for the history.
+# Earlier phases used gemini-2.0-flash. Phase 08/09 showed 1/5 success on the
+# reference prompt regardless of KG state. Diagnostic runs on 2.5-flash were
+# worse (tool hallucination). 2.5-pro is the reasoning-tier model;
+# under investigation for whether LLM capability was the real bottleneck.
+MODEL = "gemini-2.5-pro"
+
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 PERSONA_NAME = "default_dev"
+
+
+def _normalize_content(raw):
+    """Coerce LLM message content to plain string.
+
+    gemini-2.0-flash returns final_message.content as a plain str.
+    gemini-2.5-pro returns it as a list of {"type": "text", "text": "..."}
+    dicts (with optional signature metadata). Callers want a string either
+    way; this helper does the right thing for both.
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        parts = []
+        for block in raw:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    # Fallback: stringify whatever it is.
+    return str(raw)
 
 
 def _assistant(state: MessagesState, llm_with_tools, system_prompt: str):
@@ -111,10 +143,11 @@ async def run_agent(prompt: str, kg_enabled: bool = True) -> str:
 
             # Log each message in the final state for trace inspection.
             for i, msg in enumerate(result["messages"]):
+                content_preview = _normalize_content(msg.content)
                 event = {
                     "index": i,
                     "type": msg.__class__.__name__,
-                    "content_preview": (msg.content[:200] if msg.content else None),
+                    "content_preview": content_preview[:200] if content_preview else None,
                 }
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     event["tool_calls"] = [
@@ -123,6 +156,6 @@ async def run_agent(prompt: str, kg_enabled: bool = True) -> str:
                 logger.info("message", **event)
 
             final_message = result["messages"][-1]
-            answer = final_message.content or ""
+            answer = _normalize_content(final_message.content)
             logger.info("agent_finished", answer_preview=answer[:200])
             return answer
