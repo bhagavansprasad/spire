@@ -19,7 +19,7 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-05-20 | /invoices       | `PaidStatus` and `ApprovalStatus` exist on default response; values are display strings (`"Paid"`, `"Not required"`), not codes |
 | 2026-05-20 | /purchaseOrders | Field is `Ordered` (not `OrderTotalAmount`). Also: `Total` (includes tax), `OrderDate`, `PaymentTerms`, `SupplierSiteId` exist on default response |
 | 2026-05-20 | (all)           | The `?fields=...` parameter is strict: if any field in the list is invalid, the whole response is empty with no error |
-
+| 2026-05-22 | /suppliers      | Composite `q=` clauses (e.g., `q=Supplier LIKE '%Lee%' AND Status='ACTIVE'`) silently return 0 items with HTTP 200, even when matches exist. Confirms the composite-`q=` quirk is not just on `/invoices` and `/purchaseOrders` — it applies to `/suppliers` too. Likely applies across all Fusion REST endpoints on this pod. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -69,7 +69,7 @@ This is the **SupplierNumber-vs-SupplierId asymmetry** that crashed Track A:
 
 These hit you on more than one endpoint, so call them out once:
 
-1. **Composite `q=` filters fail.** Multi-clause `q=` strings (`q=Field1=X AND Field2=Y`) return HTTP 500 or silently empty results on `/invoices` and `/purchaseOrders`. Workaround used in Spire: send the most selective single clause via `q=`, over-fetch (`limit=200`), filter the rest client-side.
+1. **Composite q= filters fail**. Multi-clause q= strings (q=Field1=X AND Field2=Y) return HTTP 500 or silently empty results on every endpoint tested so far (/suppliers, /invoices, /purchaseOrders). Assume this quirk applies to all Fusion REST endpoints on this pod until proven otherwise. Workaround used in Spire: send the most selective single clause via q=, over-fetch (limit=200), filter the rest client-side.
 
 2. **Country isn't on supplier directly.** Suppliers have addresses as a child resource. Country lookup needs `?expand=addresses`, then filter client-side for any address with matching `Country` code.
 

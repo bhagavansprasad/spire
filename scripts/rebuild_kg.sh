@@ -22,7 +22,23 @@ SET SERVEROUTPUT ON
 
 -- ============================================================
 -- STEP 1: Drop all KG tables (safe if they don't exist)
+--
+-- Drop order matters: children (with FKs) must be dropped
+-- before parents. Order:
+--   kg_pattern_binding (FK -> kg_entity, kg_pattern)
+--   kg_entity_field    (FK -> kg_entity)
+--   kg_edge            (FK -> kg_entity)
+--   kg_pattern         (parent)
+--   kg_vocabulary      (no FKs, can go anywhere)
+--   kg_entity          (parent)
 -- ============================================================
+
+BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE kg_pattern_binding PURGE';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -942 THEN RAISE; END IF;
+END;
+/
 
 BEGIN
   EXECUTE IMMEDIATE 'DROP TABLE kg_entity_field PURGE';
@@ -91,21 +107,24 @@ CREATE TABLE kg_entity_field (
 );
 
 CREATE TABLE kg_edge (
-  edge_name          VARCHAR2(64)   NOT NULL,
-  from_entity        VARCHAR2(64)   NOT NULL,
-  to_entity          VARCHAR2(64)   NOT NULL,
-  from_join_field    VARCHAR2(64)   NOT NULL,
-  to_join_field      VARCHAR2(64)   NOT NULL,
-  cardinality        VARCHAR2(32)   NOT NULL,
-  traversal_hint     VARCHAR2(2000) NOT NULL,
-  notes              VARCHAR2(2000),
+  edge_name           VARCHAR2(64)   NOT NULL,
+  from_entity         VARCHAR2(64)   NOT NULL,
+  to_entity           VARCHAR2(64)   NOT NULL,
+  from_join_field     VARCHAR2(64)   NOT NULL,
+  to_join_field       VARCHAR2(64)   NOT NULL,
+  cardinality         VARCHAR2(32)   NOT NULL,
+  server_filter_rule  VARCHAR2(32)   DEFAULT 'join_only' NOT NULL,
+  traversal_hint      VARCHAR2(2000) NOT NULL,
+  notes               VARCHAR2(2000),
   CONSTRAINT pk_kg_edge PRIMARY KEY (edge_name),
   CONSTRAINT fk_kg_edge_from
     FOREIGN KEY (from_entity) REFERENCES kg_entity (entity_name),
   CONSTRAINT fk_kg_edge_to
     FOREIGN KEY (to_entity)   REFERENCES kg_entity (entity_name),
   CONSTRAINT chk_kg_edge_cardinality
-    CHECK (cardinality IN ('one_to_one', 'one_to_many', 'many_to_one', 'many_to_many'))
+    CHECK (cardinality IN ('one_to_one', 'one_to_many', 'many_to_one', 'many_to_many')),
+  CONSTRAINT chk_kg_edge_server_filter_rule
+    CHECK (server_filter_rule IN ('join_only', 'first_filter_only', 'all_supported'))
 );
 
 CREATE TABLE kg_pattern (
@@ -125,6 +144,18 @@ CREATE TABLE kg_vocabulary (
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
     CHECK (vocab_kind IN ('country', 'po_status', 'entity_synonym', 'relationship_phrase'))
+);
+
+CREATE TABLE kg_pattern_binding (
+  entity_name        VARCHAR2(64)  NOT NULL,
+  filter_type        VARCHAR2(64)  NOT NULL,
+  pattern_name       VARCHAR2(64)  NOT NULL,
+  parameter_bindings CLOB          NOT NULL,
+  CONSTRAINT pk_kg_pattern_binding PRIMARY KEY (entity_name, filter_type),
+  CONSTRAINT fk_kg_pattern_binding_entity
+    FOREIGN KEY (entity_name) REFERENCES kg_entity (entity_name),
+  CONSTRAINT fk_kg_pattern_binding_pattern
+    FOREIGN KEY (pattern_name) REFERENCES kg_pattern (pattern_name)
 );
 
 PROMPT Tables created.
@@ -214,24 +245,28 @@ PROMPT Seeded kg_entity_field (27 rows).
 
 INSERT INTO kg_edge VALUES (
   'HAS_INVOICE', 'Supplier', 'Invoice', 'SupplierNumber', 'SupplierNumber', 'one_to_many',
+  'join_only',
   'GET /fscmRestApi/.../invoices?q=SupplierNumber=''{supplier.SupplierNumber}'' (optionally with InvoiceDate filter).',
   'The invoices endpoint exposes SupplierNumber, not SupplierId. Use SupplierNumber here even though SupplierId is the canonical id on Supplier. Composite q= clauses are unreliable on this pod; apply additional filters client-side after over-fetch.'
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_ADDRESS', 'Supplier', 'Address', 'SupplierId', 'SupplierId', 'one_to_many',
+  'join_only',
   'GET /fscmRestApi/.../suppliers?expand=addresses. Address is a child resource; addresses come back inline as supplier.addresses[].',
   'There is no standalone Address endpoint. Always use expand=addresses on the supplier query. Country filtering is client-side: iterate supplier.addresses[] and match on CountryCode or Country.'
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_PURCHASE_ORDER', 'Supplier', 'PurchaseOrder', 'SupplierId', 'SupplierId', 'one_to_many',
+  'join_only',
   'GET /fscmRestApi/.../purchaseOrders?q=SupplierId={supplier.SupplierId} (optionally with status filter).',
   'Use SupplierId (numeric), not SupplierNumber, on this endpoint. This is the asymmetry with HAS_INVOICE. Composite q= clauses are unreliable; apply status filter client-side after over-fetch.'
 );
 
 INSERT INTO kg_edge VALUES (
   'ASSIGNED_TO', 'PurchaseOrder', 'Buyer', 'BuyerId', 'PersonId', 'many_to_one',
+  'join_only',
   'GET /hcmRestApi/.../publicWorkers?q=PersonId={po.BuyerId}',
   'CROSS-PILLAR: PO is in FSCM; Buyer is in HCM. There is no /fscmRestApi/.../buyers endpoint on this pod. BuyerId on a PO equals PersonId on publicWorkers.'
 );
@@ -332,7 +367,29 @@ COMMIT;
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
--- STEP 8: Verification
+-- STEP 8: Seed kg_pattern_binding
+-- ============================================================
+
+INSERT INTO kg_pattern_binding (entity_name, filter_type, pattern_name, parameter_bindings) VALUES (
+  'Supplier',
+  'country',
+  'country_filter_via_address',
+  '{"parent": "Supplier", "child_edge": "HAS_ADDRESS", "country_term_param": "country"}'
+);
+
+INSERT INTO kg_pattern_binding (entity_name, filter_type, pattern_name, parameter_bindings) VALUES (
+  'PurchaseOrder',
+  'status',
+  'status_filter',
+  '{"X": "PurchaseOrder", "status_field": "StatusCode", "status_term_param": "status"}'
+);
+
+COMMIT;
+
+PROMPT Seeded kg_pattern_binding (2 rows).
+
+-- ============================================================
+-- STEP 9: Verification
 -- ============================================================
 
 SET PAGESIZE 100
@@ -341,14 +398,23 @@ SET LINESIZE 200
 PROMPT
 PROMPT Row counts:
 SELECT 'kg_entity'        AS tab, COUNT(*) AS row_count FROM kg_entity
-UNION ALL SELECT 'kg_entity_field', COUNT(*) FROM kg_entity_field
-UNION ALL SELECT 'kg_edge',         COUNT(*) FROM kg_edge
-UNION ALL SELECT 'kg_pattern',      COUNT(*) FROM kg_pattern
-UNION ALL SELECT 'kg_vocabulary',   COUNT(*) FROM kg_vocabulary;
+UNION ALL SELECT 'kg_entity_field',     COUNT(*) FROM kg_entity_field
+UNION ALL SELECT 'kg_edge',             COUNT(*) FROM kg_edge
+UNION ALL SELECT 'kg_pattern',          COUNT(*) FROM kg_pattern
+UNION ALL SELECT 'kg_vocabulary',       COUNT(*) FROM kg_vocabulary
+UNION ALL SELECT 'kg_pattern_binding',  COUNT(*) FROM kg_pattern_binding;
 
 PROMPT
 PROMPT Patterns:
 SELECT pattern_name FROM kg_pattern ORDER BY pattern_name;
+
+PROMPT
+PROMPT Edge filter rules (should all be join_only for v1):
+SELECT edge_name, server_filter_rule FROM kg_edge ORDER BY edge_name;
+
+PROMPT
+PROMPT Pattern bindings (should be 2 rows for v1):
+SELECT entity_name, filter_type, pattern_name FROM kg_pattern_binding ORDER BY entity_name, filter_type;
 
 EXIT
 EOF
