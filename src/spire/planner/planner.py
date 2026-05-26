@@ -1,23 +1,57 @@
 """
-Planner stubs for the KG-driven path (Architecture Option 3).
+Planner for the KG-driven path (Architecture Option 3).
 
 This module is the contract between the LLM intent-parsing step and the
 MCP executor. It reads only from the KG (see sql/kg/v1/) and emits a
 structured plan. No LLM in the planning step. No prose-reading for
 decisions.
 
-Status: DESIGN ONLY. All functions are unimplemented stubs.
-Companion design doc: docs/designs/phase_2_planner_design.md
+Status: in progress. ``resolve_vocab`` is implemented; remaining
+functions still raise NotImplementedError.
 
-The dataclasses and signatures here must remain in sync with the design
-doc. When you implement: write tests against the worked example in the
-design doc, then fill in bodies one function at a time, smallest first.
+Companion design doc: docs/designs/phase_2_planner_design.md
 """
 
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterator
+
+import oracledb
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG connection
+# ─────────────────────────────────────────────────────────────────────
+
+# Connection details mirror scripts/rebuild_kg.sh. The DSN points at the
+# port-mapped Oracle container on the host. Override via environment for
+# CI or alternate setups.
+_DEFAULT_USER = "spire"
+_DEFAULT_PASSWORD = "jnjnuh"
+_DEFAULT_DSN = "localhost:1521/FREEPDB1"
+
+
+@contextmanager
+def _kg_cursor() -> Iterator[oracledb.Cursor]:
+    """
+    Yield a cursor against the KG database. Closes connection on exit.
+
+    Every KG-lookup function opens a fresh connection; pooling can be
+    added later if profiling shows it matters.
+    """
+    connection = oracledb.connect(
+        user=os.environ.get("SPIRE_DB_USER", _DEFAULT_USER),
+        password=os.environ.get("SPIRE_DB_PASSWORD", _DEFAULT_PASSWORD),
+        dsn=os.environ.get("SPIRE_DB_DSN", _DEFAULT_DSN),
+    )
+    try:
+        with connection.cursor() as cursor:
+            yield cursor
+    finally:
+        connection.close()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -167,9 +201,25 @@ def resolve_vocab(vocab_kind: str, term: str) -> str:
         resolve_vocab('po_status', 'open')    -> 'OPEN'
         resolve_vocab('po_status', 'active')  -> 'OPEN'
 
-    Raises if no row found (caller must handle unknown terms).
+    Raises ``KeyError`` if no matching row exists for the
+    (vocab_kind, term) pair. Match is case-sensitive.
     """
-    raise NotImplementedError
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT canonical_value
+            FROM kg_vocabulary
+            WHERE vocab_kind = :vocab_kind AND term = :term
+            """,
+            vocab_kind=vocab_kind,
+            term=term,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        raise KeyError(f"No vocab for ({vocab_kind!r}, {term!r})")
+
+    return row[0]
 
 
 # ─────────────────────────────────────────────────────────────────────

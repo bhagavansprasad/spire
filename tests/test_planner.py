@@ -1,23 +1,19 @@
 """
-Tests for the planner stubs (Phase 2 step 0 verification).
+Tests for the planner.
 
-This test does NOT exercise any planner logic — the stubs all raise
-NotImplementedError. It verifies the *contract*: that the dataclasses
-defined in planner.py can express the worked-example plan from
-docs/designs/phase_2_planner_design.md exactly as written.
+Two kinds of tests live here:
 
-If this test passes, we know:
-  - The module imports cleanly (no syntax errors in the stub file)
-  - The Intent, Step, and Plan types are as designed
-  - The anchor-question plan from the design doc is representable
-  - Field names and types haven't drifted between doc and code
+1. Contract tests for the dataclasses (Intent, Step, Plan) — no DB
+   required. These verify the design doc and the stub file stay in sync.
 
-If this test fails, the stub file and the design doc are out of sync.
+2. Live KG tests for implemented lookup functions — hit the live KG
+   (oracle26ai_db_bhagavan container). If these fail, run
+   ./scripts/rebuild_kg.sh first to ensure seed data is loaded.
 """
 
 import pytest
 
-from spire.planner.planner import Intent, Plan, Step
+from spire.planner.planner import Intent, Plan, Step, resolve_vocab
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -82,7 +78,7 @@ def anchor_plan() -> Plan:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Tests
+# Dataclass contract tests (no DB)
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -142,3 +138,65 @@ def test_step3_dedupes_on_join_field(anchor_plan: Plan) -> None:
 def test_step_ids_are_sequential(anchor_plan: Plan) -> None:
     """Step IDs increment by 1 starting from 1."""
     assert [s.step_id for s in anchor_plan] == [1, 2, 3]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# resolve_vocab — live KG tests
+#
+# Hit the live KG (oracle26ai_db_bhagavan container). Seed data lives in
+# scripts/rebuild_kg.sh. If these fail, run ./scripts/rebuild_kg.sh first
+# to ensure the vocabulary is loaded.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_resolve_vocab_country_canonical() -> None:
+    """Canonical form ('US') resolves to itself."""
+    assert resolve_vocab("country", "US") == "US"
+
+
+def test_resolve_vocab_country_three_letter() -> None:
+    """'USA' resolves to canonical 'US'."""
+    assert resolve_vocab("country", "USA") == "US"
+
+
+def test_resolve_vocab_country_full_name() -> None:
+    """'United States' resolves to 'US'."""
+    assert resolve_vocab("country", "United States") == "US"
+
+
+def test_resolve_vocab_country_full_formal_name() -> None:
+    """'United States of America' resolves to 'US'."""
+    assert resolve_vocab("country", "United States of America") == "US"
+
+
+def test_resolve_vocab_status_open() -> None:
+    """'open' resolves to canonical 'OPEN'."""
+    assert resolve_vocab("po_status", "open") == "OPEN"
+
+
+def test_resolve_vocab_status_synonym() -> None:
+    """'active' (synonym for open) resolves to 'OPEN'."""
+    assert resolve_vocab("po_status", "active") == "OPEN"
+
+
+def test_resolve_vocab_british_spelling() -> None:
+    """British 'cancelled' resolves to American 'CANCELED'."""
+    assert resolve_vocab("po_status", "cancelled") == "CANCELED"
+
+
+def test_resolve_vocab_unknown_term_raises_key_error() -> None:
+    """Unknown term raises KeyError."""
+    with pytest.raises(KeyError):
+        resolve_vocab("country", "Atlantis")
+
+
+def test_resolve_vocab_unknown_kind_raises_key_error() -> None:
+    """Unknown vocab_kind raises KeyError (no matching row)."""
+    with pytest.raises(KeyError):
+        resolve_vocab("nonexistent_kind", "US")
+
+
+def test_resolve_vocab_is_case_sensitive() -> None:
+    """Lowercase 'us' does not match (case-sensitive by design)."""
+    with pytest.raises(KeyError):
+        resolve_vocab("country", "us")
