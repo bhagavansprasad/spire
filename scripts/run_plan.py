@@ -21,6 +21,16 @@ Usage:
     python scripts/run_plan.py --intent original
     python scripts/run_plan.py --intent anchor
 
+    # Phase A gap-analysis prompts (see docs/design3_gap_analysis.md):
+    python scripts/run_plan.py --intent prompt-1   # UK suppliers + open POs
+    python scripts/run_plan.py --intent prompt-2   # PO-rooted query
+    python scripts/run_plan.py --intent prompt-3   # Simplest possible: all India suppliers
+    python scripts/run_plan.py --intent prompt-4   # Two negations
+    python scripts/run_plan.py --intent prompt-5   # Aggregation by buyer
+    python scripts/run_plan.py --intent prompt-6   # Out-of-scope: contracts
+    # prompt-7 (ambiguous "best supplier") has no constructible Intent;
+    # documented in the gap analysis without a runnable variant.
+
 Intent options:
     original — "Show me suppliers in US with no invoices in 6 months
                 but with open purchase orders, including the buyer
@@ -29,6 +39,7 @@ Intent options:
     anchor   — "Show me suppliers in US with open purchase orders,
                 including the buyer assigned to each." (The v1 anchor;
                 negation clause dropped.)
+    prompt-1 .. prompt-6 — Phase A gap-analysis prompts.
 
 Per-run JSON trace lands in traces/<timestamp>.jsonl alongside the
 agent-based runner's traces.
@@ -65,7 +76,7 @@ MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 
 
 # ─────────────────────────────────────────────────────────────────────
-# The two hardcoded intents
+# Built-in intents (anchor + original)
 #
 # CLI arg --intent selects between them. v1 still hardcodes Intent
 # construction (no LLM intent parser yet); --intent is a thin convenience
@@ -97,9 +108,138 @@ ORIGINAL_INTENT = Intent(
 )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Phase A — gap-analysis intents
+#
+# Each prompt is deliberately chosen to stress a different part of the
+# system. Several of these Intents are EXPECTED to fail at one stage or
+# another; that failure is itself the measurement we want.
+#
+# See docs/design3_gap_analysis.md for the per-prompt rationale and
+# expected outcomes.
+# ─────────────────────────────────────────────────────────────────────
+
+
+# Prompt 1 — Vocabulary variant of the anchor.
+# "Show me suppliers in the United Kingdom with open purchase orders,
+#  including the buyer assigned to each."
+# Expected: same shape as anchor, country=GB instead of US.
+# Should work cleanly IF the demo pod has UK suppliers.
+PROMPT_1_INTENT = Intent(
+    target_entity="Supplier",
+    filters=[
+        {"type": "country", "value": "United Kingdom"},
+        {"type": "has_open_PO", "value": True},
+    ],
+    include=["Buyer"],
+)
+
+
+# Prompt 2 — Different target entity (PurchaseOrder, not Supplier).
+# "Show me open purchase orders over $100,000 with their supplier
+#  and buyer."
+# Expected: planner raises. Today there is no entity-level fetcher
+# for PurchaseOrder in the KG (POs are only reachable via the
+# HAS_PURCHASE_ORDER edge). Also no amount-based filter type.
+# Both gaps will surface — F1 should catch the unknown filter loudly.
+PROMPT_2_INTENT = Intent(
+    target_entity="PurchaseOrder",
+    filters=[
+        {"type": "has_open_PO", "value": True},
+        # 'amount_over' is intentionally unknown to v1.1; F1 should raise.
+        {"type": "amount_over", "value": {"amount": 100000}},
+    ],
+    include=["Supplier", "Buyer"],
+)
+
+
+# Prompt 3 — Simplest possible intent.
+# "List all suppliers in India."
+# Expected: 1-step plan (search_suppliers_by_country, country=IN).
+# Sanity check that simple queries still work. Also probes whether
+# the demo pod even has India suppliers.
+PROMPT_3_INTENT = Intent(
+    target_entity="Supplier",
+    filters=[
+        {"type": "country", "value": "India"},
+    ],
+    include=[],
+)
+
+
+# Prompt 4 — Two negations composed.
+# "Suppliers in US with no invoices in 6 months and no purchase
+#  orders in 3 months."
+# Expected: planner raises on 'has_no_recent_POs'. F2 added
+# has_no_recent_invoices but no equivalent for POs. Tests whether the
+# F2 pattern generalized cleanly (it should be a KG row addition, not
+# planner code) or whether each child entity needs separate planner
+# work.
+PROMPT_4_INTENT = Intent(
+    target_entity="Supplier",
+    filters=[
+        {"type": "country", "value": "US"},
+        {"type": "has_no_recent_invoices", "value": {"months": 6}},
+        # 'has_no_recent_POs' is intentionally unknown to v1.1.
+        {"type": "has_no_recent_POs", "value": {"months": 3}},
+    ],
+    include=[],
+)
+
+
+# Prompt 5 — Aggregation; different answer shape.
+# "What's the total open PO value by buyer? Top 5 buyers by total."
+# Expected: the Intent shape doesn't really fit Design 3's three-block
+# planner (entity-fetch + edge-filters + includes). target_entity
+# 'Buyer' has no entity-level fetcher; the natural query shape is
+# 'aggregate POs grouped by buyer'. Planner will probably raise.
+# Even if executor produced data, synthesizer's hardcoded
+# SynthesizedResponse schema cannot represent rank/aggregate answers.
+# This is the explicit reason Phase B (schema generalization) exists.
+PROMPT_5_INTENT = Intent(
+    target_entity="Buyer",
+    filters=[
+        # 'po_aggregate_top_n' is intentionally a placeholder for
+        # something the system has no concept of today.
+        {"type": "po_aggregate_top_n", "value": {"metric": "Ordered", "n": 5}},
+    ],
+    include=[],
+)
+
+
+# Prompt 6 — Out of scope: contracts.
+# "Show me contract renewals due next quarter."
+# Expected: the KG has no Contract entity, no contract MCP tool.
+# Planner should raise at the find_entity_tool step (unknown entity).
+# Tests whether out-of-scope prompts surface a clean honest error
+# vs. silent partial answer vs. hallucination.
+PROMPT_6_INTENT = Intent(
+    target_entity="Contract",
+    filters=[
+        {"type": "renewal_due_in", "value": {"period": "next_quarter"}},
+    ],
+    include=[],
+)
+
+
+# Prompt 7 — Ambiguous: not constructible.
+# "Who's our best supplier?"
+# There is no defensible Intent that captures this. "Best" by what
+# metric? Spend? Reliability? PO count? Recency? Without an intent
+# parser that can ask clarifying questions, this prompt cannot be
+# turned into a structured Intent at all. Documented in the gap
+# analysis; no runnable variant in this script.
+
+
 INTENT_CHOICES: dict[str, Intent] = {
     "anchor": ANCHOR_INTENT,
     "original": ORIGINAL_INTENT,
+    "prompt-1": PROMPT_1_INTENT,
+    "prompt-2": PROMPT_2_INTENT,
+    "prompt-3": PROMPT_3_INTENT,
+    "prompt-4": PROMPT_4_INTENT,
+    "prompt-5": PROMPT_5_INTENT,
+    "prompt-6": PROMPT_6_INTENT,
 }
 
 
@@ -314,7 +454,9 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Which hardcoded Intent to run. 'original' (default) is the "
             "original Track A prompt with the negation clause; 'anchor' "
-            "is the v1 simplified prompt without negation."
+            "is the v1 simplified prompt without negation; 'prompt-1' "
+            "through 'prompt-6' are the Phase A gap-analysis prompts "
+            "(see docs/design3_gap_analysis.md)."
         ),
     )
     return parser.parse_args()
