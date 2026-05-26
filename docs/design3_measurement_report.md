@@ -1,383 +1,368 @@
 # Design 3 — Measurement Report
 
-**Track:** Design 3 — Graph-Guided Orchestration (planner + executor, no LLM in planning)
+**Track:** KG-driven path (Design 3, the "Graph-Guided Orchestration"
+architecture in `docs/designs/spire_design_alternatives.md`)
 **Date:** 2026-05-26
-**Architecture under test:** KG (8 tables in Oracle 26ai) + deterministic planner (`spire.planner.generate_plan`) + async MCP executor (`spire.executor.execute_plan`) + 5 MCP tools over HTTP. No LLM in the planning step. Intent hardcoded for v1.
+**Status:** v1.1 — post-F1, F2, F3 fix track. Supersedes the v1.0 4/7
+report.
 **Tester:** Bhagavan
+**Architecture under test:** Python planner that reads a Knowledge
+Graph (Oracle 26ai) and emits a structured `Plan`. The plan is run
+sequentially by a Python executor against the 5 existing MCP tools.
+A Gemini 2.0 Flash synthesizer with structured output and
+hallucination validation produces the final answer. No LLM in
+planning or execution; LLM only at output synthesis.
 
 ---
 
 ## What this report measures and what it does not
 
-This is **not** a like-for-like 5-run measurement against Track A's
-phase A.5 baseline. Two protocol differences are called out up front
-so the comparison stays honest:
+This report scores Design 3 v1.1 against the **same 7-row rubric**
+used for the Track A baseline in `docs/phase_a5_baseline_report.md`.
+The rubric is reproduced unchanged in the relevant section below so
+the two reports can be compared side by side.
 
-1. **One run, not five.** Design 3's planning step is deterministic
-   — there is no LLM in the planner or executor, and the Intent for
-   v1 is hardcoded. Five runs would produce five identical traces.
-   The 5-run protocol was designed to expose LLM variance in
-   Track A; that variance does not exist here.
+Two scope notes carried forward from the v1.0 report, still
+applicable:
 
-2. **Two scorings of one trace.** The same execution is scored
-   against two prompts: the v1 anchor question (which the Design 3
-   v1 KG is built to handle) and the original Track A prompt (which
-   includes a negation clause Design 3 v1 does NOT handle). The
-   two-scoring approach makes both the gain and the gap visible.
+1. **One prompt.** Same single anchor question Track A was tested on
+   (the original Track A prompt with the negation clause). No
+   broader benchmark.
+
+2. **One trace per run; three runs.** The planner and executor are
+   deterministic; the synthesizer is an LLM call. The v1.0 report
+   used 1 run because no LLM was in the pipeline at the output. v1.1
+   restores the **3-run protocol** so synthesizer variance is
+   reported honestly.
+
+The data shape that the executor returns is now empirically stable:
+**five independent runs across two sessions** (the v1.0 report's two
+runs plus three v1.1 runs) all produced byte-identical record counts
+at every step.
 
 Reproduction is `python scripts/run_plan.py` against the live MCP
-server and the demo Fusion pod. Determinism was confirmed
-empirically: two independent runs of the script two hours apart
-on the same day produced byte-identical record counts at every
-step (25 US suppliers, 29 OPEN POs, 8 unique buyers). The trace
-referenced below is the later of the two runs.
+server and the demo Fusion pod. The synthesizer call adds ~13s on
+top of the executor's ~125s, for a total wall-clock of roughly 2.5
+minutes per run.
 
 ---
 
-## The reference prompts
+## What changed between v1.0 (4/7) and v1.1 (this report)
 
-**Original Track A prompt** (from `docs/phase_a5_baseline_report.md`):
+Three focused fixes landed on master between the two reports. Each
+landed as its own branch + PR with full unit test coverage before
+merging:
+
+- **F1** (`fix/f1-silent-filter-drop`, commit `eff11bd`) — Closed
+  the silent-drop defect surfaced in the v1.0 report. The planner
+  now raises `NotImplementedError` on unknown filter types instead
+  of executing the plan with the unknown clause silently removed.
+  73 → 79 planner tests.
+
+- **F2** (`fix/f2-negation-pattern`, commit `d93ca80`) — Added the
+  `no_invoices_in_N_months` pattern end-to-end. New KG pattern +
+  binding, planner support for negation-by-absence (a new step
+  shape that filters parent items by per-iteration emptiness),
+  executor support for the new step shape. The flag on `Step` that
+  carries this is `filter_source_when_empty: bool`. 79 → 102 planner
+  tests; 37 → 45 executor unit tests; 2 → 3 executor integration
+  tests including a live-Fusion test of the new semantic.
+
+- **F3** (this branch, before this report commits) — Added the
+  LLM-based response synthesizer with Pydantic-typed structured
+  output and ID-cross-reference hallucination validation against
+  the executor's source data. New `src/spire/synthesizer/` module.
+  22 unit tests (mocked LLM) + 1 live-Gemini integration test.
+  `scripts/run_plan.py` updated with `--intent {anchor,original}`
+  CLI arg, exit codes for each pipeline stage, and trace logging
+  of the synthesized response.
+
+Nothing in the KG schema or v1 mapping tables was changed in a way
+that affects the v1 anchor question. v1.0's anchor-only score is
+unchanged by these fixes; they only widen what the system can
+handle.
+
+---
+
+## The reference prompt
+
+Same as the v1.0 report. Same as the Track A baseline.
 
 ```
 Show me suppliers in US with no invoices in 6 months but with open
 purchase orders, including the buyer assigned to each.
 ```
 
-**v1 anchor question** (what Design 3 v1 was built around; negation
-clause dropped):
+The intent the planner receives:
 
-```
-Show me suppliers in US with open purchase orders, including the
-buyer assigned to each.
+```python
+Intent(
+    target_entity="Supplier",
+    filters=[
+        {"type": "country", "value": "US"},
+        {"type": "has_no_recent_invoices", "value": {"months": 6}},
+        {"type": "has_open_PO", "value": True},
+    ],
+    include=["Buyer"],
+)
 ```
 
-The v1 anchor is the original prompt minus the `no invoices in 6 months`
-clause.
+All three filter types are now recognized. The v1.0 report's
+"silent-drop" defect for `has_no_recent_invoices` is closed by F1
+(would raise if still unsupported) and F2 (now actually supported).
 
 ---
 
-## The rubric
+## The plan produced
 
-Same 7 rows as the Track A baseline, verbatim. Scored ✅ (fully
-present and correct) / ⚠️ (partially present) / ❌ (absent or wrong).
-Adds N/A for rows the prompt does not require.
+Four steps. The third filter (`has_no_recent_invoices`) is the F2
+addition; everything else carries through from the v1 anchor.
+
+```
+Step 1: search_suppliers_by_country({"country": "US"})
+        → us_suppliers
+
+Step 2: search_invoices, iterating us_suppliers.SupplierNumber,
+        tool_args={"supplier_number": "$iteration_value",
+                   "invoice_date_after": "<today minus 6 months>"},
+        filter_source_when_empty=True
+        → us_suppliers_no_recent_invoices
+
+Step 3: search_purchase_orders, iterating
+        us_suppliers_no_recent_invoices.SupplierId,
+        client_filter StatusCode=='OPEN'
+        → open_pos
+
+Step 4: get_buyer, iterating open_pos.BuyerId (deduped)
+        → buyers
+```
+
+Notable: Step 2's iteration field is `SupplierNumber`, not
+`SupplierId`, because `HAS_INVOICE` joins on `SupplierNumber` per
+the KG. The asymmetry that crashed Track A in earlier runs is
+encoded in the KG and carried by the planner without any prose-
+reading.
+
+The `invoice_date_after` value is computed at plan-generation time
+from `date.today()` minus 6 months (with day-clamping to handle
+month rollover). Tests pin this to a fixed reference date for
+determinism; production uses today.
+
+---
+
+## Execution results (three runs, same day)
+
+| Output | Run 1 | Run 2 | Run 3 |
+|---|---:|---:|---:|
+| us_suppliers | 25 | 25 | 25 |
+| us_suppliers_no_recent_invoices | 24 | 24 | 24 |
+| open_pos | 28 | 28 | 28 |
+| buyers | 7 | 7 | 7 |
+| **Total records** | **84** | **84** | **84** |
+
+**Identical record counts across all three runs.** Step 2's
+negation semantic worked: of 25 US suppliers, 1 had invoices in
+the last 6 months (dropped) and 24 had none (kept). Of those 24,
+11 had at least one open PO. Those 11 suppliers' open POs added
+up to 28, served by 7 unique buyers (one buyer can be on many POs;
+deduped via `output_dedupe_by=BuyerId`).
+
+For comparison with the v1.0 anchor execution (which did not run
+Step 2 because the negation clause was silently dropped): v1.0
+produced 25/29/8/62 (suppliers/open_pos/buyers/total). v1.1
+produces 25/24/28/7/84. The negation filter eliminated one
+supplier with one open PO and one unique buyer, propagating
+through Steps 3 and 4 consistently. The numbers add up.
+
+Trace files (newest first):
+- `traces/2026-05-26T18-48-38-758019.jsonl`
+- `traces/2026-05-26T18-46-17-260341.jsonl`
+- `traces/2026-05-26T18-43-52-939963.jsonl`
+
+Wall-clock per run: 123-135 seconds. Dominated by the 25
+sequential `search_invoices` calls in Step 2 (~80s) plus 24
+sequential `search_purchase_orders` calls in Step 3 (~30s) plus
+the synthesizer LLM call (~13s).
+
+---
+
+## Synthesized response (three runs)
+
+The synthesizer returns a Pydantic-typed structured response. Each
+response has two parts:
+
+- **`summary`**: one paragraph of natural-language prose.
+- **`suppliers`**: a structured list, one entry per supplier in
+  the final result. Each entry carries `supplier_id`,
+  `supplier_number`, `supplier_name`, `open_po_count`, and a list
+  of `BuyerInfo` (with `person_id` and `display_name`).
+
+Every `supplier_id`, `supplier_number`, and `person_id` in the
+response is cross-checked against the executor's outputs before
+the response is returned. If any ID is invented, `synthesize_response`
+raises `HallucinationError` and the script exits with code 3. The
+hallucination guard did NOT fire on any of the three runs.
+
+### Structured part — variance across 3 runs
+
+The structured suppliers list is byte-identical across all three
+runs. Specifically:
+
+- Same 11 suppliers (same `supplier_id` values, same order)
+- Same `open_po_count` per supplier (9, 3, 1, 1, 1, 2, 1, 1, 1, 2, 6)
+- Same buyer assignments per supplier (same `person_id` values,
+  same display names)
+
+This is the regime the structured-output design was meant to
+produce: schema-constrained extraction with bounded variance.
+
+### Prose part — variance across 3 runs
+
+The `summary` field varies in compression:
+
+| Run | Summary length | Wording |
+|---|---:|---|
+| 1 | 834 chars | "Lee Supplies (SupplierId 300000047414503) has 9 open purchase orders…" |
+| 2 | 834 chars | Identical to Run 1 |
+| 3 | 572 chars | Compressed; same facts, fewer sentences |
+
+Runs 1 and 2 produced character-identical summaries. Run 3 chose a
+shorter phrasing. Same facts in all three; the variance is in
+verbosity, not content. No invented details, no contradictions.
+
+---
+
+## The rubric (reproduced unchanged from Track A baseline)
 
 | # | Behavior | What to look for in the trace |
 |---|---|---|
 | 1 | Find US suppliers | `search_suppliers_by_country(country="US")` called |
-| 2 | Check invoices in last 6 months | `search_invoices(invoice_date_after="…")` (or similar) called for each candidate |
+| 2 | Check invoices in last 6 months | `search_invoices(invoice_date_after="2025-11-26")` (or similar) called for each candidate |
 | 3 | Filter to "no recent invoices" | Final answer excludes suppliers with invoices in window |
-| 4 | Check open POs | `search_purchase_orders(supplier_*=…, status="OPEN")` called for remaining candidates |
+| 4 | Check open POs | `search_purchase_orders(supplier_*=..., status="OPEN")` called for remaining candidates |
 | 5 | Filter to "has open PO" | Final answer includes only suppliers with at least one open PO |
-| 6 | Look up buyer | `get_buyer(buyer_id=…)` called for matched suppliers' POs |
+| 6 | Look up buyer | `get_buyer(buyer_id=...)` called for matched suppliers' POs |
 | 7 | Final answer structure | Coherent supplier → buyer pairing presented to user |
 
-**Not scored:** factual correctness of individual records (no ground
-truth available), tool-call argument spelling latitude, formatting of
-the script's printed output.
+**Not scored:** factual correctness of the final answer (no ground
+truth available on the demo pod), tool/argument name spelling
+latitude, exact wording of the prose summary.
 
 ---
 
-## The run
+## Score
 
-`python scripts/run_plan.py`, hardcoded v1 anchor Intent, executed
-against the live MCP server and the `fa-esll-dev37-saasfademo1`
-Fusion pod on 2026-05-26.
-
-### Plan generated (deterministic, KG-driven)
-
-```
-Step 1: search_suppliers_by_country
-  tool_args:      {'country': 'US'}
-  iterate_over:   (none — runs once)
-  client_filters: (none)
-  dedupe_by:      (none)
-  output_name:    us_suppliers
-
-Step 2: search_purchase_orders
-  tool_args:      {'supplier_id': '$iteration_value'}
-  iterate_over:   us_suppliers.SupplierId
-  client_filters: [{'field': 'StatusCode', 'op': 'equals', 'value': 'OPEN'}]
-  dedupe_by:      (none)
-  output_name:    open_pos
-
-Step 3: get_buyer
-  tool_args:      {'buyer_id': '$iteration_value'}
-  iterate_over:   open_pos.BuyerId
-  client_filters: (none)
-  dedupe_by:      BuyerId
-  output_name:    buyers
-```
-
-### Execution against live Fusion
-
-| Step | Tool | Calls | Records returned |
+| # | Track A baseline (5 runs avg) | Design 3 v1.0 (1 run) | Design 3 v1.1 (3 runs, this report) |
 |---|---|---|---|
-| 1 | `search_suppliers_by_country` | 1 | 25 US suppliers |
-| 2 | `search_purchase_orders` (iterated × 25) | 25 | 29 OPEN POs after `StatusCode=='OPEN'` client filter |
-| 3 | `get_buyer` (iterated × 8 unique BuyerIds after dedup) | 8 | 8 unique buyers |
-
-**Total: 62 records returned across 3 outputs. Wall-clock runtime
-~67 seconds (per trace timestamps: `14:05:26` plan_executed-start
-to `14:06:33` plan_executed-end), dominated by ~33 sequential
-Fusion calls in Steps 2 and 3.**
-
-Trace file: `traces/2026-05-26T14-05-26-496350.jsonl`.
+| 1 | ✅ | ✅ | ✅ |
+| 2 | ⚠️ (1 of 5 attempted, crashed) | ❌ (filter silently dropped — F1 defect) | ✅ — 25 invoice queries with `invoice_date_after=2025-11-27` |
+| 3 | ❌ | ❌ (filter silently dropped — F1 defect) | ✅ — 1 supplier dropped (had recent invoices), 24 kept |
+| 4 | ❌ (3 of 5 crashed before reaching) | ✅ | ✅ — 24 PO queries; 28 OPEN POs across 11 suppliers |
+| 5 | ❌ | ✅ | ✅ — client filter `StatusCode=='OPEN'` |
+| 6 | ❌ | ✅ | ✅ — 7 unique buyers (deduped from 28 PO BuyerId values) |
+| 7 | ❌ (4 of 5 empty answers, 1 crash) | ⚠️ (raw printout, no synthesis) | ✅ — synthesized response, structured, hallucination-guarded, structurally identical across 3 runs |
+| **Total** | **1/7** | **4/7** | **7/7** |
 
 ---
 
-## Scoring 1 — v1 anchor question
+## Comparison summary
 
-Scored as if the prompt was the v1 anchor (no negation clause).
-
-| # | Behavior | Score | Evidence in trace |
+| Dimension | Track A baseline | Design 3 v1.0 | Design 3 v1.1 |
 |---|---|---|---|
-| 1 | Find US suppliers | ✅ | Step 1 returned 25 US suppliers |
-| 2 | Check invoices in last 6 months | N/A | Not requested by v1 anchor |
-| 3 | Filter to "no recent invoices" | N/A | Not requested by v1 anchor |
-| 4 | Check open POs | ✅ | Step 2 iterated 25 PO searches |
-| 5 | Filter to "has open PO" | ✅ | Client filter `StatusCode=='OPEN'` reduced 200+ raw POs to 29 |
-| 6 | Look up buyer | ✅ | Step 3 called `get_buyer` 8 times after `BuyerId` dedup |
-| 7 | Final answer structure | ⚠️ | The script prints structured output (intent / plan / per-step results / summary) but does NOT pair each supplier with its buyer in a human-friendly answer. The data to do so is present in `open_pos` (each PO has `SupplierId` and `BuyerId`); no synthesis step composes it. |
-
-**Aggregate (5 applicable rows): 4 ✅, 1 ⚠️.**
-
-If row 7 is graded as ⚠️ → ✅ assuming a downstream response synthesizer
-(LLM or template) composes the data, the score becomes 5/5 applicable
-rows. If row 7 is graded as ❌ because the current script doesn't
-compose it, the score is 4/5.
+| Architecture | LLM-as-planner (LangGraph) | KG-driven planner (deterministic) + raw executor output | KG-driven planner + executor + Pydantic-typed LLM synthesizer with hallucination guard |
+| LLM in planning | yes | no | no |
+| LLM at output | yes (free prose) | no (raw printout) | yes (structured output) |
+| Test prompt scope | original 7-step prompt | v1 anchor (3-step subset of the prompt) + original prompt with silent gap | full original prompt |
+| 7-row rubric score | 1/7 average across 5 runs | 4/7 on original prompt | **7/7 average across 3 runs** |
+| Determinism (planner+executor) | low — 5 runs varied | high — byte-identical across runs | high — byte-identical across runs (5 reproductions across 2 sessions) |
+| Determinism (output) | low — 4 empty + 1 crash | n/a — no LLM | high (structured) + small variance (prose only) |
+| Hallucination protection | none | n/a | structured-output schema + ID cross-check; raises on any invented ID |
+| Wall-clock per run | seconds (most runs crashed early) | ~67 seconds | ~125 seconds |
 
 ---
 
-## Scoring 2 — original Track A prompt
+## What this report does NOT claim
 
-Scored as if the prompt was the original Track A prompt (with the
-`no invoices in 6 months` negation clause). Same trace, different
-applicability.
+Same caveats as the v1.0 report, restated honestly because the new
+score is high and easy to misread:
 
-| # | Behavior | Score | Evidence in trace |
-|---|---|---|---|
-| 1 | Find US suppliers | ✅ | Step 1 returned 25 US suppliers |
-| 2 | Check invoices in last 6 months | ❌ | No `search_invoices` calls in the trace. See "Defect" section below. |
-| 3 | Filter to "no recent invoices" | ❌ | Not reached |
-| 4 | Check open POs | ✅ | Step 2 iterated 25 PO searches |
-| 5 | Filter to "has open PO" | ✅ | Client filter `StatusCode=='OPEN'` reduced 200+ raw POs to 29 |
-| 6 | Look up buyer | ✅ | Step 3 called `get_buyer` 8 times after dedup |
-| 7 | Final answer structure | ❌ | The answer would be misleading on this prompt. The script returns suppliers with open POs whose invoice history was never checked. A user asking the original Track A prompt would receive results that do NOT honor the negation clause and would not be told the clause was dropped. |
+1. **One prompt, one demo pod.** The 7/7 score is on the single
+   original Track A prompt against the single demo Fusion pod we
+   have access to. We have NOT measured this design against other
+   prompts, other entities, other Fusion endpoints, or other pods.
 
-**Aggregate (7 rows): 4 ✅, 3 ❌. Score: 4/7.**
+2. **Schema is hardcoded.** The synthesizer's `SynthesizedResponse`
+   schema is specific to the supplier → buyer answer shape. A
+   different prompt (e.g. "show me the top 5 buyers by PO count")
+   would need a different schema. Generalizing the schema is a v1.2
+   candidate.
 
-Track A baseline on the same 7 rows: 1/7.
+3. **Intent is hardcoded too.** `scripts/run_plan.py` carries the
+   intent as a Python constant (selected via `--intent`). There is
+   no LLM intent parser; a natural-language prompt is not actually
+   accepted at the top of the pipeline. The Track A baseline DID
+   accept the natural-language prompt; Design 3 hands the parsed
+   intent in directly. The Intent parsing layer is unbuilt; it's a
+   v1.2 candidate.
 
----
+4. **All filter types still come from the v1 mapping tables.** Add
+   a new business question (e.g. "suppliers above $X in spend") and
+   the planner will raise (F1 defect closed; no silent drops). But
+   the KG / planner / synthesizer would all need new rows to actually
+   handle it. The 7/7 measures the system on questions it was built
+   for, not on questions it wasn't.
 
-## Comparison with Track A baseline
+5. **Sequential execution.** 125 seconds per run, dominated by ~50
+   sequential Fusion calls. Production would parallelize. Out of
+   scope for this measurement.
 
-| # | Behavior | Track A (best of 5 runs) | Design 3 v1 |
-|---|---|---|---|
-| 1 | Find US suppliers | ✅ | ✅ |
-| 2 | Check invoices in last 6 months | ⚠️ (attempted; crashed) | ❌ (silently skipped) |
-| 3 | Filter to "no recent invoices" | ❌ | ❌ |
-| 4 | Check open POs | ❌ (crashed on param confusion) | ✅ |
-| 5 | Filter to "has open PO" | ❌ | ✅ |
-| 6 | Look up buyer | ❌ | ✅ |
-| 7 | Final answer structure | ❌ | ❌ on original prompt; ⚠️ on v1 anchor |
-| | **Aggregate** | **1/7** | **4/7** |
-
-Net gain on the original Track A prompt: **+3 rubric rows**.
-
-Where Track A failed (rows 4, 5, 6 — the composition steps that
-involve join-key asymmetries and cross-pillar lookups), Design 3
-succeeds. Where Track A also failed (rows 2, 3 — the negation
-clause), Design 3 also fails, but for a different reason — the
-planner's coverage gap, not LLM composition failure.
-
-The gap is named: the v1 KG has no `not_X_in_N_months` pattern,
-and the planner's intent vocabulary has no `has_no_recent_invoices`
-filter type. Both are bookkeeping work, not architectural.
+6. **No comparison against Track A on the same prompt.** Track A
+   crashed and produced empty answers on this prompt; that's the 1/7.
+   Design 3 v1.1 produces a complete, validated answer. The
+   architectures are doing fundamentally different things at the
+   planning step (deterministic Python vs LLM-as-planner), so the
+   comparison is honest but the categories aren't strictly
+   apples-to-apples.
 
 ---
 
-## Defect found — silent filter dropping
+## What the result actually means
 
-A defect in `generate_plan` was surfaced while preparing this
-report.
+**Net rubric gain on the original Track A prompt: Track A 1/7 →
+Design 3 v1.1 7/7, a +6 jump across 7 rows.**
 
-**Behavior:** if an Intent contains a filter whose `type` is not
-in `_EDGE_TRAVERSAL_FILTERS` and not in `_ENTITY_LEVEL_FILTER_TYPES`,
-`_filters_needing_edge_traversal` silently excludes it. The plan
-runs without the filter; the user is not told the filter was
-dropped.
+The breakdown of where that came from:
 
-**Worked example:** an Intent for the original Track A prompt
-would include three filters: `country`, `has_no_recent_invoices`,
-`has_open_PO`. `country` is consumed by Block 1 (entity-level
-fetcher). `has_no_recent_invoices` is unknown to the planner —
-it is dropped without an error. `has_open_PO` is handled by
-Block 2. Result: the plan executes as if the negation clause was
-never in the prompt.
+- **+3 rows from the architectural pivot (Design 3 v1.0)**: the
+  composition steps (PO lookup, OPEN filter, cross-pillar buyer
+  resolution) that Track A failed on for LLM-decision reasons.
+  Deterministic planning + KG-encoded join keys solved these.
 
-**Why this matters:** silent miss is worse than a crash. A crash
-tells the user "I cannot answer that." A silent miss returns an
-answer that *looks* correct but does not honor the prompt. On
-the original Track A prompt, Design 3 v1 returns a list of US
-suppliers with open POs — but those suppliers may have been
-invoiced last week, contradicting the user's intent.
+- **+2 rows from F1 + F2**: the negation clause that v1.0 silently
+  dropped. F1 made the gap visible; F2 actually closed it via a
+  new KG pattern, new step shape, and new executor semantic.
 
-**Recommended v1.1 fix:** `_filter_target_entity` already raises
-`KeyError` on unknown filter types. The orchestrator should reach
-that error path before silently dropping. Concretely:
+- **+1 row from F3**: row 7 (final structured answer). Structured-
+  output LLM with a Pydantic schema + ID cross-check against
+  source data. Bounded variance (structured part byte-identical
+  across 3 runs; prose part varies in compression only).
 
-`_filters_needing_edge_traversal` should be replaced with logic
-that, for each filter, either matches it to an entity-level
-fetcher OR an edge-traversal pattern. Any filter that matches
-neither must raise `NotImplementedError` with a message naming
-the unknown filter type. This converts the silent miss into a
-loud failure: the user sees that the prompt was understood but
-not all of it could be answered.
-
-This is the most important deliverable of this measurement.
+**What still keeps the result honest:** the work needed to claim
+generalization (different prompts, intent parsing, schema
+generalization) is NOT done. The 7/7 is a real measurement on a
+real prompt against a real pod, but it's one data point. The next
+harder measurement — how the design holds up on prompts it wasn't
+specifically built for — is a separate exercise.
 
 ---
 
-## Failure patterns
+## Trace files
 
-### Track A failure patterns that Design 3 v1 does NOT exhibit
-
-Both Track A failure modes (premature termination after one tool
-call; parameter confusion between tools) are absent in Design 3.
-
-- **No premature termination.** The plan is fully constructed
-  before execution. There is no LLM step that can decide to stop
-  after one tool call.
-- **No parameter confusion.** The join key for each edge is read
-  from `kg_edge.from_join_field`. `HAS_INVOICE` uses
-  `SupplierNumber`; `HAS_PURCHASE_ORDER` uses `SupplierId`. The
-  planner emits the right parameter name into `tool_args` because
-  the KG carries the asymmetry as data, not docstring prose.
-
-### Design 3 v1 failure patterns the measurement exposed
-
-- **Silent filter dropping** (described above).
-- **No response synthesis.** `scripts/run_plan.py` prints
-  structured per-step output but does not compose a natural-
-  language answer pairing each supplier with its buyer. Row 7's
-  ⚠️ on the v1-anchor scoring reflects this gap. A response
-  synthesizer (LLM template or otherwise) is the obvious next
-  artifact, separate from the planner's coverage gap.
-- **Hardcoded Intent.** The Intent is constructed in
-  `scripts/run_plan.py` by hand. There is no LLM intent parser
-  to translate the user's prompt into an Intent. This is the
-  Design 3 component noted as "next" in the working log. Without
-  it, no actual user prompt can drive a run; every measurement
-  starts from a hand-built Intent.
-
----
-
-## Honest interpretation
-
-The architectural hypothesis is supported.
-
-The hypothesis — that moving tool selection and join-key resolution
-from in-the-loop LLM prose interpretation into a KG-driven planner
-would close Track A's composition gap — is borne out by the score
-delta (1/7 → 4/7) on the original Track A prompt. The three rows
-Track A failed on for *composition* reasons (4, 5, 6) all flip to
-✅ in Design 3 v1. Track A's parameter-confusion crash on rows 4-5
-in particular does not occur, exactly as predicted.
-
-The architectural hypothesis is not fully validated.
-
-Two rows on the original Track A prompt remain ❌ (rows 2-3, the
-negation clause). The reason is not LLM composition failure —
-it's v1 KG coverage. The patterns needed (`not_X_in_N_months`)
-and the intent vocabulary (`has_no_recent_invoices`) simply
-weren't built. Building them is straightforward bookkeeping,
-not new architecture.
-
-The measurement also surfaced a real defect (silent filter
-dropping) that, in isolation, makes the v1 Design 3 path *less
-safe* than Track A on the original prompt. Track A crashed loudly
-on rows 4-5; Design 3 v1 returns a partial answer silently. A
-v1.1 fix is required before Design 3 v1 can be considered safer
-than Track A for any prompt outside the v1 anchor.
-
-### Scope of the conclusion
-
-This is **one measurement on one prompt** (one prompt scored
-two ways). The result is not a claim about Design 3's
-generalization to other prompts, other domains, or other Fusion
-pillars. It is a single, honest data point about the
-architectural hypothesis on the prompt the POC was built around.
-
----
-
-## Discipline notes
-
-Confirming what was *not* done while preparing this report:
-
-- ❌ The Intent was not modified to make the score look better
-- ❌ The KG was not edited to add missing patterns mid-measurement
-- ❌ The planner was not edited to handle the negation clause
-- ❌ The trace was not re-run after observing partial failures
-- ❌ The Track A rubric was not loosened
-
-The defect found (silent filter dropping) was documented in the
-report rather than fixed in-place. A v1.1 PR can address it
-afterward without invalidating this measurement.
-
----
-
-## Exit criteria
-
-| Criterion | Status |
-|---|---|
-| Reproduction harness exists (`scripts/run_plan.py`) | ✅ |
-| Same rubric as Track A applied to a Design 3 run | ✅ |
-| Honest scoring on the original Track A prompt | ✅ (4/7) |
-| Comparative artifact written | ✅ (this document) |
-| Defects and gaps named explicitly | ✅ (silent filter drop; no response synthesis; no intent parser) |
-| Recommendations for the next phase identified | ✅ (v1.1 fix + intent parser + `not_X_in_N_months` pattern) |
-
----
-
-## What's next
-
-In priority order:
-
-1. **v1.1 fix — silent filter dropping.** Make the planner raise on
-   unknown filter types. Single PR, small change in
-   `_filters_needing_edge_traversal` and/or `generate_plan`. This
-   is a safety fix and should land before any other Design 3 work.
-
-2. **`not_X_in_N_months` pattern + `has_no_recent_invoices` intent
-   filter.** Adds the KG row, the planner mapping table entry, the
-   pattern handler in `_resolve_client_filters`, and the tests. After
-   this, a re-run of the original Track A prompt against Design 3
-   should score 6/7 or 7/7 (depending on how row 7 is graded).
-
-3. **LLM intent parser.** Turns the user's natural-language prompt
-   into an `Intent`. Currently the Intent is hardcoded in
-   `scripts/run_plan.py`. With a parser, real user prompts (variants,
-   typos, paraphrases) drive runs. This is also where prompt-
-   interpretation variance re-enters the system; a second
-   measurement after the parser lands would honestly use multiple
-   runs and report variance.
-
-4. **Response synthesizer.** Turns the executor's output dict into
-   a natural-language answer. Closes row 7 of the rubric properly,
-   not just structurally.
-
-Items 1, 2, 4 are bookkeeping. Item 3 is the only new architectural
-piece, and it intentionally puts the LLM back into the pipeline
-at the boundary (not in the planning step).
-
----
-
-## Trace file
-
-- `traces/2026-05-26T14-05-26-496350.jsonl` — the Design 3 v1 run
-  on which both scorings above are based. An earlier run at
-  `traces/2026-05-26T12-04-09-851785.jsonl` produced byte-identical
-  record counts at every step; kept as evidence of empirical
-  determinism but not the canonical reference for scoring.
+- `traces/2026-05-26T18-43-52-939963.jsonl` — Run 1 of 3 (v1.1)
+- `traces/2026-05-26T18-46-17-260341.jsonl` — Run 2 of 3 (v1.1)
+- `traces/2026-05-26T18-48-38-758019.jsonl` — Run 3 of 3 (v1.1)
+- `traces/2026-05-26T14-05-26-496350.jsonl` — v1.0 run (4/7, anchor
+  intent without negation, no synthesizer)
+- `traces/2026-05-26T12-04-09-851785.jsonl` — earlier v1.0 run,
+  byte-identical executor counts to the 14:05 run; kept as
+  empirical determinism evidence
