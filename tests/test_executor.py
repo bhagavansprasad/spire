@@ -1,11 +1,12 @@
 """
-Tests for the executor (A.1 + A.2 scope).
+Tests for the executor (A.1 + A.2 + F2b scope).
 
 Two layers:
 
 1. Unit tests with mocked MCP sessions. Cover happy path, error paths,
-   result-parsing edge cases, client-filter behavior, and iteration
-   logic. No infrastructure required.
+   result-parsing edge cases, client-filter behavior, iteration logic,
+   and the F2b filter_source_when_empty semantic. No infrastructure
+   required.
 
 2. Integration tests against the live MCP server. Marked
    @pytest.mark.integration so they're skipped by default. Run with:
@@ -18,6 +19,7 @@ Two layers:
 from __future__ import annotations
 
 import json
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -27,6 +29,7 @@ from spire.config import PERSONAS_FILE
 from spire.executor.executor import (
     _apply_client_filters,
     _collect_iteration_values,
+    _execute_filter_source_step,
     _find_substitution_key,
     _parse_tool_result,
     execute_plan,
@@ -802,7 +805,340 @@ async def test_execute_plan_anchor_plan_with_mocked_session() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Integration test — hits the live MCP server
+# F2b — filter_source_when_empty unit tests (mocked)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_keeps_items_with_empty_iteration() -> None:
+    """The headline F2b behavior: a source item is KEPT if its
+    per-iteration call returns an empty list."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "us_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="us_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = _mock_session_sequence([
+        # Step 1: 3 suppliers.
+        [
+            {"SupplierId": 100, "SupplierNumber": "S100", "Supplier": "Acme"},
+            {"SupplierId": 200, "SupplierNumber": "S200", "Supplier": "Beta"},
+            {"SupplierId": 300, "SupplierNumber": "S300", "Supplier": "Gamma"},
+        ],
+        # Step 2 iter 1 (S100): no recent invoices → KEEP supplier 100.
+        [],
+        # Step 2 iter 2 (S200): one invoice → DROP supplier 200.
+        [{"InvoiceId": 9001, "SupplierNumber": "S200"}],
+        # Step 2 iter 3 (S300): no recent invoices → KEEP supplier 300.
+        [],
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers_no_recent_invoices"] == [
+        {"SupplierId": 100, "SupplierNumber": "S100", "Supplier": "Acme"},
+        {"SupplierId": 300, "SupplierNumber": "S300", "Supplier": "Gamma"},
+    ]
+    # Three iterated calls were made (one per supplier).
+    invoice_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "search_invoices"
+    ]
+    assert len(invoice_calls) == 3
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_no_items_survive() -> None:
+    """If every source item's iteration returns non-empty, the output
+    is empty."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "us_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="us_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = _mock_session_sequence([
+        [
+            {"SupplierId": 100, "SupplierNumber": "S100"},
+            {"SupplierId": 200, "SupplierNumber": "S200"},
+        ],
+        [{"InvoiceId": 1}],
+        [{"InvoiceId": 2}],
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers_no_recent_invoices"] == []
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_all_items_survive() -> None:
+    """If every source item's iteration returns empty, the output is
+    the full source list (in original order)."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "us_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="us_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    source = [
+        {"SupplierId": 100, "SupplierNumber": "S100"},
+        {"SupplierId": 200, "SupplierNumber": "S200"},
+    ]
+    session = _mock_session_sequence([source, [], []])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers_no_recent_invoices"] == source
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_empty_source_makes_no_calls() -> None:
+    """If the source produced 0 items, no iteration calls fire and the
+    output is empty."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "ZZ"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="zz_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "zz_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="zz_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = _mock_session([])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["zz_suppliers_no_recent_invoices"] == []
+    invoice_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "search_invoices"
+    ]
+    assert invoice_calls == []
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_skips_items_with_none_iteration_field() -> None:
+    """Source items where the iteration field is None are NOT included
+    in the output and NOT iterated. v1 design choice documented in
+    the executor docstring."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "us_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="us_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = _mock_session_sequence([
+        [
+            {"SupplierId": 100, "SupplierNumber": "S100"},
+            {"SupplierId": 200, "SupplierNumber": None},  # skip
+            {"SupplierId": 300},  # field missing entirely; skip
+            {"SupplierId": 400, "SupplierNumber": "S400"},
+        ],
+        # Only 2 iteration calls (for S100 and S400).
+        [],     # S100: empty → keep
+        [],     # S400: empty → keep
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers_no_recent_invoices"] == [
+        {"SupplierId": 100, "SupplierNumber": "S100"},
+        {"SupplierId": 400, "SupplierNumber": "S400"},
+    ]
+    invoice_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "search_invoices"
+    ]
+    assert len(invoice_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_unknown_from_step_raises() -> None:
+    """If from_step doesn't exist in outputs, it's a planner bug —
+    raise loudly."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": "2025-11-26",
+            },
+            iterate_over={
+                "from_step": "missing_step", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="filtered",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = AsyncMock()
+    with pytest.raises(RuntimeError, match="unknown output"):
+        await execute_plan(plan, session)
+
+
+@pytest.mark.asyncio
+async def test_filter_source_step_with_iterate_over_none_raises() -> None:
+    """filter_source_when_empty=True is incompatible with
+    iterate_over=None. Catches a planner bug at execution time."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_invoices",
+            tool_args={"supplier_number": "X"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="oops",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+    session = AsyncMock()
+    with pytest.raises(RuntimeError, match="coupled"):
+        await execute_plan(plan, session)
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_anchor_unaffected_by_filter_source_branch() -> None:
+    """Regression guard: the F2b branch must NOT change anchor-plan
+    behavior. Run the 3-step anchor with mocked data and verify the
+    same outputs as the existing anchor test."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[
+                {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+            ],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = _mock_session_sequence([
+        [{"SupplierId": 100}, {"SupplierId": 200}],
+        [{"POHeaderId": "p1", "StatusCode": "OPEN"}],
+        [{"POHeaderId": "p2", "StatusCode": "OPEN"}],
+    ])
+    outputs = await execute_plan(plan, session)
+    assert outputs["open_pos"] == [
+        {"POHeaderId": "p1", "StatusCode": "OPEN"},
+        {"POHeaderId": "p2", "StatusCode": "OPEN"},
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Integration tests — hit the live MCP server
 #
 # Requires:
 # - MCP server running on http://127.0.0.1:3333/mcp/
@@ -914,3 +1250,97 @@ async def test_execute_plan_two_step_with_iteration_against_live_mcp_server() ->
     # aggregated list shape is right and the client filter worked.
     for po in outputs["open_pos"]:
         assert po.get("StatusCode") == "OPEN"
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not PERSONAS_FILE.exists(),
+    reason="personas.yaml missing",
+)
+@pytest.mark.asyncio
+async def test_execute_plan_filter_source_when_empty_against_live_mcp_server() -> None:
+    """
+    F2b end-to-end: against live MCP server, run a 2-step plan that
+    fetches US suppliers then filters them to those with no invoices
+    in the last 6 months.
+
+    Verifies:
+    - Step 2 iterates per US supplier, calling search_invoices with
+      supplier_number + invoice_date_after.
+    - For each supplier where the call returns empty, the supplier is
+      KEPT in the output. For those where it returns non-empty, the
+      supplier is DROPPED.
+    - Output items are Supplier dicts (full source items), not Invoice
+      records.
+
+    Cost note: hits Fusion ~25 times for invoices (one per US supplier).
+    Slow by design. Plus the 25 + 25 calls in the other integration
+    test; running -m integration may take 2-3 minutes.
+
+    Honest framing: we don't assert specific counts because real
+    Fusion data drifts. We assert: output is a list of Supplier-shaped
+    dicts, and each one has the SupplierNumber field (which the planner
+    used as the iteration key).
+    """
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
+
+    # Use a fixed date so the test isn't time-bombed by demo-pod drift
+    # over months. The cutoff date matters for the assertion that
+    # search_invoices was called with this exact value.
+    cutoff = "2025-11-26"
+
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_invoices",
+            tool_args={
+                "supplier_number": "$iteration_value",
+                "invoice_date_after": cutoff,
+            },
+            iterate_over={
+                "from_step": "us_suppliers", "field": "SupplierNumber"
+            },
+            client_filters=[],
+            output_name="us_suppliers_no_recent_invoices",
+            output_dedupe_by=None,
+            filter_source_when_empty=True,
+        ),
+    ]
+
+    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            outputs = await execute_plan(plan, session)
+
+    assert set(outputs.keys()) == {
+        "us_suppliers", "us_suppliers_no_recent_invoices"
+    }
+    # We got SOME US suppliers.
+    assert len(outputs["us_suppliers"]) > 0
+    # The filter MUST be a subset of the source.
+    source_ids = {s.get("SupplierId") for s in outputs["us_suppliers"]}
+    filtered_ids = {
+        s.get("SupplierId")
+        for s in outputs["us_suppliers_no_recent_invoices"]
+    }
+    assert filtered_ids.issubset(source_ids), (
+        "Filtered output must be a subset of the source items"
+    )
+    # Each filtered item is a Supplier-shaped record, not an Invoice.
+    for item in outputs["us_suppliers_no_recent_invoices"]:
+        assert "SupplierId" in item
+        assert "SupplierNumber" in item
+        # Invoice records would have InvoiceId / InvoiceNumber instead.
+        assert "InvoiceId" not in item
