@@ -4,18 +4,15 @@ Executor for the KG-driven path (Architecture Option 3).
 Consumes a Plan produced by spire.planner.planner.generate_plan and
 runs each Step against the Spire MCP server. No LLM in the loop.
 
-A.1 scope (this version):
-- Executes non-iterating steps only (iterate_over is None).
-- Applies client_filters (equals operator) — though the anchor plan's
-  Step 1 has none, the code path is present for symmetry with A.2.
-- Returns dict[output_name, list[dict]].
+Scope (current):
+- Non-iterating steps (A.1)
+- Iterating steps with $iteration_value substitution and
+  output_dedupe_by handling (A.2)
+- client_filters with 'equals' operator
+- Returns dict[output_name, list[dict]]
 
-A.2 will add:
-- Iteration over previous outputs with $iteration_value substitution
-- output_dedupe_by handling
-
-A.3 will add:
-- scripts/run_plan.py end-to-end driver
+Next:
+- A.3 will add scripts/run_plan.py as the end-to-end driver
 
 Design decisions locked for v1:
 - Sequential execution (no asyncio.gather parallelism)
@@ -34,9 +31,8 @@ from mcp import ClientSession
 from spire.planner.planner import Plan, Step
 
 
-# Sentinel returned in step.tool_args when iteration is expected to
-# substitute the value per-item. Reserved for A.2; A.1 only rejects
-# iterating steps before getting here.
+# Sentinel value in step.tool_args; the executor substitutes the current
+# iteration value for any key whose value equals this string.
 ITERATION_SENTINEL = "$iteration_value"
 
 
@@ -147,6 +143,79 @@ def _apply_client_filters(
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Iteration helpers
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _find_substitution_key(tool_args: dict[str, Any]) -> str:
+    """
+    Find the single key in tool_args whose value is the iteration
+    sentinel.
+
+    v1 contract: exactly one such key per iterating step. Zero or two
+    or more are planner bugs and raise RuntimeError loudly. The exec
+    loop calls this once per iterating step, not once per iteration
+    value, so the cost is bounded.
+    """
+    keys = [k for k, v in tool_args.items() if v == ITERATION_SENTINEL]
+    if len(keys) == 0:
+        raise RuntimeError(
+            f"Iterating step's tool_args contain no {ITERATION_SENTINEL!r} "
+            "sentinel; planner bug. tool_args=" + repr(tool_args)
+        )
+    if len(keys) > 1:
+        raise RuntimeError(
+            f"Iterating step's tool_args contain multiple "
+            f"{ITERATION_SENTINEL!r} sentinels (keys: {keys}); "
+            "v1 supports exactly one substitution key per step."
+        )
+    return keys[0]
+
+
+def _collect_iteration_values(
+    outputs: dict[str, list[dict]],
+    iterate_over: dict[str, str],
+    dedupe: bool,
+) -> list[Any]:
+    """
+    Extract the values to iterate over from a previous step's output.
+
+    Pulls iterate_over.field from each item in
+    outputs[iterate_over.from_step]. Drops None values. If dedupe is
+    True, dedupes while preserving order of first occurrence.
+
+    Raises:
+        RuntimeError if from_step is not in outputs (planner bug).
+    """
+    from_step = iterate_over["from_step"]
+    field = iterate_over["field"]
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"Iterating step references unknown output {from_step!r}. "
+            "Planner bug: a step's iterate_over.from_step must name a "
+            "previous step's output_name."
+        )
+
+    source_items = outputs[from_step]
+    raw_values = [item.get(field) for item in source_items]
+    # Drop None: an item that didn't carry the field shouldn't be
+    # iterated. This is a real condition (Fusion responses can be
+    # sparse) and shouldn't crash the plan.
+    values = [v for v in raw_values if v is not None]
+
+    if not dedupe:
+        return values
+
+    seen: set[Any] = set()
+    deduped: list[Any] = []
+    for v in values:
+        if v not in seen:
+            seen.add(v)
+            deduped.append(v)
+    return deduped
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Step execution
 # ─────────────────────────────────────────────────────────────────────
 
@@ -176,6 +245,54 @@ async def _execute_non_iterating_step(
     return items
 
 
+async def _execute_iterating_step(
+    step: Step,
+    session: ClientSession,
+    outputs: dict[str, list[dict]],
+) -> list[dict]:
+    """
+    Execute a single step that iterates over a previous step's output.
+
+    For each value pulled from outputs[step.iterate_over.from_step]
+    by step.iterate_over.field:
+    - Build per-iteration tool_args by replacing the sentinel-valued
+      key with the current value
+    - Call the MCP tool
+    - Parse the result and apply client_filters
+    - Concatenate into a single flat list
+
+    Note on output_dedupe_by semantics: the field name suggests
+    deduping the OUTPUT, but the planner uses it to control whether
+    iteration values are deduped before calling the tool (avoiding
+    redundant calls like get_buyer with the same buyer_id twice).
+    v1 implements iteration-value dedup; v1.1 could distinguish if
+    output-item dedup ever becomes a separate need.
+    """
+    if step.iterate_over is None:
+        # Should never reach here; execute_plan dispatches based on
+        # iterate_over. But guard anyway.
+        raise RuntimeError(
+            f"Step {step.step_id} marked as iterating but iterate_over "
+            "is None."
+        )
+
+    substitution_key = _find_substitution_key(step.tool_args)
+    dedupe = step.output_dedupe_by is not None
+    values = _collect_iteration_values(outputs, step.iterate_over, dedupe)
+
+    aggregated: list[dict] = []
+    for value in values:
+        per_iter_args = dict(step.tool_args)  # shallow copy is enough
+        per_iter_args[substitution_key] = value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+        aggregated.extend(items)
+
+    return aggregated
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────
@@ -198,11 +315,15 @@ async def execute_plan(
         dict mapping each step's output_name to its result list.
         For tools that return a single record (e.g. get_buyer), the
         record is wrapped in a single-element list.
+        For iterating steps, results across iterations are concatenated
+        into one flat list.
 
     Raises:
-        NotImplementedError: if the plan contains iterating steps
-            (iterate_over is not None). Iteration lands in A.2.
-        RuntimeError: if MCP returns an unexpectedly shaped result.
+        RuntimeError: if MCP returns an unexpectedly shaped result,
+            or if a step's iterate_over references an output that
+            doesn't exist (planner bug), or if a non-iterating step
+            carries the iteration sentinel (planner bug), or if an
+            iterating step carries zero / multiple sentinels.
         ValueError: if a client_filters operator is unknown.
         Any exception from session.call_tool propagates (fail-the-whole-
         plan policy).
@@ -210,13 +331,10 @@ async def execute_plan(
     outputs: dict[str, list[dict]] = {}
 
     for step in plan:
-        if step.iterate_over is not None:
-            raise NotImplementedError(
-                f"Step {step.step_id} requires iteration; "
-                "iteration lands in executor batch A.2."
-            )
-
-        items = await _execute_non_iterating_step(step, session)
+        if step.iterate_over is None:
+            items = await _execute_non_iterating_step(step, session)
+        else:
+            items = await _execute_iterating_step(step, session, outputs)
         outputs[step.output_name] = items
 
     return outputs

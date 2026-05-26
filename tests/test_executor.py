@@ -1,28 +1,23 @@
 """
-Tests for the executor (A.1 scope).
+Tests for the executor (A.1 + A.2 scope).
 
 Two layers:
 
 1. Unit tests with mocked MCP sessions. Cover happy path, error paths,
-   result-parsing edge cases, client-filter behavior. No infrastructure
-   required.
+   result-parsing edge cases, client-filter behavior, and iteration
+   logic. No infrastructure required.
 
-2. One integration test against the live MCP server. Marked
-   @pytest.mark.integration so it's skipped by default. Run with:
+2. Integration tests against the live MCP server. Marked
+   @pytest.mark.integration so they're skipped by default. Run with:
        pytest -m integration tests/test_executor.py
 
    Requires the MCP server running on http://127.0.0.1:3333/mcp/ and
    personas.yaml present.
-
-A.2 will add tests for iteration, $iteration_value substitution, and
-output_dedupe_by handling. A.1 explicitly verifies that iterating
-steps raise NotImplementedError.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -31,6 +26,8 @@ import pytest
 from spire.config import PERSONAS_FILE
 from spire.executor.executor import (
     _apply_client_filters,
+    _collect_iteration_values,
+    _find_substitution_key,
     _parse_tool_result,
     execute_plan,
 )
@@ -61,6 +58,19 @@ def _mock_session(payload: object) -> AsyncMock:
     session.call_tool.return_value = _call_tool_result(
         [_text_block(json.dumps(payload))]
     )
+    return session
+
+
+def _mock_session_sequence(payloads: list[object]) -> AsyncMock:
+    """
+    Build a mock MCP session that returns a different payload on each
+    successive call_tool invocation. Used to simulate iteration where
+    each iterated call returns different data.
+    """
+    session = AsyncMock()
+    session.call_tool.side_effect = [
+        _call_tool_result([_text_block(json.dumps(p))]) for p in payloads
+    ]
     return session
 
 
@@ -194,13 +204,133 @@ def test_apply_client_filters_unknown_op_raises() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# execute_plan — unit tests with mocked sessions
+# _find_substitution_key — unit tests
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_find_substitution_key_single_sentinel() -> None:
+    args = {"supplier_id": "$iteration_value"}
+    assert _find_substitution_key(args) == "supplier_id"
+
+
+def test_find_substitution_key_sentinel_among_other_args() -> None:
+    """The sentinel can coexist with literal-valued args; only the
+    sentinel key is the substitution target."""
+    args = {"supplier_id": "$iteration_value", "status": "OPEN"}
+    assert _find_substitution_key(args) == "supplier_id"
+
+
+def test_find_substitution_key_no_sentinel_raises() -> None:
+    """An iterating step with no sentinel anywhere is a planner bug."""
+    args = {"supplier_id": 12345}
+    with pytest.raises(RuntimeError, match="no .* sentinel"):
+        _find_substitution_key(args)
+
+
+def test_find_substitution_key_multiple_sentinels_raises() -> None:
+    """v1 supports exactly one substitution key per iterating step."""
+    args = {"a": "$iteration_value", "b": "$iteration_value"}
+    with pytest.raises(RuntimeError, match="multiple"):
+        _find_substitution_key(args)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# _collect_iteration_values — unit tests
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_collect_iteration_values_simple() -> None:
+    outputs = {
+        "us_suppliers": [
+            {"SupplierId": 100, "Supplier": "ACME"},
+            {"SupplierId": 101, "Supplier": "Lee"},
+        ]
+    }
+    values = _collect_iteration_values(
+        outputs,
+        {"from_step": "us_suppliers", "field": "SupplierId"},
+        dedupe=False,
+    )
+    assert values == [100, 101]
+
+
+def test_collect_iteration_values_dedupe_preserves_order() -> None:
+    """When dedupe=True, duplicates are removed but first-occurrence
+    order is preserved."""
+    outputs = {
+        "open_pos": [
+            {"BuyerId": 555},
+            {"BuyerId": 777},
+            {"BuyerId": 555},  # duplicate
+            {"BuyerId": 999},
+        ]
+    }
+    values = _collect_iteration_values(
+        outputs,
+        {"from_step": "open_pos", "field": "BuyerId"},
+        dedupe=True,
+    )
+    assert values == [555, 777, 999]
+
+
+def test_collect_iteration_values_dedupe_false_keeps_duplicates() -> None:
+    """Without dedupe, duplicates are kept (each PO generates a buyer
+    lookup even if it's the same buyer — pre-A.2 behavior)."""
+    outputs = {"open_pos": [{"BuyerId": 555}, {"BuyerId": 555}]}
+    values = _collect_iteration_values(
+        outputs,
+        {"from_step": "open_pos", "field": "BuyerId"},
+        dedupe=False,
+    )
+    assert values == [555, 555]
+
+
+def test_collect_iteration_values_drops_none() -> None:
+    """Items where the field is missing or None are silently dropped.
+    This is real data — Fusion responses can be sparse."""
+    outputs = {
+        "open_pos": [
+            {"BuyerId": 100},
+            {"BuyerId": None},
+            {},  # field missing entirely
+            {"BuyerId": 200},
+        ]
+    }
+    values = _collect_iteration_values(
+        outputs,
+        {"from_step": "open_pos", "field": "BuyerId"},
+        dedupe=False,
+    )
+    assert values == [100, 200]
+
+
+def test_collect_iteration_values_unknown_from_step_raises() -> None:
+    outputs = {"us_suppliers": [{"SupplierId": 1}]}
+    with pytest.raises(RuntimeError, match="unknown output"):
+        _collect_iteration_values(
+            outputs,
+            {"from_step": "wrong_name", "field": "SupplierId"},
+            dedupe=False,
+        )
+
+
+def test_collect_iteration_values_empty_source_returns_empty() -> None:
+    outputs = {"us_suppliers": []}
+    values = _collect_iteration_values(
+        outputs,
+        {"from_step": "us_suppliers", "field": "SupplierId"},
+        dedupe=False,
+    )
+    assert values == []
+
+
+# ─────────────────────────────────────────────────────────────────────
+# execute_plan — single-step unit tests (mocked)
 # ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_execute_plan_single_step_no_filters_no_iteration() -> None:
-    """Happy path: one non-iterating step, no client filters, mock session."""
     plan = [
         Step(
             step_id=1,
@@ -227,36 +357,13 @@ async def test_execute_plan_single_step_no_filters_no_iteration() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_plan_iterating_step_raises_not_implemented() -> None:
-    """A.1 explicitly does not handle iteration. Make sure the
-    NotImplementedError fires loudly."""
-    plan = [
-        Step(
-            step_id=1,
-            tool_name="search_purchase_orders",
-            tool_args={"supplier_id": "$iteration_value"},
-            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
-            client_filters=[],
-            output_name="open_pos",
-            output_dedupe_by=None,
-        ),
-    ]
-    session = AsyncMock()
-    with pytest.raises(NotImplementedError, match="A.2"):
-        await execute_plan(plan, session)
-
-
-@pytest.mark.asyncio
 async def test_execute_plan_iteration_sentinel_in_non_iterating_step_raises() -> None:
-    """Sanity check: a step marked non-iterating (iterate_over is None)
-    that still carries $iteration_value in its args is a planner bug.
-    The executor must catch this loudly, not silently send the
-    sentinel to MCP."""
+    """A step with iterate_over=None must not carry the sentinel."""
     plan = [
         Step(
             step_id=1,
             tool_name="search_suppliers_by_country",
-            tool_args={"country": "$iteration_value"},  # planner bug shape
+            tool_args={"country": "$iteration_value"},
             iterate_over=None,
             client_filters=[],
             output_name="us_suppliers",
@@ -270,8 +377,6 @@ async def test_execute_plan_iteration_sentinel_in_non_iterating_step_raises() ->
 
 @pytest.mark.asyncio
 async def test_execute_plan_propagates_tool_call_exception() -> None:
-    """Fail-the-whole-plan policy: if call_tool raises, the exception
-    propagates verbatim. No swallow, no partial result."""
     plan = [
         Step(
             step_id=1,
@@ -291,9 +396,6 @@ async def test_execute_plan_propagates_tool_call_exception() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_plan_applies_client_filters_to_result() -> None:
-    """The executor applies client_filters to the parsed tool result.
-    Confirms the integration between _parse_tool_result and
-    _apply_client_filters."""
     plan = [
         Step(
             step_id=1,
@@ -326,11 +428,377 @@ async def test_execute_plan_applies_client_filters_to_result() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_plan_returns_empty_dict_for_empty_plan() -> None:
-    """A zero-step plan returns an empty dict, not an error."""
     session = AsyncMock()
     outputs = await execute_plan([], session)
     assert outputs == {}
     session.call_tool.assert_not_awaited()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# execute_plan — iteration unit tests (mocked)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_two_step_with_iteration_aggregates_results() -> None:
+    """Step 1 returns 2 suppliers; Step 2 iterates SupplierId and
+    returns POs per supplier. The executor must call Step 2's tool
+    twice (once per supplier) and concatenate the results."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = _mock_session_sequence([
+        # Step 1 result.
+        [{"SupplierId": 100}, {"SupplierId": 200}],
+        # Step 2, iteration 1 (supplier 100).
+        [{"POHeaderId": "p1", "SupplierId": 100}],
+        # Step 2, iteration 2 (supplier 200).
+        [
+            {"POHeaderId": "p2", "SupplierId": 200},
+            {"POHeaderId": "p3", "SupplierId": 200},
+        ],
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers"] == [
+        {"SupplierId": 100}, {"SupplierId": 200}
+    ]
+    # Iteration results are flattened/concatenated.
+    assert outputs["open_pos"] == [
+        {"POHeaderId": "p1", "SupplierId": 100},
+        {"POHeaderId": "p2", "SupplierId": 200},
+        {"POHeaderId": "p3", "SupplierId": 200},
+    ]
+    # Verify the iteration substitution worked.
+    calls = session.call_tool.await_args_list
+    assert calls[1].args == ("search_purchase_orders", {"supplier_id": 100})
+    assert calls[2].args == ("search_purchase_orders", {"supplier_id": 200})
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_applies_client_filters_per_call() -> None:
+    """client_filters are applied to each iteration's result. The
+    anchor plan's Step 2 has client_filter StatusCode=='OPEN' — only
+    OPEN POs should make it into the aggregated output."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[
+                {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+            ],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = _mock_session_sequence([
+        [{"SupplierId": 100}, {"SupplierId": 200}],
+        # Supplier 100: mix of OPEN and CLOSED — only OPEN survives.
+        [
+            {"POHeaderId": "p1", "StatusCode": "OPEN"},
+            {"POHeaderId": "p2", "StatusCode": "CLOSED"},
+        ],
+        # Supplier 200: all CLOSED — nothing survives.
+        [{"POHeaderId": "p3", "StatusCode": "CLOSED"}],
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["open_pos"] == [
+        {"POHeaderId": "p1", "StatusCode": "OPEN"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_dedupes_when_dedupe_set() -> None:
+    """Step 3 in the anchor plan dedupes BuyerId so get_buyer isn't
+    called twice for the same buyer."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_purchase_orders",
+            tool_args={},
+            iterate_over=None,
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="get_buyer",
+            tool_args={"buyer_id": "$iteration_value"},
+            iterate_over={"from_step": "open_pos", "field": "BuyerId"},
+            client_filters=[],
+            output_name="buyers",
+            output_dedupe_by="BuyerId",
+        ),
+    ]
+    session = _mock_session_sequence([
+        # Step 1: 3 POs, but two share BuyerId=555.
+        [
+            {"POHeaderId": "p1", "BuyerId": 555},
+            {"POHeaderId": "p2", "BuyerId": 777},
+            {"POHeaderId": "p3", "BuyerId": 555},
+        ],
+        # Step 2: only TWO calls expected (one per unique buyer).
+        {"PersonId": 555, "DisplayName": "Alice"},
+        {"PersonId": 777, "DisplayName": "Bob"},
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    # Two buyer records, in first-occurrence order.
+    assert outputs["buyers"] == [
+        {"PersonId": 555, "DisplayName": "Alice"},
+        {"PersonId": 777, "DisplayName": "Bob"},
+    ]
+    # And the tool was called exactly twice, not three times.
+    buyer_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "get_buyer"
+    ]
+    assert len(buyer_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_no_dedupe_calls_per_item() -> None:
+    """Without output_dedupe_by, every iterated value gets a call —
+    even if duplicates appear (proves the dedup is opt-in)."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_purchase_orders",
+            tool_args={},
+            iterate_over=None,
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="get_buyer",
+            tool_args={"buyer_id": "$iteration_value"},
+            iterate_over={"from_step": "open_pos", "field": "BuyerId"},
+            client_filters=[],
+            output_name="buyers",
+            output_dedupe_by=None,  # explicit opt-out
+        ),
+    ]
+    session = _mock_session_sequence([
+        [{"BuyerId": 555}, {"BuyerId": 555}],
+        {"PersonId": 555, "DisplayName": "Alice"},
+        {"PersonId": 555, "DisplayName": "Alice"},
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    # Two iterations, two results — duplicates included.
+    assert len(outputs["buyers"]) == 2
+    buyer_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "get_buyer"
+    ]
+    assert len(buyer_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_empty_source_skips_tool_call() -> None:
+    """If the source step produced 0 items, the iterating step makes
+    0 tool calls and produces an empty output. Don't crash."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "ZZ"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="zz_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "zz_suppliers", "field": "SupplierId"},
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = _mock_session([])  # Step 1 returns empty
+    outputs = await execute_plan(plan, session)
+    assert outputs == {"zz_suppliers": [], "open_pos": []}
+    # Step 2's tool must not be called.
+    po_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "search_purchase_orders"
+    ]
+    assert po_calls == []
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_unknown_from_step_raises() -> None:
+    """A step's iterate_over.from_step must reference a previous
+    step's output. Otherwise it's a planner bug."""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "does_not_exist", "field": "SupplierId"},
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = AsyncMock()
+    with pytest.raises(RuntimeError, match="unknown output"):
+        await execute_plan(plan, session)
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_iteration_propagates_per_call_exception() -> None:
+    """If any single iterated call raises, the plan fails — no partial
+    aggregation. (Fail-the-whole-plan policy.)"""
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+    session = AsyncMock()
+    # First call (Step 1) succeeds; second (first iteration of Step 2) fails.
+    session.call_tool.side_effect = [
+        _call_tool_result(
+            [_text_block(json.dumps([{"SupplierId": 100}, {"SupplierId": 200}]))]
+        ),
+        RuntimeError("fusion 500"),
+    ]
+    with pytest.raises(RuntimeError, match="fusion 500"):
+        await execute_plan(plan, session)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Anchor plan — end-to-end with mocked session
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_execute_plan_anchor_plan_with_mocked_session() -> None:
+    """
+    Run the full 3-step anchor plan against a mocked session that
+    returns realistic-shaped data. Verifies the executor handles the
+    full Block 1 → Block 2 → Block 3 flow including iteration, client
+    filtering, and dedup — without needing live Fusion.
+    """
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[
+                {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+            ],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=3,
+            tool_name="get_buyer",
+            tool_args={"buyer_id": "$iteration_value"},
+            iterate_over={"from_step": "open_pos", "field": "BuyerId"},
+            client_filters=[],
+            output_name="buyers",
+            output_dedupe_by="BuyerId",
+        ),
+    ]
+    # Step 1: 2 US suppliers.
+    # Step 2 (×2): supplier 100 has 1 OPEN PO with BuyerId 555.
+    #              supplier 200 has 1 OPEN and 1 CLOSED PO with BuyerIds 555 and 999.
+    # Step 3 (×2 after dedup): 2 unique buyers.
+    session = _mock_session_sequence([
+        [{"SupplierId": 100}, {"SupplierId": 200}],
+        [{"POHeaderId": "p1", "StatusCode": "OPEN", "BuyerId": 555}],
+        [
+            {"POHeaderId": "p2", "StatusCode": "OPEN", "BuyerId": 555},
+            {"POHeaderId": "p3", "StatusCode": "CLOSED", "BuyerId": 999},
+        ],
+        {"PersonId": 555, "DisplayName": "Alice"},
+    ])
+
+    outputs = await execute_plan(plan, session)
+
+    assert outputs["us_suppliers"] == [
+        {"SupplierId": 100}, {"SupplierId": 200}
+    ]
+    # Only OPEN POs across both suppliers (2 total).
+    assert outputs["open_pos"] == [
+        {"POHeaderId": "p1", "StatusCode": "OPEN", "BuyerId": 555},
+        {"POHeaderId": "p2", "StatusCode": "OPEN", "BuyerId": 555},
+    ]
+    # Both OPEN POs have BuyerId=555, deduped to one — so only one
+    # get_buyer call and one buyer record.
+    assert outputs["buyers"] == [
+        {"PersonId": 555, "DisplayName": "Alice"}
+    ]
+    buyer_calls = [
+        c for c in session.call_tool.await_args_list
+        if c.args[0] == "get_buyer"
+    ]
+    assert len(buyer_calls) == 1
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -346,15 +814,6 @@ async def test_execute_plan_returns_empty_dict_for_empty_plan() -> None:
 # ─────────────────────────────────────────────────────────────────────
 
 
-pytestmark_integration = [
-    pytest.mark.integration,
-    pytest.mark.skipif(
-        not PERSONAS_FILE.exists(),
-        reason="personas.yaml missing",
-    ),
-]
-
-
 @pytest.mark.integration
 @pytest.mark.skipif(
     not PERSONAS_FILE.exists(),
@@ -362,15 +821,8 @@ pytestmark_integration = [
 )
 @pytest.mark.asyncio
 async def test_execute_plan_step1_against_live_mcp_server() -> None:
-    """
-    End-to-end: run the anchor plan's Step 1 against the live MCP server.
-
-    This is the test that confirms our MCP-result-parsing assumptions
-    (TextContent + JSON body) match what FastMCP actually sends.
-
-    If this fails because of result-format mismatch, _parse_tool_result
-    needs to adapt. That's the whole reason this test exists.
-    """
+    """End-to-end: run the anchor plan's Step 1 against the live MCP
+    server. Confirms FastMCP wire-format assumptions."""
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
 
@@ -393,16 +845,72 @@ async def test_execute_plan_step1_against_live_mcp_server() -> None:
             await session.initialize()
             outputs = await execute_plan(plan, session)
 
-    # Should have exactly one output bucket.
     assert set(outputs.keys()) == {"us_suppliers"}
     suppliers = outputs["us_suppliers"]
     assert isinstance(suppliers, list)
-    # We expect at least one US supplier on the demo pod.
     assert len(suppliers) > 0
-    # Each item should at minimum carry SupplierId and Supplier (per
-    # the search_suppliers_by_country projection).
     first = suppliers[0]
     assert "SupplierId" in first
     assert "Supplier" in first
-    # And the MatchedCountry marker added by the tool.
     assert first.get("MatchedCountry") == "US"
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not PERSONAS_FILE.exists(),
+    reason="personas.yaml missing",
+)
+@pytest.mark.asyncio
+async def test_execute_plan_two_step_with_iteration_against_live_mcp_server() -> None:
+    """
+    End-to-end iteration: Step 1 fetches US suppliers; Step 2 iterates
+    SupplierId calling search_purchase_orders with the OPEN client filter.
+
+    Validates that iteration + $iteration_value substitution + per-call
+    client filtering all work against the live MCP server with real
+    Fusion data.
+
+    Cost note: this hits Fusion once per US supplier (~25 calls). Slow
+    by design. Worth it for the end-to-end confirmation.
+    """
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
+
+    plan = [
+        Step(
+            step_id=1,
+            tool_name="search_suppliers_by_country",
+            tool_args={"country": "US"},
+            iterate_over=None,
+            client_filters=[],
+            output_name="us_suppliers",
+            output_dedupe_by=None,
+        ),
+        Step(
+            step_id=2,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value"},
+            iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
+            client_filters=[
+                {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+            ],
+            output_name="open_pos",
+            output_dedupe_by=None,
+        ),
+    ]
+
+    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            outputs = await execute_plan(plan, session)
+
+    assert set(outputs.keys()) == {"us_suppliers", "open_pos"}
+    assert isinstance(outputs["us_suppliers"], list)
+    assert isinstance(outputs["open_pos"], list)
+    # The demo pod has at least some open POs for US suppliers.
+    # Don't assert an exact count (data may shift); just confirm the
+    # aggregated list shape is right and the client filter worked.
+    for po in outputs["open_pos"]:
+        assert po.get("StatusCode") == "OPEN"
