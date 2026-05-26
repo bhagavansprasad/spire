@@ -701,3 +701,209 @@ Phase 08's protocol forbids mid-test fixes; freezing everything before phase 08 
 Phase 07 was small, as expected — pure tooling. The interesting thing wasn't the script (a few hundred lines of pretty straightforward Python); it was what the script revealed when pointed at the phase 05 traces. The KG-on runs showed clean multi-step composition; the KG-off runs showed both Track A failure modes. That observation is what justifies running phase 08 next.
 
 ---
+
+# Design 3 — Graph-Guided Orchestration
+
+A KG-driven path that replaces in-the-loop LLM tool selection with a
+deterministic planner. The LLM (if any) sits outside the planning step,
+not inside it.
+
+This is a different track from B-lite (which embedded the KG as system-
+prompt context for the LangGraph agent and was set aside; see Track B in
+the historical section). The Design 3 architecture is:
+
+```
+Prompt -> [optional LLM intent parser] -> Intent
+       -> Planner (reads KG, no LLM)   -> Plan
+       -> Executor (MCP, no LLM)        -> dict[output_name, list[dict]]
+       -> [optional LLM response synth] -> answer
+```
+
+The middle two steps are the new architecture. They contain no LLM,
+no prose interpretation, and read only structured KG data plus the
+incoming Intent.
+
+Reference question (the "anchor"): *"Show me suppliers in US with open
+purchase orders, including the buyer assigned to each."*
+
+Design contract: `docs/designs/phase_2_planner_design.md`.
+
+---
+
+## Phase 1 — KG schema v1
+
+**Goal:** Replace the markdown-blob KG (B-lite) with a relational schema
+the planner can query directly.
+
+**Built:**
+- 8 tables under `sql/kg/v1/`:
+  `kg_entity`, `kg_entity_field`, `kg_edge`, `kg_pattern`,
+  `kg_vocabulary`, `kg_pattern_binding`, `kg_entity_tool`,
+  `kg_edge_tool`
+- Rebuild script `scripts/rebuild_kg.sh` (drops + recreates + seeds)
+- Domain seed for the anchor question: 5 entities, 4 edges,
+  2 patterns, 42 vocabulary rows across 4 vocab_kinds, plus the
+  tool-binding rows
+
+**Status:** Loaded into the `spire` schema on `oracle26ai_db_bhagavan`.
+
+**Key design choice:** edges are directional and carry their own join
+fields. The `Supplier <-> Invoice` edge uses `SupplierNumber` on both
+sides; the `Supplier <-> PurchaseOrder` edge uses `SupplierId`. This
+asymmetry — the one that crashed Track A — is now encoded in
+`kg_edge.from_join_field` rather than guessed by the LLM at runtime.
+
+---
+
+## Phase 2 — Planner
+
+**Goal:** Generate a runnable `Plan` from a structured `Intent` using
+only KG data. No LLM, no prose interpretation.
+
+**Built:** `src/spire/planner/planner.py`
+- 6 KG-lookup functions:
+  `resolve_vocab`, `find_entity`, `find_entity_tool`, `find_edge`,
+  `find_edge_tool`, `find_pattern_for_filter`
+- 7 working helpers + 1 documented stub (`_previous_entity`,
+  intentionally unused — the orchestrator tracks state inline)
+- `generate_plan(intent) -> Plan` orchestrator (three-block flow:
+  entity fetch / edge-traversal filters / includes)
+- v1 intent-to-KG mapping tables as module-level constants
+  (`_ENTITY_LEVEL_FILTER_TYPES`, `_EDGE_TRAVERSAL_FILTERS`,
+  `_TOOL_PRIMARY_ARG`, `_FILTER_VALUE_VOCAB_KIND`,
+  `_OUTPUT_NAME_BY_ENTITY`)
+
+**Tests:** 73 tests in `tests/test_planner.py`, all passing.
+
+Headline test: `generate_plan(anchor_intent) == anchor_plan` —
+asserts the orchestrator emits the exact 3-step plan in the design
+doc's worked example.
+
+**Merged:** PR `kg-poc/phase-2-planner-orchestrator` -> master.
+
+**Known v1 limitations** (documented in code):
+- `_make_output_name` special-cases `PurchaseOrder -> 'open_pos'`
+- Only `status_filter` and `country_filter_via_address` patterns
+- Only the anchor intent shape is exercised
+- Intent-to-KG mapping tables are hardcoded in the planner module
+  (v1.1 candidate: move into the KG itself)
+
+---
+
+## Phase 3 — Executor and end-to-end driver
+
+**Goal:** Run a `Plan` against the Spire MCP server, with no LLM in the
+loop, and tie planner + executor into a runnable script.
+
+Done in three sub-batches in one PR.
+
+### A.1 — Executor skeleton + non-iterating steps
+
+- `src/spire/executor/executor.py` (new package)
+- `execute_plan(plan, session) -> dict[output_name, list[dict]]`
+- Handles steps where `iterate_over is None`
+- Parses FastMCP `TextContent` blocks back to `list[dict]`
+- Applies `client_filters` with the `equals` operator
+- 20 unit tests + 1 integration test (live MCP server)
+
+### A.2 — Iteration + `$iteration_value` + `output_dedupe_by`
+
+- `_find_substitution_key`, `_collect_iteration_values`,
+  `_execute_iterating_step`
+- Sequential iteration; per-iteration substitution, MCP call, parse,
+  filter, accumulate; flat-list aggregation
+- `output_dedupe_by` controls **iteration-value dedup**, not
+  output-item dedup (avoids redundant `get_buyer` calls when multiple
+  POs share a `BuyerId`); v1.1 candidate to rename/split if both
+  kinds become needed
+- 37 unit tests + 2 integration tests
+
+### A.3 — `scripts/run_plan.py`
+
+- End-to-end driver: hardcoded anchor `Intent` ->
+  `generate_plan` -> `execute_plan` against live MCP -> print intent
+  / plan / per-step outputs / summary
+- Writes JSONL trace alongside agent traces, so
+  `scripts/inspect_trace.py` reads both
+
+**Merged:** PR `kg-poc/phase-3-executor-iteration` -> master.
+
+**Design decisions locked for v1** (documented in code):
+- Sequential execution (no `asyncio.gather` parallelism)
+- Fail-the-whole-plan on any tool error (no partial results)
+- Raw MCP (`session.call_tool`); no LangChain in the executor
+- Caller manages `ClientSession` lifecycle
+- `equals` is the only supported `client_filters` operator
+- Exactly one `$iteration_value` substitution key per iterating step
+
+---
+
+## End-to-end run against the live demo pod
+
+Ran `python scripts/run_plan.py` against the live MCP server +
+`fa-esll-dev37-saasfademo1` Fusion pod.
+
+**Result:**
+- **25** US suppliers via `search_suppliers_by_country("US")`
+- **29** OPEN POs across those suppliers (Step 2 = 25 sequential
+  Fusion calls + `StatusCode == 'OPEN'` client filter)
+- **8** unique buyers after `BuyerId` dedup (Step 3 = 8 sequential
+  `get_buyer` calls, cross-pillar FSCM -> HCM)
+- **62** records returned across all 3 steps
+- Runtime: ~30 seconds, dominated by sequential Fusion calls
+
+**What this proves:**
+- KG data drives every decision (which tool, which join field, which
+  status value)
+- The `SupplierId` vs `SupplierNumber` asymmetry that crashed Track A
+  is handled correctly because it's read from `kg_edge.from_join_field`,
+  not inferred
+- The cross-pillar `BuyerId -> PersonId` lookup works (FSCM POs ->
+  HCM publicWorkers)
+- Zero LLM in the planning step. The system answers the anchor
+  question deterministically.
+
+**What it does NOT yet prove:**
+- Generalization beyond the anchor intent (only this shape is exercised)
+- Formal scoring against the 7-step rubric (next phase)
+
+---
+
+## Honest comparison with Track A
+
+Track A baseline (from `docs/phase_a5_baseline_report.md`):
+**1/7 on the anchor question, 5 runs averaged.**
+
+Design 3 on the anchor question: **a complete, structured answer with
+real Fusion data**. The qualitative gap is substantial. Track A failed
+because the LLM couldn't reliably compose `Supplier -> PO -> Buyer`
+with the correct join keys; Design 3 succeeds because that composition
+isn't an LLM decision anymore.
+
+The formal 7-step rubric scoring is the next phase. Note up front:
+Design 3 is **deterministic**, so the 5-run protocol from Track A
+(designed to expose LLM variance) is mostly redundant here. 1 careful
+run + rubric scoring + an honest report on what the determinism means
+is the planned approach.
+
+---
+
+## What's next
+
+1. **Formal measurement** against the 7-step rubric. Comparable
+   artifact to `docs/phase_a5_baseline_report.md`. Run via
+   `scripts/run_plan.py`, score by hand against the rubric, note the
+   determinism caveat.
+2. **LLM intent parser** (prompt -> `Intent`). Currently the Intent
+   is hardcoded in `scripts/run_plan.py`. The parser brings the LLM
+   back at the entry point of the pipeline — not into the planner.
+
+Deferred / v1.1 candidates noted in code:
+- Move planner mapping tables into the KG itself
+- Add an `entity` field to `Step` so `_previous_entity` becomes real
+- Generalize `_make_output_name` away from the `PurchaseOrder` special case
+- Add more patterns (start with `not_X_in_N_months` for "no invoices in
+  6 months" — the negation clause dropped from the v1 anchor question)
+- Add more `client_filters` operators (e.g., `any_child_equals`,
+  numeric comparisons)
+- Optional parallelism in the executor (`asyncio.gather`)
