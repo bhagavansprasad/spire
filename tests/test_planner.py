@@ -30,6 +30,7 @@ from spire.planner.planner import (
     _make_output_name,
     _pick_entity_filter,
     _resolve_client_filters,
+    _validate_intent_filters,
     find_edge,
     find_edge_tool,
     find_entity,
@@ -595,6 +596,85 @@ def test_make_output_name_purchase_order_special_cased() -> None:
 def test_make_output_name_buyer_plural() -> None:
     """Buyer becomes 'buyers' via the default convention."""
     assert _make_output_name("Buyer", None, []) == "buyers"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# _validate_intent_filters — unit tests
+#
+# F1: ensures unknown filter types raise loudly instead of being
+# silently dropped by _filters_needing_edge_traversal.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_validate_intent_filters_accepts_all_known_types() -> None:
+    """A mix of supported entity-level and edge-traversal filter types
+    passes validation without raising."""
+    filters = [
+        {"type": "country", "value": "US"},
+        {"type": "has_open_PO", "value": True},
+    ]
+    # Should not raise.
+    _validate_intent_filters(filters)
+
+
+def test_validate_intent_filters_accepts_empty_list() -> None:
+    """No filters at all is a valid intent shape (e.g., a fetch-all).
+    Validation passes."""
+    _validate_intent_filters([])
+
+
+def test_validate_intent_filters_raises_on_single_unknown_type() -> None:
+    """An unknown filter type raises NotImplementedError naming the
+    type. This is the F1 fix: the v1 planner silently dropped these."""
+    filters = [{"type": "has_no_recent_invoices", "value": {"months": 6}}]
+    with pytest.raises(NotImplementedError) as exc_info:
+        _validate_intent_filters(filters)
+    assert "has_no_recent_invoices" in str(exc_info.value)
+
+
+def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
+    """If multiple unknown filter types are present, the error message
+    lists ALL of them — the user shouldn't have to fix one at a time."""
+    filters = [
+        {"type": "country", "value": "US"},          # known
+        {"type": "has_no_recent_invoices", "value": True},  # unknown
+        {"type": "has_open_PO", "value": True},      # known
+        {"type": "is_strategic_supplier", "value": True},   # unknown
+    ]
+    with pytest.raises(NotImplementedError) as exc_info:
+        _validate_intent_filters(filters)
+    msg = str(exc_info.value)
+    assert "has_no_recent_invoices" in msg
+    assert "is_strategic_supplier" in msg
+
+
+def test_validate_intent_filters_error_message_names_supported_types() -> None:
+    """The error message must point the caller at what IS supported,
+    so the gap is actionable, not just a 'no'."""
+    filters = [{"type": "has_no_recent_invoices", "value": True}]
+    with pytest.raises(NotImplementedError) as exc_info:
+        _validate_intent_filters(filters)
+    msg = str(exc_info.value)
+    assert "country" in msg          # entity-level support listed
+    assert "has_open_PO" in msg      # edge-traversal support listed
+
+
+def test_generate_plan_raises_on_unknown_filter_type() -> None:
+    """End-to-end: generate_plan must propagate the validation error.
+    This is the regression test for the silent-drop defect surfaced in
+    the Design 3 measurement report."""
+    intent = Intent(
+        target_entity="Supplier",
+        filters=[
+            {"type": "country", "value": "US"},
+            {"type": "has_no_recent_invoices", "value": {"months": 6}},
+            {"type": "has_open_PO", "value": True},
+        ],
+        include=["Buyer"],
+    )
+    with pytest.raises(NotImplementedError) as exc_info:
+        generate_plan(intent)
+    assert "has_no_recent_invoices" in str(exc_info.value)
 
 
 # ─────────────────────────────────────────────────────────────────────
