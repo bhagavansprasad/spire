@@ -2,7 +2,7 @@
 
 These verify the v1 KG can be loaded from Oracle as a markdown bundle.
 They hit the real Oracle 26ai container and assume the seed scripts
-have run (sql/kg/v1/*.sql).
+have run (scripts/rebuild_kg.sh).
 
 Skipped if personas.yaml is missing.
 """
@@ -85,14 +85,23 @@ async def test_kg_context_includes_us_country_vocabulary():
 
 
 @pytest.mark.asyncio
-async def test_kg_context_includes_all_four_patterns():
+async def test_kg_context_includes_all_three_patterns():
+    """v1.0 had 2 patterns; F2 added a 3rd (no_child_in_N_months) for
+    the negation-by-absence semantic. All three must appear in the
+    loaded bundle.
+
+    Note: cross_pillar_lookup was in the original v1 plan but was
+    dropped before implementation (the cross-pillar edge ASSIGNED_TO
+    carries its own notes; no separate pattern needed). no_Y_in_N_months
+    was renamed to no_child_in_N_months for clarity (parent/child terms
+    match the binding's vocabulary).
+    """
     persona = load_persona("default_dev")
     bundle = await load_kg_context(persona)
     for pattern in (
-        "no_Y_in_N_months",
         "status_filter",
         "country_filter_via_address",
-        "cross_pillar_lookup",
+        "no_child_in_N_months",
     ):
         assert pattern in bundle, f"Pattern {pattern} missing from bundle"
 
@@ -102,5 +111,6 @@ async def test_kg_context_pattern_mechanics_included():
     """The mechanics field (CLOB) must come through readable in the bundle."""
     persona = load_persona("default_dev")
     bundle = await load_kg_context(persona)
-    # Look for distinctive content from the no_Y_in_N_months mechanics step.
+    # Look for distinctive content from the no_child_in_N_months mechanics step
+    # ("Compute the cutoff date: today minus months_param months.")
     assert "cutoff" in bundle.lower()

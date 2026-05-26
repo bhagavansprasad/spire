@@ -1,17 +1,14 @@
 """Integration tests for the KG metadata tables in Oracle.
 
-These verify that the v1 KG, populated by sql/kg/v1/*.sql, is readable
-from Spire code via OracleClient. They are not unit tests — they hit
-the real Oracle 26ai container and assume the seed scripts have run.
+These verify that the v1 KG, populated by scripts/rebuild_kg.sh,
+is readable from Spire code via OracleClient. They are not unit tests —
+they hit the real Oracle 26ai container and assume the seed scripts
+have run.
 
 If a test here fails, the most likely cause is that the SPIRE schema
 is empty or stale. To repopulate:
 
-    cd /home/bhagavan/pocs/spire
-    for f in sql/kg/v1/000_drop_all.sql sql/kg/v1/00{1,2,3,4,5}_create_*.sql \\
-             sql/kg/v1/0{06,07,08,09,10}_seed_*.sql; do
-      docker exec -i oracle26ai_db_bhagavan sqlplus -s spire/jnjnuh@FREEPDB1 < "$f"
-    done
+    ./scripts/rebuild_kg.sh
 
 Skipped if personas.yaml is missing — same gate as the other
 integration tests.
@@ -68,15 +65,25 @@ async def test_kg_entity_has_five_rows():
 
 
 @pytest.mark.asyncio
-async def test_kg_table_row_counts_match_v1():
-    """All 5 KG tables match the v1 row counts established in phase 03."""
+async def test_kg_table_row_counts_match_v1_1():
+    """All 8 KG tables match the v1.1 row counts.
+
+    v1.0 had 5 tables; v1.1 added 3 more (kg_pattern_binding,
+    kg_entity_tool, kg_edge_tool) for the planner.
+    v1.0 had 2 patterns (status_filter, country_filter_via_address);
+    F2 added a 3rd (no_child_in_N_months) for the negation-by-absence
+    semantic.
+    """
     persona = load_persona("default_dev")
     expected = {
         "kg_entity": 5,
         "kg_entity_field": 27,
         "kg_edge": 4,
-        "kg_pattern": 4,
+        "kg_pattern": 3,
         "kg_vocabulary": 42,
+        "kg_pattern_binding": 3,
+        "kg_entity_tool": 2,
+        "kg_edge_tool": 3,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():
@@ -196,15 +203,19 @@ async def test_po_status_open_synonyms():
 
 
 @pytest.mark.asyncio
-async def test_no_y_in_n_months_pattern_has_parseable_parameters():
+async def test_no_child_in_n_months_pattern_has_parseable_parameters():
     """kg_pattern.parameters is stored as a JSON string. It must parse,
-    and the no_Y_in_N_months pattern must declare X, Y, edge,
-    date_field, and N."""
+    and the no_child_in_N_months pattern (added in F2 for negation-by-
+    absence) must declare parent, child_edge, date_field, and months_param.
+
+    This pattern is the KG side of the 'has_no_recent_invoices' filter:
+    keep parent entities whose per-iteration call returned empty.
+    """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
         row = await oc.fetch_one(
             "SELECT parameters FROM kg_pattern "
-            "WHERE pattern_name = 'no_Y_in_N_months'"
+            "WHERE pattern_name = 'no_child_in_N_months'"
         )
         assert row is not None
         # Read CLOB inside the `async with` block; the connection must
@@ -212,4 +223,4 @@ async def test_no_y_in_n_months_pattern_has_parseable_parameters():
         params_str = await _read_clob(row[0])
     params = json.loads(params_str)
     param_names = {p["name"] for p in params}
-    assert param_names == {"X", "Y", "edge", "date_field", "N"}
+    assert param_names == {"parent", "child_edge", "date_field", "months_param"}

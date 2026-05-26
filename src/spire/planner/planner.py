@@ -2,7 +2,7 @@
 Planner for the KG-driven path (Architecture Option 3).
 
 This module is the contract between the LLM intent-parsing step and the
-MCP executor. It reads only from the KG (see sql/kg/v1/) and emits a
+MCP executor. It reads only from the KG (see scripts/rebuild_kg.sh) and emits a
 structured plan. No LLM in the planning step. No prose-reading for
 decisions.
 
