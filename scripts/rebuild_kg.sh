@@ -25,6 +25,8 @@ SET SERVEROUTPUT ON
 --
 -- Drop order matters: children (with FKs) must be dropped
 -- before parents. Order:
+--   kg_edge_tool       (FK -> kg_edge)
+--   kg_entity_tool     (FK -> kg_entity)
 --   kg_pattern_binding (FK -> kg_entity, kg_pattern)
 --   kg_entity_field    (FK -> kg_entity)
 --   kg_edge            (FK -> kg_entity)
@@ -32,6 +34,20 @@ SET SERVEROUTPUT ON
 --   kg_vocabulary      (no FKs, can go anywhere)
 --   kg_entity          (parent)
 -- ============================================================
+
+BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE kg_edge_tool PURGE';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -942 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE kg_entity_tool PURGE';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -942 THEN RAISE; END IF;
+END;
+/
 
 BEGIN
   EXECUTE IMMEDIATE 'DROP TABLE kg_pattern_binding PURGE';
@@ -156,6 +172,25 @@ CREATE TABLE kg_pattern_binding (
     FOREIGN KEY (entity_name) REFERENCES kg_entity (entity_name),
   CONSTRAINT fk_kg_pattern_binding_pattern
     FOREIGN KEY (pattern_name) REFERENCES kg_pattern (pattern_name)
+);
+
+CREATE TABLE kg_entity_tool (
+  entity_name     VARCHAR2(64)  NOT NULL,
+  filter_type     VARCHAR2(64)  NOT NULL,
+  mcp_tool_name   VARCHAR2(128) NOT NULL,
+  notes           VARCHAR2(1000),
+  CONSTRAINT pk_kg_entity_tool PRIMARY KEY (entity_name, filter_type),
+  CONSTRAINT fk_kg_entity_tool_entity
+    FOREIGN KEY (entity_name) REFERENCES kg_entity (entity_name)
+);
+
+CREATE TABLE kg_edge_tool (
+  edge_name       VARCHAR2(64)  NOT NULL,
+  mcp_tool_name   VARCHAR2(128) NOT NULL,
+  notes           VARCHAR2(1000),
+  CONSTRAINT pk_kg_edge_tool PRIMARY KEY (edge_name),
+  CONSTRAINT fk_kg_edge_tool_edge
+    FOREIGN KEY (edge_name) REFERENCES kg_edge (edge_name)
 );
 
 PROMPT Tables created.
@@ -389,7 +424,64 @@ COMMIT;
 PROMPT Seeded kg_pattern_binding (2 rows).
 
 -- ============================================================
--- STEP 9: Verification
+-- STEP 9: Seed kg_entity_tool
+--
+-- Maps entities to the MCP tools that fetch them.
+-- filter_type='none' is the default/unfiltered fetcher.
+-- ============================================================
+
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'Supplier',
+  'none',
+  'search_suppliers',
+  'Default fetcher for Supplier. Used when no specific filter is requested.'
+);
+
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'Supplier',
+  'country',
+  'search_suppliers_by_country',
+  'Country-filtered fetcher. Uses expand=addresses under the hood; address data is bundled with the response.'
+);
+
+COMMIT;
+
+PROMPT Seeded kg_entity_tool (2 rows).
+
+-- ============================================================
+-- STEP 10: Seed kg_edge_tool
+--
+-- Maps edges to the MCP tools that traverse them.
+-- HAS_ADDRESS deliberately has no row: address data is bundled
+-- with search_suppliers_by_country (via expand=addresses).
+-- Absence of a row signals to the planner that this edge is
+-- not independently traversable.
+-- ============================================================
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_INVOICE',
+  'search_invoices',
+  'Takes supplier_number (or supplier_name) + optional invoice_date_after.'
+);
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_PURCHASE_ORDER',
+  'search_purchase_orders',
+  'Takes supplier_id (or supplier_name) + optional status.'
+);
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'ASSIGNED_TO',
+  'get_buyer',
+  'Takes buyer_id. Cross-pillar: maps BuyerId (FSCM) to PersonId (HCM).'
+);
+
+COMMIT;
+
+PROMPT Seeded kg_edge_tool (3 rows).
+
+-- ============================================================
+-- STEP 11: Verification
 -- ============================================================
 
 SET PAGESIZE 100
@@ -402,7 +494,9 @@ UNION ALL SELECT 'kg_entity_field',     COUNT(*) FROM kg_entity_field
 UNION ALL SELECT 'kg_edge',             COUNT(*) FROM kg_edge
 UNION ALL SELECT 'kg_pattern',          COUNT(*) FROM kg_pattern
 UNION ALL SELECT 'kg_vocabulary',       COUNT(*) FROM kg_vocabulary
-UNION ALL SELECT 'kg_pattern_binding',  COUNT(*) FROM kg_pattern_binding;
+UNION ALL SELECT 'kg_pattern_binding',  COUNT(*) FROM kg_pattern_binding
+UNION ALL SELECT 'kg_entity_tool',      COUNT(*) FROM kg_entity_tool
+UNION ALL SELECT 'kg_edge_tool',        COUNT(*) FROM kg_edge_tool;
 
 PROMPT
 PROMPT Patterns:
@@ -415,6 +509,14 @@ SELECT edge_name, server_filter_rule FROM kg_edge ORDER BY edge_name;
 PROMPT
 PROMPT Pattern bindings (should be 2 rows for v1):
 SELECT entity_name, filter_type, pattern_name FROM kg_pattern_binding ORDER BY entity_name, filter_type;
+
+PROMPT
+PROMPT Entity-to-tool bindings (should be 2 rows for v1):
+SELECT entity_name, filter_type, mcp_tool_name FROM kg_entity_tool ORDER BY entity_name, filter_type;
+
+PROMPT
+PROMPT Edge-to-tool bindings (should be 3 rows for v1; HAS_ADDRESS deliberately absent):
+SELECT edge_name, mcp_tool_name FROM kg_edge_tool ORDER BY edge_name;
 
 EXIT
 EOF
