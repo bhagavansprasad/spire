@@ -6,9 +6,10 @@ MCP executor. It reads only from the KG (see sql/kg/v1/) and emits a
 structured plan. No LLM in the planning step. No prose-reading for
 decisions.
 
-Status: KG-lookup layer, helpers, orchestrator, and intent validation
-all implemented. v1 covers the anchor question; see design doc
-§"Known limitations" for what other intent shapes are NOT supported.
+Status: KG-lookup layer, helpers, orchestrator, intent validation,
+and the F2 'no_invoices_in_N_months' negation pattern all
+implemented. v1.1 covers the anchor question + the original Track A
+prompt's negation clause. See design doc for known limitations.
 
 Companion design doc: docs/designs/phase_2_planner_design.md
 """
@@ -19,6 +20,7 @@ import json
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Iterator
 
 import oracledb
@@ -28,12 +30,13 @@ import oracledb
 # v1 mapping tables (intent vocabulary -> KG vocabulary)
 #
 # Intent filter types come from the LLM parser, which uses
-# domain-friendly names ('country', 'has_open_PO'). The KG uses
-# normalized names ('country' as kg_entity_tool.filter_type, 'status'
-# as kg_pattern_binding.filter_type). These tables bridge the two.
+# domain-friendly names ('country', 'has_open_PO',
+# 'has_no_recent_invoices'). The KG uses normalized names
+# ('country' as kg_entity_tool.filter_type, 'status' as
+# kg_pattern_binding.filter_type). These tables bridge the two.
 #
-# v1.1 candidate: move these into the KG itself so the planner is
-# fully data-driven. For v1 they're hardcoded so the planner stays
+# v1.2 candidate: move these into the KG itself so the planner is
+# fully data-driven. For v1.1 they're hardcoded so the planner stays
 # small and the KG schema stays simple.
 # ─────────────────────────────────────────────────────────────────────
 
@@ -47,17 +50,20 @@ _ENTITY_LEVEL_FILTER_TYPES: set[str] = {"country"}
 # to look up.
 _EDGE_TRAVERSAL_FILTERS: dict[str, tuple[str, str]] = {
     "has_open_PO": ("PurchaseOrder", "status"),
+    "has_no_recent_invoices": ("Invoice", "no_recent_invoices"),
 }
 
 # Per-edge-traversal filter, the vocab kind to resolve the implicit value.
 # 'has_open_PO' implies status='open'; we resolve 'open' via po_status vocab.
+# 'has_no_recent_invoices' has no implicit vocab term — the value is
+# explicit (e.g. {"months": 6}), so this dict has no entry for it.
 _EDGE_FILTER_IMPLICIT_VALUES: dict[str, tuple[str, str]] = {
     "has_open_PO": ("po_status", "open"),
 }
 
 # Map MCP tool name -> primary argument name (the one the executor
 # substitutes $iteration_value into when iterating).
-# v1.1 candidate: store this in the KG (e.g., kg_edge_tool.arg_name).
+# v1.2 candidate: store this in the KG (e.g., kg_edge_tool.arg_name).
 _TOOL_PRIMARY_ARG: dict[str, str] = {
     "search_invoices": "supplier_number",
     "search_purchase_orders": "supplier_id",
@@ -80,6 +86,14 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "PurchaseOrder": "pos",
     "Buyer": "buyers",
     "Address": "addresses",
+}
+
+# Filter-type -> short suffix used when the step's output is the
+# filtered parent list (i.e. filter_source_when_empty=True).
+# Composed with the source output name as
+# "{source_output_name}_{suffix}". v1.2 candidate: move into the KG.
+_FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
+    "has_no_recent_invoices": "no_recent_invoices",
 }
 
 
@@ -144,13 +158,15 @@ class Intent:
     Output of the LLM intent-parsing step.
     Input to ``generate_plan``.
 
-    Example (for the anchor question
-    'Show me suppliers in US with open POs, including the buyer'):
+    Example (for the original Track A prompt
+    'suppliers in US with no invoices in 6 months but with open POs,
+    including the buyer assigned to each'):
 
         Intent(
             target_entity="Supplier",
             filters=[
                 {"type": "country", "value": "US"},
+                {"type": "has_no_recent_invoices", "value": {"months": 6}},
                 {"type": "has_open_PO", "value": True},
             ],
             include=["Buyer"],
@@ -174,6 +190,12 @@ class Step:
     - ``client_filters`` are applied in Python after each tool call.
       All v1 edges have ``server_filter_rule = 'join_only'``, so any
       filter beyond the join key lives here.
+    - ``filter_source_when_empty`` (F2): when True, the step's output
+      is the SOURCE step's items, filtered to those whose per-iteration
+      tool call returned an empty list. Used for "negation by absence"
+      filters like "suppliers with NO invoices in the last 6 months".
+      The executor honors this flag; it defaults to False so existing
+      steps behave unchanged.
     """
 
     step_id: int
@@ -183,6 +205,7 @@ class Step:
     client_filters: list[dict[str, Any]]
     output_name: str
     output_dedupe_by: str | None
+    filter_source_when_empty: bool = False
 
 
 Plan = list[Step]
@@ -456,21 +479,30 @@ def resolve_vocab(vocab_kind: str, term: str) -> str:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def generate_plan(intent: Intent) -> Plan:
+def generate_plan(
+    intent: Intent, reference_date: date | None = None
+) -> Plan:
     """
     Produce an ordered, executable plan from a structured intent.
 
     Uses only KG lookups. No LLM. No prose interpretation.
 
-    Three-block flow (sufficient for v1's anchor question; see design doc
-    for known limitations):
+    Three-block flow:
 
     1. Fetch target entity (with entity-level filter if applicable).
     2. For each filter needing an edge traversal, add an iterating step.
+       Some filters (negation-by-absence, e.g. has_no_recent_invoices)
+       emit a step whose output is the FILTERED PARENT list, not the
+       child list. Such steps carry filter_source_when_empty=True for
+       the executor.
     3. For each include, add a lookup step (with dedup on the join field).
 
-    Tracing the anchor question through this orchestrator produces the
-    3-step plan shown in the design doc.
+    Args:
+        intent: The structured intent (validated; unknown filter types
+            raise NotImplementedError before any plan work happens).
+        reference_date: For testability of date-computing filters
+            (e.g. has_no_recent_invoices computes today - N months).
+            Defaults to date.today() in production.
 
     Raises NotImplementedError if any filter in ``intent.filters`` has
     a ``type`` not supported in v1 (silent-drop defect fix — F1).
@@ -478,6 +510,8 @@ def generate_plan(intent: Intent) -> Plan:
     # Validate up front so unknown filter types raise loudly instead
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
+
+    ref_date = reference_date if reference_date is not None else date.today()
 
     plan: Plan = []
     step_id = 1
@@ -506,6 +540,7 @@ def generate_plan(intent: Intent) -> Plan:
 
     # ── Block 2: edge-traversal filters ───────────────────────────
     for filter_spec in _filters_needing_edge_traversal(intent.filters):
+        filter_type = filter_spec["type"]
         target_entity = _filter_target_entity(filter_spec)
         edge = find_edge(previous_entity, target_entity)
         tool = find_edge_tool(edge["edge_name"])
@@ -516,22 +551,52 @@ def generate_plan(intent: Intent) -> Plan:
                 f"Edge {edge['edge_name']!r} has no tool binding; "
                 "cannot traverse independently."
             )
-        client_filters = _resolve_client_filters(filter_spec, target_entity)
+
+        # Decide step shape based on the filter type:
+        #
+        # - status-style filters (has_open_PO): per-iteration client
+        #   filter on the child results; output is the child list.
+        #
+        # - negation-by-absence filters (has_no_recent_invoices): no
+        #   client filter; output is the PARENT items whose per-iteration
+        #   call returned empty. filter_source_when_empty=True.
+        filter_source_when_empty = filter_type in _FILTER_SOURCE_NAME_SUFFIX
+
+        if filter_source_when_empty:
+            # Build args including computed values (e.g. invoice_date_after).
+            tool_args = _build_iteration_args_with_computed(
+                filter_spec, tool, ref_date
+            )
+            client_filters: list[dict[str, Any]] = []
+            output_name = _make_filtered_source_output_name(
+                previous_output_name, filter_type
+            )
+            # Output is parent items, so previous_entity stays as parent.
+            new_previous_entity = previous_entity
+        else:
+            tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
+            client_filters = _resolve_client_filters(
+                filter_spec, target_entity
+            )
+            output_name = _make_output_name(target_entity, None, [])
+            new_previous_entity = target_entity
+
         plan.append(
             Step(
                 step_id=step_id,
                 tool_name=tool,
-                tool_args={_arg_name_for_tool(tool): "$iteration_value"},
+                tool_args=tool_args,
                 iterate_over={
                     "from_step": previous_output_name,
                     "field": edge["from_join_field"],
                 },
                 client_filters=client_filters,
-                output_name=_make_output_name(target_entity, None, []),
+                output_name=output_name,
                 output_dedupe_by=None,
+                filter_source_when_empty=filter_source_when_empty,
             )
         )
-        previous_entity = target_entity
+        previous_entity = new_previous_entity
         previous_output_name = plan[-1].output_name
         step_id += 1
 
@@ -700,9 +765,10 @@ def _resolve_client_filters(
     ``parameter_bindings``, resolves vocab values, and constructs the
     filter list in the ``{field, op, value}`` shape.
 
-    v1 only implements ``status_filter``. country_filter_via_address is
-    handled by the entity-level fetcher in Block 1, not as a client
-    filter.
+    v1 only implements ``status_filter`` here. country_filter_via_address
+    is handled by the entity-level fetcher in Block 1.
+    no_child_in_N_months is handled via filter_source_when_empty in the
+    orchestrator, not via client filters.
 
     Example: {"type": "has_open_PO", ...} on PurchaseOrder
         -> [{"field": "StatusCode", "op": "equals", "value": "OPEN"}]
@@ -726,13 +792,95 @@ def _resolve_client_filters(
         canonical = resolve_vocab(vocab_kind, implicit_term)
         return [{"field": field_name, "op": "equals", "value": canonical}]
 
-    # Other patterns (e.g., country_filter_via_address) don't apply
-    # as client filters in v1's anchor question. If we get here, the
-    # planner is being asked something v1 doesn't cover.
+    # Other patterns (e.g., country_filter_via_address, no_child_in_N_months)
+    # are NOT handled here in v1.1 — they're handled elsewhere in the
+    # orchestrator (Block 1 entity fetcher, or filter_source_when_empty
+    # respectively). If we get here, the planner is being asked
+    # something v1 doesn't cover.
     raise NotImplementedError(
         f"Client-filter construction for pattern {pattern_name!r} "
         "is not implemented in v1."
     )
+
+
+def _build_iteration_args_with_computed(
+    filter_spec: dict[str, Any],
+    tool_name: str,
+    reference_date: date,
+) -> dict[str, Any]:
+    """
+    Build tool_args for an iterating step whose args include a
+    computed value (e.g. invoice_date_after = today - N months).
+
+    The primary iteration key is always set to the iteration sentinel.
+    Additional computed args are added based on the filter type.
+
+    For has_no_recent_invoices with value {"months": 6}, returns:
+        {"supplier_number": "$iteration_value",
+         "invoice_date_after": "2025-11-26"}
+    where the date is reference_date minus 6 months.
+
+    v1.1 only handles has_no_recent_invoices. Other computed-arg
+    filter types would extend this function.
+    """
+    intent_filter_type = filter_spec["type"]
+    primary_arg = _arg_name_for_tool(tool_name)
+    args: dict[str, Any] = {primary_arg: "$iteration_value"}
+
+    if intent_filter_type == "has_no_recent_invoices":
+        value = filter_spec.get("value") or {}
+        months = value.get("months")
+        if not isinstance(months, int) or months <= 0:
+            raise ValueError(
+                f"has_no_recent_invoices requires value={{'months': <positive int>}}; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        cutoff = _compute_date_n_months_ago(months, reference_date)
+        args["invoice_date_after"] = cutoff.isoformat()
+        return args
+
+    # Other filter types with computed args would dispatch here.
+    raise NotImplementedError(
+        f"Computed iteration args not implemented for filter type "
+        f"{intent_filter_type!r}."
+    )
+
+
+def _compute_date_n_months_ago(months: int, reference_date: date) -> date:
+    """
+    Return reference_date minus ``months`` months.
+
+    Naive month arithmetic — handles month rollover with day clamping.
+    Example: 2026-03-31 minus 1 month -> 2026-02-28 (not 2026-02-31).
+
+    Pure function for testability; reference_date defaulting happens
+    in the orchestrator, not here.
+    """
+    year = reference_date.year
+    month = reference_date.month - months
+    while month <= 0:
+        month += 12
+        year -= 1
+    # Clamp day to last day of target month.
+    day = min(reference_date.day, _days_in_month(year, month))
+    return date(year, month, day)
+
+
+def _days_in_month(year: int, month: int) -> int:
+    """Return the number of days in the given (year, month)."""
+    if month == 12:
+        next_month_first = date(year + 1, 1, 1)
+    else:
+        next_month_first = date(year, month + 1, 1)
+    last_day = (next_month_first - _one_day()).day
+    return last_day
+
+
+def _one_day():
+    """Return a one-day timedelta. Helper to avoid a top-level import
+    when most of this module doesn't need timedelta."""
+    from datetime import timedelta
+    return timedelta(days=1)
 
 
 def _arg_name_for_tool(tool_name: str) -> str:
@@ -798,6 +946,28 @@ def _make_output_name(
         return "open_pos"
 
     return base
+
+
+def _make_filtered_source_output_name(
+    source_output_name: str, filter_type: str
+) -> str:
+    """
+    Compose the output name for a step that filters its source items by
+    iteration-emptiness (filter_source_when_empty=True).
+
+    Example: source='us_suppliers', filter='has_no_recent_invoices'
+        -> 'us_suppliers_no_recent_invoices'
+
+    Raises KeyError if filter_type has no suffix mapping in
+    _FILTER_SOURCE_NAME_SUFFIX.
+    """
+    if filter_type not in _FILTER_SOURCE_NAME_SUFFIX:
+        raise KeyError(
+            f"No filter-source name suffix for {filter_type!r}. "
+            "Add it to _FILTER_SOURCE_NAME_SUFFIX."
+        )
+    suffix = _FILTER_SOURCE_NAME_SUFFIX[filter_type]
+    return f"{source_output_name}_{suffix}"
 
 
 def _previous_entity(plan: Plan) -> str:

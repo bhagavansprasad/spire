@@ -309,7 +309,7 @@ INSERT INTO kg_edge VALUES (
 PROMPT Seeded kg_edge (4 rows).
 
 -- ============================================================
--- STEP 6: Seed kg_pattern (2 rows after Item 4 removals)
+-- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
 -- ============================================================
 
 INSERT INTO kg_pattern (pattern_name, shape, parameters, mechanics, example) VALUES (
@@ -341,7 +341,24 @@ INSERT INTO kg_pattern (pattern_name, shape, parameters, mechanics, example) VAL
   'Suppliers in US: parent=Supplier, child_edge=HAS_ADDRESS, country_term=''US'' -> filter where any supplier.addresses[].CountryCode=''US''.'
 );
 
-PROMPT Seeded kg_pattern (2 rows).
+INSERT INTO kg_pattern (pattern_name, shape, parameters, mechanics, example) VALUES (
+  'no_child_in_N_months',
+  'Filter parent entities to those with NO child of type C in the last N months on a given date field.',
+  '[
+    {"name":"parent","type":"Entity","description":"The parent entity (e.g. Supplier)."},
+    {"name":"child_edge","type":"Edge","description":"The edge from parent to child (e.g. HAS_INVOICE)."},
+    {"name":"date_field","type":"FieldName","description":"The date field on the child to compare against (e.g. InvoiceDate)."},
+    {"name":"months_param","type":"int","description":"The lookback window in months (e.g. 6)."}
+   ]',
+  '1. Compute the cutoff date: today minus months_param months. Format as ISO YYYY-MM-DD.
+2. For each parent, query the child endpoint with date_field >= cutoff.
+3. A parent passes the filter if the child query returns ZERO results (negation by absence).
+4. The result of this step is the FILTERED PARENT LIST, not the child list.
+5. The executor implements this via Step.filter_source_when_empty=True.',
+  'Suppliers with no invoices in 6 months: parent=Supplier, child_edge=HAS_INVOICE, date_field=InvoiceDate, months_param=6 -> keep suppliers where search_invoices(supplier, invoice_date_after=<6 months ago>) returns empty.'
+);
+
+PROMPT Seeded kg_pattern (3 rows).
 
 -- ============================================================
 -- STEP 7: Seed kg_vocabulary
@@ -402,7 +419,7 @@ COMMIT;
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
--- STEP 8: Seed kg_pattern_binding
+-- STEP 8: Seed kg_pattern_binding (3 rows for v1.1 with F2)
 -- ============================================================
 
 INSERT INTO kg_pattern_binding (entity_name, filter_type, pattern_name, parameter_bindings) VALUES (
@@ -419,9 +436,16 @@ INSERT INTO kg_pattern_binding (entity_name, filter_type, pattern_name, paramete
   '{"X": "PurchaseOrder", "status_field": "StatusCode", "status_term_param": "status"}'
 );
 
+INSERT INTO kg_pattern_binding (entity_name, filter_type, pattern_name, parameter_bindings) VALUES (
+  'Supplier',
+  'no_recent_invoices',
+  'no_child_in_N_months',
+  '{"parent": "Supplier", "child_edge": "HAS_INVOICE", "date_field": "InvoiceDate", "months_param": "months"}'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_pattern_binding (2 rows).
+PROMPT Seeded kg_pattern_binding (3 rows).
 
 -- ============================================================
 -- STEP 9: Seed kg_entity_tool
@@ -507,7 +531,7 @@ PROMPT Edge filter rules (should all be join_only for v1):
 SELECT edge_name, server_filter_rule FROM kg_edge ORDER BY edge_name;
 
 PROMPT
-PROMPT Pattern bindings (should be 2 rows for v1):
+PROMPT Pattern bindings (should be 3 rows for v1.1):
 SELECT entity_name, filter_type, pattern_name FROM kg_pattern_binding ORDER BY entity_name, filter_type;
 
 PROMPT
