@@ -6,9 +6,9 @@ MCP executor. It reads only from the KG (see sql/kg/v1/) and emits a
 structured plan. No LLM in the planning step. No prose-reading for
 decisions.
 
-Status: KG-lookup layer, helpers, and orchestrator all implemented.
-v1 covers the anchor question; see design doc §"Known limitations" for
-what other intent shapes are NOT supported.
+Status: KG-lookup layer, helpers, orchestrator, and intent validation
+all implemented. v1 covers the anchor question; see design doc
+§"Known limitations" for what other intent shapes are NOT supported.
 
 Companion design doc: docs/designs/phase_2_planner_design.md
 """
@@ -471,7 +471,14 @@ def generate_plan(intent: Intent) -> Plan:
 
     Tracing the anchor question through this orchestrator produces the
     3-step plan shown in the design doc.
+
+    Raises NotImplementedError if any filter in ``intent.filters`` has
+    a ``type`` not supported in v1 (silent-drop defect fix — F1).
     """
+    # Validate up front so unknown filter types raise loudly instead
+    # of being silently dropped by _filters_needing_edge_traversal.
+    _validate_intent_filters(intent.filters)
+
     plan: Plan = []
     step_id = 1
 
@@ -563,6 +570,35 @@ def generate_plan(intent: Intent) -> Plan:
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _validate_intent_filters(filters: list[dict[str, Any]]) -> None:
+    """
+    Verify every filter in the intent has a known handler in v1.
+
+    Called from generate_plan before any other work, so unknown filter
+    types raise loudly instead of being silently dropped further down
+    the pipeline. (v1's _filters_needing_edge_traversal would otherwise
+    silently exclude filters whose type isn't in _EDGE_TRAVERSAL_FILTERS,
+    which means an intent like {"type": "has_no_recent_invoices", ...}
+    would execute as if that clause weren't in the prompt — a silent
+    miss that's worse than a crash.)
+
+    Raises NotImplementedError listing ALL unknown filter types at once,
+    with a message naming the v1-supported alternatives.
+    """
+    known_types = _ENTITY_LEVEL_FILTER_TYPES | set(_EDGE_TRAVERSAL_FILTERS)
+    unknown = [
+        f.get("type") for f in filters if f.get("type") not in known_types
+    ]
+    if unknown:
+        raise NotImplementedError(
+            f"Intent contains filter types not supported in v1: {unknown}. "
+            f"Supported entity-level filters: "
+            f"{sorted(_ENTITY_LEVEL_FILTER_TYPES)}. "
+            f"Supported edge-traversal filters: "
+            f"{sorted(_EDGE_TRAVERSAL_FILTERS)}."
+        )
+
+
 def _pick_entity_filter(filters: list[dict[str, Any]]) -> str:
     """
     Decide which filter (if any) has a dedicated entity-level fetcher tool.
@@ -626,6 +662,11 @@ def _filters_needing_edge_traversal(
     v1: returns filters whose type is in _EDGE_TRAVERSAL_FILTERS.
     Entity-level filters (already consumed by Block 1) and unknown
     filter types are excluded.
+
+    Note: this function used to silently drop unknown filter types
+    (the v1 defect surfaced in the Design 3 measurement report).
+    _validate_intent_filters is now called from generate_plan before
+    this function runs, so unknown types raise before reaching here.
     """
     return [f for f in filters if f.get("type") in _EDGE_TRAVERSAL_FILTERS]
 
