@@ -8,17 +8,20 @@ Scope (current):
 - Non-iterating steps (A.1)
 - Iterating steps with $iteration_value substitution and
   output_dedupe_by handling (A.2)
+- Negation-by-absence steps (filter_source_when_empty=True): for each
+  source item, call the tool; KEEP the source item iff the call
+  returns an empty list. Output is the FILTERED source items, not
+  the iteration results. (F2b)
 - client_filters with 'equals' operator
 - Returns dict[output_name, list[dict]]
-
-Next:
-- A.3 will add scripts/run_plan.py as the end-to-end driver
 
 Design decisions locked for v1:
 - Sequential execution (no asyncio.gather parallelism)
 - Fail-the-whole-plan on any tool error (no partial results)
 - Raw MCP (session.call_tool), no LangChain
 - Caller manages the ClientSession; we accept it as a parameter
+- Source items with None for the iteration field are SKIPPED entirely
+  in filter_source_when_empty mode (they don't appear in the output).
 """
 
 from __future__ import annotations
@@ -293,6 +296,71 @@ async def _execute_iterating_step(
     return aggregated
 
 
+async def _execute_filter_source_step(
+    step: Step,
+    session: ClientSession,
+    outputs: dict[str, list[dict]],
+) -> list[dict]:
+    """
+    Execute a step whose semantic is "filter the source by per-iteration
+    emptiness" (F2: negation by absence).
+
+    For each item in the source step's output:
+      - Read the iteration field's value (e.g. SupplierNumber).
+      - If that value is None: SKIP the item entirely (do NOT include
+        in output). v1 design choice. Documented in module docstring.
+      - Otherwise: call the tool with the value substituted in.
+        Apply client_filters.
+        If the result is empty -> KEEP the source item (full original dict).
+        If the result is non-empty -> DROP the source item.
+
+    Returns the kept source items in their original order. Output items
+    are full source dicts (e.g. Supplier records), NOT the iteration
+    results.
+
+    The point of this step shape: handle "X with NO Y" queries — e.g.
+    "suppliers with no invoices in the last 6 months". The iterating
+    tool finds Ys per X; emptiness means the negation holds.
+    """
+    if step.iterate_over is None:
+        raise RuntimeError(
+            f"Step {step.step_id} has filter_source_when_empty=True but "
+            "iterate_over is None. Planner bug: these fields are coupled."
+        )
+
+    substitution_key = _find_substitution_key(step.tool_args)
+    from_step = step.iterate_over["from_step"]
+    iter_field = step.iterate_over["field"]
+
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"filter_source_when_empty step references unknown output "
+            f"{from_step!r}. Planner bug."
+        )
+    source_items = outputs[from_step]
+
+    kept: list[dict] = []
+    for source_item in source_items:
+        iteration_value = source_item.get(iter_field)
+        if iteration_value is None:
+            # Skip: no join key, can't iterate. Documented v1 behavior.
+            continue
+
+        per_iter_args = dict(step.tool_args)
+        per_iter_args[substitution_key] = iteration_value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+
+        # Negation by absence: empty result means the source item
+        # passes the filter.
+        if not items:
+            kept.append(source_item)
+
+    return kept
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────
@@ -317,6 +385,9 @@ async def execute_plan(
         record is wrapped in a single-element list.
         For iterating steps, results across iterations are concatenated
         into one flat list.
+        For filter_source_when_empty steps, the output is the source
+        items kept by negation-by-absence (i.e. those whose iteration
+        returned empty).
 
     Raises:
         RuntimeError: if MCP returns an unexpectedly shaped result,
@@ -332,7 +403,15 @@ async def execute_plan(
 
     for step in plan:
         if step.iterate_over is None:
+            if step.filter_source_when_empty:
+                raise RuntimeError(
+                    f"Step {step.step_id} has filter_source_when_empty=True "
+                    "but iterate_over is None. Planner bug: these fields "
+                    "are coupled."
+                )
             items = await _execute_non_iterating_step(step, session)
+        elif step.filter_source_when_empty:
+            items = await _execute_filter_source_step(step, session, outputs)
         else:
             items = await _execute_iterating_step(step, session, outputs)
         outputs[step.output_name] = items

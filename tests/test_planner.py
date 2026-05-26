@@ -10,12 +10,14 @@ Three kinds of tests live here:
    find_entity_tool, find_edge, find_edge_tool, find_pattern_for_filter).
 
 3. Helper + orchestrator tests, culminating in the end-to-end
-   anchor-question trace. The orchestrator test is the headline:
-   generate_plan(anchor_intent) must equal anchor_plan.
+   anchor-question trace AND the original-prompt trace. The orchestrator
+   tests are the headlines.
 
 If KG-dependent tests fail, run ./scripts/rebuild_kg.sh to reload seed
 data.
 """
+
+from datetime import date
 
 import pytest
 
@@ -25,8 +27,11 @@ from spire.planner.planner import (
     Step,
     _arg_name_for_tool,
     _build_fetcher_args,
+    _build_iteration_args_with_computed,
+    _compute_date_n_months_ago,
     _filter_target_entity,
     _filters_needing_edge_traversal,
+    _make_filtered_source_output_name,
     _make_output_name,
     _pick_entity_filter,
     _resolve_client_filters,
@@ -102,6 +107,29 @@ def anchor_plan() -> Plan:
     ]
 
 
+@pytest.fixture
+def original_track_a_intent() -> Intent:
+    """
+    The structured intent for the original Track A prompt
+    (with the 'no invoices in 6 months' negation clause).
+    """
+    return Intent(
+        target_entity="Supplier",
+        filters=[
+            {"type": "country", "value": "US"},
+            {"type": "has_no_recent_invoices", "value": {"months": 6}},
+            {"type": "has_open_PO", "value": True},
+        ],
+        include=["Buyer"],
+    )
+
+
+@pytest.fixture
+def fixed_reference_date() -> date:
+    """A fixed date for testable date arithmetic. 2026-05-26."""
+    return date(2026, 5, 26)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Dataclass contract tests (no DB)
 # ─────────────────────────────────────────────────────────────────────
@@ -124,6 +152,24 @@ def test_step_dataclass_matches_design(anchor_plan: Plan) -> None:
     assert step1.client_filters == []
     assert step1.output_name == "us_suppliers"
     assert step1.output_dedupe_by is None
+    # F2 addition: filter_source_when_empty defaults to False
+    # so existing Steps stay compatible.
+    assert step1.filter_source_when_empty is False
+
+
+def test_step_dataclass_accepts_filter_source_when_empty() -> None:
+    """F2: Step can be constructed with filter_source_when_empty=True."""
+    s = Step(
+        step_id=1,
+        tool_name="search_invoices",
+        tool_args={"supplier_number": "$iteration_value"},
+        iterate_over={"from_step": "us_suppliers", "field": "SupplierNumber"},
+        client_filters=[],
+        output_name="us_suppliers_no_recent_invoices",
+        output_dedupe_by=None,
+        filter_source_when_empty=True,
+    )
+    assert s.filter_source_when_empty is True
 
 
 def test_plan_is_a_list_of_steps(anchor_plan: Plan) -> None:
@@ -434,6 +480,19 @@ def test_find_pattern_for_filter_status_on_po() -> None:
     assert bindings["status_term_param"] == "status"
 
 
+def test_find_pattern_for_filter_no_recent_invoices_on_supplier() -> None:
+    """F2: The no_recent_invoices filter on Supplier binds to
+    no_child_in_N_months."""
+    result = find_pattern_for_filter("Supplier", "no_recent_invoices")
+    assert result["pattern_name"] == "no_child_in_N_months"
+    bindings = result["parameter_bindings"]
+    assert isinstance(bindings, dict)
+    assert bindings["parent"] == "Supplier"
+    assert bindings["child_edge"] == "HAS_INVOICE"
+    assert bindings["date_field"] == "InvoiceDate"
+    assert bindings["months_param"] == "months"
+
+
 def test_find_pattern_for_filter_parameter_bindings_is_parsed_json() -> None:
     """parameter_bindings comes back as a Python dict, not a JSON string.
     Callers should never have to call json.loads themselves."""
@@ -520,10 +579,30 @@ def test_filters_needing_edge_traversal_empty_for_country_only() -> None:
     assert _filters_needing_edge_traversal(filters) == []
 
 
+def test_filters_needing_edge_traversal_includes_no_recent_invoices() -> None:
+    """F2: has_no_recent_invoices is an edge-traversal filter, kept."""
+    filters = [
+        {"type": "country", "value": "US"},
+        {"type": "has_no_recent_invoices", "value": {"months": 6}},
+        {"type": "has_open_PO", "value": True},
+    ]
+    result = _filters_needing_edge_traversal(filters)
+    assert len(result) == 2
+    assert result[0]["type"] == "has_no_recent_invoices"
+    assert result[1]["type"] == "has_open_PO"
+
+
 def test_filter_target_entity_has_open_po_maps_to_purchase_order() -> None:
     """has_open_PO is a filter on the PurchaseOrder entity."""
     spec = {"type": "has_open_PO", "value": True}
     assert _filter_target_entity(spec) == "PurchaseOrder"
+
+
+def test_filter_target_entity_has_no_recent_invoices_maps_to_invoice() -> None:
+    """F2: has_no_recent_invoices targets the Invoice entity (the
+    child being checked for absence)."""
+    spec = {"type": "has_no_recent_invoices", "value": {"months": 6}}
+    assert _filter_target_entity(spec) == "Invoice"
 
 
 def test_filter_target_entity_unknown_raises() -> None:
@@ -599,10 +678,7 @@ def test_make_output_name_buyer_plural() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# _validate_intent_filters — unit tests
-#
-# F1: ensures unknown filter types raise loudly instead of being
-# silently dropped by _filters_needing_edge_traversal.
+# _validate_intent_filters — unit tests (F1)
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -617,6 +693,16 @@ def test_validate_intent_filters_accepts_all_known_types() -> None:
     _validate_intent_filters(filters)
 
 
+def test_validate_intent_filters_accepts_all_known_types_including_no_recent() -> None:
+    """F2: has_no_recent_invoices is now also a known type."""
+    filters = [
+        {"type": "country", "value": "US"},
+        {"type": "has_no_recent_invoices", "value": {"months": 6}},
+        {"type": "has_open_PO", "value": True},
+    ]
+    _validate_intent_filters(filters)
+
+
 def test_validate_intent_filters_accepts_empty_list() -> None:
     """No filters at all is a valid intent shape (e.g., a fetch-all).
     Validation passes."""
@@ -624,12 +710,11 @@ def test_validate_intent_filters_accepts_empty_list() -> None:
 
 
 def test_validate_intent_filters_raises_on_single_unknown_type() -> None:
-    """An unknown filter type raises NotImplementedError naming the
-    type. This is the F1 fix: the v1 planner silently dropped these."""
-    filters = [{"type": "has_no_recent_invoices", "value": {"months": 6}}]
+    """An unknown filter type raises NotImplementedError naming the type."""
+    filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
         _validate_intent_filters(filters)
-    assert "has_no_recent_invoices" in str(exc_info.value)
+    assert "is_strategic_supplier" in str(exc_info.value)
 
 
 def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
@@ -637,44 +722,138 @@ def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
     lists ALL of them — the user shouldn't have to fix one at a time."""
     filters = [
         {"type": "country", "value": "US"},          # known
-        {"type": "has_no_recent_invoices", "value": True},  # unknown
-        {"type": "has_open_PO", "value": True},      # known
         {"type": "is_strategic_supplier", "value": True},   # unknown
+        {"type": "has_open_PO", "value": True},      # known
+        {"type": "is_diversity_supplier", "value": True},   # unknown
     ]
     with pytest.raises(NotImplementedError) as exc_info:
         _validate_intent_filters(filters)
     msg = str(exc_info.value)
-    assert "has_no_recent_invoices" in msg
     assert "is_strategic_supplier" in msg
+    assert "is_diversity_supplier" in msg
 
 
 def test_validate_intent_filters_error_message_names_supported_types() -> None:
     """The error message must point the caller at what IS supported,
     so the gap is actionable, not just a 'no'."""
-    filters = [{"type": "has_no_recent_invoices", "value": True}]
+    filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
         _validate_intent_filters(filters)
     msg = str(exc_info.value)
     assert "country" in msg          # entity-level support listed
     assert "has_open_PO" in msg      # edge-traversal support listed
+    assert "has_no_recent_invoices" in msg  # F2: now also supported
 
 
 def test_generate_plan_raises_on_unknown_filter_type() -> None:
-    """End-to-end: generate_plan must propagate the validation error.
-    This is the regression test for the silent-drop defect surfaced in
-    the Design 3 measurement report."""
+    """End-to-end: generate_plan must propagate the validation error."""
     intent = Intent(
         target_entity="Supplier",
         filters=[
             {"type": "country", "value": "US"},
-            {"type": "has_no_recent_invoices", "value": {"months": 6}},
+            {"type": "is_strategic_supplier", "value": True},
             {"type": "has_open_PO", "value": True},
         ],
         include=["Buyer"],
     )
     with pytest.raises(NotImplementedError) as exc_info:
         generate_plan(intent)
-    assert "has_no_recent_invoices" in str(exc_info.value)
+    assert "is_strategic_supplier" in str(exc_info.value)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# F2 helpers — unit tests (no DB for the pure-Python ones)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_compute_date_n_months_ago_simple(fixed_reference_date: date) -> None:
+    """2026-05-26 minus 6 months = 2025-11-26."""
+    result = _compute_date_n_months_ago(6, fixed_reference_date)
+    assert result == date(2025, 11, 26)
+
+
+def test_compute_date_n_months_ago_one_month(fixed_reference_date: date) -> None:
+    """2026-05-26 minus 1 month = 2026-04-26."""
+    result = _compute_date_n_months_ago(1, fixed_reference_date)
+    assert result == date(2026, 4, 26)
+
+
+def test_compute_date_n_months_ago_twelve_months(fixed_reference_date: date) -> None:
+    """2026-05-26 minus 12 months = 2025-05-26."""
+    result = _compute_date_n_months_ago(12, fixed_reference_date)
+    assert result == date(2025, 5, 26)
+
+
+def test_compute_date_n_months_ago_handles_day_overflow() -> None:
+    """2026-03-31 minus 1 month = 2026-02-28 (day clamped to last of Feb)."""
+    ref = date(2026, 3, 31)
+    result = _compute_date_n_months_ago(1, ref)
+    assert result == date(2026, 2, 28)
+
+
+def test_compute_date_n_months_ago_crosses_year_boundary() -> None:
+    """2026-02-15 minus 3 months = 2025-11-15."""
+    ref = date(2026, 2, 15)
+    result = _compute_date_n_months_ago(3, ref)
+    assert result == date(2025, 11, 15)
+
+
+def test_compute_date_n_months_ago_crosses_year_boundary_multiyear() -> None:
+    """2026-05-26 minus 30 months = 2023-11-26."""
+    ref = date(2026, 5, 26)
+    result = _compute_date_n_months_ago(30, ref)
+    assert result == date(2023, 11, 26)
+
+
+def test_build_iteration_args_has_no_recent_invoices(
+    fixed_reference_date: date,
+) -> None:
+    """F2: build_iteration_args composes primary key + computed date."""
+    spec = {"type": "has_no_recent_invoices", "value": {"months": 6}}
+    args = _build_iteration_args_with_computed(
+        spec, "search_invoices", fixed_reference_date
+    )
+    assert args == {
+        "supplier_number": "$iteration_value",
+        "invoice_date_after": "2025-11-26",
+    }
+
+
+def test_build_iteration_args_missing_months_raises(
+    fixed_reference_date: date,
+) -> None:
+    """F2: missing 'months' key in value raises ValueError."""
+    spec = {"type": "has_no_recent_invoices", "value": {}}
+    with pytest.raises(ValueError, match="months"):
+        _build_iteration_args_with_computed(
+            spec, "search_invoices", fixed_reference_date
+        )
+
+
+def test_build_iteration_args_negative_months_raises(
+    fixed_reference_date: date,
+) -> None:
+    """F2: negative months value raises ValueError (nonsense input)."""
+    spec = {"type": "has_no_recent_invoices", "value": {"months": -3}}
+    with pytest.raises(ValueError, match="months"):
+        _build_iteration_args_with_computed(
+            spec, "search_invoices", fixed_reference_date
+        )
+
+
+def test_make_filtered_source_output_name_no_recent_invoices() -> None:
+    """F2: source 'us_suppliers' + 'has_no_recent_invoices' ->
+    'us_suppliers_no_recent_invoices'."""
+    result = _make_filtered_source_output_name(
+        "us_suppliers", "has_no_recent_invoices"
+    )
+    assert result == "us_suppliers_no_recent_invoices"
+
+
+def test_make_filtered_source_output_name_unknown_filter_raises() -> None:
+    """F2: unknown filter type raises KeyError so missing mappings are loud."""
+    with pytest.raises(KeyError, match="filter-source name suffix"):
+        _make_filtered_source_output_name("us_suppliers", "unknown_filter")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -757,3 +936,117 @@ def test_generate_plan_country_full_name_normalizes_to_us() -> None:
     assert produced[0].tool_args == {"country": "US"}
     # Step 1's output name should also normalize to 'us_suppliers'.
     assert produced[0].output_name == "us_suppliers"
+
+
+def test_generate_plan_anchor_no_filter_source_when_empty(
+    anchor_intent: Intent,
+) -> None:
+    """F2: the anchor intent has no negation filter; no step should
+    carry filter_source_when_empty=True."""
+    produced = generate_plan(anchor_intent)
+    for step in produced:
+        assert step.filter_source_when_empty is False
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Orchestrator — original Track A prompt with negation (F2 headline)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_generate_plan_original_track_a_prompt_produces_four_steps(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """F2 headline: original prompt with has_no_recent_invoices
+    produces a 4-step plan, with Step 2 being the negation filter."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    assert len(produced) == 4
+
+
+def test_generate_plan_original_track_a_step1_is_country_fetch(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """Step 1 fetches US suppliers (unchanged from anchor)."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    step1 = produced[0]
+    assert step1.tool_name == "search_suppliers_by_country"
+    assert step1.tool_args == {"country": "US"}
+    assert step1.output_name == "us_suppliers"
+
+
+def test_generate_plan_original_track_a_step2_is_negation_filter(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """F2 headline: Step 2 iterates us_suppliers.SupplierNumber, calls
+    search_invoices with invoice_date_after = ref_date - 6 months,
+    and carries filter_source_when_empty=True. Its output is
+    us_suppliers_no_recent_invoices (parent items, filtered)."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    step2 = produced[1]
+    assert step2.tool_name == "search_invoices"
+    assert step2.iterate_over == {
+        "from_step": "us_suppliers", "field": "SupplierNumber"
+    }
+    assert step2.tool_args == {
+        "supplier_number": "$iteration_value",
+        "invoice_date_after": "2025-11-26",  # 2026-05-26 minus 6 months
+    }
+    assert step2.client_filters == []
+    assert step2.output_name == "us_suppliers_no_recent_invoices"
+    assert step2.filter_source_when_empty is True
+
+
+def test_generate_plan_original_track_a_step3_iterates_filtered_suppliers(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """Step 3 (has_open_PO) iterates from the FILTERED supplier list,
+    not the original. This wiring is the key correctness check."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    step3 = produced[2]
+    assert step3.tool_name == "search_purchase_orders"
+    assert step3.iterate_over == {
+        "from_step": "us_suppliers_no_recent_invoices",
+        "field": "SupplierId",
+    }
+    assert step3.client_filters == [
+        {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+    ]
+    assert step3.filter_source_when_empty is False
+
+
+def test_generate_plan_original_track_a_step4_is_buyer_lookup(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """Step 4 (include Buyer) iterates from open_pos with BuyerId dedup."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    step4 = produced[3]
+    assert step4.tool_name == "get_buyer"
+    assert step4.iterate_over == {
+        "from_step": "open_pos", "field": "BuyerId"
+    }
+    assert step4.output_dedupe_by == "BuyerId"
+
+
+def test_generate_plan_original_track_a_step_ids_sequential(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """Step IDs are 1, 2, 3, 4."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    assert [s.step_id for s in produced] == [1, 2, 3, 4]
