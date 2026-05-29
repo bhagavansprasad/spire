@@ -59,7 +59,7 @@ async def search_suppliers(
 async def search_suppliers_by_country(
     country: str,
     limit: int = 25,
-) -> list[dict]:
+) -> dict:
     """Find suppliers with at least one address in the given country.
 
     Use this when the user asks about suppliers in a specific country
@@ -74,12 +74,12 @@ async def search_suppliers_by_country(
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
-        return await _search_suppliers_by_country(
+        result = await _search_suppliers_by_country(
             client,
             country=country,
             limit=limit,
         )
-
+        return result.to_dict()
 
 @mcp.tool()
 async def search_invoices(

@@ -58,6 +58,35 @@ def _is_tool_result_envelope(payload: object) -> bool:
         return False
     return True
 
+def _extract_truncation_meta(call_tool_result: Any) -> dict | None:
+    """Extract truncation metadata from a ToolResult envelope if present.
+
+    Returns None if the tool's payload isn't a ToolResult envelope (i.e.
+    the tool hasn't been migrated yet). Returns a dict with the three
+    metadata fields if it is.
+    """
+    content = getattr(call_tool_result, "content", None)
+    if not content or len(content) != 1:
+        return None
+    block = content[0]
+    if getattr(block, "type", None) != "text":
+        return None
+    raw_text = getattr(block, "text", None)
+    if raw_text is None:
+        return None
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not _is_tool_result_envelope(payload):
+        return None
+    return {
+        "total_available": payload.get("total_available"),
+        "limit_applied": payload.get("limit_applied"),
+        "truncated": payload.get("truncated"),
+    }
+    
+
 def _parse_tool_result(call_tool_result: Any) -> list[dict]:
     """
     Extract the JSON payload from an MCP CallToolResult.
@@ -244,7 +273,7 @@ def _collect_iteration_values(
 
 async def _execute_non_iterating_step(
     step: Step, session: ClientSession
-) -> list[dict]:
+) -> tuple[list[dict], dict | None]:
     """
     Execute a single step that does NOT iterate.
 
@@ -263,9 +292,9 @@ async def _execute_non_iterating_step(
 
     call_result = await session.call_tool(step.tool_name, step.tool_args)
     items = _parse_tool_result(call_result)
+    truncation = _extract_truncation_meta(call_result)
     items = _apply_client_filters(items, step.client_filters)
-    return items
-
+    return items, truncation
 
 async def _execute_iterating_step(
     step: Step,
@@ -387,7 +416,7 @@ async def _execute_filter_source_step(
 
 async def execute_plan(
     plan: Plan, session: ClientSession
-) -> dict[str, list[dict]]:
+) -> tuple[dict[str, list[dict]], dict[str, dict]]:
     """
     Run a Plan against the MCP server. Returns the outputs of every
     step keyed by output_name.
@@ -419,6 +448,7 @@ async def execute_plan(
         plan policy).
     """
     outputs: dict[str, list[dict]] = {}
+    truncation_by_step: dict[str, dict] = {}
 
     for step in plan:
         if step.iterate_over is None:
@@ -428,11 +458,13 @@ async def execute_plan(
                     "but iterate_over is None. Planner bug: these fields "
                     "are coupled."
                 )
-            items = await _execute_non_iterating_step(step, session)
+            items, truncation = await _execute_non_iterating_step(step, session)
+            if truncation is not None and truncation.get("truncated"):
+                truncation_by_step[step.output_name] = truncation
         elif step.filter_source_when_empty:
             items = await _execute_filter_source_step(step, session, outputs)
         else:
             items = await _execute_iterating_step(step, session, outputs)
         outputs[step.output_name] = items
 
-    return outputs
+    return outputs, truncation_by_step

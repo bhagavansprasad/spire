@@ -104,7 +104,14 @@ class SynthesizedResponse(BaseModel):
         description="One entry per supplier in the final filtered set. "
         "Empty list if no suppliers passed the filters."
     )
-
+    truncation_notes: list[str] = Field(
+        default_factory=list,
+        description="One short note per truncated step. Each note states "
+        "the step's output_name, the total_available count if known, and "
+        "how many records were examined. Empty list when no step was "
+        "truncated. Populate ONLY from the truncation block in the "
+        "executor output; never invent counts.",
+    )
 
 # ─────────────────────────────────────────────────────────────────────
 # Errors
@@ -193,30 +200,52 @@ _SYSTEM_PROMPT = (
     "5. List each unique buyer assigned to that supplier's POs. Each "
     "buyer's person_id must appear in the buyers bucket.\n"
     "6. Keep the summary to 3-5 sentences. Plain English. No marketing "
-    "language."
+    "language.\n"
+    "7. If the input includes a 'truncation' block, populate "
+    "truncation_notes with one note per entry. Each note must state the "
+    "step's output_name, the total_available count (or 'unknown' if "
+    "null), and how many records were examined. Example: "
+    "'us_suppliers: 137 total in source; 25 examined for filtering.' "
+    "Do NOT invent numbers; copy them from the truncation block. If no "
+    "truncation block is present, return an empty truncation_notes list."
 )
 
-
-def _build_synthesis_prompt(outputs: dict[str, list[dict]]) -> str:
+def _build_synthesis_prompt(
+    outputs: dict[str, list[dict]],
+    truncation_by_step: dict[str, dict] | None = None,
+) -> str:
     """
     Build the user-message portion of the prompt.
 
-    Includes the full outputs dict as pretty-printed JSON. Token cost
-    is real (~5-10k for our typical outputs) but small for Gemini Flash,
-    and it sidesteps any 'did the LLM see this record?' ambiguity. The
-    validator catches hallucinations regardless.
+    Includes the full outputs dict as pretty-printed JSON, plus an
+    optional truncation block when any step was truncated.
     """
-    # default=str handles any non-JSON-native types in the data
-    # (e.g. Decimal, datetime) so json.dumps doesn't crash mid-prompt.
     rendered = json.dumps(outputs, default=str, indent=2)
-    return (
+    parts = [
         "Here is the executor's output. Each top-level key is the "
         "output_name of a step; each value is a list of records returned "
         "by that step.\n\n"
-        f"```json\n{rendered}\n```\n\n"
-        "Produce the structured response per the schema. Remember: only "
-        "reference IDs present in the data above; do not invent."
+        f"```json\n{rendered}\n```\n"
+    ]
+
+    if truncation_by_step:
+        truncation_rendered = json.dumps(
+            truncation_by_step, default=str, indent=2
+        )
+        parts.append(
+            "\nThe following steps were truncated. Each entry tells you "
+            "how many records actually match the step's filters in the "
+            "source, vs. how many were examined by the executor. "
+            "Populate truncation_notes from this block; do NOT invent "
+            "counts.\n\n"
+            f"```json\n{truncation_rendered}\n```\n"
+        )
+
+    parts.append(
+        "\nProduce the structured response per the schema. Remember: "
+        "only reference IDs present in the data above; do not invent."
     )
+    return "".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -275,6 +304,7 @@ def _validate_no_hallucinated_ids(
 def synthesize_response(
     outputs: dict[str, list[dict]],
     llm: Any | None = None,
+    truncation_by_step: dict[str, dict] | None = None,
 ) -> SynthesizedResponse:
     """
     Turn the executor's output dict into a validated structured response.
@@ -284,20 +314,22 @@ def synthesize_response(
         llm: Optional pre-built LangChain LLM. Tests inject a mock here;
             production passes None and a fresh ChatGoogleGenerativeAI is
             constructed. Reads GEMINI_API_KEY from the environment.
+        truncation_by_step: Optional dict from execute_plan keyed by
+            output_name, with each value being {total_available,
+            limit_applied, truncated}. When present, the LLM is
+            instructed to populate truncation_notes from it.
 
     Returns:
         SynthesizedResponse — a Pydantic model. response.summary is the
-        one-paragraph prose; response.suppliers is the structured list.
+        one-paragraph prose; response.suppliers is the structured list;
+        response.truncation_notes lists any truncated steps.
 
     Raises:
         HallucinationError if any structured ID doesn't match the
         executor's data.
         Pydantic ValidationError if the LLM somehow produces output
-        that doesn't fit the schema (langchain should usually prevent
-        this via with_structured_output, but if it leaks through we
-        want it to fail loudly).
-        Anything raised by the LLM call (network errors, auth errors,
-        rate limits) propagates.
+        that doesn't fit the schema.
+        Anything raised by the LLM call propagates.
     """
     if llm is None:
         llm = ChatGoogleGenerativeAI(
@@ -305,7 +337,7 @@ def synthesize_response(
         )
 
     structured_llm = llm.with_structured_output(SynthesizedResponse)
-    user_message = _build_synthesis_prompt(outputs)
+    user_message = _build_synthesis_prompt(outputs, truncation_by_step)
 
     response = structured_llm.invoke(
         [
@@ -314,9 +346,6 @@ def synthesize_response(
         ]
     )
 
-    # langchain's with_structured_output returns either the Pydantic
-    # model directly or a dict that needs coercion, depending on
-    # provider version. Handle both.
     if isinstance(response, dict):
         response = SynthesizedResponse(**response)
 

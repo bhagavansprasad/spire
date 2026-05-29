@@ -398,7 +398,7 @@ async def test_execute_plan_single_step_no_filters_no_iteration() -> None:
     ]
     session = _mock_session(payload)
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs == {"us_suppliers": payload}
     session.call_tool.assert_awaited_once_with(
@@ -466,7 +466,7 @@ async def test_execute_plan_applies_client_filters_to_result() -> None:
     ]
     session = _mock_session(payload)
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs == {
         "open_pos": [
@@ -479,7 +479,7 @@ async def test_execute_plan_applies_client_filters_to_result() -> None:
 @pytest.mark.asyncio
 async def test_execute_plan_returns_empty_dict_for_empty_plan() -> None:
     session = AsyncMock()
-    outputs = await execute_plan([], session)
+    outputs, _ = await execute_plan([], session)
     assert outputs == {}
     session.call_tool.assert_not_awaited()
 
@@ -526,7 +526,7 @@ async def test_execute_plan_two_step_with_iteration_aggregates_results() -> None
         ],
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers"] == [
         {"SupplierId": 100}, {"SupplierId": 200}
@@ -581,7 +581,7 @@ async def test_execute_plan_iteration_applies_client_filters_per_call() -> None:
         [{"POHeaderId": "p3", "StatusCode": "CLOSED"}],
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["open_pos"] == [
         {"POHeaderId": "p1", "StatusCode": "OPEN"}
@@ -624,7 +624,7 @@ async def test_execute_plan_iteration_dedupes_when_dedupe_set() -> None:
         {"PersonId": 777, "DisplayName": "Bob"},
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     # Two buyer records, in first-occurrence order.
     assert outputs["buyers"] == [
@@ -669,7 +669,7 @@ async def test_execute_plan_iteration_no_dedupe_calls_per_item() -> None:
         {"PersonId": 555, "DisplayName": "Alice"},
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     # Two iterations, two results — duplicates included.
     assert len(outputs["buyers"]) == 2
@@ -705,7 +705,7 @@ async def test_execute_plan_iteration_empty_source_skips_tool_call() -> None:
         ),
     ]
     session = _mock_session([])  # Step 1 returns empty
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
     assert outputs == {"zz_suppliers": [], "open_pos": []}
     # Step 2's tool must not be called.
     po_calls = [
@@ -829,7 +829,7 @@ async def test_execute_plan_anchor_plan_with_mocked_session() -> None:
         {"PersonId": 555, "DisplayName": "Alice"},
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers"] == [
         {"SupplierId": 100}, {"SupplierId": 200}
@@ -901,7 +901,7 @@ async def test_filter_source_step_keeps_items_with_empty_iteration() -> None:
         [],
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers_no_recent_invoices"] == [
         {"SupplierId": 100, "SupplierNumber": "S100", "Supplier": "Acme"},
@@ -954,7 +954,7 @@ async def test_filter_source_step_no_items_survive() -> None:
         [{"InvoiceId": 2}],
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers_no_recent_invoices"] == []
 
@@ -995,7 +995,7 @@ async def test_filter_source_step_all_items_survive() -> None:
     ]
     session = _mock_session_sequence([source, [], []])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers_no_recent_invoices"] == source
 
@@ -1032,7 +1032,7 @@ async def test_filter_source_step_empty_source_makes_no_calls() -> None:
     ]
     session = _mock_session([])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["zz_suppliers_no_recent_invoices"] == []
     invoice_calls = [
@@ -1085,7 +1085,7 @@ async def test_filter_source_step_skips_items_with_none_iteration_field() -> Non
         [],     # S400: empty → keep
     ])
 
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
 
     assert outputs["us_suppliers_no_recent_invoices"] == [
         {"SupplierId": 100, "SupplierNumber": "S100"},
@@ -1177,7 +1177,7 @@ async def test_execute_plan_anchor_unaffected_by_filter_source_branch() -> None:
         [{"POHeaderId": "p1", "StatusCode": "OPEN"}],
         [{"POHeaderId": "p2", "StatusCode": "OPEN"}],
     ])
-    outputs = await execute_plan(plan, session)
+    outputs, _ = await execute_plan(plan, session)
     assert outputs["open_pos"] == [
         {"POHeaderId": "p1", "StatusCode": "OPEN"},
         {"POHeaderId": "p2", "StatusCode": "OPEN"},
@@ -1226,7 +1226,7 @@ async def test_execute_plan_step1_against_live_mcp_server() -> None:
     async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            outputs = await execute_plan(plan, session)
+            outputs, _ = await execute_plan(plan, session)
 
     assert set(outputs.keys()) == {"us_suppliers"}
     suppliers = outputs["us_suppliers"]
@@ -1287,7 +1287,7 @@ async def test_execute_plan_two_step_with_iteration_against_live_mcp_server() ->
     async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            outputs = await execute_plan(plan, session)
+            outputs, _ = await execute_plan(plan, session)
 
     assert set(outputs.keys()) == {"us_suppliers", "open_pos"}
     assert isinstance(outputs["us_suppliers"], list)
@@ -1369,7 +1369,7 @@ async def test_execute_plan_filter_source_when_empty_against_live_mcp_server() -
     async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            outputs = await execute_plan(plan, session)
+            outputs, _ = await execute_plan(plan, session)
 
     assert set(outputs.keys()) == {
         "us_suppliers", "us_suppliers_no_recent_invoices"
@@ -1391,3 +1391,31 @@ async def test_execute_plan_filter_source_when_empty_against_live_mcp_server() -
         assert "SupplierNumber" in item
         # Invoice records would have InvoiceId / InvoiceNumber instead.
         assert "InvoiceId" not in item
+
+def test_extract_truncation_meta_returns_none_for_legacy_list() -> None:
+    """Legacy list[dict] payloads (un-migrated tools) yield no metadata."""
+    from spire.executor.executor import _extract_truncation_meta
+    payload = [{"SupplierId": 1}, {"SupplierId": 2}]
+    result = _extract_truncation_meta(
+        _call_tool_result([_text_block(json.dumps(payload))])
+    )
+    assert result is None
+
+
+def test_extract_truncation_meta_extracts_from_envelope() -> None:
+    """ToolResult envelopes yield their three metadata fields."""
+    from spire.executor.executor import _extract_truncation_meta
+    payload = {
+        "items": [{"a": 1}],
+        "total_available": 137,
+        "limit_applied": 25,
+        "truncated": True,
+    }
+    result = _extract_truncation_meta(
+        _call_tool_result([_text_block(json.dumps(payload))])
+    )
+    assert result == {
+        "total_available": 137,
+        "limit_applied": 25,
+        "truncated": True,
+    }
