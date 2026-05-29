@@ -26,3 +26,4 @@ temp/
 *.swp
 *.Zone.Identifier
 *.egg-info/
+context_out/
