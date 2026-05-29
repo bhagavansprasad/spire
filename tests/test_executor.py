@@ -141,6 +141,53 @@ def test_parse_tool_result_scalar_payload_raises() -> None:
     with pytest.raises(RuntimeError, match="neither dict, list, nor null"):
         _parse_tool_result(result)
 
+def test_parse_tool_result_unwraps_tool_result_envelope() -> None:
+    """A ToolResult-shaped dict is unwrapped to its items list.
+
+    This is the new return shape introduced for search_invoices.
+    Truncation metadata is dropped at this layer (handled separately
+    in a later step).
+    """
+    payload = {
+        "items": [{"InvoiceId": 1}, {"InvoiceId": 2}],
+        "total_available": 8531,
+        "limit_applied": 25,
+        "truncated": True,
+    }
+    result = _parse_tool_result(
+        _call_tool_result([_text_block(json.dumps(payload))])
+    )
+    assert result == [{"InvoiceId": 1}, {"InvoiceId": 2}]
+
+
+def test_parse_tool_result_unwraps_empty_tool_result_envelope() -> None:
+    """A ToolResult with empty items returns an empty list.
+
+    Critical for filter_source_when_empty steps: the iteration must
+    see [] for empty results, not [envelope_dict].
+    """
+    payload = {
+        "items": [],
+        "total_available": 0,
+        "limit_applied": 25,
+        "truncated": False,
+    }
+    result = _parse_tool_result(
+        _call_tool_result([_text_block(json.dumps(payload))])
+    )
+    assert result == []
+
+
+def test_parse_tool_result_dict_without_truncated_key_not_unwrapped() -> None:
+    """A dict that lacks the 'truncated' marker is treated as a normal
+    single-record return (e.g., get_buyer), not a ToolResult envelope.
+    """
+    payload = {"items": ["not a tool result"], "BuyerId": 123}
+    result = _parse_tool_result(
+        _call_tool_result([_text_block(json.dumps(payload))])
+    )
+    # Falls through to the generic "wrap dict in list" branch.
+    assert result == [payload]
 
 # ─────────────────────────────────────────────────────────────────────
 # _apply_client_filters — unit tests

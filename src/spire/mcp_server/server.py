@@ -87,7 +87,7 @@ async def search_invoices(
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
     limit: int = 25,
-) -> list[dict]:
+) -> dict:
     """Search Oracle Fusion invoices.
 
     Use this to find invoices for a specific supplier, optionally filtered
@@ -105,14 +105,14 @@ async def search_invoices(
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
-        return await _search_invoices(
+        result = await _search_invoices(
             client,
             supplier_number=supplier_number,
             supplier_name=supplier_name,
             invoice_date_after=invoice_date_after,
             limit=limit,
         )
-
+        return result.to_dict()
 
 @mcp.tool()
 async def search_purchase_orders(
