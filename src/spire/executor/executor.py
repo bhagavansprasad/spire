@@ -43,6 +43,20 @@ ITERATION_SENTINEL = "$iteration_value"
 # MCP result parsing
 # ─────────────────────────────────────────────────────────────────────
 
+def _is_tool_result_envelope(payload: object) -> bool:
+    """Detect the ToolResult serialized shape.
+
+    A ToolResult is a dict with at least these keys: items (list) and
+    truncated (anything). The combination is distinctive — no existing
+    Spire tool returns a record with both 'items' and 'truncated' keys.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if not isinstance(payload.get("items"), list):
+        return False
+    if "truncated" not in payload:
+        return False
+    return True
 
 def _parse_tool_result(call_tool_result: Any) -> list[dict]:
     """
@@ -99,6 +113,11 @@ def _parse_tool_result(call_tool_result: Any) -> list[dict]:
     # Normalize to list[dict].
     if payload is None:
         return []
+    if _is_tool_result_envelope(payload):
+        # ToolResult envelope: unwrap to its items list. Truncation
+        # metadata (total_available, truncated) is dropped here; it
+        # will be plumbed through to the synthesizer in a later step.
+        return payload["items"]
     if isinstance(payload, dict):
         return [payload]
     if isinstance(payload, list):

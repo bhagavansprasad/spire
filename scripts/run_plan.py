@@ -400,6 +400,8 @@ async def _run(intent: Intent, intent_name: str) -> int:
     except Exception as exc:
         logger.error("plan_execution_failed", error=str(exc))
         print(f"ERROR executing plan: {exc}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         return 2
     logger.info(
         "plan_executed",
