@@ -310,6 +310,11 @@ def _format_synthesized(response: SynthesizedResponse) -> str:
     """Render the synthesized response: prose summary + structured
     supplier list."""
     lines = ["Answer:", "", response.summary, ""]
+    if response.truncation_notes:
+        lines.append("Truncation:")
+        for note in response.truncation_notes:
+            lines.append(f"  - {note}")
+        lines.append("")
     if not response.suppliers:
         lines.append("(No suppliers in the structured result.)")
         return "\n".join(lines)
@@ -396,7 +401,7 @@ async def _run(intent: Intent, intent_name: str) -> int:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 logger.info("mcp_session_initialized", url=MCP_SERVER_URL)
-                outputs = await execute_plan(plan, session)
+                outputs, truncation_by_step = await execute_plan(plan, session)
     except Exception as exc:
         logger.error("plan_execution_failed", error=str(exc))
         print(f"ERROR executing plan: {exc}", file=sys.stderr)
@@ -414,7 +419,7 @@ async def _run(intent: Intent, intent_name: str) -> int:
     print("Synthesizing answer via LLM ...")
     print()
     try:
-        response = synthesize_response(outputs)
+        response = synthesize_response(outputs, truncation_by_step=truncation_by_step)
     except HallucinationError as exc:
         logger.error("synthesis_hallucination", error=str(exc))
         print(
