@@ -1,8 +1,13 @@
 bundles:
   handoff:
   - docs/spire_handoff_*.md
+  - docs/prompt_coverage.md
+  - docs/feature_roadmap.md
   - README.md
-  - docs/designs/design3_v1_to_production_roadmap.md
+  planning:
+  - docs/prompt_coverage.md
+  - docs/feature_roadmap.md
+  - docs/spire_handoff_*.md
   core:
   - src/spire/planner/planner.py
   - src/spire/executor/executor.py
