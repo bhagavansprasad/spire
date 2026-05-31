@@ -50,17 +50,7 @@ before the parser starts generating them).
 
 ### 2. Invoice date upper bound
 
-**What:** Add `invoice_date_before` parameter to `search_invoices`.
-Apply as client-side filter, same pattern as `invoice_date_after`.
-
-**Why:** Closes G1 in `prompt_coverage.md`. Three real prompts hit
-this gap: "Pull all 2022 Jan Invoices," "Pull all 2022 Jan Invoices
-for Lee Supplies," "spend details by supplier for Lee Supplies in
-Jan 2022." Today the agent honestly refuses; this lets it answer.
-
-**Dependencies:** none.
-
-**Effort:** small.
+**Status:** merged (PR #37), live verification pending.
 
 ---
 
@@ -207,17 +197,27 @@ preemptively.
 
 ## Backlog summary
 
-| # | Feature                                  | Effort  | Status | Closes |
-|---|------------------------------------------|---------|--------|--------|
-| 2 | Invoice date upper bound                 | small   | open   | G1     |
-| 3 | Supplier status filter                   | small   | open   | G2     |
-| 4 | Migrate remaining tools to ToolResult    | medium  | open   | G3     |
-| 5 | Synthesizer schema generalization        | medium  | open   | —      |
-| 1 | Natural-language entry                   | large   | open   | —      |
-| 8 | Graceful refusal                         | small   | open   | G5     |
-| 6 | New entity: contracts                    | small-medium | open | — |
-| 7 | Aggregation tools                        | medium  | open   | G4     |
+| # | Feature                                  | Effort  | Status      | Closes |
+|---|------------------------------------------|---------|-------------|--------|
+| 2 | Invoice date upper bound                 | small   | merged*     | G1     |
+| 3 | Supplier status filter                   | small   | merged*     | G2     |
+| 4 | Migrate remaining tools to ToolResult    | medium  | merged*†    | G3     |
+| 5 | Synthesizer schema generalization        | medium  | open        | —      |
+| 1 | Natural-language entry                   | large   | open        | —      |
+| 8 | Graceful refusal                         | small   | open        | G5     |
+| 6 | New entity: contracts                    | small-medium | open   | —      |
+| 7 | Aggregation tools                        | medium  | open        | G4     |
 
-Table is in execution order. "Closes" refers to gap IDs in
-`prompt_coverage.md`. Update status to `in-progress` when work
-starts, `done` when merged — don't delete completed entries.
+\* **merged** = code merged to master (PR #37), but **live verification
+against the Fusion pod is still pending** (auth unavailable at merge
+time). Not yet `done`. Before marking `done`:
+- grep executor/planner/synthesizer for callers expecting `list[dict]`
+  from the two migrated tools (static, no auth needed)
+- `pytest tests/` with `personas.yaml` present
+- confirm supplier `Status` vocabulary (docstrings currently guess
+  ACTIVE/INACTIVE)
+
+† Feature 4 migrated `search_suppliers` and `search_purchase_orders`
+only. `get_buyer` was intentionally left unmigrated — it's a single
+unique-key lookup, so truncation metadata is meaningless. Feature 4 is
+considered complete in scope despite this.
