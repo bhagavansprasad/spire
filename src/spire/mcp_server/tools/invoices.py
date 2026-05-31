@@ -13,6 +13,11 @@ Filters supported:
 - supplier_number: exact match on SupplierNumber
 - supplier_name: substring match (LIKE) on Supplier
 - invoice_date_after: ISO date string; matches invoices on or after this date
+- invoice_date_before: ISO date string; matches invoices strictly before
+  this date (exclusive). Client-side only — never sent as the server q=
+  clause, so a lone invoice_date_before with no other filter over-fetches
+  up to `limit` unfiltered and may miss older records beyond the fetch
+  window. Pair it with invoice_date_after for a bounded range.
 - limit: max records returned after client-side filtering (default 25)
 """
 
@@ -66,6 +71,7 @@ async def search_invoices(
     supplier_number: str | None = None,
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
+    invoice_date_before: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion invoices.
@@ -73,7 +79,12 @@ async def search_invoices(
     Args:
         supplier_number: Exact SupplierNumber, e.g., "1252".
         supplier_name: Substring match on Supplier name.
-        invoice_date_after: ISO date "YYYY-MM-DD".
+        invoice_date_after: ISO date "YYYY-MM-DD". Matches invoices on
+            or after this date (inclusive).
+        invoice_date_before: ISO date "YYYY-MM-DD". Matches invoices
+            strictly before this date (exclusive). Applied client-side
+            only. For a calendar month, pair with invoice_date_after:
+            e.g. Jan 2022 -> after="2022-01-01", before="2022-02-01".
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -84,7 +95,9 @@ async def search_invoices(
           - truncated: True iff we know more records match than returned
     """
     # Pick the most selective filter to send to Fusion via q=.
-    # Priority: exact match (supplier_number) > LIKE > date range.
+    # Priority: exact match (supplier_number) > LIKE > date lower bound.
+    # invoice_date_before is intentionally never the server clause; it
+    # stays a pure client-side filter to keep the truncation logic intact.
     server_clause: str | None = None
     if supplier_number:
         server_clause = f"SupplierNumber='{supplier_number}'"
@@ -95,7 +108,13 @@ async def search_invoices(
 
     # Over-fetch if we'll be filtering further; otherwise use limit directly.
     needs_client_filter = sum(
-        bool(x) for x in (supplier_number, supplier_name, invoice_date_after)
+        bool(x)
+        for x in (
+            supplier_number,
+            supplier_name,
+            invoice_date_after,
+            invoice_date_before,
+        )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
 
@@ -113,6 +132,8 @@ async def search_invoices(
         if supplier_name and supplier_name.lower() not in (item.get("Supplier") or "").lower():
             return False
         if invoice_date_after and (item.get("InvoiceDate") or "") < invoice_date_after:
+            return False
+        if invoice_date_before and (item.get("InvoiceDate") or "") >= invoice_date_before:
             return False
         return True
 
