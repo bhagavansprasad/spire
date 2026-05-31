@@ -1,10 +1,14 @@
-"""Integration tests for the search_purchase_orders tool."""
+"""Integration tests for the search_purchase_orders tool.
+
+Updated for feature 4: search_purchase_orders now returns a ToolResult.
+"""
 
 import pytest
 
 from spire.config import PERSONAS_FILE, load_persona
 from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.purchase_orders import search_purchase_orders
+from spire.mcp_server.tools.tool_result import ToolResult
 
 
 pytestmark = pytest.mark.skipif(
@@ -17,10 +21,10 @@ pytestmark = pytest.mark.skipif(
 async def test_search_purchase_orders_no_filter():
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
-        items = await search_purchase_orders(client, limit=5)
-    assert isinstance(items, list)
-    assert len(items) > 0
-    first = items[0]
+        result = await search_purchase_orders(client, limit=5)
+    assert isinstance(result, ToolResult)
+    assert len(result.items) > 0
+    first = result.items[0]
     for field in ["POHeaderId", "OrderNumber", "Status", "Supplier", "SupplierId"]:
         assert field in first
 
@@ -29,9 +33,9 @@ async def test_search_purchase_orders_no_filter():
 async def test_search_purchase_orders_by_status_open():
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
-        items = await search_purchase_orders(client, status="OPEN", limit=10)
-    assert isinstance(items, list)
-    for item in items:
+        result = await search_purchase_orders(client, status="OPEN", limit=10)
+    assert isinstance(result, ToolResult)
+    for item in result.items:
         assert item["StatusCode"] == "OPEN"
 
 
@@ -39,10 +43,10 @@ async def test_search_purchase_orders_by_status_open():
 async def test_search_purchase_orders_by_supplier_name():
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
-        items = await search_purchase_orders(client, supplier_name="EIP", limit=10)
-    assert isinstance(items, list)
-    if items:
-        assert any("EIP" in (item.get("Supplier") or "") for item in items)
+        result = await search_purchase_orders(client, supplier_name="EIP", limit=10)
+    assert isinstance(result, ToolResult)
+    if result.items:
+        assert any("EIP" in (item.get("Supplier") or "") for item in result.items)
 
 
 @pytest.mark.asyncio
@@ -50,32 +54,28 @@ async def test_search_purchase_orders_by_supplier_id():
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
         seed = await search_purchase_orders(client, limit=1)
-        assert len(seed) == 1
-        sid = seed[0]["SupplierId"]
+        assert len(seed.items) == 1
+        sid = seed.items[0]["SupplierId"]
 
-        items = await search_purchase_orders(client, supplier_id=sid, limit=10)
-    assert isinstance(items, list)
-    assert len(items) >= 1
-    for item in items:
+        result = await search_purchase_orders(client, supplier_id=sid, limit=10)
+    assert isinstance(result, ToolResult)
+    assert len(result.items) >= 1
+    for item in result.items:
         assert item["SupplierId"] == sid
 
 
 @pytest.mark.asyncio
 async def test_search_purchase_orders_composite_supplier_name_and_status():
-    """Verifies the client-side filter composition works:
-    EIP Inc has an OPEN PO; combining the two filters must surface it.
-    """
+    """Verifies client-side filter composition: EIP Inc has an OPEN PO."""
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
-        items = await search_purchase_orders(
+        result = await search_purchase_orders(
             client,
             supplier_name="EIP",
             status="OPEN",
             limit=10,
         )
-    assert isinstance(items, list)
-    # If the EIP PO is still OPEN, we should see at least one match.
-    # If demo data has changed, this assertion may need adjustment.
-    for item in items:
+    assert isinstance(result, ToolResult)
+    for item in result.items:
         assert item["StatusCode"] == "OPEN"
         assert "EIP" in (item.get("Supplier") or "")

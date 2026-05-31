@@ -13,9 +13,13 @@ Filters supported:
 - supplier_id: exact match on SupplierId (numeric)
 - status: exact match on StatusCode (e.g., "OPEN", "CLOSED")
 - limit: max records returned after client-side filtering (default 25)
+
+Returns a ToolResult so callers can distinguish a complete result from
+a capped subset.
 """
 
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.tool_result import ToolResult
 
 
 PURCHASE_ORDERS_PATH = "/fscmRestApi/resources/11.13.18.05/purchaseOrders"
@@ -38,13 +42,29 @@ _PROJECTED_FIELDS = [
 ]
 
 
+async def _fetch_total_for_clause(
+    client: FusionClient, server_clause: str | None
+) -> int | None:
+    """Cheaply ask Fusion how many records match the server clause."""
+    params: dict[str, str | int] = {
+        "limit": 1,
+        "totalResults": "true",
+        "onlyData": "true",
+    }
+    if server_clause:
+        params["q"] = server_clause
+    response = await client.get(PURCHASE_ORDERS_PATH, params=params)
+    total = response.get("totalResults")
+    return total if isinstance(total, int) else None
+
+
 async def search_purchase_orders(
     client: FusionClient,
     supplier_name: str | None = None,
     supplier_id: int | None = None,
     status: str | None = None,
     limit: int = 25,
-) -> list[dict]:
+) -> ToolResult:
     """Search Oracle Fusion purchase orders.
 
     Args:
@@ -55,7 +75,11 @@ async def search_purchase_orders(
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
-        List of PO dicts, projected to a useful subset of fields.
+        ToolResult with:
+          - items: projected PO dicts (up to `limit`)
+          - total_available: true source count when computable, else None
+          - limit_applied: the limit value used
+          - truncated: True iff we know more records match than returned
     """
     # Priority for server-side clause: exact id > status > LIKE.
     server_clause: str | None = None
@@ -87,5 +111,29 @@ async def search_purchase_orders(
             return False
         return True
 
-    filtered = [item for item in items if matches(item)][:limit]
-    return [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in filtered]
+    filtered = [item for item in items if matches(item)]
+    final_items = filtered[:limit]
+    projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in final_items]
+
+    # ---- total_available / truncated, mirroring invoices.py ----
+    if needs_client_filter and len(items) >= OVERFETCH_LIMIT:
+        return ToolResult(
+            items=projected,
+            total_available=None,
+            limit_applied=limit,
+            truncated=True,
+        )
+
+    if not needs_client_filter and len(final_items) >= limit:
+        total = await _fetch_total_for_clause(client, server_clause)
+        return ToolResult.build(
+            items=projected,
+            limit_applied=limit,
+            total_available=total,
+        )
+
+    return ToolResult.build(
+        items=projected,
+        limit_applied=limit,
+        total_available=len(filtered),
+    )

@@ -39,20 +39,25 @@ _persona = load_persona(PERSONA_NAME)
 @mcp.tool()
 async def search_suppliers(
     supplier_name_contains: str | None = None,
+    status: str | None = None,
     limit: int = 25,
-) -> list[dict]:
-    """Search Oracle Fusion suppliers by name fragment.
+) -> dict:
+    """Search Oracle Fusion suppliers by name fragment and/or status.
 
     Args:
         supplier_name_contains: Optional substring to match in supplier name.
+        status: Exact Status match (e.g., "ACTIVE", "INACTIVE"). Applied
+            client-side. Use for "active suppliers" / "inactive suppliers".
         limit: Max records to return (default 25).
     """
     async with FusionClient(_persona) as client:
-        return await _search_suppliers(
+        result = await _search_suppliers(
             client,
             supplier_name_contains=supplier_name_contains,
+            status=status,
             limit=limit,
         )
+        return result.to_dict()
 
 
 @mcp.tool()
@@ -86,6 +91,7 @@ async def search_invoices(
     supplier_number: str | None = None,
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
+    invoice_date_before: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion invoices.
@@ -95,13 +101,18 @@ async def search_invoices(
     last N months?" pass the supplier's number plus an invoice_date_after
     of (today - N months) and check whether the result is empty.
 
+    For a calendar month, combine the bounds: Jan 2022 is
+    invoice_date_after="2022-01-01" and invoice_date_before="2022-02-01".
+
     Args:
         supplier_number: Exact SupplierNumber, e.g., "1252". Get this from
             search_suppliers first.
         supplier_name: Substring match on Supplier name. Use when the
             supplier_number is unknown.
         invoice_date_after: ISO date "YYYY-MM-DD". Returns invoices on
-            or after this date.
+            or after this date (inclusive).
+        invoice_date_before: ISO date "YYYY-MM-DD". Returns invoices
+            strictly before this date (exclusive).
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
@@ -110,6 +121,7 @@ async def search_invoices(
             supplier_number=supplier_number,
             supplier_name=supplier_name,
             invoice_date_after=invoice_date_after,
+            invoice_date_before=invoice_date_before,
             limit=limit,
         )
         return result.to_dict()
@@ -120,7 +132,7 @@ async def search_purchase_orders(
     supplier_id: int | None = None,
     status: str | None = None,
     limit: int = 25,
-) -> list[dict]:
+) -> dict:
     """Search Oracle Fusion purchase orders.
 
     Use this to find POs for a specific supplier, optionally filtered by
@@ -137,13 +149,14 @@ async def search_purchase_orders(
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
-        return await _search_purchase_orders(
+        result = await _search_purchase_orders(
             client,
             supplier_name=supplier_name,
             supplier_id=supplier_id,
             status=status,
             limit=limit,
         )
+        return result.to_dict()
 
 
 @mcp.tool()

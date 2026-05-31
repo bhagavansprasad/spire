@@ -120,3 +120,44 @@ async def test_search_invoices_not_truncated_when_limit_exceeds_matches():
     assert isinstance(result, ToolResult)
     assert result.truncated is False
     assert len(result.items) == 0
+
+
+# ---- Feature 2: invoice_date_before (upper bound) ----
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_date_before_upper_bound():
+    """invoice_date_before is exclusive: every returned invoice must be
+    strictly before the bound. Uses a wide window so the pod returns rows.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client,
+            invoice_date_before="2024-01-01",
+            limit=25,
+        )
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["InvoiceDate"] < "2024-01-01"
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_month_range_for_supplier():
+    """Closes G1: a calendar-month range for one supplier.
+    Lee Supplies (1252) in a 2022 window — every row must fall inside
+    [after, before) and belong to 1252.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client,
+            supplier_number="1252",
+            invoice_date_after="2022-01-01",
+            invoice_date_before="2023-01-01",
+            limit=25,
+        )
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["SupplierNumber"] == "1252"
+        assert "2022-01-01" <= item["InvoiceDate"] < "2023-01-01"
