@@ -202,7 +202,7 @@ preemptively.
 | 2 | Invoice date upper bound                 | small   | merged*     | G1     |
 | 3 | Supplier status filter                   | small   | merged*     | G2     |
 | 4 | Migrate remaining tools to ToolResult    | medium  | merged*†    | G3     |
-| 5 | Synthesizer schema generalization        | medium  | open        | —      |
+| 5 | Synthesizer schema generalization        | medium  | merged*     | —      |
 | 1 | Natural-language entry                   | large   | open        | —      |
 | 8 | Graceful refusal                         | small   | open        | G5     |
 | 6 | New entity: contracts                    | small-medium | open   | —      |
