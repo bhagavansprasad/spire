@@ -9,19 +9,24 @@ Architecture decisions locked for v1:
 - Output: Pydantic-typed JSON via with_structured_output, NOT free-form
   prose. Variance is bounded by the schema; row 7 of the rubric becomes
   mechanically verifiable.
-- Hallucination guard: every supplier_id and person_id in the response
-  is cross-referenced against the executor's source data. Invented IDs
-  raise HallucinationError loudly — no auto-retry, no silent acceptance.
-- Schema is currently specific to the original Track A prompt's output
-  shape (suppliers + buyers + PO counts + one free-form summary string).
-  Generalizing to arbitrary output shapes is a v1.1 candidate.
+- Hallucination guard: every supplier_id / supplier_number / person_id /
+  invoice identifier in the response is cross-referenced against the
+  executor's source data. Invented IDs raise HallucinationError loudly —
+  no auto-retry, no silent acceptance.
 
-Scope (F3a):
-- Schema definitions, synthesizer entry point, hallucination validation.
-- No CLI integration yet. F3b wires this into scripts/run_plan.py.
+Feature 5 (schema generalization):
+- The response schema is no longer fixed to the supplier-rooted shape.
+  Three sibling top-level schemas exist — one per target entity that has
+  an entity-level fetcher today (Supplier, Invoice, PurchaseOrder). The
+  schema is selected from intent.target_entity at synthesis time and
+  bound to with_structured_output. Each schema carries its own typed
+  record list and its own hallucination validator.
+- A target_entity with no schema (e.g. Buyer aggregation, Contract)
+  raises UnsupportedEntityError loudly. Graceful messaging for that case
+  is feature 8's job, not the synthesizer's.
 
-Companion design refs: docs/design3_measurement_report.md (defect:
-row 7 = no synthesizer); the F1/F2/F3 fix plan in the working log.
+Companion design refs: docs/feature_roadmap.md (feature 5);
+docs/design3_measurement_report.md (row 7 = no synthesizer).
 """
 
 from __future__ import annotations
@@ -37,81 +42,166 @@ from pydantic import BaseModel, Field
 # LLM configuration
 # ─────────────────────────────────────────────────────────────────────
 
-# Same model the agent runner uses. Cheap, capable enough for structured
-# extraction from a few hundred lines of JSON context.
 _MODEL_NAME = "gemini-2.0-flash"
-# Deterministic-as-possible: temperature 0 for synthesis. Gemini isn't
-# strictly deterministic at T=0 but variance is minimized.
 _TEMPERATURE = 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Output schema
-#
-# Specific to the original Track A prompt's answer shape. Each field is
-# typed; the LLM is forced into this shape by langchain's
-# with_structured_output. v1.1 candidate: generalize per-intent.
+# Shared sub-models
 # ─────────────────────────────────────────────────────────────────────
 
 
 class BuyerInfo(BaseModel):
     """One buyer mentioned in the synthesized response.
 
-    Both fields are validated against the executor's `buyers` output
-    after synthesis — person_id MUST appear in that list."""
+    person_id is validated against the executor's buyers output after
+    synthesis — it MUST appear there."""
 
     person_id: int = Field(description="The buyer's PersonId (HCM key).")
     display_name: str = Field(description="The buyer's display name.")
 
 
-class SupplierSummary(BaseModel):
-    """One supplier in the synthesized response.
+# ─────────────────────────────────────────────────────────────────────
+# Per-entity record models
+# ─────────────────────────────────────────────────────────────────────
+
+
+class SupplierRecord(BaseModel):
+    """One supplier in a supplier-rooted response.
 
     supplier_id and supplier_number are both validated against the
-    executor's output (e.g. us_suppliers_no_recent_invoices). The LLM
-    must not invent either."""
+    executor's output. The LLM must not invent either."""
 
-    supplier_id: int = Field(
-        description="The supplier's SupplierId (numeric primary key)."
-    )
+    supplier_id: int = Field(description="The supplier's SupplierId (numeric PK).")
     supplier_number: str = Field(
         description="The supplier's SupplierNumber (human-readable id)."
     )
     supplier_name: str = Field(description="The supplier's display name.")
     open_po_count: int = Field(
         description="Number of open purchase orders for this supplier "
-        "in the executor's open_pos output."
+        "in the executor's open_pos output. 0 if none."
     )
     buyers: list[BuyerInfo] = Field(
-        description="Buyers assigned to this supplier's open POs. "
-        "Each buyer's person_id must appear in the executor's "
-        "buyers output."
-    )
-
-
-class SynthesizedResponse(BaseModel):
-    """The top-level synthesized response.
-
-    summary is the only free-form field. Everything else is typed and
-    validatable. The response is rejected (HallucinationError) if any
-    structured ID doesn't match the source data."""
-
-    summary: str = Field(
-        description="One-paragraph natural-language summary of the result. "
-        "Keep to 3-5 sentences. Do not invent specifics not in the data."
-    )
-    suppliers: list[SupplierSummary] = Field(
-        description="One entry per supplier in the final filtered set. "
-        "Empty list if no suppliers passed the filters."
-    )
-    truncation_notes: list[str] = Field(
         default_factory=list,
-        description="One short note per truncated step. Each note states "
-        "the step's output_name, the total_available count if known, and "
-        "how many records were examined. Empty list when no step was "
-        "truncated. Populate ONLY from the truncation block in the "
-        "executor output; never invent counts.",
+        description="Buyers assigned to this supplier's open POs. Each "
+        "buyer's person_id must appear in the executor's buyers output.",
     )
+
+
+class InvoiceRecord(BaseModel):
+    """One invoice in an invoice-rooted response.
+
+    supplier_number / supplier_id are validated against the executor's
+    output when present. invoice_number is free text from the source."""
+
+    invoice_id: int = Field(description="The invoice's InvoiceId (numeric PK).")
+    invoice_number: str = Field(description="The invoice's InvoiceNumber.")
+    invoice_date: str = Field(description="The invoice date (ISO string).")
+    invoice_amount: float = Field(description="The invoice amount.")
+    invoice_currency: str = Field(
+        default="", description="The invoice currency code, if present."
+    )
+    supplier_name: str = Field(description="The supplier's display name.")
+    supplier_number: str = Field(
+        description="The supplier's SupplierNumber. Must appear in the data."
+    )
+
+
+class PurchaseOrderRecord(BaseModel):
+    """One purchase order in a PO-rooted response.
+
+    supplier_id and buyer.person_id are validated against the executor's
+    output when present."""
+
+    po_header_id: int = Field(description="The PO's POHeaderId (numeric PK).")
+    order_number: str = Field(description="The PO's OrderNumber.")
+    status: str = Field(description="The PO status (e.g. OPEN, CLOSED).")
+    supplier_name: str = Field(description="The supplier's display name.")
+    supplier_id: int = Field(
+        description="The supplier's SupplierId. Must appear in the data."
+    )
+    buyer: BuyerInfo | None = Field(
+        default=None,
+        description="The buyer assigned to this PO, if one is in the data. "
+        "person_id must appear in the executor's buyers output.",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Per-entity top-level response models
+#
+# Three siblings, one per target entity with an entity-level fetcher.
+# Each carries summary + typed records + truncation_notes. The schema
+# bound to with_structured_output is selected by target_entity.
+#
+# SynthesizedResponse is kept as an alias of the supplier-rooted schema
+# so existing supplier-path callers/tests are unaffected.
+# ─────────────────────────────────────────────────────────────────────
+
+
+_TRUNCATION_FIELD = Field(
+    default_factory=list,
+    description="One short note per truncated step. Each note states the "
+    "step's output_name, the total_available count if known, and how many "
+    "records were examined. Empty when no step was truncated. Populate ONLY "
+    "from the truncation block in the executor output; never invent counts.",
+)
+
+_SUMMARY_FIELD = Field(
+    description="One-paragraph natural-language summary (3-5 sentences). "
+    "Do not invent specifics not in the data."
+)
+
+
+class SupplierResponse(BaseModel):
+    """Supplier-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    suppliers: list[SupplierRecord] = Field(
+        default_factory=list,
+        description="One entry per supplier in the final filtered set. "
+        "Empty if none passed the filters.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+class InvoiceResponse(BaseModel):
+    """Invoice-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    invoices: list[InvoiceRecord] = Field(
+        default_factory=list,
+        description="One entry per invoice in the final set. Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+class PurchaseOrderResponse(BaseModel):
+    """PurchaseOrder-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    purchase_orders: list[PurchaseOrderRecord] = Field(
+        default_factory=list,
+        description="One entry per purchase order in the final set. "
+        "Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+# Backward-compatible alias: the supplier schema was the original
+# SynthesizedResponse. Keeping the name means supplier-path code and
+# tests that import SynthesizedResponse / SupplierSummary still work.
+SynthesizedResponse = SupplierResponse
+SupplierSummary = SupplierRecord
+
+
+# entity name -> (response schema). Only entities with a real fetcher.
+SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
+    "Supplier": SupplierResponse,
+    "Invoice": InvoiceResponse,
+    "PurchaseOrder": PurchaseOrderResponse,
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Errors
@@ -120,61 +210,48 @@ class SynthesizedResponse(BaseModel):
 
 class HallucinationError(RuntimeError):
     """The LLM produced structured output containing IDs that don't
-    appear in the executor's source data.
+    appear in the executor's source data. The message names the
+    offending IDs so the gap is actionable."""
 
-    The exception message names the offending IDs so the gap is
-    actionable rather than a generic 'something's wrong'."""
+
+class UnsupportedEntityError(RuntimeError):
+    """The Intent's target_entity has no synthesizer schema. Loud by
+    design — graceful user-facing messaging is feature 8's job."""
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Source-data fingerprint (used both for prompt building and validation)
+# Source-data fingerprint (prompt building + validation)
 # ─────────────────────────────────────────────────────────────────────
 
 
 def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
-    """
-    Walk the executor outputs and collect the IDs the response is
-    allowed to mention.
-
-    Returns a dict like:
-        {
-          "supplier_ids":     {300000047414503, ...},
-          "supplier_numbers": {"1252", ...},
-          "person_ids":       {300000047340498, ...},
-        }
-
-    The validator uses this to detect hallucinated IDs. The prompt
-    builder uses the same data so the LLM sees exactly the universe
-    it's allowed to reference.
-
-    Walks every output bucket and extracts the relevant fields wherever
-    they appear, so order of buckets in `outputs` doesn't matter.
-    """
+    """Walk the executor outputs and collect the IDs the response is
+    allowed to mention. Bucket order doesn't matter — every bucket is
+    scanned for every id field."""
     supplier_ids: set = set()
     supplier_numbers: set = set()
     person_ids: set = set()
+    invoice_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
-            sid = item.get("SupplierId")
-            if sid is not None:
+            if (sid := item.get("SupplierId")) is not None:
                 supplier_ids.add(sid)
-            snum = item.get("SupplierNumber")
-            if snum is not None:
+            if (snum := item.get("SupplierNumber")) is not None:
                 supplier_numbers.add(snum)
-            pid = item.get("PersonId")
-            if pid is not None:
+            if (pid := item.get("PersonId")) is not None:
                 person_ids.add(pid)
-            # BuyerId on a PO equals PersonId on a Buyer record — treat
-            # both as the same id space for validation purposes.
-            bid = item.get("BuyerId")
-            if bid is not None:
+            # BuyerId on a PO equals PersonId on a Buyer record.
+            if (bid := item.get("BuyerId")) is not None:
                 person_ids.add(bid)
+            if (iid := item.get("InvoiceId")) is not None:
+                invoice_ids.add(iid)
 
     return {
         "supplier_ids": supplier_ids,
         "supplier_numbers": supplier_numbers,
         "person_ids": person_ids,
+        "invoice_ids": invoice_ids,
     }
 
 
@@ -183,117 +260,179 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
 # ─────────────────────────────────────────────────────────────────────
 
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_PREAMBLE = (
     "You are a response synthesizer for an Oracle Fusion Cloud query "
-    "assistant. You will be given the structured output of a deterministic "
-    "data-fetch pipeline (a dict of named result buckets). Your job is to "
-    "produce a clear, concise summary of what the data shows.\n\n"
-    "Rules you MUST follow:\n"
-    "1. Only reference IDs (SupplierId, SupplierNumber, PersonId/BuyerId) "
-    "that appear in the data given to you. Do NOT invent IDs.\n"
-    "2. Do not add details that are not in the data (e.g. invented "
-    "addresses, amounts, dates, buyer email).\n"
-    "3. If the final filtered set is empty, say so plainly in the summary "
-    "and return an empty suppliers list.\n"
-    "4. Group purchase orders by supplier. Report open_po_count as the "
-    "exact count of POs in the open_pos bucket for each supplier.\n"
-    "5. List each unique buyer assigned to that supplier's POs. Each "
-    "buyer's person_id must appear in the buyers bucket.\n"
-    "6. Keep the summary to 3-5 sentences. Plain English. No marketing "
+    "assistant. You are given the structured output of a deterministic "
+    "data-fetch pipeline (a dict of named result buckets). Produce a "
+    "clear, concise answer of what the data shows.\n\n"
+    "Rules you MUST follow for every response:\n"
+    "- Only reference IDs (SupplierId, SupplierNumber, PersonId/BuyerId, "
+    "InvoiceId) that appear in the data given to you. Do NOT invent IDs.\n"
+    "- Do not add details not in the data (invented addresses, amounts, "
+    "dates, emails).\n"
+    "- Keep the summary to 3-5 sentences. Plain English. No marketing "
     "language.\n"
-    "7. If the input includes a 'truncation' block, populate "
-    "truncation_notes with one note per entry. Each note must state the "
-    "step's output_name, the total_available count (or 'unknown' if "
-    "null), and how many records were examined. Example: "
-    "'us_suppliers: 137 total in source; 25 examined for filtering.' "
-    "Do NOT invent numbers; copy them from the truncation block. If no "
-    "truncation block is present, return an empty truncation_notes list."
+    "- If the final set is empty, say so plainly and return an empty "
+    "records list.\n"
+    "- If the input includes a 'truncation' block, populate "
+    "truncation_notes with one note per entry: the step's output_name, "
+    "the total_available count (or 'unknown' if null), and how many "
+    "records were examined. Example: 'us_suppliers: 137 total in source; "
+    "25 examined for filtering.' Copy numbers from the truncation block; "
+    "never invent them. If no truncation block, return an empty list.\n\n"
 )
+
+# Per-entity instruction block, appended to the preamble.
+_SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
+    "Supplier": (
+        "This is a SUPPLIER-rooted query. For each supplier in the final "
+        "filtered set, emit one entry under 'suppliers'. Group purchase "
+        "orders by supplier: open_po_count is the exact count of that "
+        "supplier's POs in the open_pos bucket. List each unique buyer "
+        "assigned to that supplier's POs; each buyer's person_id must "
+        "appear in the buyers bucket."
+    ),
+    "Invoice": (
+        "This is an INVOICE-rooted query. For each invoice in the final "
+        "set, emit one entry under 'invoices' with its id, number, date, "
+        "amount, currency, and the supplier name/number. supplier_number "
+        "must appear in the data. Do not group or aggregate; list the "
+        "invoices as returned."
+    ),
+    "PurchaseOrder": (
+        "This is a PURCHASE-ORDER-rooted query. For each PO in the final "
+        "set, emit one entry under 'purchase_orders' with its header id, "
+        "order number, status, and supplier name/id. supplier_id must "
+        "appear in the data. If a buyer is present for the PO, include it; "
+        "the buyer's person_id must appear in the buyers bucket."
+    ),
+}
+
+
+def _build_system_prompt(target_entity: str) -> str:
+    """Preamble + the per-entity instruction block."""
+    block = _SYSTEM_PROMPT_BY_ENTITY[target_entity]
+    return _SYSTEM_PROMPT_PREAMBLE + block
+
 
 def _build_synthesis_prompt(
     outputs: dict[str, list[dict]],
     truncation_by_step: dict[str, dict] | None = None,
 ) -> str:
-    """
-    Build the user-message portion of the prompt.
-
-    Includes the full outputs dict as pretty-printed JSON, plus an
-    optional truncation block when any step was truncated.
-    """
+    """Build the user-message portion of the prompt: outputs as JSON,
+    plus an optional truncation block."""
     rendered = json.dumps(outputs, default=str, indent=2)
     parts = [
         "Here is the executor's output. Each top-level key is the "
         "output_name of a step; each value is a list of records returned "
-        "by that step.\n\n"
-        f"```json\n{rendered}\n```\n"
+        f"by that step.\n\n```json\n{rendered}\n```\n"
     ]
-
     if truncation_by_step:
-        truncation_rendered = json.dumps(
-            truncation_by_step, default=str, indent=2
-        )
+        truncation_rendered = json.dumps(truncation_by_step, default=str, indent=2)
         parts.append(
-            "\nThe following steps were truncated. Each entry tells you "
-            "how many records actually match the step's filters in the "
-            "source, vs. how many were examined by the executor. "
-            "Populate truncation_notes from this block; do NOT invent "
-            "counts.\n\n"
-            f"```json\n{truncation_rendered}\n```\n"
+            "\nThe following steps were truncated. Each entry tells you how "
+            "many records actually match in the source vs. how many were "
+            "examined. Populate truncation_notes from this block; do NOT "
+            f"invent counts.\n\n```json\n{truncation_rendered}\n```\n"
         )
-
     parts.append(
-        "\nProduce the structured response per the schema. Remember: "
-        "only reference IDs present in the data above; do not invent."
+        "\nProduce the structured response per the schema. Remember: only "
+        "reference IDs present in the data above; do not invent."
     )
     return "".join(parts)
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Hallucination validation
+# Hallucination validation — dispatched per response type
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _validate_no_hallucinated_ids(
-    response: SynthesizedResponse, outputs: dict[str, list[dict]]
-) -> None:
-    """
-    Raise HallucinationError if any ID in the response doesn't match
-    the executor's source data.
+def _raise_if_bad(parts: list[str]) -> None:
+    if parts:
+        raise HallucinationError(
+            "Synthesizer produced IDs that do not appear in the executor "
+            "output: " + "; ".join(parts)
+        )
 
-    Collects ALL offending IDs across the whole response before raising,
-    so the caller sees the full extent of the hallucination instead of
-    fixing one at a time.
 
-    An empty response (no suppliers) is always valid.
-    """
-    valid = _collect_valid_ids(outputs)
-    bad_supplier_ids: list[int] = []
-    bad_supplier_numbers: list[str] = []
-    bad_person_ids: list[int] = []
-
-    for supplier in response.suppliers:
-        if supplier.supplier_id not in valid["supplier_ids"]:
-            bad_supplier_ids.append(supplier.supplier_id)
-        if supplier.supplier_number not in valid["supplier_numbers"]:
-            bad_supplier_numbers.append(supplier.supplier_number)
-        for buyer in supplier.buyers:
-            if buyer.person_id not in valid["person_ids"]:
-                bad_person_ids.append(buyer.person_id)
-
-    if not (bad_supplier_ids or bad_supplier_numbers or bad_person_ids):
-        return
-
+def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> None:
+    bad_sid: list[int] = []
+    bad_snum: list[str] = []
+    bad_pid: list[int] = []
+    for s in response.suppliers:
+        if s.supplier_id not in valid["supplier_ids"]:
+            bad_sid.append(s.supplier_id)
+        if s.supplier_number not in valid["supplier_numbers"]:
+            bad_snum.append(s.supplier_number)
+        for b in s.buyers:
+            if b.person_id not in valid["person_ids"]:
+                bad_pid.append(b.person_id)
     parts = []
-    if bad_supplier_ids:
-        parts.append(f"supplier_ids={bad_supplier_ids}")
-    if bad_supplier_numbers:
-        parts.append(f"supplier_numbers={bad_supplier_numbers}")
-    if bad_person_ids:
-        parts.append(f"person_ids={bad_person_ids}")
-    raise HallucinationError(
-        "Synthesizer produced IDs that do not appear in the executor "
-        "output: " + "; ".join(parts)
-    )
+    if bad_sid:
+        parts.append(f"supplier_ids={bad_sid}")
+    if bad_snum:
+        parts.append(f"supplier_numbers={bad_snum}")
+    if bad_pid:
+        parts.append(f"person_ids={bad_pid}")
+    _raise_if_bad(parts)
+
+
+def _validate_invoice(response: InvoiceResponse, valid: dict[str, set]) -> None:
+    bad_iid: list[int] = []
+    bad_snum: list[str] = []
+    for inv in response.invoices:
+        if inv.invoice_id not in valid["invoice_ids"]:
+            bad_iid.append(inv.invoice_id)
+        if inv.supplier_number not in valid["supplier_numbers"]:
+            bad_snum.append(inv.supplier_number)
+    parts = []
+    if bad_iid:
+        parts.append(f"invoice_ids={bad_iid}")
+    if bad_snum:
+        parts.append(f"supplier_numbers={bad_snum}")
+    _raise_if_bad(parts)
+
+
+def _validate_purchase_order(
+    response: PurchaseOrderResponse, valid: dict[str, set]
+) -> None:
+    bad_sid: list[int] = []
+    bad_pid: list[int] = []
+    for po in response.purchase_orders:
+        if po.supplier_id not in valid["supplier_ids"]:
+            bad_sid.append(po.supplier_id)
+        if po.buyer is not None and po.buyer.person_id not in valid["person_ids"]:
+            bad_pid.append(po.buyer.person_id)
+    parts = []
+    if bad_sid:
+        parts.append(f"supplier_ids={bad_sid}")
+    if bad_pid:
+        parts.append(f"person_ids={bad_pid}")
+    _raise_if_bad(parts)
+
+
+_VALIDATORS = {
+    SupplierResponse: _validate_supplier,
+    InvoiceResponse: _validate_invoice,
+    PurchaseOrderResponse: _validate_purchase_order,
+}
+
+
+def _validate_no_hallucinated_ids(
+    response: BaseModel, outputs: dict[str, list[dict]]
+) -> None:
+    """Dispatch to the validator for the response's concrete type.
+    An empty record list is always valid."""
+    valid = _collect_valid_ids(outputs)
+    validator = _VALIDATORS.get(type(response))
+    if validator is None:
+        # Unknown response type — should never happen given schema
+        # selection, but fail loud rather than skip validation silently.
+        raise UnsupportedEntityError(
+            f"No hallucination validator for response type "
+            f"{type(response).__name__}."
+        )
+    validator(response, valid)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -303,51 +442,53 @@ def _validate_no_hallucinated_ids(
 
 def synthesize_response(
     outputs: dict[str, list[dict]],
+    target_entity: str,
     llm: Any | None = None,
     truncation_by_step: dict[str, dict] | None = None,
-) -> SynthesizedResponse:
-    """
-    Turn the executor's output dict into a validated structured response.
+) -> BaseModel:
+    """Turn the executor's output into a validated structured response,
+    using the schema for the Intent's target_entity.
 
     Args:
         outputs: The dict returned by spire.executor.execute_plan.
-        llm: Optional pre-built LangChain LLM. Tests inject a mock here;
+        target_entity: The Intent's target_entity ("Supplier", "Invoice",
+            or "PurchaseOrder"). Selects the response schema.
+        llm: Optional pre-built LangChain LLM. Tests inject a mock;
             production passes None and a fresh ChatGoogleGenerativeAI is
-            constructed. Reads GEMINI_API_KEY from the environment.
+            built (reads GEMINI_API_KEY from the environment).
         truncation_by_step: Optional dict from execute_plan keyed by
-            output_name, with each value being {total_available,
-            limit_applied, truncated}. When present, the LLM is
-            instructed to populate truncation_notes from it.
+            output_name. When present, the LLM populates truncation_notes.
 
     Returns:
-        SynthesizedResponse — a Pydantic model. response.summary is the
-        one-paragraph prose; response.suppliers is the structured list;
-        response.truncation_notes lists any truncated steps.
+        A Pydantic model — SupplierResponse, InvoiceResponse, or
+        PurchaseOrderResponse depending on target_entity.
 
     Raises:
-        HallucinationError if any structured ID doesn't match the
-        executor's data.
-        Pydantic ValidationError if the LLM somehow produces output
-        that doesn't fit the schema.
+        UnsupportedEntityError if target_entity has no schema.
+        HallucinationError if any structured ID isn't in the executor data.
+        Pydantic ValidationError if the LLM output doesn't fit the schema.
         Anything raised by the LLM call propagates.
     """
-    if llm is None:
-        llm = ChatGoogleGenerativeAI(
-            model=_MODEL_NAME, temperature=_TEMPERATURE
+    schema = SYNTHESIS_SCHEMAS.get(target_entity)
+    if schema is None:
+        raise UnsupportedEntityError(
+            f"No synthesizer schema for target_entity={target_entity!r}. "
+            f"Supported: {sorted(SYNTHESIS_SCHEMAS)}."
         )
 
-    structured_llm = llm.with_structured_output(SynthesizedResponse)
+    if llm is None:
+        llm = ChatGoogleGenerativeAI(model=_MODEL_NAME, temperature=_TEMPERATURE)
+
+    structured_llm = llm.with_structured_output(schema)
+    system_prompt = _build_system_prompt(target_entity)
     user_message = _build_synthesis_prompt(outputs, truncation_by_step)
 
     response = structured_llm.invoke(
-        [
-            ("system", _SYSTEM_PROMPT),
-            ("human", user_message),
-        ]
+        [("system", system_prompt), ("human", user_message)]
     )
 
     if isinstance(response, dict):
-        response = SynthesizedResponse(**response)
+        response = schema(**response)
 
     _validate_no_hallucinated_ids(response, outputs)
     return response

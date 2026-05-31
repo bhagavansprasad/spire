@@ -67,10 +67,13 @@ from spire.executor.executor import execute_plan
 from spire.planner.planner import Intent, Plan, generate_plan
 from spire.synthesizer.synthesizer import (
     HallucinationError,
-    SynthesizedResponse,
+    InvoiceResponse,
+    PurchaseOrderResponse,
+    SupplierResponse,
+    UnsupportedEntityError,
     synthesize_response,
 )
-
+    
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 
@@ -306,35 +309,74 @@ def _format_outputs(
     return "\n".join(lines)
 
 
-def _format_synthesized(response: SynthesizedResponse) -> str:
-    """Render the synthesized response: prose summary + structured
-    supplier list."""
+def _format_synthesized(response) -> str:
+    """Render the synthesized response: prose summary + a structured
+    record list whose shape depends on the response type."""
     lines = ["Answer:", "", response.summary, ""]
     if response.truncation_notes:
         lines.append("Truncation:")
         for note in response.truncation_notes:
             lines.append(f"  - {note}")
         lines.append("")
-    if not response.suppliers:
-        lines.append("(No suppliers in the structured result.)")
+ 
+    if isinstance(response, SupplierResponse):
+        if not response.suppliers:
+            lines.append("(No suppliers in the structured result.)")
+            return "\n".join(lines)
+        lines.append("Suppliers:")
+        for s in response.suppliers:
+            buyer_str = ", ".join(
+                f"{b.display_name} (id={b.person_id})" for b in s.buyers
+            ) or "(no buyer)"
+            lines.append(
+                f"  - {s.supplier_name} "
+                f"(SupplierId={s.supplier_id}, SupplierNumber={s.supplier_number}) "
+                f"— {s.open_po_count} open PO(s); buyer(s): {buyer_str}"
+            )
         return "\n".join(lines)
-    lines.append("Suppliers:")
-    for s in response.suppliers:
-        buyer_str = ", ".join(
-            f"{b.display_name} (id={b.person_id})" for b in s.buyers
-        ) or "(no buyer)"
-        lines.append(
-            f"  - {s.supplier_name} "
-            f"(SupplierId={s.supplier_id}, SupplierNumber={s.supplier_number}) "
-            f"— {s.open_po_count} open PO(s); buyer(s): {buyer_str}"
-        )
+ 
+    if isinstance(response, InvoiceResponse):
+        if not response.invoices:
+            lines.append("(No invoices in the structured result.)")
+            return "\n".join(lines)
+        lines.append("Invoices:")
+        for inv in response.invoices:
+            cur = f" {inv.invoice_currency}" if inv.invoice_currency else ""
+            lines.append(
+                f"  - {inv.invoice_number} "
+                f"(InvoiceId={inv.invoice_id}) — {inv.invoice_date}, "
+                f"{inv.invoice_amount}{cur}; "
+                f"{inv.supplier_name} (SupplierNumber={inv.supplier_number})"
+            )
+        return "\n".join(lines)
+ 
+    if isinstance(response, PurchaseOrderResponse):
+        if not response.purchase_orders:
+            lines.append("(No purchase orders in the structured result.)")
+            return "\n".join(lines)
+        lines.append("Purchase Orders:")
+        for po in response.purchase_orders:
+            buyer_str = (
+                f"{po.buyer.display_name} (id={po.buyer.person_id})"
+                if po.buyer is not None
+                else "(no buyer)"
+            )
+            lines.append(
+                f"  - {po.order_number} "
+                f"(POHeaderId={po.po_header_id}) — {po.status}; "
+                f"{po.supplier_name} (SupplierId={po.supplier_id}); "
+                f"buyer: {buyer_str}"
+            )
+        return "\n".join(lines)
+ 
+    # Should be unreachable — every schema in SYNTHESIS_SCHEMAS is handled.
+    lines.append("(Unrecognized response shape.)")
     return "\n".join(lines)
-
 
 def _format_summary(
     plan: Plan,
     outputs: dict[str, list[dict]],
-    response: SynthesizedResponse,
+    response,
 ) -> str:
     """One-screen end-of-run summary."""
     lines = ["Summary:"]
@@ -348,7 +390,15 @@ def _format_summary(
             f"  Final raw output:     {final_count} record(s) under "
             f"'{last_step.output_name}'"
         )
-    lines.append(f"  Synthesized answer:   {len(response.suppliers)} supplier(s)")
+    if isinstance(response, SupplierResponse):
+        n, label = len(response.suppliers), "supplier(s)"
+    elif isinstance(response, InvoiceResponse):
+        n, label = len(response.invoices), "invoice(s)"
+    elif isinstance(response, PurchaseOrderResponse):
+        n, label = len(response.purchase_orders), "purchase order(s)"
+    else:
+        n, label = 0, "record(s)"
+    lines.append(f"  Synthesized answer:   {n} {label}")
     return "\n".join(lines)
 
 
@@ -419,7 +469,20 @@ async def _run(intent: Intent, intent_name: str) -> int:
     print("Synthesizing answer via LLM ...")
     print()
     try:
-        response = synthesize_response(outputs, truncation_by_step=truncation_by_step)
+        response = synthesize_response(
+            outputs,
+            target_entity=intent.target_entity,
+            truncation_by_step=truncation_by_step,
+        )
+    except UnsupportedEntityError as exc:
+        logger.error("synthesis_unsupported_entity", error=str(exc))
+        print(
+            f"ERROR: no synthesizer schema for target_entity="
+            f"{intent.target_entity!r}.",
+            file=sys.stderr,
+        )
+        print(f"Details: {exc}", file=sys.stderr)
+        return 3
     except HallucinationError as exc:
         logger.error("synthesis_hallucination", error=str(exc))
         print(
