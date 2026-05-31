@@ -449,6 +449,25 @@ curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
   "$FUSION_BASE_URL/hcmRestApi/resources/11.13.18.05/publicWorkers?q=PersonId%3D300000047340498&fields=PersonId,PersonNumber,DisplayName,WorkEmail,Username&limit=1"
 ```
 
+### 6 Date-range queries on /invoices (workaround)
+
+Fusion's q= clause supports `>=` and `<` separately but not compounded
+(see Composite-q quirk above). To get records in a date range, send the
+lower bound via q= and filter the upper bound client-side.
+
+curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
+  --get \
+  --data-urlencode "q=InvoiceDate >= '2022-01-01'" \
+  --data-urlencode "fields=InvoiceDate" \
+  --data-urlencode "limit=500" \
+  --data-urlencode "onlyData=true" \
+  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
+
+Verified 2026-05-30: For Jan 2022 query, first 500 records span
+2022-01-01 to 2022-03-14, so client-side filtering for Jan 2022 is
+complete (212 records). At higher invoice volumes, this pattern may
+need overfetch tuning or pagination.
+
 ---
 
 ## Notes for the KG experiment
@@ -482,5 +501,6 @@ This doc covers only the endpoints Spire's existing 5 tools use. Other Fusion en
 If the KG experiment needs any of these, you'll be building net-new tool integrations.
 
 ---
+
 
 **End of reference. Verify each curl against the live pod before relying on the exact field names — Fusion's response shapes can vary slightly by pod configuration.**
