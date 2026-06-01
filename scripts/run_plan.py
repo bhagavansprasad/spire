@@ -74,6 +74,8 @@ from spire.synthesizer.synthesizer import (
     synthesize_response,
 )
     
+from spire.nl_parser.parser import parse as parse_prompt
+from spire.nl_parser.result import ParseResult
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 
@@ -529,11 +531,45 @@ def _parse_args() -> argparse.Namespace:
             "(see docs/design3_gap_analysis.md)."
         ),
     )
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        help=(
+            "A natural-language prompt to parse into an Intent via the NL "
+            "parser (feature 1), instead of selecting a hand-built --intent. "
+            "If the prompt is out of scope, prints a capability message and "
+            "exits with code 4."
+        ),
+    )
+    
     return parser.parse_args()
 
-
+def _print_refusal(prompt: str, result: ParseResult) -> None:
+    """Print a parser refusal in a readable form (feature 1 wording;
+    feature 8 will make it capability-framed)."""
+    r = result.refusal
+    print(f"Prompt: {prompt}")
+    print()
+    print(f"Spire can't answer this ({r.flavor.value}).")
+    print(f"  {r.detail}")
+    if r.offending_filters:
+        print(f"  Unsupported filters: {r.offending_filters}")
+        
 def main() -> int:
     args = _parse_args()
+
+    if args.prompt is not None:
+        # NL path (feature 1). Parsing is synchronous (Q2): load the KG
+        # menu and call the parser before entering the async pipeline.
+        result = parse_prompt(args.prompt)
+        if result.is_refusal:
+            _print_refusal(args.prompt, result)
+            return 4
+        # Valid Intent -> run the existing pipeline. intent_name is a
+        # short label for tracing/printing.
+        return asyncio.run(_run(result.intent, "nl_prompt"))
+
+    # Hand-built path (unchanged).
     intent = INTENT_CHOICES[args.intent]
     return asyncio.run(_run(intent, args.intent))
 

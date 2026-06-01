@@ -1,0 +1,204 @@
+"""
+The NL parser — natural-language prompt to ``Intent`` (feature 1).
+
+This is the interpreter stage of the Design 3 pipeline:
+
+    Prompt -> [parser: LLM] -> Intent -> planner -> executor -> synthesizer
+
+See docs/designs/feature_1_nl_parser_design.md. The parser is modeled on the
+synthesizer: a single bounded LLM call with structured output, plus
+validation. It owns its KG access via the planner's synchronous path.
+
+CHECKPOINT SCOPE:
+This module covers prompt-building, the LLM call, draft production, and the
+two-way KG validation of the draft (Q2 direction 2). The LLM emits a
+``DraftIntent`` (Pydantic), which is converted to the planner's ``Intent`` and
+then validated against the KG menu: out-of-scope entities/filters become typed
+refusals (UNKNOWN_ENTITY / UNSUPPORTED_OPERATION / UNSUPPORTED_FILTER); wholly
+unparseable output becomes UNPARSEABLE. The pipeline gate (Q5: stop before
+planning on a refusal) is the remaining integration step.
+
+LLM INJECTION (Q4):
+``parse`` takes an optional ``llm``. Tests inject a mock that returns a canned
+``DraftIntent``; production passes None and a real Gemini client is built —
+same convention as the synthesizer.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from spire.nl_parser.draft import DraftIntent
+from spire.nl_parser.result import ParseResult, RefusalFlavor
+from spire.nl_parser.validation import validate_intent
+from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
+
+
+# Mirror the synthesizer's model choice and determinism.
+_MODEL_NAME = "gemini-2.0-flash"
+_TEMPERATURE = 0.0
+
+
+_SYSTEM_PROMPT_PREAMBLE = (
+    "You convert a natural-language question about Oracle Fusion procurement "
+    "data into a single structured Intent. You do NOT answer the question, "
+    "fetch data, or call tools. You only produce the Intent.\n\n"
+    "An Intent has:\n"
+    "- target_entity: the ONE entity the question is rooted on.\n"
+    "- filters: zero or more constraints, each a type plus a JSON-encoded "
+    "value.\n"
+    "- include: related entities to fetch alongside (e.g. the buyer on a PO).\n\n"
+    "You may ONLY use the entities and filter types listed below.\n\n"
+    "COMPLETENESS — extract EVERY in-scope detail:\n"
+    "When the question maps onto the allowed vocabulary, you MUST capture "
+    "ALL of its constraints and relationships — do not omit any. Map natural "
+    "language to the allowed filters/includes, for example:\n"
+    "- a country ('US', 'in the United Kingdom') -> a 'country' filter, with "
+    "the value normalized to the canonical code from the COUNTRY list below.\n"
+    "- 'with open POs' / 'has open purchase orders' -> a 'has_open_PO' "
+    "filter with value true.\n"
+    "- 'no invoices in the last N months' / 'without recent invoices' / "
+    "'no recent invoices' / 'haven't invoiced in N months' -> a "
+    "'has_no_recent_invoices' filter with value {\"months\": N}. This clause "
+    "is easy to miss — whenever the prompt mentions an absence of invoices "
+    "over a time window, you MUST emit this filter.\n"
+    "- 'include the buyer' / 'with the buyer' / 'show the buyer assigned' -> "
+    "add 'Buyer' to include.\n"
+    "If a prompt mentions several of these, emit ALL of them. A common error "
+    "is dropping a constraint (e.g. forgetting the country, or omitting the "
+    "buyer include) — do not do this.\n\n"
+    "OUT OF SCOPE — refuse, do not salvage:\n"
+    "If the question needs ANY entity or filter that is not in the lists "
+    "below, or needs an operation like aggregation/ranking/totals, or is too "
+    "vague to pin to a specific entity and filters, you MUST set "
+    "unanswerable=true and briefly say why in unanswerable_reason. In that "
+    "case do NOT guess a target_entity and do NOT map the request to the "
+    "closest listed entity. It is WRONG to turn an unanswerable question into "
+    "a broad in-scope query (for example, answering 'contract renewals' by "
+    "listing all suppliers). Refusing is correct; salvaging is not.\n\n"
+    "So: capture everything when in scope; refuse cleanly when out of scope. "
+    "Only produce a normal Intent (unanswerable=false) when the question maps "
+    "cleanly onto the allowed entities and filters.\n"
+)
+
+
+def _format_menu(menu: KGMenu) -> str:
+    """Render the KG menu as the allowed-vocabulary block of the prompt."""
+    lines: list[str] = []
+
+    lines.append("ALLOWED target_entity values (these have a fetcher):")
+    for e in sorted(menu.target_entities):
+        desc = menu.entity_descriptions.get(e, "")
+        lines.append(f"  - {e}: {desc}")
+    lines.append("")
+
+    lines.append(
+        "OTHER known entities (recognized, but NOT valid as target_entity — "
+        "a query rooted on these is out of scope):"
+    )
+    others = sorted(set(menu.entity_descriptions) - set(menu.target_entities))
+    for e in others:
+        lines.append(f"  - {e}")
+    lines.append("")
+
+    lines.append("ALLOWED filter types:")
+    for ft in sorted(menu.filter_types):
+        lines.append(f"  - {ft}")
+    lines.append("")
+
+    lines.append(
+        "COUNTRY values accepted (map any of these terms to the canonical "
+        "code on the right when building a 'country' filter):"
+    )
+    for term, canonical in sorted(menu.country_terms.items()):
+        lines.append(f"  - {term} -> {canonical}")
+
+    return "\n".join(lines)
+
+
+def _build_system_prompt(menu: KGMenu) -> str:
+    return _SYSTEM_PROMPT_PREAMBLE + "\n" + _format_menu(menu)
+
+
+def parse(
+    prompt: str,
+    llm: Any | None = None,
+    menu: KGMenu | None = None,
+) -> ParseResult:
+    """Parse a natural-language prompt into a ParseResult.
+
+    Args:
+        prompt: The user's natural-language question.
+        llm: Optional pre-built LangChain LLM. Tests inject a mock whose
+            ``with_structured_output(DraftIntent).invoke(...)`` returns a
+            canned DraftIntent (or dict). Production passes None and a fresh
+            ChatGoogleGenerativeAI is built (reads GEMINI_API_KEY).
+        menu: Optional pre-loaded KGMenu. Tests pass a fixture to avoid a DB
+            hit; production passes None and the menu is read synchronously
+            from the KG via load_kg_menu().
+
+    Returns:
+        ParseResult — ``ok`` wrapping an Intent when the LLM produced a
+        shape-valid draft, or a ``refuse`` with flavor UNPARSEABLE when the
+        LLM produced nothing usable or a malformed value.
+
+        NOTE (checkpoint 2): a shape-valid draft is NOT yet validated against
+        the KG. Entity/filter KG-checks (and their UNKNOWN_ENTITY /
+        UNSUPPORTED_FILTER / UNSUPPORTED_OPERATION refusals) arrive in
+        checkpoint 3.
+    """
+    if menu is None:
+        menu = load_kg_menu()
+
+    if llm is None:
+        # Imported lazily so unit tests (which inject a mock) don't require
+        # langchain-google-genai or a GEMINI_API_KEY to import this module.
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        llm = ChatGoogleGenerativeAI(model=_MODEL_NAME, temperature=_TEMPERATURE)
+
+    structured_llm = llm.with_structured_output(DraftIntent)
+    system_prompt = _build_system_prompt(menu)
+
+    response = structured_llm.invoke(
+        [("system", system_prompt), ("human", prompt)]
+    )
+
+    # Normalize to a DraftIntent (the synthesizer guards the same way: some
+    # backends return a dict rather than the model instance).
+    if isinstance(response, dict):
+        response = DraftIntent(**response)
+
+    if response is None:
+        return ParseResult.refuse(
+            flavor=RefusalFlavor.UNPARSEABLE,
+            detail="The model did not produce a structured Intent for this prompt.",
+        )
+
+    # The model explicitly declared the prompt out of scope (the structural
+    # half of the silent-rewrite fix). Trust it: refuse directly, without
+    # consulting target_entity/filters.
+    if response.unanswerable:
+        reason = response.unanswerable_reason or "The prompt is out of scope."
+        return ParseResult.refuse(
+            flavor=RefusalFlavor.UNPARSEABLE,
+            detail=reason,
+        )
+
+    # Shape-level conversion. A malformed filter value (non-JSON) is an
+    # unparseable result, not a crash.
+    try:
+        intent = response.to_intent()
+    except ValueError as exc:
+        return ParseResult.refuse(
+            flavor=RefusalFlavor.UNPARSEABLE,
+            detail=f"The model's Intent was malformed: {exc}",
+        )
+
+    # Q2 direction 2: validate the draft back against the KG. Out-of-scope
+    # entities/filters become typed refusals (checkpoint 3).
+    refusal = validate_intent(intent, menu)
+    if refusal is not None:
+        return ParseResult(refusal=refusal)
+
+    return ParseResult.ok(intent)
