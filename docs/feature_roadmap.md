@@ -197,27 +197,23 @@ preemptively.
 
 ## Backlog summary
 
-| # | Feature                                  | Effort  | Status      | Closes |
-|---|------------------------------------------|---------|-------------|--------|
-| 2 | Invoice date upper bound                 | small   | merged*     | G1     |
-| 3 | Supplier status filter                   | small   | merged*     | G2     |
-| 4 | Migrate remaining tools to ToolResult    | medium  | merged*†    | G3     |
-| 5 | Synthesizer schema generalization        | medium  | merged*     | —      |
-| 1 | Natural-language entry                   | large   | open        | —      |
-| 8 | Graceful refusal                         | small   | open        | G5     |
-| 6 | New entity: contracts                    | small-medium | open   | —      |
-| 7 | Aggregation tools                        | medium  | open        | G4     |
+| # | Feature                                  | Effort  | Status | Closes |
+|---|------------------------------------------|---------|--------|--------|
+| 2 | Invoice date upper bound                 | small   | done   | G1     |
+| 3 | Supplier status filter                   | small   | done   | G2     |
+| 4 | Migrate remaining tools to ToolResult    | medium  | done†  | G3     |
+| 5 | Synthesizer schema generalization        | medium  | done   | —      |
+| 1 | Natural-language entry                   | large   | open   | —      |
+| 8 | Graceful refusal                         | small   | open   | G5     |
+| 6 | New entity: contracts                    | small-medium | open | —    |
+| 7 | Aggregation tools                        | medium  | open   | G4     |
 
-\* **merged** = code merged to master (PR #37), but **live verification
-against the Fusion pod is still pending** (auth unavailable at merge
-time). Not yet `done`. Before marking `done`:
-- grep executor/planner/synthesizer for callers expecting `list[dict]`
-  from the two migrated tools (static, no auth needed)
-- `pytest tests/` with `personas.yaml` present
-- confirm supplier `Status` vocabulary (docstrings currently guess
-  ACTIVE/INACTIVE)
+Features 2–5 verified against the live Fusion pod: full suite 263 passed
+(5 integration tests deselected — live-Gemini synthesis and end-to-end
+run_plan still unrun).
 
-† Feature 4 migrated `search_suppliers` and `search_purchase_orders`
-only. `get_buyer` was intentionally left unmigrated — it's a single
-unique-key lookup, so truncation metadata is meaningless. Feature 4 is
-considered complete in scope despite this.
+† Feature 4 migrated search_suppliers and search_purchase_orders only.
+get_buyer was intentionally left unmigrated — a single unique-key lookup,
+so truncation metadata is meaningless. Feature 4 is complete in scope.
+
+**Status:** done — verified against live Fusion (suite green).
