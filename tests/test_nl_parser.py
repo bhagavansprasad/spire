@@ -285,7 +285,9 @@ def test_explicit_unanswerable_refused(menu):
     result = parse("Show contract renewals", llm=MockLLM(draft), menu=menu)
 
     assert result.is_refusal
-    assert result.refusal.flavor == RefusalFlavor.UNPARSEABLE
+    # Feature 8: a self-declared refusal naming an entity the KG doesn't
+    # know is now UNKNOWN_ENTITY, not the old catch-all UNPARSEABLE.
+    assert result.refusal.flavor == RefusalFlavor.UNKNOWN_ENTITY
     assert "Contract" in result.refusal.detail
 
 

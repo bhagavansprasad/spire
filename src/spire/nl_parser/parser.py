@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
 from spire.nl_parser.validation import validate_intent
@@ -176,13 +177,24 @@ def parse(
         )
 
     # The model explicitly declared the prompt out of scope (the structural
-    # half of the silent-rewrite fix). Trust it: refuse directly, without
-    # consulting target_entity/filters.
+    # half of the silent-rewrite fix). Trust the REFUSAL, but don't trust the
+    # model to know WHICH kind of refusal it is — feature 1 tagged every
+    # self-declared refusal UNPARSEABLE. Feature 8 re-derives the flavor from
+    # the draft + KG menu (UNKNOWN_ENTITY for contracts, UNSUPPORTED_OPERATION
+    # for aggregation), falling back to UNPARSEABLE only when nothing more
+    # specific fits.
     if response.unanswerable:
         reason = response.unanswerable_reason or "The prompt is out of scope."
+        flavor = derive_flavor(reason, response.target_entity, menu)
+        offending = (
+            response.target_entity
+            if flavor is RefusalFlavor.UNKNOWN_ENTITY and response.target_entity
+            else None
+        )
         return ParseResult.refuse(
-            flavor=RefusalFlavor.UNPARSEABLE,
+            flavor=flavor,
             detail=reason,
+            offending_entity=offending,
         )
 
     # Shape-level conversion. A malformed filter value (non-JSON) is an
@@ -202,3 +214,4 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
