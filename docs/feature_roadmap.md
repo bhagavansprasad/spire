@@ -87,6 +87,8 @@ Contract isn't in the system. Adds a new data domain.
 **Dependencies:** ideally after 1, 4, 5 — so contracts get NL-parsed
 entry, truncation honesty, and flexible schema.
 
+**Design:** pending a brainstorming session before work starts.
+
 **Effort:** small to medium.
 
 ---
@@ -105,22 +107,28 @@ not a generic engine.
 
 **Dependencies:** parser (1) should route aggregation prompts here.
 
+**Design:** pending a brainstorming session before work starts.
+
 **Effort:** medium per shape.
 
 ---
 
 ### 8. Graceful refusal for unsupported prompts
 
-**Status:** open — NEXT. Partially set up by feature 1.
+**Status:** done. Closes G5 in part.
 
-**What:** Turn the parser's structured refusal into a polished,
-capability-framed user message generated from the KG. Feature 1 already
-detects out-of-scope prompts and returns a `Refusal` (flavor + facts)
-and `run_plan.py` exits 4; feature 8 adds the gracious wording and
-derives the correct flavor from the KG (today a self-declared refusal
-maps to UNPARSEABLE even when it's really UNKNOWN_ENTITY / aggregation).
+**What:** Turns the parser's structured refusal into a polished,
+capability-framed user message generated from the KG. New
+`capability.py` module: `derive_flavor` re-derives the correct flavor
+from the draft + KG menu (a self-declared refusal naming an unknown
+entity is now UNKNOWN_ENTITY, aggregation is UNSUPPORTED_OPERATION,
+genuinely vague prompts stay UNPARSEABLE); `capability_message` builds
+the user-facing wording — what Spire can do (from the KG menu, so it
+never goes stale) plus why the prompt is outside it. Wired into
+`run_plan.py`'s refusal printer.
 
-**Why:** Closes G5 in part. The current refusal is honest but blunt.
+**Why:** Closed G5 in part. The feature-1 refusal was honest but blunt
+and mislabeled self-declared refusals.
 
 **Dependencies:** 1 (done).
 
@@ -133,12 +141,13 @@ maps to UNPARSEABLE even when it's really UNKNOWN_ENTITY / aggregation).
 ### Phase one: foundation — DONE
 **2 -> 3 -> 4 -> 5.** Closed known gaps, strengthened the tool layer.
 
-### Phase two: architectural shift — feature 1 DONE, feature 8 NEXT
-**1 -> 8.** NL parser landed. 8 (graceful refusal wording) follows.
+### Phase two: architectural shift — DONE
+**1 -> 8.** NL parser landed; graceful refusal wording landed.
 
-### Phase three: capability expansion
+### Phase three: capability expansion — NEXT
 **6, 7 (parallel, as demand surfaces).** Demand-driven; don't build
-preemptively.
+preemptively. Design for each is settled in a brainstorming session
+before work starts.
 
 ---
 
@@ -151,7 +160,7 @@ preemptively.
 | 4 | Migrate remaining tools to ToolResult    | medium  | done   | G3     |
 | 5 | Synthesizer schema generalization        | medium  | done   | —      |
 | 1 | Natural-language entry                   | large   | done   | —      |
-| 8 | Graceful refusal                         | small   | open (next) | G5 |
+| 8 | Graceful refusal                         | small   | done   | G5     |
 | 6 | New entity: contracts                    | small-medium | open | —    |
 | 7 | Aggregation tools                        | medium  | open   | G4     |
 
@@ -162,18 +171,39 @@ verified against live Gemini (parser integration suite green).
 
 ## Component lifecycle
 
-### Track A agent — retire after Design 3 is proven
+### Track A agent — cleared for removal
 
 The Track A agent (`ask.py` -> `runner.py`, the LLM-as-planner baseline)
 is **not** part of the Design 3 runtime and is never invoked by the
-Design 3 pipeline. It is kept solely as the **evaluation baseline** —
-the comparison arm that justifies the Design 3 architecture.
+Design 3 pipeline. It was kept as the evaluation baseline — the
+comparison arm that would justify the Design 3 architecture.
 
-- **Keep until** Design 3 consistently produces valid results —
-  specifically, until the feature-1 parser-driven path has been run
-  against the agent baseline and the before/after comparison is recorded.
-- **Then** the agent has served its purpose and should be deleted.
-- **Do not** remove it before that comparison exists — doing so destroys
-  the ability to demonstrate the before/after that justifies feature 1.
-- **Rationale:** the repo is still a POC; in the "prove the architecture"
-  phase the baseline earns its keep.
+**Decision: the baseline comparison will not be run.** Design 3 / Way 2
+is the committed architecture; the agent's only remaining job was to
+justify that choice, and the choice is made. So the agent is now
+**cleared for removal** — its lifecycle no longer gates on a comparison
+that won't happen.
+
+Code to remove when the cleanup is done:
+- `scripts/ask.py` (the agent entry point)
+- `src/spire/agent/` (`runner.py`, `prompts.py`, `lg_utility.py`,
+  `tracing.py` — confirm `tracing.py` isn't shared by `run_plan.py`
+  before deleting it)
+- `tests/test_agent_runner.py`, `tests/test_prompts.py`
+- `inspect_trace.py` is agent-shaped and doesn't parse `run_plan`
+  traces; remove or repoint as part of the same cleanup.
+
+Not yet deleted — this is a tracked, deliberate cleanup step, not done
+in passing.
+
+### Design 3 (Way 2) is deliberately NOT an agent
+
+Design 3 is not an agentic architecture and is not meant to become one.
+The LLM is bounded to two single-shot roles — the interpreter (the
+feature-1 parser) and the synthesizer — with a deterministic planner and
+executor in between. There is no tool-calling loop, no
+`assistant -> tools -> assistant` cycle, no LLM-driven control flow. This
+is the property that makes the pipeline predictable and its failures
+attributable to a specific stage, and it is the defining difference from
+the Track A agent. Future features add bounded tools and schemas; they do
+not reintroduce agent-style orchestration.

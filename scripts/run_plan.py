@@ -76,6 +76,8 @@ from spire.synthesizer.synthesizer import (
     
 from spire.nl_parser.parser import parse as parse_prompt
 from spire.nl_parser.result import ParseResult
+from spire.nl_parser.capability import capability_message
+from spire.nl_parser.vocabulary import load_kg_menu
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 
@@ -544,14 +546,18 @@ def _parse_args() -> argparse.Namespace:
     
     return parser.parse_args()
 
-def _print_refusal(prompt: str, result: ParseResult) -> None:
-    """Print a parser refusal in a readable form (feature 1 wording;
-    feature 8 will make it capability-framed)."""
+def _print_refusal(prompt: str, result: ParseResult, menu) -> None:
+    """Print a parser refusal, capability-framed (feature 8).
+
+    Leads with what Spire CAN do (sourced from the KG menu) and why this
+    prompt falls outside it. The blunt flavor/detail is kept as a secondary
+    line for developers."""
     r = result.refusal
     print(f"Prompt: {prompt}")
     print()
-    print(f"Spire can't answer this ({r.flavor.value}).")
-    print(f"  {r.detail}")
+    print(capability_message(r, menu))
+    print()
+    print(f"  (refusal: {r.flavor.value} — {r.detail})")
     if r.offending_filters:
         print(f"  Unsupported filters: {r.offending_filters}")
         
@@ -561,9 +567,12 @@ def main() -> int:
     if args.prompt is not None:
         # NL path (feature 1). Parsing is synchronous (Q2): load the KG
         # menu and call the parser before entering the async pipeline.
-        result = parse_prompt(args.prompt)
+        # Feature 8: the menu is also what the capability message is built
+        # from, so load it once and share it with the parser and the printer.
+        menu = load_kg_menu()
+        result = parse_prompt(args.prompt, menu=menu)
         if result.is_refusal:
-            _print_refusal(args.prompt, result)
+            _print_refusal(args.prompt, result, menu)
             return 4
         # Valid Intent -> run the existing pipeline. intent_name is a
         # short label for tracing/printing.
@@ -576,3 +585,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
