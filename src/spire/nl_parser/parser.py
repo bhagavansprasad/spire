@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE
 from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
@@ -35,9 +36,9 @@ from spire.nl_parser.validation import validate_intent
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
 
-# Mirror the synthesizer's model choice and determinism.
-_MODEL_NAME = "gemini-2.0-flash"
-_TEMPERATURE = 0.0
+# Model and determinism come from spire.config (single source of truth).
+_MODEL_NAME = GEMINI_MODEL
+_TEMPERATURE = GEMINI_TEMPERATURE
 
 
 _SYSTEM_PROMPT_PREAMBLE = (
@@ -70,13 +71,21 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "buyer include) — do not do this.\n\n"
     "OUT OF SCOPE — refuse, do not salvage:\n"
     "If the question needs ANY entity or filter that is not in the lists "
-    "below, or needs an operation like aggregation/ranking/totals, or is too "
-    "vague to pin to a specific entity and filters, you MUST set "
-    "unanswerable=true and briefly say why in unanswerable_reason. In that "
-    "case do NOT guess a target_entity and do NOT map the request to the "
-    "closest listed entity. It is WRONG to turn an unanswerable question into "
-    "a broad in-scope query (for example, answering 'contract renewals' by "
-    "listing all suppliers). Refusing is correct; salvaging is not.\n\n"
+    "below, or is too vague to pin to a specific entity and filters, you "
+    "MUST set unanswerable=true and briefly say why in unanswerable_reason. "
+    "In that case do NOT guess a target_entity and do NOT map the request to "
+    "the closest listed entity. It is WRONG to turn an unanswerable question "
+    "into a broad in-scope query (for example, answering 'contract renewals' "
+    "by listing all suppliers). Refusing is correct; salvaging is not.\n\n"
+    "AGGREGATION — use the aggregate block, do NOT refuse:\n"
+    "If the question asks for a RANKING or TOTAL rather than a list — e.g. "
+    "'top 10 suppliers by spend', 'which suppliers did we spend the most "
+    "with last quarter', 'total invoiced by supplier in 2025' — set the "
+    "aggregate block instead of producing a list. Use op='by_supplier' for "
+    "supplier spend rankings, fill date_from/date_to from any time window in "
+    "the prompt (as 'YYYY-MM-DD'), and top_n from any 'top N' wording "
+    "(default 10). Do NOT set unanswerable for these — aggregation by "
+    "supplier IS supported.\n\n"
     "So: capture everything when in scope; refuse cleanly when out of scope. "
     "Only produce a normal Intent (unanswerable=false) when the question maps "
     "cleanly onto the allowed entities and filters.\n"
@@ -207,6 +216,13 @@ def parse(
             detail=f"The model's Intent was malformed: {exc}",
         )
 
+    # Feature 7: an aggregation intent is validated by the planner's
+    # aggregation-op registry, not by the entity/filter KG menu (its
+    # target_entity/filters are unused). Skip validate_intent, which
+    # would reject it for not having a KG-valid target entity.
+    if intent.aggregate is not None:
+        return ParseResult.ok(intent)
+
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
@@ -214,4 +230,5 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
 

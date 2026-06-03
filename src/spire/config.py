@@ -26,6 +26,19 @@ from pydantic import BaseModel
 PERSONAS_FILE = Path(__file__).resolve().parents[2] / "personas.yaml"
 
 
+# ─────────────────────────────────────────────────────────────────────
+# LLM configuration (single source of truth)
+#
+# The model name and temperature used by the Design 3 LLM components
+# (the nl_parser interpreter and the synthesizer). Centralized here so
+# there is exactly one place to change the model. Both components import
+# GEMINI_MODEL / GEMINI_TEMPERATURE from this module.
+# ─────────────────────────────────────────────────────────────────────
+
+GEMINI_MODEL = "gemini-2.5-pro"
+GEMINI_TEMPERATURE = 0.0
+
+
 class FusionCredentials(BaseModel):
     base_url: str
     username: str
@@ -59,3 +72,4 @@ def load_persona(name: str) -> Persona:
         raise KeyError(f"Persona '{name}' not found in {PERSONAS_FILE}")
 
     return Persona(**data[name])
+

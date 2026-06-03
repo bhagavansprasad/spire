@@ -37,13 +37,16 @@ from typing import Any
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
+from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE
+
 
 # ─────────────────────────────────────────────────────────────────────
 # LLM configuration
 # ─────────────────────────────────────────────────────────────────────
 
-_MODEL_NAME = "gemini-2.0-flash"
-_TEMPERATURE = 0.0
+# Model and determinism come from spire.config (single source of truth).
+_MODEL_NAME = GEMINI_MODEL
+_TEMPERATURE = GEMINI_TEMPERATURE
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -188,6 +191,38 @@ class PurchaseOrderResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class SupplierSpendRow(BaseModel):
+    """One supplier in a spend ranking (feature 7 aggregation).
+
+    supplier_number is validated against the ranking the executor
+    produced — the LLM must not invent or reorder suppliers."""
+
+    supplier_name: str = Field(description="The supplier's display name.")
+    supplier_number: str = Field(
+        description="The supplier's SupplierNumber (human-readable id)."
+    )
+    total_spend: float = Field(
+        description="Total invoiced amount for this supplier over the range, "
+        "copied exactly from the ranking data. Never recompute."
+    )
+    invoice_count: int = Field(
+        description="Number of invoices for this supplier, copied from the "
+        "ranking data."
+    )
+
+
+class SupplierSpendRankingResponse(BaseModel):
+    """Aggregation response: suppliers ranked by total spend (feature 7)."""
+
+    summary: str = _SUMMARY_FIELD
+    suppliers: list[SupplierSpendRow] = Field(
+        default_factory=list,
+        description="Suppliers in ranked order (highest spend first), copied "
+        "from the ranking data. Do not reorder, add, or drop suppliers.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 # Backward-compatible alias: the supplier schema was the original
 # SynthesizedResponse. Keeping the name means supplier-path code and
 # tests that import SynthesizedResponse / SupplierSummary still work.
@@ -224,6 +259,18 @@ class UnsupportedEntityError(RuntimeError):
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _is_supplier_spend_ranking(outputs: dict[str, list[dict]]) -> bool:
+    """True if the executor output is an aggregation ranking rather than
+    an entity list. The aggregation tool returns a single object tagged
+    shape='supplier_spend_ranking', which the executor places (wrapped in
+    a one-element list) under the 'aggregation' bucket."""
+    bucket = outputs.get("aggregation")
+    if not bucket:
+        return False
+    first = bucket[0]
+    return isinstance(first, dict) and first.get("shape") == "supplier_spend_ranking"
+
+
 def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     """Walk the executor outputs and collect the IDs the response is
     allowed to mention. Bucket order doesn't matter — every bucket is
@@ -246,6 +293,12 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 person_ids.add(bid)
             if (iid := item.get("InvoiceId")) is not None:
                 invoice_ids.add(iid)
+            # Feature 7: an aggregation ranking carries its suppliers
+            # nested under "rows", each with a lowercase "supplier_number".
+            if isinstance(item.get("rows"), list):
+                for row in item["rows"]:
+                    if (rn := row.get("supplier_number")) is not None:
+                        supplier_numbers.add(rn)
 
     return {
         "supplier_ids": supplier_ids,
@@ -305,6 +358,20 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "order number, status, and supplier name/id. supplier_id must "
         "appear in the data. If a buyer is present for the PO, include it; "
         "the buyer's person_id must appear in the buyers bucket."
+    ),
+    "SupplierSpendRanking": (
+        "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
+        "single 'aggregation' bucket containing one ranking object with a "
+        "'rows' list, already sorted by total spend (highest first). For "
+        "each row, emit one entry under 'suppliers' in the SAME order, "
+        "copying supplier_name, supplier_number, total_spend, and "
+        "invoice_count EXACTLY. Do not reorder, recompute, add, or drop "
+        "suppliers, and do not do any arithmetic — the totals are already "
+        "computed. In the summary, state the date range (from date_from/"
+        "date_to), how many suppliers were ranked (total_suppliers), and "
+        "name the top one or two with their totals. If 'truncated' is true, "
+        "say plainly that the totals are based on a sample of invoices and "
+        "may understate actual spend."
     ),
 }
 
@@ -411,10 +478,24 @@ def _validate_purchase_order(
     _raise_if_bad(parts)
 
 
+def _validate_supplier_spend_ranking(
+    response: SupplierSpendRankingResponse, valid: dict[str, set]
+) -> None:
+    bad_snum: list[str] = []
+    for row in response.suppliers:
+        if row.supplier_number not in valid["supplier_numbers"]:
+            bad_snum.append(row.supplier_number)
+    parts = []
+    if bad_snum:
+        parts.append(f"supplier_numbers={bad_snum}")
+    _raise_if_bad(parts)
+
+
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
     InvoiceResponse: _validate_invoice,
     PurchaseOrderResponse: _validate_purchase_order,
+    SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
 }
 
 
@@ -469,18 +550,28 @@ def synthesize_response(
         Pydantic ValidationError if the LLM output doesn't fit the schema.
         Anything raised by the LLM call propagates.
     """
-    schema = SYNTHESIS_SCHEMAS.get(target_entity)
-    if schema is None:
-        raise UnsupportedEntityError(
-            f"No synthesizer schema for target_entity={target_entity!r}. "
-            f"Supported: {sorted(SYNTHESIS_SCHEMAS)}."
-        )
+    # Feature 7: an aggregation produces a ranking, not an entity list.
+    # It has no target_entity (the Intent carried an aggregate block
+    # instead), so select the schema from the data shape. The executor
+    # places the ranking under "aggregation" as a single object whose
+    # "shape" identifies it.
+    if _is_supplier_spend_ranking(outputs):
+        schema: type[BaseModel] = SupplierSpendRankingResponse
+        prompt_key = "SupplierSpendRanking"
+    else:
+        schema = SYNTHESIS_SCHEMAS.get(target_entity)
+        if schema is None:
+            raise UnsupportedEntityError(
+                f"No synthesizer schema for target_entity={target_entity!r}. "
+                f"Supported: {sorted(SYNTHESIS_SCHEMAS)}."
+            )
+        prompt_key = target_entity
 
     if llm is None:
         llm = ChatGoogleGenerativeAI(model=_MODEL_NAME, temperature=_TEMPERATURE)
 
     structured_llm = llm.with_structured_output(schema)
-    system_prompt = _build_system_prompt(target_entity)
+    system_prompt = _build_system_prompt(prompt_key)
     user_message = _build_synthesis_prompt(outputs, truncation_by_step)
 
     response = structured_llm.invoke(

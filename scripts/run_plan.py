@@ -70,6 +70,7 @@ from spire.synthesizer.synthesizer import (
     InvoiceResponse,
     PurchaseOrderResponse,
     SupplierResponse,
+    SupplierSpendRankingResponse,
     UnsupportedEntityError,
     synthesize_response,
 )
@@ -373,6 +374,19 @@ def _format_synthesized(response) -> str:
             )
         return "\n".join(lines)
  
+    if isinstance(response, SupplierSpendRankingResponse):
+        if not response.suppliers:
+            lines.append("(No suppliers in the ranking.)")
+            return "\n".join(lines)
+        lines.append("Supplier spend ranking:")
+        for i, s in enumerate(response.suppliers, 1):
+            lines.append(
+                f"  {i}. {s.supplier_name} "
+                f"(SupplierNumber={s.supplier_number}) — "
+                f"{s.total_spend:,.2f} across {s.invoice_count} invoice(s)"
+            )
+        return "\n".join(lines)
+
     # Should be unreachable — every schema in SYNTHESIS_SCHEMAS is handled.
     lines.append("(Unrecognized response shape.)")
     return "\n".join(lines)
@@ -400,6 +414,8 @@ def _format_summary(
         n, label = len(response.invoices), "invoice(s)"
     elif isinstance(response, PurchaseOrderResponse):
         n, label = len(response.purchase_orders), "purchase order(s)"
+    elif isinstance(response, SupplierSpendRankingResponse):
+        n, label = len(response.suppliers), "ranked supplier(s)"
     else:
         n, label = 0, "record(s)"
     lines.append(f"  Synthesized answer:   {n} {label}")
