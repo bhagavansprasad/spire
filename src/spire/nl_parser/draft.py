@@ -60,6 +60,36 @@ class DraftFilter(BaseModel):
     )
 
 
+class DraftAggregate(BaseModel):
+    """The aggregation block, when the question asks for a ranking/total
+    rather than a list (feature 7).
+
+    The LLM sets this when it detects aggregation/ranking wording ("top
+    N by spend", "total ... by supplier", "which suppliers spent most").
+    The user never types these fields — the LLM derives them from the
+    natural-language prompt.
+    """
+
+    op: str = Field(
+        description=(
+            "The aggregation shape. Supported: 'by_supplier' (rank "
+            "suppliers by total invoice spend over a date range)."
+        )
+    )
+    date_from: str = Field(
+        default="",
+        description="Inclusive ISO lower bound 'YYYY-MM-DD', or empty.",
+    )
+    date_to: str = Field(
+        default="",
+        description="Exclusive ISO upper bound 'YYYY-MM-DD', or empty.",
+    )
+    top_n: int = Field(
+        default=10,
+        description="How many groups to return (e.g. 10 for 'top 10').",
+    )
+
+
 class DraftIntent(BaseModel):
     """Pydantic mirror of ``Intent`` for structured LLM output.
 
@@ -111,6 +141,16 @@ class DraftIntent(BaseModel):
             "Related entities to fetch alongside, e.g. ['Buyer']. Empty if none."
         ),
     )
+    aggregate: DraftAggregate | None = Field(
+        default=None,
+        description=(
+            "Set this (instead of producing a list) when the question asks "
+            "for a ranking or total — e.g. 'top 10 suppliers by spend', "
+            "'which suppliers did we spend the most with last quarter'. "
+            "Leave it null for ordinary list questions. When set, "
+            "target_entity/filters/include are ignored."
+        ),
+    )
 
     def to_intent(self) -> Intent:
         """Convert to the planner's ``Intent`` dataclass.
@@ -145,4 +185,15 @@ class DraftIntent(BaseModel):
             target_entity=self.target_entity,
             filters=decoded_filters,
             include=list(self.include),
+            aggregate=(
+                {
+                    "op": self.aggregate.op,
+                    "date_from": self.aggregate.date_from or None,
+                    "date_to": self.aggregate.date_to or None,
+                    "top_n": self.aggregate.top_n,
+                }
+                if self.aggregate is not None
+                else None
+            ),
         )
+

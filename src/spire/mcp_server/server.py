@@ -17,6 +17,9 @@ from fastmcp import FastMCP
 
 from spire.config import load_persona
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.aggregate_invoices import (
+    aggregate_invoices_by_supplier as _aggregate_invoices_by_supplier,
+)
 from spire.mcp_server.tools.buyer import get_buyer as _get_buyer
 from spire.mcp_server.tools.invoices import search_invoices as _search_invoices
 from spire.mcp_server.tools.purchase_orders import (
@@ -160,6 +163,41 @@ async def search_purchase_orders(
 
 
 @mcp.tool()
+async def aggregate_invoices_by_supplier(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Rank suppliers by total invoice spend over a date range.
+
+    Use this for ranking/total questions like "top 10 suppliers by
+    spend" or "which suppliers did we spend the most with in Q1". The
+    tool groups invoices by supplier, sums InvoiceAmount, and returns the
+    top_n suppliers by total spend. Grouping (supplier) and measure (sum
+    of spend) are fixed — this is a bounded aggregation, not a general
+    engine.
+
+    Args:
+        date_from: ISO "YYYY-MM-DD". Inclusive lower bound on InvoiceDate.
+        date_to: ISO "YYYY-MM-DD". Exclusive upper bound on InvoiceDate.
+            For Q1 2026: date_from="2026-01-01", date_to="2026-04-01".
+        top_n: Number of suppliers to return (default 10).
+
+    Returns:
+        A "supplier_spend_ranking" dict: ranked rows of
+        {supplier, supplier_number, total_spend, invoice_count} plus
+        total_suppliers, returned, truncated, and the echoed date range.
+    """
+    async with FusionClient(_persona) as client:
+        return await _aggregate_invoices_by_supplier(
+            client,
+            date_from=date_from,
+            date_to=date_to,
+            top_n=top_n,
+        )
+
+
+@mcp.tool()
 async def get_buyer(buyer_id: int) -> dict | None:
     """Look up a buyer (purchasing agent) by ID.
 
@@ -180,3 +218,4 @@ async def get_buyer(buyer_id: int) -> dict | None:
 
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+

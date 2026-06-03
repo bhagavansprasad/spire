@@ -78,6 +78,13 @@ _FILTER_VALUE_VOCAB_KIND: dict[str, str] = {
     "country": "country",
 }
 
+# Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
+# per tool, by design (feature 7 boundedness rule): a new aggregation
+# shape is a new op + new tool, never a parameter on an existing one.
+_AGGREGATION_TOOLS: dict[str, str] = {
+    "by_supplier": "aggregate_invoices_by_supplier",
+}
+
 # Friendly output-name prefixes per entity. Pure naming convention;
 # the executor doesn't interpret these.
 _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
@@ -176,6 +183,15 @@ class Intent:
     target_entity: str
     filters: list[dict[str, Any]] = field(default_factory=list)
     include: list[str] = field(default_factory=list)
+    # Feature 7: when set, the question is an aggregation, not a list.
+    # The LLM parser fills this when it detects aggregation/ranking
+    # wording; it is None for ordinary list queries (the default), so
+    # all existing behavior is unchanged. Shape:
+    #   {"op": "by_supplier", "date_from": "...", "date_to": "...",
+    #    "top_n": 10}
+    # The planner maps a populated aggregate to a single tool step; the
+    # op names the bounded aggregation tool (one op per tool, by design).
+    aggregate: dict[str, Any] | None = None
 
 
 @dataclass
@@ -507,6 +523,15 @@ def generate_plan(
     Raises NotImplementedError if any filter in ``intent.filters`` has
     a ``type`` not supported in v1 (silent-drop defect fix — F1).
     """
+    # ── Feature 7: aggregation short-circuit ──────────────────────
+    # When the intent carries an aggregate block, the question is a
+    # ranking/total, not a list. Emit a single non-iterating step that
+    # calls the bounded aggregation tool. This bypasses the entity-fetch
+    # / edge-traversal / include flow entirely — aggregation owns its
+    # own fetch+filter+math inside the tool.
+    if intent.aggregate is not None:
+        return _build_aggregation_plan(intent.aggregate)
+
     # Validate up front so unknown filter types raise loudly instead
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
@@ -633,6 +658,48 @@ def generate_plan(
 # ─────────────────────────────────────────────────────────────────────
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────
+
+
+def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
+    """
+    Build a single-step plan for an aggregation intent (feature 7).
+
+    The aggregate block names an op (which maps to a bounded aggregation
+    tool) plus the tool's parameters (date_from, date_to, top_n). The
+    result is one non-iterating Step; the tool does the fetch + math and
+    returns a structured ranking, which the executor passes through to
+    the synthesizer.
+
+    Raises NotImplementedError if the op has no registered tool — the
+    aggregation analog of _validate_intent_filters' unknown-type guard,
+    so an unsupported aggregation fails loudly rather than silently.
+    """
+    op = aggregate.get("op")
+    tool = _AGGREGATION_TOOLS.get(op)
+    if tool is None:
+        raise NotImplementedError(
+            f"Aggregation op {op!r} is not supported in v1. "
+            f"Supported ops: {sorted(_AGGREGATION_TOOLS)}."
+        )
+
+    # Pass through only the recognized tool params, dropping None so the
+    # tool's own defaults (e.g. top_n=10) apply when unspecified.
+    tool_args: dict[str, Any] = {}
+    for key in ("date_from", "date_to", "top_n"):
+        if aggregate.get(key) is not None:
+            tool_args[key] = aggregate[key]
+
+    return [
+        Step(
+            step_id=1,
+            tool_name=tool,
+            tool_args=tool_args,
+            iterate_over=None,
+            client_filters=[],
+            output_name="aggregation",
+            output_dedupe_by=None,
+        )
+    ]
 
 
 def _validate_intent_filters(filters: list[dict[str, Any]]) -> None:
@@ -986,3 +1053,4 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
