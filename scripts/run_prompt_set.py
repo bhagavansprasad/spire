@@ -31,8 +31,7 @@ import asyncio
 import sys
 import time
 
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from fastmcp import Client
 
 from spire.executor.executor import execute_plan
 from spire.planner.planner import generate_plan
@@ -68,9 +67,9 @@ DEFAULT_PROMPTS: list[str] = [
 ]
 
 
-async def _run_one(prompt: str, menu, session) -> str:
+async def _run_one(prompt: str, menu, client) -> str:
     """Run one prompt through parse -> plan -> execute -> synthesize on the
-    shared MCP session. Returns a short status label for the roll-up."""
+    shared fastmcp client. Returns a short status label for the roll-up."""
     banner = "=" * 78
     print(f"\n{banner}\nPROMPT: {prompt}\n{banner}", flush=True)
 
@@ -95,10 +94,20 @@ async def _run_one(prompt: str, menu, session) -> str:
     print(_format_plan(plan))
     print()
 
-    # Execute on the shared session.
+    # Execute on the shared client.
     print("Executing plan against MCP server ...")
+
+    async def _on_progress(progress, total, message=None):
+        shown = message or ""
+        if total:
+            print(f"  … progress {progress}/{total} {shown}", flush=True)
+        else:
+            print(f"  … progress {shown}", flush=True)
+
     try:
-        outputs, truncation_by_step = await execute_plan(plan, session)
+        outputs, truncation_by_step = await execute_plan(
+            plan, client, progress_handler=_on_progress
+        )
     except Exception as exc:
         print(f"ERROR executing plan: {exc}", file=sys.stderr)
         return f"execute error: {exc}"
@@ -126,16 +135,14 @@ async def _run_all(prompts: list[str]) -> int:
     menu = load_kg_menu()
     results: list[tuple[str, str, float]] = []
 
-    # One session for the whole set.
-    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            for prompt in prompts:
-                start = time.monotonic()
-                label = await _run_one(prompt, menu, session)
-                elapsed = time.monotonic() - start
-                print(f"\n[{label} — {elapsed:.1f}s]", flush=True)
-                results.append((prompt, label, elapsed))
+    # One connection for the whole set.
+    async with Client(MCP_SERVER_URL) as client:
+        for prompt in prompts:
+            start = time.monotonic()
+            label = await _run_one(prompt, menu, client)
+            elapsed = time.monotonic() - start
+            print(f"\n[{label} — {elapsed:.1f}s]", flush=True)
+            results.append((prompt, label, elapsed))
 
     banner = "=" * 78
     print(f"\n{banner}\nRUN SUMMARY\n{banner}")

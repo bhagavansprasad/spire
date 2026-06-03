@@ -19,7 +19,7 @@ Design decisions locked for v1:
 - Sequential execution (no asyncio.gather parallelism)
 - Fail-the-whole-plan on any tool error (no partial results)
 - Raw MCP (session.call_tool), no LangChain
-- Caller manages the ClientSession; we accept it as a parameter
+- Caller manages the fastmcp Client; we accept it as a parameter
 - Source items with None for the iteration field are SKIPPED entirely
   in filter_source_when_empty mode (they don't appear in the output).
 """
@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from mcp import ClientSession
+from fastmcp import Client
 
 from spire.planner.planner import Plan, Step
 
@@ -272,7 +272,7 @@ def _collect_iteration_values(
 
 
 async def _execute_non_iterating_step(
-    step: Step, session: ClientSession
+    step: Step, session: Client, progress_handler=None
 ) -> tuple[list[dict], dict | None]:
     """
     Execute a single step that does NOT iterate.
@@ -290,7 +290,9 @@ async def _execute_non_iterating_step(
                 f"key {k!r}. Planner bug."
             )
 
-    call_result = await session.call_tool(step.tool_name, step.tool_args)
+    call_result = await session.call_tool(
+        step.tool_name, step.tool_args, progress_handler=progress_handler
+    )
     items = _parse_tool_result(call_result)
     truncation = _extract_truncation_meta(call_result)
     items = _apply_client_filters(items, step.client_filters)
@@ -298,7 +300,7 @@ async def _execute_non_iterating_step(
 
 async def _execute_iterating_step(
     step: Step,
-    session: ClientSession,
+    session: Client,
     outputs: dict[str, list[dict]],
 ) -> list[dict]:
     """
@@ -346,7 +348,7 @@ async def _execute_iterating_step(
 
 async def _execute_filter_source_step(
     step: Step,
-    session: ClientSession,
+    session: Client,
     outputs: dict[str, list[dict]],
 ) -> list[dict]:
     """
@@ -415,7 +417,7 @@ async def _execute_filter_source_step(
 
 
 async def execute_plan(
-    plan: Plan, session: ClientSession
+    plan: Plan, session: Client, progress_handler=None
 ) -> tuple[dict[str, list[dict]], dict[str, dict]]:
     """
     Run a Plan against the MCP server. Returns the outputs of every
@@ -423,9 +425,14 @@ async def execute_plan(
 
     Args:
         plan: The list of Steps produced by spire.planner.generate_plan.
-        session: An already-initialized MCP ClientSession. Caller is
+        session: An already-connected fastmcp Client. Caller is
             responsible for opening and closing it (same convention as
             runner.py).
+        progress_handler: Optional async callable
+            (progress, total, message) passed through to call_tool for
+            non-iterating steps. When provided, a long-running tool (e.g.
+            aggregate_invoices_by_supplier paginating the pod) reports
+            progress back to the caller mid-call. None disables it.
 
     Returns:
         dict mapping each step's output_name to its result list.
@@ -458,7 +465,9 @@ async def execute_plan(
                     "but iterate_over is None. Planner bug: these fields "
                     "are coupled."
                 )
-            items, truncation = await _execute_non_iterating_step(step, session)
+            items, truncation = await _execute_non_iterating_step(
+                step, session, progress_handler
+            )
             if truncation is not None and truncation.get("truncated"):
                 truncation_by_step[step.output_name] = truncation
         elif step.filter_source_when_empty:

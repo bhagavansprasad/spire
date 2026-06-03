@@ -171,6 +171,7 @@ async def aggregate_invoices_by_supplier(
     date_from: str | None = None,
     date_to: str | None = None,
     top_n: int = 10,
+    report_progress=None,
 ) -> dict:
     """Rank suppliers by total invoice spend over a date range.
 
@@ -226,15 +227,21 @@ async def aggregate_invoices_by_supplier(
         page_items = response.get("items", [])
         items.extend(page_items)
 
-        # Minimal progress to stderr (server terminal): page number and
-        # running total, so a long paginated fetch is visibly advancing
-        # rather than looking hung.
+        # Progress: report to the caller via the callback when one is
+        # provided (client sees it mid-call), and always echo to stderr
+        # as a server-side liveness fallback.
+        msg = (
+            f"page {page + 1}: +{len(page_items)} (total {len(items)})"
+        )
         print(
-            f"[aggregate_invoices_by_supplier] page {page + 1}: "
-            f"+{len(page_items)} (total {len(items)})",
+            f"[aggregate_invoices_by_supplier] {msg}",
             file=sys.stderr,
             flush=True,
         )
+        if report_progress is not None:
+            # progress = pages done; total unknown until the pod stops,
+            # so report the running page count without a fixed total.
+            await report_progress(page + 1, None, msg)
 
         # Stop when the pod reports no further pages. Fall back to a short
         # page as the end signal if hasMore is absent.

@@ -59,8 +59,7 @@ import json
 import sys
 from dataclasses import asdict
 
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from fastmcp import Client
 
 from spire.agent.tracing import make_trace_logger
 from spire.executor.executor import execute_plan
@@ -467,11 +466,21 @@ async def _run(intent: Intent, intent_name: str) -> int:
     print("Executing plan against MCP server ...")
     print()
     try:
-        async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                logger.info("mcp_session_initialized", url=MCP_SERVER_URL)
-                outputs, truncation_by_step = await execute_plan(plan, session)
+        async with Client(MCP_SERVER_URL) as client:
+            logger.info("mcp_session_initialized", url=MCP_SERVER_URL)
+
+            async def _on_progress(progress, total, message=None):
+                # Print tool progress to the caller's terminal as it
+                # arrives mid-call (e.g. aggregation paginating the pod).
+                shown = message or ""
+                if total:
+                    print(f"  … progress {progress}/{total} {shown}", flush=True)
+                else:
+                    print(f"  … progress {shown}", flush=True)
+
+            outputs, truncation_by_step = await execute_plan(
+                plan, client, progress_handler=_on_progress
+            )
     except Exception as exc:
         logger.error("plan_execution_failed", error=str(exc))
         print(f"ERROR executing plan: {exc}", file=sys.stderr)

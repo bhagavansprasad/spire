@@ -13,7 +13,7 @@ Tools currently exposed:
 - get_buyer
 """
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from spire.config import load_persona
 from spire.fusion.client import FusionClient
@@ -164,6 +164,7 @@ async def search_purchase_orders(
 
 @mcp.tool()
 async def aggregate_invoices_by_supplier(
+    ctx: Context,
     date_from: str | None = None,
     date_to: str | None = None,
     top_n: int = 10,
@@ -194,6 +195,7 @@ async def aggregate_invoices_by_supplier(
             date_from=date_from,
             date_to=date_to,
             top_n=top_n,
+            report_progress=ctx.report_progress,
         )
 
 
