@@ -33,13 +33,7 @@ import time
 
 from fastmcp import Client
 
-from spire.executor.executor import execute_plan
-from spire.planner.planner import generate_plan
-from spire.synthesizer.synthesizer import (
-    UnsupportedEntityError,
-    synthesize_response,
-)
-from spire.nl_parser.parser import parse as parse_prompt
+from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
 
@@ -68,34 +62,10 @@ DEFAULT_PROMPTS: list[str] = [
 
 
 async def _run_one(prompt: str, menu, client) -> str:
-    """Run one prompt through parse -> plan -> execute -> synthesize on the
-    shared fastmcp client. Returns a short status label for the roll-up."""
+    """Run one prompt through the LangGraph pipeline on the shared fastmcp
+    client. Returns a short status label for the roll-up."""
     banner = "=" * 78
     print(f"\n{banner}\nPROMPT: {prompt}\n{banner}", flush=True)
-
-    # Parse (synchronous). A refusal short-circuits the rest.
-    result = parse_prompt(prompt, menu=menu)
-    if result.is_refusal:
-        r = result.refusal
-        print(capability_message(r, menu))
-        print(f"  (refusal: {r.flavor.value} — {r.detail})")
-        return "refused (expected for out-of-scope)"
-
-    intent = result.intent
-    print(_format_intent(intent))
-    print()
-
-    # Plan.
-    try:
-        plan = generate_plan(intent)
-    except Exception as exc:
-        print(f"ERROR generating plan: {exc}", file=sys.stderr)
-        return f"plan error: {exc}"
-    print(_format_plan(plan))
-    print()
-
-    # Execute on the shared client.
-    print("Executing plan against MCP server ...")
 
     async def _on_progress(progress, total, message=None):
         shown = message or ""
@@ -104,30 +74,34 @@ async def _run_one(prompt: str, menu, client) -> str:
         else:
             print(f"  … progress {shown}", flush=True)
 
-    try:
-        outputs, truncation_by_step = await execute_plan(
-            plan, client, progress_handler=_on_progress
-        )
-    except Exception as exc:
-        print(f"ERROR executing plan: {exc}", file=sys.stderr)
-        return f"execute error: {exc}"
-    print(_format_outputs(outputs))
-    print()
+    state = await GRAPH.ainvoke(
+        {
+            "prompt": prompt,
+            "menu": menu,
+            "session": client,
+            "progress_handler": _on_progress,
+        }
+    )
 
-    # Synthesize.
-    print("Synthesizing answer via LLM ...")
-    try:
-        response = synthesize_response(
-            outputs,
-            target_entity=intent.target_entity,
-            truncation_by_step=truncation_by_step,
-        )
-    except UnsupportedEntityError as exc:
-        print(f"ERROR: no synthesizer schema — {exc}", file=sys.stderr)
-        return f"synth error: {exc}"
-    print(_format_synthesized(response))
+    if state.get("refusal"):
+        r = state["refusal"]
+        print(capability_message(r, menu))
+        print(f"  (refusal: {r.flavor.value} — {r.detail})")
+        return "refused (expected for out-of-scope)"
+
+    if state.get("error"):
+        print(f"ERROR: {state['error']}", file=sys.stderr)
+        return f"error: {state['error']}"
+
+    print(_format_intent(state["intent"]))
     print()
-    print(_format_summary(plan, outputs, response))
+    print(_format_plan(state["plan"]))
+    print()
+    print(_format_outputs(state["outputs"]))
+    print()
+    print(_format_synthesized(state["response"]))
+    print()
+    print(_format_summary(state["plan"], state["outputs"], state["response"]))
     return "ok"
 
 

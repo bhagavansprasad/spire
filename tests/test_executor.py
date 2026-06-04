@@ -402,9 +402,8 @@ async def test_execute_plan_single_step_no_filters_no_iteration() -> None:
 
     assert outputs == {"us_suppliers": payload}
     session.call_tool.assert_awaited_once_with(
-        "search_suppliers_by_country", {"country": "US"}
+        "search_suppliers_by_country", {"country": "US"}, progress_handler=None
     )
-
 
 @pytest.mark.asyncio
 async def test_execute_plan_iteration_sentinel_in_non_iterating_step_raises() -> None:

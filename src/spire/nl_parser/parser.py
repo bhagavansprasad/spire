@@ -162,10 +162,11 @@ def parse(
 
     if llm is None:
         # Imported lazily so unit tests (which inject a mock) don't require
-        # langchain-google-genai or a GEMINI_API_KEY to import this module.
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        # an LLM dep or API key to import this module. build_llm picks the
+        # configured provider (gemini today).
+        from spire.config import build_llm
 
-        llm = ChatGoogleGenerativeAI(model=_MODEL_NAME, temperature=_TEMPERATURE)
+        llm = build_llm(_TEMPERATURE)
 
     structured_llm = llm.with_structured_output(DraftIntent)
     system_prompt = _build_system_prompt(menu)

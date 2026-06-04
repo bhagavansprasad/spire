@@ -1,35 +1,43 @@
-"""One-shot agent graph visualization.
+#!/usr/bin/env python3
+"""
+Render the LangGraph pipeline as a PNG.
 
-Requires the MCP server to be running. Produces docs/agent_graph.png.
+Uses PYPPETEER to render locally (no remote mermaid service). Output is
+written next to this script as draw_graph.png by default, or to --out.
 
 Usage:
     python scripts/draw_graph.py
+    python scripts/draw_graph.py --out docs/pipeline_graph.png
 """
 
-import asyncio
-from pathlib import Path
+from __future__ import annotations
 
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+import argparse
+import os
 
-from spire.agent.lg_utility import save_graph_as_png
-from spire.agent.runner import MCP_SERVER_URL, _build_graph
-from spire.agent.tracing import make_trace_logger
+from spire.graph.pipeline import GRAPH
 
 
-OUTPUT_PATH = Path("docs") / "agent_graph.png"
+def save_graph_as_png(graph, filename: str) -> None:
+    # Default renderer uses the mermaid.ink web service (needs network)
+    # but no local browser/pyppeteer.
+    png_bytes = graph.get_graph().draw_mermaid_png()
+    with open(filename, "wb") as f:
+        f.write(png_bytes)
 
 
-async def main():
-    logger, _ = make_trace_logger()
-    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            graph = await _build_graph(session, logger)
-            OUTPUT_PATH.parent.mkdir(exist_ok=True)
-            save_graph_as_png(graph, OUTPUT_PATH)
-            print(f"Graph saved to {OUTPUT_PATH}")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Render the pipeline graph to PNG.")
+    parser.add_argument(
+        "--out",
+        default=os.path.join(os.path.dirname(__file__), "draw_graph.png"),
+        help="Output PNG path (default: scripts/draw_graph.png).",
+    )
+    args = parser.parse_args()
+    save_graph_as_png(GRAPH, args.out)
+    print(f"Wrote {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())
