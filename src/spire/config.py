@@ -44,9 +44,14 @@ GEMINI_TEMPERATURE = 0.0
 #   SPIRE_LLM_PROVIDER = gemini | anthropic | openai
 #   SPIRE_LLM_MODEL    = optional model-name override
 import os as _os
+import sys as _sys
 
 LLM_PROVIDER = _os.environ.get("SPIRE_LLM_PROVIDER", "gemini")
 LLM_MODEL = _os.environ.get("SPIRE_LLM_MODEL", "")
+
+# Default model per provider (overridable via SPIRE_LLM_MODEL).
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
+OPENAI_MODEL = "gpt-5"
 
 
 def build_llm(temperature: float = GEMINI_TEMPERATURE):
@@ -56,35 +61,34 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
     ``with_structured_output(...).invoke(...)`` surface, so callers
     (parser, synthesizer, graph nodes) are provider-agnostic.
 
-    Only "gemini" is implemented today; "anthropic" and "openai" are
-    stubbed to raise a clear NotImplementedError until their deps and
-    branches are added (incremental rollout).
+    Gemini, Anthropic (Claude), and OpenAI are all implemented.
     """
     provider = LLM_PROVIDER.lower()
 
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(
-            model=LLM_MODEL or GEMINI_MODEL,
-            temperature=temperature,
-        )
+        model = LLM_MODEL or GEMINI_MODEL
+        print(f"[llm] provider=gemini model={model}", file=_sys.stderr)
+        return ChatGoogleGenerativeAI(model=model, temperature=temperature)
 
     if provider == "anthropic":
-        raise NotImplementedError(
-            "Anthropic provider not wired yet. Add langchain-anthropic and "
-            "a ChatAnthropic branch in build_llm()."
-        )
+        from langchain_anthropic import ChatAnthropic
+
+        model = LLM_MODEL or ANTHROPIC_MODEL
+        print(f"[llm] provider=anthropic model={model}", file=_sys.stderr)
+        return ChatAnthropic(model=model, temperature=temperature)
 
     if provider == "openai":
-        raise NotImplementedError(
-            "OpenAI provider not wired yet. Add langchain-openai and a "
-            "ChatOpenAI branch in build_llm()."
-        )
+        from langchain_openai import ChatOpenAI
+
+        model = LLM_MODEL or OPENAI_MODEL
+        print(f"[llm] provider=openai model={model}", file=_sys.stderr)
+        return ChatOpenAI(model=model, temperature=temperature)
 
     raise ValueError(
         f"Unknown SPIRE_LLM_PROVIDER={LLM_PROVIDER!r}. "
-        "Supported: gemini (anthropic, openai pending)."
+        "Supported: gemini, anthropic, openai."
     )
 
 
