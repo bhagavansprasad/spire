@@ -14,15 +14,14 @@ This is a single-query smoke test. If it passes, we know:
 
 import oracledb
 
+from spire.planner.planner import _oracle_credentials
+
 
 def main() -> None:
-    # Connection string matches what rebuild_kg.sh uses,
-    # split into oracledb's expected form.
-    connection = oracledb.connect(
-        user="spire",
-        password="jnjnuh",
-        dsn="localhost:1521/FREEPDB1",
-    )
+    # Credentials come from the single resolver (env -> persona -> fallback)
+    # so this smoke test uses the same source as the rest of the app.
+    user, password, dsn = _oracle_credentials()
+    connection = oracledb.connect(user=user, password=password, dsn=dsn)
 
     try:
         with connection.cursor() as cursor:
