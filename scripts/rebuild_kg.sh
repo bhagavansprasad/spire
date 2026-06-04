@@ -7,8 +7,45 @@
 
 set -euo pipefail
 
-CONTAINER="oracle26ai_db_bhagavan"
-CONN="${SPIRE_DB_CONN:-spire/jnjnuh@FREEPDB1}"
+if [ -z "${1:-}" ]; then
+  echo "Usage: $0 <container-name>" >&2
+  echo "  e.g. $0 oracle26ai_db_spire" >&2
+  exit 1
+fi
+CONTAINER="$1"
+
+# Connection string for sqlplus inside the container: user/password@service.
+# Source: SPIRE_DB_CONN env override, else derived from personas.yaml's
+# oracle block (the single source of DB credentials). No static fallback —
+# fail loudly if neither is available.
+# The DSN in personas.yaml is host:port/service; sqlplus inside the
+# container only needs the service name, so we take the part after '/'.
+_derive_conn() {
+  python3 - <<'PYEOF'
+import sys
+try:
+    import yaml
+    from pathlib import Path
+    path = Path.cwd() / "personas.yaml"
+    if not path.exists():
+        sys.exit(1)
+    data = yaml.safe_load(open(path))
+    o = data.get("default_dev", {}).get("oracle")
+    if not o:
+        sys.exit(1)
+    service = o["dsn"].split("/")[-1]
+    print(f'{o["username"]}/{o["password"]}@{service}')
+except Exception:
+    sys.exit(1)
+PYEOF
+}
+
+CONN="${SPIRE_DB_CONN:-$(_derive_conn)}"
+if [ -z "$CONN" ]; then
+  echo "ERROR: no DB connection. Set SPIRE_DB_CONN, or provide an oracle" >&2
+  echo "block in personas.yaml (run from the repo root)." >&2
+  exit 1
+fi
 
 echo "============================================================"
 echo "Rebuilding KG schema in $CONTAINER"

@@ -108,12 +108,53 @@ _FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
 # KG connection
 # ─────────────────────────────────────────────────────────────────────
 
-# Connection details mirror scripts/rebuild_kg.sh. The DSN points at the
-# port-mapped Oracle container on the host. Override via environment for
-# CI or alternate setups.
-_DEFAULT_USER = "spire"
-_DEFAULT_PASSWORD = "jnjnuh"
+# Oracle KG credentials resolve in this order, per field:
+#   1. Environment variable (SPIRE_DB_USER / _PASSWORD / _DSN) — for CI
+#      and ad-hoc overrides.
+#   2. The persona's `oracle` block in personas.yaml — the normal source
+#      and the single place to configure DB credentials.
+# There is no hardcoded credential fallback: if neither source supplies a
+# value, _oracle_credentials raises. (The DSN, being a non-secret local
+# address, keeps a default; user and password must be configured.)
+
 _DEFAULT_DSN = "localhost:1521/FREEPDB1"
+
+
+def _oracle_credentials() -> tuple[str, str, str]:
+    """Resolve (user, password, dsn) for the KG connection.
+
+    Env vars win, then the persona's oracle block. No credential is
+    hardcoded: if neither source provides a username/password, raise a
+    clear error rather than silently using a baked-in default. The DSN
+    falls back to the local address (not a secret) if unspecified."""
+    persona_oracle = None
+    try:
+        from spire.config import load_persona
+
+        persona_name = os.environ.get("SPIRE_PERSONA", "default_dev")
+        persona_oracle = load_persona(persona_name).oracle
+    except Exception:
+        # No personas.yaml, unknown persona, or no oracle block — env
+        # vars may still supply the credentials.
+        persona_oracle = None
+
+    user = os.environ.get("SPIRE_DB_USER") or (
+        persona_oracle.username if persona_oracle else None
+    )
+    password = os.environ.get("SPIRE_DB_PASSWORD") or (
+        persona_oracle.password if persona_oracle else None
+    )
+    dsn = os.environ.get("SPIRE_DB_DSN") or (
+        persona_oracle.dsn if persona_oracle else None
+    ) or _DEFAULT_DSN
+
+    if not user or not password:
+        raise RuntimeError(
+            "No Oracle DB credentials. Set the oracle block in "
+            "personas.yaml (username + password), or export "
+            "SPIRE_DB_USER / SPIRE_DB_PASSWORD."
+        )
+    return user, password, dsn
 
 
 @contextmanager
@@ -124,11 +165,8 @@ def _kg_cursor() -> Iterator[oracledb.Cursor]:
     Every KG-lookup function opens a fresh connection; pooling can be
     added later if profiling shows it matters.
     """
-    connection = oracledb.connect(
-        user=os.environ.get("SPIRE_DB_USER", _DEFAULT_USER),
-        password=os.environ.get("SPIRE_DB_PASSWORD", _DEFAULT_PASSWORD),
-        dsn=os.environ.get("SPIRE_DB_DSN", _DEFAULT_DSN),
-    )
+    user, password, dsn = _oracle_credentials()
+    connection = oracledb.connect(user=user, password=password, dsn=dsn)
     try:
         with connection.cursor() as cursor:
             yield cursor
