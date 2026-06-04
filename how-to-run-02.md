@@ -5,7 +5,8 @@ Two paths are runnable today:
 - **Design 3 (recommended)** — KG-driven planner + executor + LLM
   synthesizer. Scores 7/7 on the anchor question.
 - **Track A (legacy baseline)** — LangGraph agent + LLM-as-planner.
-  Scores 1/7 on the same question. Kept runnable for comparison.
+  Scores 1/7 on the same question. Kept runnable for comparison; cleared
+  for removal.
 
 ---
 
@@ -21,34 +22,37 @@ Two paths are runnable today:
    pip install -e .
    ```
 
-2. **Oracle 26ai container** (for the Knowledge Graph). Default
-   container name: `oracle26ai_db_bhagavan`. Schema: `SPIRE`. Service:
-   `FREEPDB1`. Override with `SPIRE_DB_USER` / `SPIRE_DB_PASSWORD` /
-   `SPIRE_DB_DSN` env vars if your setup differs.
+2. **Oracle 26ai** (for the Knowledge Graph), reachable either as a
+   local container or over the network. Credentials come from
+   `personas.yaml` (see below); env vars
+   `SPIRE_DB_USER` / `SPIRE_DB_PASSWORD` / `SPIRE_DB_DSN` override it for
+   CI or ad-hoc runs.
 
 3. **Fusion Cloud pod** with READ access to suppliers, invoices,
    purchaseOrders, and HCM publicWorkers.
 
-4. **Gemini API key** for the synthesizer:
+4. **Gemini API key** for the parser and synthesizer:
 
    ```bash
    export GEMINI_API_KEY="your-key-here"
    ```
 
+   The model is centralized in `src/spire/config.py`
+   (`GEMINI_MODEL`, currently `gemini-2.5-pro`).
+
 ---
 
 ## One-time configuration
 
-### Personas (Fusion credentials)
+### Personas and credentials
 
-Spire reads pod credentials from `personas.yaml`, which is **gitignored**.
-Copy the example file and fill in your real values:
+Spire reads both Fusion and Oracle credentials from `personas.yaml`,
+which is **gitignored**. It is the single place DB credentials live.
+Copy the example and fill in real values:
 
 ```bash
 cp personas.example.yaml personas.yaml
 ```
-
-Then edit `personas.yaml`:
 
 ```yaml
 default_dev:
@@ -58,26 +62,54 @@ default_dev:
     password: "<your-fusion-password>"
     auth_type: "basic"
   oracle:
-    dsn: "localhost:1521/FREEPDB1"
+    dsn: "localhost:1521/FREEPDB1"   # or host:port/service for a remote DB
     username: "spire"
     password: "<your-oracle-password>"
 ```
 
-**Security note:** `personas.yaml` is in `.gitignore` and should NEVER
-be committed. Do not paste real credentials into commit messages, log
-files, or chat tools either.
+There is no hardcoded DB password anywhere in the code: if neither
+`personas.yaml` nor the `SPIRE_DB_*` env vars supply a username and
+password, the KG connection fails with a clear error.
+
+**Security note:** `personas.yaml` is in `.gitignore` and must NEVER be
+committed. Do not paste real credentials into commit messages, logs, or
+chat tools.
 
 ### Knowledge Graph
 
-Populate the SPIRE schema in Oracle:
+Populate the SPIRE schema. Two options:
+
+**Python (recommended) — works local or remote, no docker/sqlplus:**
 
 ```bash
-./scripts/rebuild_kg.sh
+python scripts/rebuild_kg.py
 ```
 
-This is idempotent — safe to re-run. It drops + recreates all 8 KG
-tables and re-seeds them. Expected verification output at the end:
-8 tables, 3 patterns, 3 pattern bindings, ~83 rows total.
+Connects over the network using the credentials above, runs all schema
+statements, and commits. Use `--quiet` to suppress per-statement echo.
+
+**Shell (local container only):** runs `sqlplus` inside a named
+container; pass the container name as the first argument:
+
+```bash
+./scripts/rebuild_kg.sh <container-name>     # e.g. oracle26ai_db_spire
+```
+
+Both are idempotent — they drop and recreate the 8 KG tables and
+re-seed them. Verify with:
+
+```bash
+python scripts/print_kg.py
+```
+
+Expected: kg_entity 5, kg_entity_field 27, kg_edge 4, kg_pattern 3,
+kg_vocabulary 42, kg_pattern_binding 3, kg_entity_tool 2, kg_edge_tool 3.
+
+You can also smoke-test the DB connection alone:
+
+```bash
+python scripts/test_kg_connection.py
+```
 
 ---
 
@@ -91,70 +123,60 @@ Two terminals.
 python -m spire.mcp_server.server
 ```
 
-Serves on `http://127.0.0.1:3333/mcp/`. The server reads
-`personas.yaml` for Fusion credentials.
+Serves on `http://127.0.0.1:3333/mcp/`. Reads `personas.yaml` for Fusion
+credentials.
 
-**Terminal 2 — the pipeline**:
+**Terminal 2 — the pipeline** (natural-language prompt):
 
 ```bash
-# Default: full original Track A prompt with negation clause
-python scripts/run_plan.py
-
-# Or explicitly:
-python scripts/run_plan.py --intent original
-
-# Or the simpler v1 anchor (no negation clause):
-python scripts/run_plan.py --intent anchor
+python scripts/run_plan.py --prompt "Show me suppliers in US"
+python scripts/run_plan.py --prompt "Top 10 suppliers by spend in 2022"
 ```
 
-Expected behavior:
-- Prints the parsed Intent
-- Generates and prints the 4-step (or 3-step) Plan
-- Executes against the live MCP server (~2 minutes for the
-  4-step plan; dominated by ~50 sequential Fusion calls)
-- Calls Gemini for the synthesizer (~2-5 seconds, ~13s typical)
-- Prints the structured response (prose + per-supplier list)
-- Writes a trace JSONL to `traces/<timestamp>.jsonl`
+What it does: parses the prompt to an Intent, generates and prints the
+Plan, executes against the live MCP server, calls Gemini for the
+synthesizer, prints the structured answer, and writes a trace JSONL to
+`traces/<timestamp>.jsonl`.
 
 Exit codes:
 - `0` — success
 - `1` — plan generation failed
 - `2` — plan execution failed
 - `3` — synthesis failed (including hallucination detection)
+- `4` — graceful refusal (prompt out of scope)
+
+### Aggregation prompts
+
+Ranking/total prompts route to a bounded aggregation tool
+(`aggregate_invoices_by_supplier`), e.g. "top 10 suppliers by spend in
+2022" or "which suppliers did we spend the most with last year". The
+tool paginates the full date range, so wide ranges take longer
+(sequential Fusion calls); page progress is reported back to the caller
+as it runs.
+
+### Running a batch of prompts
+
+```bash
+python scripts/run_prompt_set.py
+```
+
+Runs a fixed mixed set (aggregation, list, refusal) through the live
+pipeline in one process. `--prompts "..." "..."` overrides the set.
 
 ---
 
 ## Running Track A (the legacy baseline)
 
-Track A scores 1/7 on the anchor question; kept runnable for
-comparison and historical interest. Same MCP server as Design 3.
+Track A scores 1/7 on the anchor question; kept runnable for comparison.
+Cleared for removal. Same MCP server as Design 3.
 
 ```bash
 # Terminal 1: MCP server (same as Design 3)
 python -m spire.mcp_server.server
 
 # Terminal 2: the LangGraph agent
-python scripts/ask.py "Show me suppliers in US with no invoices in 6 months but with open purchase orders, including the buyer assigned to each."
-```
-
-Other example prompts the Track A agent was tested against:
-
-```bash
 python scripts/ask.py "Show invoices for Lee Supplies after January 2024"
-python scripts/ask.py "Find any invoices for Lee Supplies"
-python scripts/ask.py "Find open purchase orders for EIP"
-python scripts/ask.py "Who is the buyer with ID 300000047340498?"
-python scripts/ask.py "Find suppliers in US"
-python scripts/ask.py "Find suppliers in the United Kingdom"
-python scripts/ask.py "Show all closed purchase orders"
-python scripts/ask.py "What tools do you have available?"
-
-# Two-step composition (expected to fail on this path; that's the baseline finding)
-python scripts/ask.py "Who is the buyer for Lee Supplies' open POs?"
 ```
-
-See [`docs/phase_a5_baseline_report.md`](docs/phase_a5_baseline_report.md)
-for the formal scoring of Track A against the rubric.
 
 ---
 
@@ -164,47 +186,36 @@ for the formal scoring of Track A against the rubric.
 # Unit tests only (fast, no infrastructure needed)
 pytest tests/
 
-# Plus integration tests (requires MCP server running, GEMINI_API_KEY set,
+# Integration tests (require MCP server running, GEMINI_API_KEY set,
 # and Oracle KG populated)
 pytest tests/ -m integration
 ```
-
-Current expected results: **235 passed, 5 deselected** (the 5
-integration tests run only with `-m integration`).
 
 ---
 
 ## Troubleshooting
 
-**`KeyError: No vocab for ...`** — KG schema is empty or stale.
-Re-run `./scripts/rebuild_kg.sh`.
+**`ORA-01017: invalid credential`** — the DB password in
+`personas.yaml` (or `SPIRE_DB_PASSWORD`) doesn't match the database.
+Fix it in `personas.yaml`.
 
-**`HallucinationError`** — Synthesizer produced an ID not in the
-executor's data. Re-run; the structured part is usually identical
-across runs, but Gemini at T=0 is not strictly deterministic.
+**`No Oracle DB credentials` (RuntimeError)** — neither `personas.yaml`
+nor the `SPIRE_DB_*` env vars supplied a username/password.
 
-**`oracledb.exceptions.OperationalError` connecting to Oracle** —
-Container probably isn't running. Start it, then re-run.
+**`KeyError: No vocab for ...`** — KG schema is empty or stale. Re-run
+`python scripts/rebuild_kg.py`.
 
-**MCP `streamablehttp_client` connection errors** — The MCP server
-isn't running in Terminal 1, or it's serving on a different port.
+**`HallucinationError`** — synthesizer produced an ID not in the
+executor's data. Re-run; the structured part is usually identical across
+runs, but Gemini at T=0 is not strictly deterministic.
 
-**Tests that need `personas.yaml`** automatically skip if it's
-missing, so test failures with that file absent are usually
-infrastructure issues (Oracle down, MCP down) rather than missing
-config.
+**`oracledb` connection errors** — the database isn't reachable. For a
+local container, confirm it's running; for a remote DB, check the DSN
+host/port in `personas.yaml`.
 
----
+**MCP connection errors** — the MCP server isn't running in Terminal 1,
+or it's on a different port.
 
-## Where things live
-
-- `scripts/run_plan.py` — Design 3 entry point
-- `scripts/ask.py` — Track A entry point
-- `scripts/rebuild_kg.sh` — KG rebuild
-- `src/spire/planner/planner.py` — deterministic planner
-- `src/spire/executor/executor.py` — plan executor
-- `src/spire/synthesizer/synthesizer.py` — LLM synthesizer
-- `src/spire/mcp_server/` — 5 MCP tools
-- `personas.yaml` — credentials (gitignored)
-- `traces/` — per-run JSONL traces
-- `docs/` — design docs, measurement reports, working log
+**Tests needing `personas.yaml`** skip automatically if it's missing, so
+failures with that file absent are usually infrastructure issues (DB
+down, MCP down) rather than missing config.
