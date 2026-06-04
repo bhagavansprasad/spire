@@ -34,7 +34,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE
@@ -568,7 +567,9 @@ def synthesize_response(
         prompt_key = target_entity
 
     if llm is None:
-        llm = ChatGoogleGenerativeAI(model=_MODEL_NAME, temperature=_TEMPERATURE)
+        from spire.config import build_llm
+
+        llm = build_llm(_TEMPERATURE)
 
     structured_llm = llm.with_structured_output(schema)
     system_prompt = _build_system_prompt(prompt_key)
