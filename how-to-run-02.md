@@ -31,11 +31,36 @@ Two paths are runnable today:
 3. **Fusion Cloud pod** with READ access to suppliers, invoices,
    purchaseOrders, and HCM publicWorkers.
 
-4. **Gemini API key** for the parser and synthesizer:
+4. **Gemini access** for the parser and synthesizer. Two modes:
+
+   **a) Public Gemini API** — a single key:
 
    ```bash
    export GEMINI_API_KEY="your-key-here"
    ```
+
+   **b) Vertex AI** — routes calls through a Google Cloud project
+   (use this when the public key's prepay credits are depleted, or to
+   share a project's billing across users). Set:
+
+   ```bash
+   export GOOGLE_GENAI_USE_VERTEXAI=TRUE
+   export GOOGLE_CLOUD_PROJECT=<your-project-id>
+   export GOOGLE_CLOUD_LOCATION=us-central1
+   export VERTEXAI_PROJECT_ID=<your-project-id>
+   export VERTEXAI_LOCATION=us-central1
+   ```
+
+   Vertex also needs Google credentials (not just the env vars):
+
+   ```bash
+   gcloud auth application-default login
+   gcloud auth application-default set-quota-project <your-project-id>
+   ```
+
+   When `GOOGLE_GENAI_USE_VERTEXAI=TRUE` is set, the API key is ignored
+   and all calls go through Vertex. Each user on a shared machine needs
+   their own `gcloud auth application-default login`.
 
    The model is centralized in `src/spire/config.py`
    (`GEMINI_MODEL`, currently `gemini-2.5-pro`).
@@ -194,6 +219,38 @@ pytest tests/ -m integration
 ---
 
 ## Troubleshooting
+
+**`429 RESOURCE_EXHAUSTED` / "prepayment credits are depleted"** — the
+public Gemini API key is out of credit. Switch to Vertex AI (set the
+`GOOGLE_GENAI_USE_VERTEXAI=TRUE` block above), or use a key with credit.
+Note: if Vertex is *not* enabled, the SDK uses the API key even when env
+vars look set.
+
+**`DefaultCredentialsError: Your default credentials were not found`** —
+Vertex is enabled but Google credentials aren't set up for this user.
+Run `gcloud auth application-default login`. On a shared machine each
+user needs to do this for their own account.
+
+**`UserWarning: ... without a quota project`** — harmless, but clear it
+with `gcloud auth application-default set-quota-project <project-id>`.
+
+### Fixing Google config via the Cloud Console
+
+Some issues are resolved in the browser at https://console.cloud.google.com
+(select the right project first, e.g. `bhagavangenai-444212`):
+
+- **Out of API credits / billing (429):** manage the public Gemini API
+  key and its credits in AI Studio (https://ai.studio). For Vertex,
+  Console → Billing → confirm a billing account is linked to the project.
+- **"API not enabled" on Vertex calls:** Console → APIs & Services →
+  Library → search "Vertex AI API" → Enable.
+- **Give another user Vertex access** (so they don't borrow someone
+  else's credentials): Console → IAM & Admin → IAM → Grant Access → add
+  the user's Google email → roles `Vertex AI User` and
+  `Service Usage Consumer`. The user then runs their own
+  `gcloud auth application-default login`.
+- **Quota project (console equivalent of the warning above):** ensure
+  the user has `Service Usage Consumer` on the project.
 
 **`ORA-01017: invalid credential`** — the DB password in
 `personas.yaml` (or `SPIRE_DB_PASSWORD`) doesn't match the database.
