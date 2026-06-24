@@ -67,13 +67,14 @@ comparison, not an assumption.
 
 ## 4. The architecture: a bounded pipeline
 
+![Spire bounded pipeline architecture](spire_pipeline_architecture.png)
+
 ```
 NL prompt → 1·Parse (LLM) → 2·Plan (code) → 3·Execute (code) → 4·Synthesize (LLM) → answer or refusal
 ```
 
 The LLM appears only at the two ends. The middle is deterministic. Each
 stage:
-
 **1 · Parse (LLM).** Reads the prompt and produces a structured Intent.
 This is the only place language is interpreted. It is bounded by the KG:
 it may only use entities and fields the KG defines, and it resolves the
