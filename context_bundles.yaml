@@ -76,3 +76,5 @@ excludes:
 - context_out/*
 - build_context.py
 - context_bundles.yaml
+- "docs/archive/*"
+- archive
