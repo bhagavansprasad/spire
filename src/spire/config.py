@@ -86,7 +86,7 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
         print(f"[llm] provider=openai model={model}", file=_sys.stderr)
         return ChatOpenAI(model=model, temperature=temperature)
 
-    raise ValueError(
+    raise ValueError( 
         f"Unknown SPIRE_LLM_PROVIDER={LLM_PROVIDER!r}. "
         "Supported: gemini, anthropic, openai."
     )

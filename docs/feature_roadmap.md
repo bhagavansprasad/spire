@@ -207,3 +207,62 @@ is the property that makes the pipeline predictable and its failures
 attributable to a specific stage, and it is the defining difference from
 the Track A agent. Future features add bounded tools and schemas; they do
 not reintroduce agent-style orchestration.
+
+---
+
+## Future tasks (tracked)
+
+Follow-ups deferred during the LangGraph migration and provider work.
+Recorded here so they aren't lost; none is started.
+
+### F1. Retire Track A
+
+Remove `scripts/ask.py` and `src/spire/agent/` now that `run_graph.py`
+is the single entry point and Track A is no longer used. See the Track A
+removal notes above for the exact file list. Deliberate cleanup commit,
+not done in passing.
+
+**Effort:** small.
+
+### F2. Parallelize the aggregation fetch
+
+`aggregate_invoices_by_supplier` paginates the full date range
+sequentially (~43 calls for a year, ~185s per prompt). Fetch pages
+concurrently (e.g. count first, then `asyncio.gather` the pages) to cut
+wall time. Progress reporting already exists; this is a speed change
+only, behavior unchanged.
+
+**Effort:** small to medium.
+
+### F3. Client-visible progress is done; extend if needed
+
+Progress now threads tool -> server -> graph -> caller via
+`report_progress` / `progress_handler`. No further work unless we want a
+total/percentage (needs an upfront count query).
+
+**Effort:** n/a unless extended.
+
+### F4. Multi-provider — finish and harden
+
+Gemini, OpenAI, and Anthropic are wired in `config.build_llm()` and
+verified to route correctly (Gemini + OpenAI return live results).
+Remaining: confirm Anthropic end-to-end with a valid model ID and funded
+key, and sanity-check structured-output parity across providers on the
+parser and synthesizer schemas (tool-calling vs Gemini schema mode can
+differ).
+
+**Effort:** small.
+
+---
+
+## Note: the pipeline is now a LangGraph graph
+
+Design 3 is now expressed as a LangGraph custom graph
+(`src/spire/graph/pipeline.py`, run via `scripts/run_graph.py`). This did
+NOT make it an agent: the graph is bounded — fixed edges, the same
+parse -> plan -> execute -> synthesize stages wrapping the existing
+functions, no tool-calling loop and no LLM-driven control flow. The
+"deliberately NOT an agent" property above still holds; only the
+orchestration mechanism changed (imperative `run_plan.py` -> graph).
+`run_plan.py` is retained during the transition and is a candidate for
+retirement once the graph is established.
