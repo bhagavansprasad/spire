@@ -97,7 +97,7 @@ def test_synthesize_routes_to_ranking_schema(
     result = synthesize_response(ranking_outputs, target_entity="", llm=llm)
     assert result is well_formed_ranking
     llm.with_structured_output.assert_called_once_with(
-        SupplierSpendRankingResponse
+        SupplierSpendRankingResponse, include_raw=True
     )
     assert [s.supplier_number for s in result.suppliers] == ["1253", "1001"]
 
@@ -122,3 +122,4 @@ def test_non_ranking_empty_target_still_raises():
     llm = _mock_llm(None)
     with pytest.raises(UnsupportedEntityError):
         synthesize_response({"suppliers": []}, target_entity="", llm=llm)
+

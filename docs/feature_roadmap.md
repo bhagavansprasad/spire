@@ -136,6 +136,33 @@ and mislabeled self-declared refusals.
 
 ---
 
+### 9. KG-to-tool determinism test framework
+
+**What:** A test harness that traces a prompt through
+`prompt -> KG context -> LLM -> Intent -> plan -> tool name` and asserts
+the plan-to-tool segment is deterministic — a given Intent always
+selects the same tools, byte-identical across runs. Includes a curated
+prompt taxonomy and produces a prompt-to-tool table as living
+documentation.
+
+**Why:** Spire's core claim is that tool selection is deterministic
+(planner lookup, not LLM judgment). Today that's asserted in design docs
+and exercised only indirectly. This makes it a checked, regenerable
+artifact — and the evidence behind the architecture explainer's
+"why not an agent" argument.
+
+**Bounded by:** the existing planner and KG bindings; this is a test
+harness over existing components, not new runtime code.
+
+**Dependencies:** 1 (parser), and the planner/binding tables (done).
+
+**Design:** drafted early in
+`docs/designs/feature_determinism_test_framework_design.md` — a
+proposal, to be confirmed at feature start (per the roadmap convention
+that designs are finalized when work begins).
+
+**Effort:** small to medium.
+
 ## Execution order
 
 ### Phase one: foundation — DONE
@@ -163,6 +190,7 @@ before work starts.
 | 8 | Graceful refusal                         | small   | done   | G5     |
 | 6 | New entity: contracts                    | small-medium | open | —    |
 | 7 | Aggregation tools                        | medium  | open   | G4     |
+| 9 | Determinism test framework               | small-medium | open | — |
 
 Features 1–5 verified against the live Fusion pod. Feature 1 also
 verified against live Gemini (parser integration suite green).

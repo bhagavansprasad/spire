@@ -168,12 +168,24 @@ def parse(
 
         llm = build_llm(_TEMPERATURE)
 
-    structured_llm = llm.with_structured_output(DraftIntent)
+    structured_llm = llm.with_structured_output(DraftIntent, include_raw=True)
     system_prompt = _build_system_prompt(menu)
 
-    response = structured_llm.invoke(
+    result = structured_llm.invoke(
         [("system", system_prompt), ("human", prompt)]
     )
+
+    # With include_raw=True the real LLM returns
+    # {"raw": AIMessage, "parsed": DraftIntent|None, "parsing_error": ...}.
+    # Unit tests inject a mock that returns the bare model (or a dict);
+    # handle both so token logging never breaks the mock path.
+    if isinstance(result, dict) and "parsed" in result:
+        from spire.config import log_usage
+
+        log_usage(result.get("raw"), stage="parse")
+        response = result["parsed"]
+    else:
+        response = result
 
     # Normalize to a DraftIntent (the synthesizer guards the same way: some
     # backends return a dict rather than the model instance).
@@ -231,5 +243,6 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
 
 
