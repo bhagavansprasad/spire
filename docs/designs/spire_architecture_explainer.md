@@ -57,11 +57,37 @@ predictable ways:
 4. It mishandles "absence is the signal" cases.
 5. It loops, picks wrong tools, and fails *unattributably* — when the
    answer is wrong you cannot say which step broke.
+6. **Selection degrades as the tool catalog grows.** With a handful of
+   tools an LLM can usually pick correctly. As the count climbs into the
+   dozens, selection accuracy drops — the model misroutes, picks
+   near-duplicate tools, or stalls. Spire sidesteps this: the planner
+   routes to tools deterministically from the KG, so adding endpoints
+   does not degrade selection.
 
-This is not hypothetical. An agent baseline (Track A) was built
-specifically as the comparison arm to test this. The bounded design was
-then committed deliberately — an engineering decision backed by the
-comparison, not an assumption.
+This is not hypothetical. An agent baseline was built specifically as
+the comparison arm to test this. The bounded design was then committed
+deliberately — an engineering decision backed by the comparison, not an
+assumption.
+
+### Traditional tool-calling vs Spire
+
+| Dimension | Traditional tool-calling | Spire |
+|---|---|---|
+| What the LLM sees | Tool catalog: names, descriptions, arg schemas | Domain model: entities, fields, edges, vocabulary, patterns |
+| What the LLM is asked | "Which tool do I call, with what args?" | "What does this question mean?" |
+| Nature of the task | Routing decision (selection) | Comprehension (interpretation) |
+| LLM output | A tool call (or a chain of them) | A structured Intent — entities/edges/filters, no tools |
+| Where tool selection happens | Inside the LLM, at generation time | In the planner — deterministic code, by KG table lookup |
+| Determinism | Non-deterministic; same prompt can pick different tools | Deterministic; same Intent always selects the same tools |
+| Effect of more tools | Selection accuracy degrades as the catalog grows | Lookup table grows; no added LLM reasoning load |
+| Failure mode | Wrong tool, looping, unattributable | Attributable to a stage (parse vs plan vs execute) |
+| Join-key / pod-quirk knowledge | LLM must infer it from tool descriptions | Encoded once in the KG; code applies it |
+
+The crux: traditional tool-calling asks the LLM *which function to call*;
+Spire asks the LLM *what the question means*, and lets deterministic code
+select the tools. The first is a routing decision made at generation
+time; the second is a comprehension task, which LLMs do far more
+reliably.
 
 ---
 
@@ -75,6 +101,7 @@ NL prompt → 1·Parse (LLM) → 2·Plan (code) → 3·Execute (code) → 4·Syn
 
 The LLM appears only at the two ends. The middle is deterministic. Each
 stage:
+
 **1 · Parse (LLM).** Reads the prompt and produces a structured Intent.
 This is the only place language is interpreted. It is bounded by the KG:
 it may only use entities and fields the KG defines, and it resolves the
@@ -123,7 +150,7 @@ already knows to be true.
 
 ## 6. With KG vs without KG
 
-**Without (agent / Track A).** The LLM sees a prompt plus a pile of
+**Without (a traditional agent).** The LLM sees a prompt plus a pile of
 tools, reasons live, guesses keys, may loop, and fails silently. When
 wrong, the failure is not attributable to any one place.
 
@@ -180,7 +207,7 @@ tool bindings) and the matching MCP tools are mechanical to produce.
 
 ## 10. The line that matters for a reviewer
 
-The bounded-beats-agent claim was not asserted — the agent was built as
-a comparison arm, then the bounded design was committed. The LLM is
-confined so that every failure is attributable to one stage. That is an
-engineering argument, not a marketing one.
+The bounded-beats-agent claim was not asserted — an agent baseline was
+built as a comparison arm, then the bounded design was committed. The
+LLM is confined so that every failure is attributable to one stage. That
+is an engineering argument, not a marketing one.
