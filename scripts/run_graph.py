@@ -20,6 +20,7 @@ import sys
 from fastmcp import Client
 
 from spire.graph.pipeline import GRAPH
+from spire.config import reset_usage, usage_report
 from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
@@ -34,6 +35,7 @@ from run_plan import (  # reuse the existing formatters + URL
 
 
 async def _run(prompt: str) -> int:
+    reset_usage()
     menu = load_kg_menu()
 
     async with Client(MCP_SERVER_URL) as client:
@@ -59,6 +61,8 @@ async def _run(prompt: str) -> int:
         r = state["refusal"]
         print(capability_message(r, menu))
         print(f"  (refusal: {r.flavor.value} — {r.detail})")
+        print()
+        print(usage_report())
         return 4
 
     # Error in any node.
@@ -75,6 +79,8 @@ async def _run(prompt: str) -> int:
     print(_format_synthesized(state["response"]))
     print()
     print(_format_summary(state["plan"], state["outputs"], state["response"]))
+    print()
+    print(usage_report())
     return 0
 
 
@@ -89,3 +95,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

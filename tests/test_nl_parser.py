@@ -49,7 +49,7 @@ class MockLLM:
         self._canned = canned
         self.structured_for = None
 
-    def with_structured_output(self, schema):
+    def with_structured_output(self, schema, **kwargs):
         self.structured_for = schema
         return _StructuredStub(self._canned)
 
@@ -303,3 +303,4 @@ def test_unanswerable_takes_precedence_over_empty_entity(menu):
 
     assert result.is_refusal
     assert result.refusal.detail == "needs spend aggregation"
+

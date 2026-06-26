@@ -571,16 +571,29 @@ def synthesize_response(
 
         llm = build_llm(_TEMPERATURE)
 
-    structured_llm = llm.with_structured_output(schema)
+    structured_llm = llm.with_structured_output(schema, include_raw=True)
     system_prompt = _build_system_prompt(prompt_key)
     user_message = _build_synthesis_prompt(outputs, truncation_by_step)
 
-    response = structured_llm.invoke(
+    result = structured_llm.invoke(
         [("system", system_prompt), ("human", user_message)]
     )
+
+    # With include_raw=True the real LLM returns
+    # {"raw": AIMessage, "parsed": schema, "parsing_error": ...}. Unit
+    # tests inject a mock returning the bare model (or a dict); handle
+    # both so token logging never breaks the mock path.
+    if isinstance(result, dict) and "parsed" in result:
+        from spire.config import log_usage
+
+        log_usage(result.get("raw"), stage="synthesize")
+        response = result["parsed"]
+    else:
+        response = result
 
     if isinstance(response, dict):
         response = schema(**response)
 
     _validate_no_hallucinated_ids(response, outputs)
     return response
+

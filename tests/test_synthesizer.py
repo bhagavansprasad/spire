@@ -376,7 +376,7 @@ def test_synthesize_response_happy_path(sample_outputs, well_formed_response) ->
     llm = _mock_llm(well_formed_response)
     result = synthesize_response(sample_outputs, target_entity="Supplier", llm=llm)
     assert result == well_formed_response
-    llm.with_structured_output.assert_called_once_with(SupplierResponse)
+    llm.with_structured_output.assert_called_once_with(SupplierResponse, include_raw=True)
 
 
 def test_synthesize_response_accepts_dict_from_llm(sample_outputs) -> None:
@@ -425,7 +425,7 @@ def test_synthesize_response_invoice_entity_selects_invoice_schema(invoice_outpu
     llm = _mock_llm(response)
     result = synthesize_response(invoice_outputs, target_entity="Invoice", llm=llm)
     assert isinstance(result, InvoiceResponse)
-    llm.with_structured_output.assert_called_once_with(InvoiceResponse)
+    llm.with_structured_output.assert_called_once_with(InvoiceResponse, include_raw=True)
     assert result.invoices[0].invoice_id == 9001
 
 
@@ -437,7 +437,7 @@ def test_synthesize_response_po_entity_selects_po_schema(po_outputs) -> None:
     llm = _mock_llm(response)
     result = synthesize_response(po_outputs, target_entity="PurchaseOrder", llm=llm)
     assert isinstance(result, PurchaseOrderResponse)
-    llm.with_structured_output.assert_called_once_with(PurchaseOrderResponse)
+    llm.with_structured_output.assert_called_once_with(PurchaseOrderResponse, include_raw=True)
 
 
 def test_synthesize_response_unsupported_entity_raises(sample_outputs) -> None:
@@ -469,3 +469,4 @@ def test_synthesize_response_against_live_gemini(sample_outputs) -> None:
     assert len(response.summary) > 20
     returned_ids = {s.supplier_id for s in response.suppliers}
     assert returned_ids <= {100, 300}
+

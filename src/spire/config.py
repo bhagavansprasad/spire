@@ -92,6 +92,62 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
     )
 
 
+def log_usage(raw_message, stage: str) -> None:
+    """Record and print token usage for one LLM call, in the [llm] style.
+
+    ``raw_message`` is the LangChain ``AIMessage`` returned under the
+    ``"raw"`` key when a structured LLM is built with
+    ``with_structured_output(..., include_raw=True)``. Its
+    ``usage_metadata`` is normalized by LangChain across the gemini,
+    anthropic, and openai providers, so the same field works for all.
+
+    The per-call numbers are also accumulated in ``_USAGE_LOG`` so the
+    entry script can print a combined end-of-run report via
+    ``usage_report()``. Call ``reset_usage()`` at the start of a run.
+
+    Safe to call with None or an object lacking usage_metadata: it just
+    records and prints zeros.
+    """
+    um = getattr(raw_message, "usage_metadata", None) or {}
+    inp = um.get("input_tokens", 0)
+    out = um.get("output_tokens", 0)
+    _USAGE_LOG.append({"stage": stage, "in": inp, "out": out})
+    print(
+        f"[llm] stage={stage} in={inp} out={out} total={inp + out}",
+        file=_sys.stderr,
+    )
+
+
+# Per-run token accumulator. The entry script clears it with
+# reset_usage() at the start of a run and prints usage_report() at the end.
+_USAGE_LOG: list[dict] = []
+
+
+def reset_usage() -> None:
+    """Clear accumulated token usage. Call at the start of a run."""
+    _USAGE_LOG.clear()
+
+
+def usage_report() -> str:
+    """Return a small end-of-run token report from accumulated usage."""
+    if not _USAGE_LOG:
+        return "Token usage:\n  (no LLM calls recorded)"
+    lines = ["Token usage:"]
+    tot_in = tot_out = 0
+    for e in _USAGE_LOG:
+        tot_in += e["in"]
+        tot_out += e["out"]
+        lines.append(
+            f"  {e['stage']:<12} in={e['in']:>7}  out={e['out']:>7}  "
+            f"total={e['in'] + e['out']:>7}"
+        )
+    lines.append(
+        f"  {'TOTAL':<12} in={tot_in:>7}  out={tot_out:>7}  "
+        f"total={tot_in + tot_out:>7}"
+    )
+    return "\n".join(lines)
+
+
 class FusionCredentials(BaseModel):
     base_url: str
     username: str
@@ -125,4 +181,5 @@ def load_persona(name: str) -> Persona:
         raise KeyError(f"Persona '{name}' not found in {PERSONAS_FILE}")
 
     return Persona(**data[name])
+
 
