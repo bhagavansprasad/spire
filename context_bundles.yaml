@@ -86,8 +86,8 @@ excludes:
 - .git/*
 - '*Zone.Identifier'
 - '*.svg'
+- '*.png'
 - '*.pdf'
-- '*.puml'
 - context_out
 - context_out/*
 - build_context.py
