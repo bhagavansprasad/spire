@@ -35,7 +35,7 @@ PERSONAS_FILE = Path(__file__).resolve().parents[2] / "personas.yaml"
 # GEMINI_MODEL / GEMINI_TEMPERATURE from this module.
 # ─────────────────────────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.5-pro"
+GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_TEMPERATURE = 0.0
 
 # Provider seam. Today only "gemini" is wired; the factory is structured
@@ -181,5 +181,3 @@ def load_persona(name: str) -> Persona:
         raise KeyError(f"Persona '{name}' not found in {PERSONAS_FILE}")
 
     return Persona(**data[name])
-
-
