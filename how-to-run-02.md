@@ -140,6 +140,14 @@ export SPIRE_LLM_PROVIDER=anthropic       # default model: claude-sonnet-4-6
 Two terminals.
 
 🟢 **EVERY TIME**
+
+
+```bash
+export IKS_FUSION_BASE_URL="https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com"
+export IKS_FUSION_USERNAME="mskrishna.om@gmail.com"
+export IKS_FUSION_PASSWORD="KS4j%j#5"
+```
+
 ```bash
 # Terminal 1 — MCP server (keep running)
 python -m spire.mcp_server.server
