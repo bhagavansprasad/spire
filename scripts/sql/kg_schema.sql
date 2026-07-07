@@ -18,6 +18,13 @@ SET SERVEROUTPUT ON
 -- ============================================================
 
 BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE kg_entity_filter PURGE';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLCODE != -942 THEN RAISE; END IF;
+END;
+/
+
+BEGIN
   EXECUTE IMMEDIATE 'DROP TABLE kg_edge_tool PURGE';
 EXCEPTION WHEN OTHERS THEN
   IF SQLCODE != -942 THEN RAISE; END IF;
@@ -173,6 +180,24 @@ CREATE TABLE kg_edge_tool (
   CONSTRAINT pk_kg_edge_tool PRIMARY KEY (edge_name),
   CONSTRAINT fk_kg_edge_tool_edge
     FOREIGN KEY (edge_name) REFERENCES kg_edge (edge_name)
+);
+
+CREATE TABLE kg_entity_filter (
+  entity_name          VARCHAR2(64)  NOT NULL,
+  filter_type          VARCHAR2(64)  NOT NULL,
+  mechanism            VARCHAR2(32)  NOT NULL,
+  tool_arg_name        VARCHAR2(64),
+  vocab_kind           VARCHAR2(32),
+  target_entity        VARCHAR2(64),
+  kg_filter_type       VARCHAR2(64),
+  implicit_vocab_kind  VARCHAR2(32),
+  implicit_term        VARCHAR2(128),
+  notes                VARCHAR2(1000),
+  CONSTRAINT pk_kg_entity_filter PRIMARY KEY (entity_name, filter_type),
+  CONSTRAINT fk_kg_entity_filter_entity
+    FOREIGN KEY (entity_name) REFERENCES kg_entity (entity_name),
+  CONSTRAINT chk_kg_entity_filter_mechanism
+    CHECK (mechanism IN ('entity_level', 'edge_traversal'))
 );
 
 PROMPT Tables created.
@@ -492,5 +517,33 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
 COMMIT;
 
 PROMPT Seeded kg_edge_tool (3 rows).
+
+-- ============================================================
+-- STEP 11: Seed kg_entity_filter
+--
+-- Filter definitions, formerly hardcoded in the planner.
+-- mechanism='entity_level'   -> dedicated fetcher, uses tool_arg_name.
+-- mechanism='edge_traversal' -> walks to target_entity via kg_filter_type.
+-- Seeded to reproduce v1.1 hardcoded values exactly.
+-- ============================================================
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
+  'Supplier', 'country', 'entity_level', 'country', 'country', NULL, NULL, NULL, NULL,
+  'Entity-level country filter. Resolves value via country vocab; fetched by search_suppliers_by_country.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
+  'Supplier', 'has_open_PO', 'edge_traversal', NULL, NULL, 'PurchaseOrder', 'status', 'po_status', 'open',
+  'Edge filter: supplier has an open PO. Implicit status=open resolved via po_status vocab.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
+  'Supplier', 'has_no_recent_invoices', 'edge_traversal', NULL, NULL, 'Invoice', 'no_recent_invoices', NULL, NULL,
+  'Edge filter: supplier has no invoices in N months. Value is explicit ({months: N}).'
+);
+
+COMMIT;
+
+PROMPT Seeded kg_entity_filter (3 rows).
 
 -- ============================================================
