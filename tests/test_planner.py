@@ -353,17 +353,10 @@ def test_find_entity_tool_unknown_filter_type_raises_key_error() -> None:
         find_entity_tool("Supplier", "color")
 
 
-@pytest.mark.skip(
-    reason="Invoice now has a default fetcher (search_invoices) in the KG. "
-    "This test asserts the old behavior. Update in Phase 4 when Invoice "
-    "becomes a queryable target end to end."
-)
-def test_find_entity_tool_no_default_fetcher_for_invoice_raises() -> None:
-    """v1 only declared fetchers for Supplier. Invoice now has a default
-    fetcher in kg_entity_tool, so this no longer raises. Re-scoped to
-    Phase 4."""
-    with pytest.raises(KeyError):
-        find_entity_tool("Invoice", "none")
+def test_find_entity_tool_default_invoice_fetcher() -> None:
+    """Invoice has a default fetcher (search_invoices); Phase 4 made it
+    a queryable target."""
+    assert find_entity_tool("Invoice", "none") == "search_invoices"
 
 
 # ─────────────────────────────────────────────────────────────────────
