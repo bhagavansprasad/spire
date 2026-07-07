@@ -9,6 +9,7 @@ tools over HTTP. Run with:
 Tools currently exposed:
 - search_suppliers
 - search_invoices
+- search_addresses
 - search_purchase_orders
 - get_buyer
 """
@@ -26,6 +27,7 @@ from spire.mcp_server.tools.purchase_orders import (
     search_purchase_orders as _search_purchase_orders,
 )
 from spire.mcp_server.tools.suppliers import search_suppliers as _search_suppliers
+from spire.mcp_server.tools.addresses import search_addresses as _search_addresses
 
 
 PERSONA_NAME = "default_dev"
@@ -121,6 +123,38 @@ async def search_invoices(
             limit=limit,
         )
         return result.to_dict()
+
+
+@mcp.tool()
+async def search_addresses(
+    supplier_number: str | None = None,
+    supplier_name: str | None = None,
+    country: str | None = None,
+    limit: int = 25,
+) -> dict:
+    """Fetch supplier addresses as flat records.
+
+    Use for address questions. Requires at least one of supplier_number,
+    supplier_name, or country — addresses are a child of the supplier
+    record, so an unfiltered fetch would pull every address on the pod.
+
+    Args:
+        supplier_number: Exact SupplierNumber, e.g. "1252".
+        supplier_name: Substring match on Supplier name.
+        country: ISO-2 code (e.g. "US") or full name (e.g. "United
+            States"), matched against each address.
+        limit: Max address records to return.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_addresses(
+            client,
+            supplier_number=supplier_number,
+            supplier_name=supplier_name,
+            country=country,
+            limit=limit,
+        )
+        return result.to_dict()
+
 
 @mcp.tool()
 async def search_purchase_orders(

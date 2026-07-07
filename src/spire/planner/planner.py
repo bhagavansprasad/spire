@@ -1,4 +1,5 @@
 
+
 """
 Planner for the KG-driven path (Architecture Option 3).
 
@@ -644,6 +645,19 @@ def generate_plan(
                 "(e.g. 'invoices for Lee Supplies')."
             )
 
+    # Address queries require a supplier or a country. Without one the
+    # fetch would flatten every supplier's addresses on the pod.
+    if intent.target_entity == "Address":
+        has_addr_filter = any(
+            f.get("type") in ("supplier", "country") for f in intent.filters
+        )
+        if not has_addr_filter:
+            raise ValueError(
+                "Address queries require a supplier or a country. For "
+                "example 'addresses for supplier 1252' or 'US supplier "
+                "addresses'."
+            )
+
     ref_date = reference_date if reference_date is not None else date.today()
 
     plan: Plan = []
@@ -1233,6 +1247,8 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
 

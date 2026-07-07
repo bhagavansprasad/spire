@@ -64,6 +64,8 @@ DEFAULT_PROMPTS: list[str] = [
     # — invoice filters (Phase 5) —
     "Invoices for supplier 1252 over 100000",
     "Invoices for Lee Supplies in 2023",
+    # — address (Phase 6) —
+    "Addresses for supplier 1252",
     # — refusal (out of scope) —
     "Show me contract renewals due next quarter",
 ]

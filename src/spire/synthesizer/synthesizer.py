@@ -1,3 +1,4 @@
+
 """
 Response synthesizer for the KG-driven path (Architecture Option 3).
 
@@ -190,6 +191,40 @@ class PurchaseOrderResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class AddressRecord(BaseModel):
+    """One supplier address in an address-rooted response.
+
+    address_id and supplier_number are validated against the executor's
+    output. Address fields are free text from the source."""
+
+    address_id: int = Field(
+        description="The address's SupplierAddressId (numeric key). "
+        "Must appear in the data."
+    )
+    supplier_name: str = Field(description="The parent supplier's display name.")
+    supplier_number: str = Field(
+        description="The parent supplier's SupplierNumber. Must appear in "
+        "the data."
+    )
+    country: str = Field(default="", description="Full country name, if present.")
+    city: str = Field(default="", description="City, if present.")
+    state: str = Field(default="", description="State/province, if present.")
+    formatted_address: str = Field(
+        default="", description="One-line formatted address, if present."
+    )
+
+
+class AddressResponse(BaseModel):
+    """Address-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    addresses: list[AddressRecord] = Field(
+        default_factory=list,
+        description="One entry per address in the final set. Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class SupplierSpendRow(BaseModel):
     """One supplier in a spend ranking (feature 7 aggregation).
 
@@ -233,6 +268,7 @@ SupplierSummary = SupplierRecord
 SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "Supplier": SupplierResponse,
     "Invoice": InvoiceResponse,
+    "Address": AddressResponse,
     "PurchaseOrder": PurchaseOrderResponse,
 }
 
@@ -278,6 +314,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     supplier_numbers: set = set()
     person_ids: set = set()
     invoice_ids: set = set()
+    address_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -292,6 +329,8 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 person_ids.add(bid)
             if (iid := item.get("InvoiceId")) is not None:
                 invoice_ids.add(iid)
+            if (aid := item.get("SupplierAddressId")) is not None:
+                address_ids.add(aid)
             # Feature 7: an aggregation ranking carries its suppliers
             # nested under "rows", each with a lowercase "supplier_number".
             if isinstance(item.get("rows"), list):
@@ -304,6 +343,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "supplier_numbers": supplier_numbers,
         "person_ids": person_ids,
         "invoice_ids": invoice_ids,
+        "address_ids": address_ids,
     }
 
 
@@ -350,6 +390,14 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "amount, currency, and the supplier name/number. supplier_number "
         "must appear in the data. Do not group or aggregate; list the "
         "invoices as returned."
+    ),
+    "Address": (
+        "This is an ADDRESS-rooted query. For each address in the final "
+        "set, emit one entry under 'addresses' with its address_id, the "
+        "parent supplier's name and number, and the country, city, state, "
+        "and formatted_address when present. address_id and supplier_number "
+        "must appear in the data. Do not group or aggregate; list the "
+        "addresses as returned."
     ),
     "PurchaseOrder": (
         "This is a PURCHASE-ORDER-rooted query. For each PO in the final "
@@ -459,6 +507,22 @@ def _validate_invoice(response: InvoiceResponse, valid: dict[str, set]) -> None:
     _raise_if_bad(parts)
 
 
+def _validate_address(response: AddressResponse, valid: dict[str, set]) -> None:
+    bad_aid: list[int] = []
+    bad_snum: list[str] = []
+    for a in response.addresses:
+        if a.address_id not in valid["address_ids"]:
+            bad_aid.append(a.address_id)
+        if a.supplier_number not in valid["supplier_numbers"]:
+            bad_snum.append(a.supplier_number)
+    parts = []
+    if bad_aid:
+        parts.append(f"address_ids={bad_aid}")
+    if bad_snum:
+        parts.append(f"supplier_numbers={bad_snum}")
+    _raise_if_bad(parts)
+
+
 def _validate_purchase_order(
     response: PurchaseOrderResponse, valid: dict[str, set]
 ) -> None:
@@ -493,6 +557,7 @@ def _validate_supplier_spend_ranking(
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
     InvoiceResponse: _validate_invoice,
+    AddressResponse: _validate_address,
     PurchaseOrderResponse: _validate_purchase_order,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
 }
@@ -596,4 +661,6 @@ def synthesize_response(
 
     _validate_no_hallucinated_ids(response, outputs)
     return response
+
+
 

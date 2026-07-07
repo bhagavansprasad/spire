@@ -185,13 +185,15 @@ def test_collect_valid_ids_finds_all_ids_in_sample(sample_outputs) -> None:
 
 
 def test_collect_valid_ids_handles_empty_outputs() -> None:
-    """No buckets → empty sets. Feature 5 adds invoice_ids to the dict."""
+    """No buckets → empty sets. Feature 5 adds invoice_ids; Phase 6 adds
+    address_ids to the dict."""
     ids = _collect_valid_ids({})
     assert ids == {
         "supplier_ids": set(),
         "supplier_numbers": set(),
         "person_ids": set(),
         "invoice_ids": set(),
+        "address_ids": set(),
     }
 
 
