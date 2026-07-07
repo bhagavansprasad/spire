@@ -913,6 +913,19 @@ def _build_entity_fetcher_args(
         if not arg_name:
             continue
         raw_value = f.get("value")
+
+        # Range filters carry a dict value, e.g. created_date ->
+        # {"from": "...", "to": "..."}. Expand each present bound to its
+        # own tool arg. tool_arg_name is the base ("created"); the arg
+        # names are "<base>_from" / "<base>_to".
+        if isinstance(raw_value, dict):
+            base = arg_name.removesuffix("_from")
+            if raw_value.get("from"):
+                args[f"{base}_from"] = raw_value["from"]
+            if raw_value.get("to"):
+                args[f"{base}_to"] = raw_value["to"]
+            continue
+
         vocab_kind = vocab_kinds.get(ftype)
         if vocab_kind is not None:
             args[arg_name] = resolve_vocab(vocab_kind, raw_value)

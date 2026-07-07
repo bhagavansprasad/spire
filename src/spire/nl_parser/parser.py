@@ -1,3 +1,4 @@
+
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -64,6 +65,15 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "'has_no_recent_invoices' filter with value {\"months\": N}. This clause "
     "is easy to miss — whenever the prompt mentions an absence of invoices "
     "over a time window, you MUST emit this filter.\n"
+    "- 'active suppliers' / 'inactive suppliers' -> a 'status' filter with "
+    "value 'active' or 'inactive'.\n"
+    "- 'suppliers named X' / 'called X' / 'with X in the name' -> a "
+    "'name_fragment' filter with value the substring X.\n"
+    "- 'created after X' / 'created between X and Y' / 'created in <period>' "
+    "-> a 'created_date' filter with value {\"from\": \"YYYY-MM-DD\", "
+    "\"to\": \"YYYY-MM-DD\"}. Include only the bounds the prompt gives; omit "
+    "the other key. Convert every date to YYYY-MM-DD (e.g. 'Jan 2025' -> "
+    "from '2025-01-01'; 'March 2025' as an end -> to '2025-04-01').\n"
     "- 'include the buyer' / 'with the buyer' / 'show the buyer assigned' -> "
     "add 'Buyer' to include.\n"
     "If a prompt mentions several of these, emit ALL of them. A common error "
@@ -243,6 +253,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 

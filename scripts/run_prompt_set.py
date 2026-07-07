@@ -56,6 +56,11 @@ DEFAULT_PROMPTS: list[str] = [
     # — ordinary list —
     "Show me invoices for supplier 1252",
     "List US suppliers",
+    # — supplier filters (Phase 3) —
+    "Get list of active suppliers",
+    "Suppliers named Lee",
+    "active US suppliers",
+    "Suppliers created between Jan and Mar 2025",
     # — refusal (out of scope) —
     "Show me contract renewals due next quarter",
 ]
