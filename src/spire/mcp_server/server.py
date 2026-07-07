@@ -1,3 +1,4 @@
+
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
@@ -7,7 +8,6 @@ tools over HTTP. Run with:
 
 Tools currently exposed:
 - search_suppliers
-- search_suppliers_by_country
 - search_invoices
 - search_purchase_orders
 - get_buyer
@@ -26,9 +26,6 @@ from spire.mcp_server.tools.purchase_orders import (
     search_purchase_orders as _search_purchase_orders,
 )
 from spire.mcp_server.tools.suppliers import search_suppliers as _search_suppliers
-from spire.mcp_server.tools.suppliers_by_country import (
-    search_suppliers_by_country as _search_suppliers_by_country,
-)
 
 
 PERSONA_NAME = "default_dev"
@@ -43,14 +40,26 @@ _persona = load_persona(PERSONA_NAME)
 async def search_suppliers(
     supplier_name_contains: str | None = None,
     status: str | None = None,
+    country: str | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
     limit: int = 25,
 ) -> dict:
-    """Search Oracle Fusion suppliers by name fragment and/or status.
+    """Search Oracle Fusion suppliers by any combination of filters.
+
+    Use for supplier questions with any mix of: a name fragment, a
+    status, a country, and a creation-date range. Filters stack
+    (e.g. "active US suppliers named Lee").
 
     Args:
         supplier_name_contains: Optional substring to match in supplier name.
         status: Exact Status match (e.g., "ACTIVE", "INACTIVE"). Applied
             client-side. Use for "active suppliers" / "inactive suppliers".
+        country: ISO-2 code (e.g., "US", "GB") or full name (e.g.,
+            "United States"). Matched against the addresses child
+            resource. Three-letter codes like "USA" are not supported.
+        created_from: Lower bound on CreationDate ("YYYY-MM-DD").
+        created_to: Upper bound on CreationDate ("YYYY-MM-DD").
         limit: Max records to return (default 25).
     """
     async with FusionClient(_persona) as client:
@@ -58,36 +67,13 @@ async def search_suppliers(
             client,
             supplier_name_contains=supplier_name_contains,
             status=status,
-            limit=limit,
-        )
-        return result.to_dict()
-
-
-@mcp.tool()
-async def search_suppliers_by_country(
-    country: str,
-    limit: int = 25,
-) -> dict:
-    """Find suppliers with at least one address in the given country.
-
-    Use this when the user asks about suppliers in a specific country
-    (e.g., "US suppliers", "suppliers in the UK"). Country is not a
-    field on the supplier record directly — it's matched against the
-    addresses child resource.
-
-    Args:
-        country: ISO-2 code (e.g., "US", "GB") or full name (e.g.,
-            "United States"). Three-letter codes like "USA" are not
-            supported — use "US" instead.
-        limit: Max records to return.
-    """
-    async with FusionClient(_persona) as client:
-        result = await _search_suppliers_by_country(
-            client,
             country=country,
+            created_from=created_from,
+            created_to=created_to,
             limit=limit,
         )
         return result.to_dict()
+
 
 @mcp.tool()
 async def search_invoices(
@@ -220,4 +206,6 @@ async def get_buyer(buyer_id: int) -> dict | None:
 
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+
+
 

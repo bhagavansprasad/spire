@@ -148,7 +148,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'entity_synonym', 'relationship_phrase'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -192,12 +192,17 @@ CREATE TABLE kg_entity_filter (
   kg_filter_type       VARCHAR2(64),
   implicit_vocab_kind  VARCHAR2(32),
   implicit_term        VARCHAR2(128),
+  query_style          VARCHAR2(16),
+  filter_field         VARCHAR2(64),
+  filter_op            VARCHAR2(16),
   notes                VARCHAR2(1000),
   CONSTRAINT pk_kg_entity_filter PRIMARY KEY (entity_name, filter_type),
   CONSTRAINT fk_kg_entity_filter_entity
     FOREIGN KEY (entity_name) REFERENCES kg_entity (entity_name),
   CONSTRAINT chk_kg_entity_filter_mechanism
-    CHECK (mechanism IN ('entity_level', 'edge_traversal'))
+    CHECK (mechanism IN ('entity_level', 'edge_traversal')),
+  CONSTRAINT chk_kg_entity_filter_query_style
+    CHECK (query_style IS NULL OR query_style IN ('server_q', 'client_side'))
 );
 
 PROMPT Tables created.
@@ -399,6 +404,10 @@ INSERT INTO kg_vocabulary VALUES ('po_status', 'draft',     'INCOMPLETE', 'Synon
 INSERT INTO kg_vocabulary VALUES ('po_status', 'canceled',  'CANCELED',   NULL);
 INSERT INTO kg_vocabulary VALUES ('po_status', 'cancelled', 'CANCELED',   'British spelling.');
 
+-- supplier_status (distinct from po_status; Supplier.Status is ACTIVE/INACTIVE)
+INSERT INTO kg_vocabulary VALUES ('supplier_status', 'active',   'ACTIVE',   'Supplier is active.');
+INSERT INTO kg_vocabulary VALUES ('supplier_status', 'inactive', 'INACTIVE', 'Supplier is inactive.');
+
 -- entity_synonym
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'supplier',         'Supplier',      NULL);
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'vendor',           'Supplier',      'Synonym.');
@@ -465,14 +474,7 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Supplier',
   'none',
   'search_suppliers',
-  'Default fetcher for Supplier. Used when no specific filter is requested.'
-);
-
-INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
-  'Supplier',
-  'country',
-  'search_suppliers_by_country',
-  'Country-filtered fetcher. Uses expand=addresses under the hood; address data is bundled with the response.'
+  'Default fetcher for Supplier. Handles all entity-level supplier filters (name, status, country, created date) via combined tool args.'
 );
 
 INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
@@ -484,7 +486,7 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
 
 COMMIT;
 
-PROMPT Seeded kg_entity_tool (3 rows).
+PROMPT Seeded kg_entity_tool (2 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -524,26 +526,46 @@ PROMPT Seeded kg_edge_tool (3 rows).
 -- Filter definitions, formerly hardcoded in the planner.
 -- mechanism='entity_level'   -> dedicated fetcher, uses tool_arg_name.
 -- mechanism='edge_traversal' -> walks to target_entity via kg_filter_type.
--- Seeded to reproduce v1.1 hardcoded values exactly.
+--
+-- For entity_level filters, query_style/filter_field/filter_op describe
+-- HOW the fetcher applies the filter:
+--   query_style='server_q'    -> send a single-clause q= to Fusion.
+--   query_style='client_side' -> over-fetch, then match filter_field.
+-- filter_op is LIKE, >=, or equals. Edge-traversal rows leave these null.
 -- ============================================================
 
-INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
-  'Supplier', 'country', 'entity_level', 'country', 'country', NULL, NULL, NULL, NULL,
-  'Entity-level country filter. Resolves value via country vocab; fetched by search_suppliers_by_country.'
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'country', 'entity_level', 'country', 'country', NULL, NULL, NULL, NULL, 'client_side', 'Country', 'equals',
+  'Country lives on the addresses child; over-fetch with expand=addresses and match client-side.'
 );
 
-INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
-  'Supplier', 'has_open_PO', 'edge_traversal', NULL, NULL, 'PurchaseOrder', 'status', 'po_status', 'open',
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'status', 'entity_level', 'status', 'supplier_status', NULL, NULL, NULL, NULL, 'client_side', 'Status', 'equals',
+  'Supplier ACTIVE/INACTIVE. Server-side q= on Status is unreliable on this pod; over-fetch and match client-side.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'name_fragment', 'entity_level', 'supplier_name_contains', NULL, NULL, NULL, NULL, NULL, 'server_q', 'Supplier', 'LIKE',
+  'Name substring match. Single-clause q=Supplier LIKE ''%value%'' is reliable server-side.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'created_date', 'entity_level', 'created_from', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '>=',
+  'Creation-date range. Lower bound via q=CreationDate >= ''x'' server-side; upper bound filtered client-side (composite q= fails on this pod).'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'has_open_PO', 'edge_traversal', NULL, NULL, 'PurchaseOrder', 'status', 'po_status', 'open', NULL, NULL, NULL,
   'Edge filter: supplier has an open PO. Implicit status=open resolved via po_status vocab.'
 );
 
-INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, notes) VALUES (
-  'Supplier', 'has_no_recent_invoices', 'edge_traversal', NULL, NULL, 'Invoice', 'no_recent_invoices', NULL, NULL,
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'has_no_recent_invoices', 'edge_traversal', NULL, NULL, 'Invoice', 'no_recent_invoices', NULL, NULL, NULL, NULL, NULL,
   'Edge filter: supplier has no invoices in N months. Value is explicit ({months: N}).'
 );
 
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (3 rows).
+PROMPT Seeded kg_entity_filter (6 rows).
 
 -- ============================================================

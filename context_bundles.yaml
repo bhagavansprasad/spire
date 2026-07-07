@@ -52,7 +52,9 @@ bundles:
   - src/spire/kg
   - tests/test_kg_loader.py
   - tests/test_kg_metadata.py
+  - scripts/sql/kg_schema.sql
   - scripts/rebuild_kg.sh
+  - scripts/print_kg.sh
   - docs/designs/kg_schema_v1.md
   - docs/designs/kg_evaluation_framework.md
   demo:

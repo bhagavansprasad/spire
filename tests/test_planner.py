@@ -77,7 +77,7 @@ def anchor_plan() -> Plan:
     return [
         Step(
             step_id=1,
-            tool_name="search_suppliers_by_country",
+            tool_name="search_suppliers",
             tool_args={"country": "US"},
             iterate_over=None,
             client_filters=[],
@@ -146,7 +146,7 @@ def test_step_dataclass_matches_design(anchor_plan: Plan) -> None:
     """The Step dataclass accepts every field the design doc requires."""
     step1 = anchor_plan[0]
     assert step1.step_id == 1
-    assert step1.tool_name == "search_suppliers_by_country"
+    assert step1.tool_name == "search_suppliers"
     assert step1.tool_args == {"country": "US"}
     assert step1.iterate_over is None
     assert step1.client_filters == []
@@ -182,7 +182,7 @@ def test_plan_is_a_list_of_steps(anchor_plan: Plan) -> None:
 def test_anchor_plan_tool_names_match_kg(anchor_plan: Plan) -> None:
     """Tool names referenced in the plan must be the MCP tools we have."""
     expected_tools = [
-        "search_suppliers_by_country",
+        "search_suppliers",
         "search_purchase_orders",
         "get_buyer",
     ]
@@ -267,10 +267,9 @@ def test_resolve_vocab_unknown_kind_raises_key_error() -> None:
         resolve_vocab("nonexistent_kind", "US")
 
 
-def test_resolve_vocab_is_case_sensitive() -> None:
-    """Lowercase 'us' does not match (case-sensitive by design)."""
-    with pytest.raises(KeyError):
-        resolve_vocab("country", "us")
+def test_resolve_vocab_is_case_insensitive() -> None:
+    """Lowercase 'us' matches; vocab lookup is case-insensitive on the term."""
+    assert resolve_vocab("country", "us") == "US"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -334,12 +333,12 @@ def test_find_entity_tool_default_supplier_fetcher() -> None:
     assert find_entity_tool("Supplier", "none") == "search_suppliers"
 
 
-def test_find_entity_tool_country_filter_uses_specialised_tool() -> None:
-    """filter_type='country' returns the country-aware Supplier fetcher."""
-    assert (
+def test_find_entity_tool_country_has_no_dedicated_tool() -> None:
+    """Country no longer has its own fetcher; it routes through the
+    default search_suppliers with combined args. So there is no
+    (Supplier, country) row in kg_entity_tool."""
+    with pytest.raises(KeyError):
         find_entity_tool("Supplier", "country")
-        == "search_suppliers_by_country"
-    )
 
 
 def test_find_entity_tool_unknown_entity_raises_key_error() -> None:
@@ -447,8 +446,8 @@ def test_find_edge_tool_assigned_to() -> None:
 
 def test_find_edge_tool_has_address_returns_none() -> None:
     """HAS_ADDRESS deliberately has no row in kg_edge_tool.
-    Addresses come bundled with search_suppliers_by_country via
-    expand=addresses; absence of a row is meaningful."""
+    Addresses come bundled with search_suppliers via expand=addresses
+    when a country filter is present; absence of a row is meaningful."""
     assert find_edge_tool("HAS_ADDRESS") is None
 
 
@@ -979,7 +978,7 @@ def test_generate_plan_original_track_a_step1_is_country_fetch(
         original_track_a_intent, reference_date=fixed_reference_date
     )
     step1 = produced[0]
-    assert step1.tool_name == "search_suppliers_by_country"
+    assert step1.tool_name == "search_suppliers"
     assert step1.tool_args == {"country": "US"}
     assert step1.output_name == "us_suppliers"
 
