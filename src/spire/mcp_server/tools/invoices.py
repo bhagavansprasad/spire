@@ -1,3 +1,4 @@
+
 """Invoice search tool.
 
 Plain async function — not coupled to FastMCP. Registration happens
@@ -72,6 +73,8 @@ async def search_invoices(
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
     invoice_date_before: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion invoices.
@@ -85,6 +88,8 @@ async def search_invoices(
             strictly before this date (exclusive). Applied client-side
             only. For a calendar month, pair with invoice_date_after:
             e.g. Jan 2022 -> after="2022-01-01", before="2022-02-01".
+        amount_min: Lower bound on InvoiceAmount (inclusive). Client-side.
+        amount_max: Upper bound on InvoiceAmount (inclusive). Client-side.
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -114,6 +119,8 @@ async def search_invoices(
             supplier_name,
             invoice_date_after,
             invoice_date_before,
+            amount_min is not None,
+            amount_max is not None,
         )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
@@ -135,6 +142,14 @@ async def search_invoices(
             return False
         if invoice_date_before and (item.get("InvoiceDate") or "") >= invoice_date_before:
             return False
+        if amount_min is not None or amount_max is not None:
+            amt = item.get("InvoiceAmount")
+            if amt is None:
+                return False
+            if amount_min is not None and amt < amount_min:
+                return False
+            if amount_max is not None and amt > amount_max:
+                return False
         return True
 
     filtered = [item for item in items if matches(item)]
@@ -180,3 +195,5 @@ async def search_invoices(
         limit_applied=limit,
         total_available=len(filtered),
     )
+
+
