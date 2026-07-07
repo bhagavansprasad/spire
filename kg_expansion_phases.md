@@ -117,7 +117,7 @@ inactive=INACTIVE, matched client-side. Not InactiveDate-based.
 
 ## Phase 3b — Supplier creation-date filter
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** Add the creation-date range filter for suppliers.
 
@@ -142,7 +142,7 @@ client-side (composite q= fails on this pod).
 
 ## Phase 4 — Invoice as a queryable target
 
-**Status:** PARTIAL (KG row already added: Invoice is targetable)
+**Status:** DONE (merged to master)
 
 **Goal:** Root a query on Invoice, filtered by supplier. Default fields.
 
@@ -172,7 +172,7 @@ No supplier → clean refusal.
 
 ## Phase 5 — Invoice filters (amount, date)
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** Add amount and date filters for invoices.
 
@@ -192,7 +192,7 @@ No supplier → clean refusal.
 
 ## Phase 6 — Address as a queryable target
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** Root a query on Address. Fetched via `suppliers?expand=addresses`.
 
@@ -247,3 +247,16 @@ across all entities.
   merged into one combinable `search_suppliers`; country row removed;
   resolve_vocab made case-insensitive. Phase 3 split into 3a (status +
   name, done) and 3b (created_date, open).
+- Phase 3b done: supplier creation-date range filter. Parser emits a
+  from/to object; planner expands it to created_from/created_to.
+- Phase 4 done: Invoice as a queryable target, filtered by supplier
+  (number or name). Planner refuses an Invoice query with no supplier.
+- Phase 5 done: invoice amount and date range filters. Added
+  `tool_arg_name_hi` so range filters carry both bound args in the KG;
+  planner range expansion generalized (from/to and min/max). 9 filter
+  rows.
+- Phase 6 done: Address as a queryable target via a new
+  `search_addresses` tool (flattens supplier.addresses[]). Filtered by
+  supplier or country; planner refuses if neither given. Added
+  AddressRecord/AddressResponse with id validation. 3 entity_tool, 11
+  filter rows.
