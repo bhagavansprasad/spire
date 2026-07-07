@@ -2,9 +2,10 @@
 """
 print_kg.py — Inspect the Spire Knowledge Graph.
 
-Reads the 8 KG tables (kg_entity, kg_entity_field, kg_edge, kg_pattern,
-kg_vocabulary, kg_pattern_binding, kg_entity_tool, kg_edge_tool) and
-prints them as formatted ASCII tables, with row counts and an FK summary.
+Reads the 9 KG tables (kg_entity, kg_entity_field, kg_edge, kg_pattern,
+kg_vocabulary, kg_pattern_binding, kg_entity_tool, kg_entity_filter,
+kg_edge_tool) and prints them as formatted ASCII tables, with row counts
+and an FK summary.
 
 Requires:
 - Oracle container running (oracle26ai_db_bhagavan)
@@ -121,7 +122,23 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 2,
+        "expected_rows": 3,
+    },
+    {
+        "name": "kg_entity_filter",
+        "purpose": "Filter definitions (formerly hardcoded in the planner). "
+                   "mechanism tells the planner if a filter is entity_level "
+                   "(dedicated fetcher) or edge_traversal (walks to a child).",
+        "columns": ["entity_name", "filter_type", "mechanism",
+                    "tool_arg_name", "vocab_kind", "target_entity",
+                    "kg_filter_type", "implicit_vocab_kind", "implicit_term",
+                    "notes"],
+        "sql": "SELECT entity_name, filter_type, mechanism, tool_arg_name, "
+               "vocab_kind, target_entity, kg_filter_type, "
+               "implicit_vocab_kind, implicit_term, notes "
+               "FROM kg_entity_filter ORDER BY entity_name, filter_type",
+        "clob_cols": set(),
+        "expected_rows": 3,
     },
     {
         "name": "kg_edge_tool",
@@ -144,6 +161,7 @@ FK_RELATIONS: list[tuple[str, str, str]] = [
     ("kg_pattern_binding", "entity_name",  "kg_entity.entity_name"),
     ("kg_pattern_binding", "pattern_name", "kg_pattern.pattern_name"),
     ("kg_entity_tool",     "entity_name",  "kg_entity.entity_name"),
+    ("kg_entity_filter",   "entity_name",  "kg_entity.entity_name"),
     ("kg_edge_tool",       "edge_name",    "kg_edge.edge_name"),
 ]
 
@@ -325,7 +343,7 @@ def main() -> int:
     parser.add_argument(
         "--table",
         choices=[t["name"] for t in TABLES],
-        help="Print just one table instead of all eight.",
+        help="Print just one table instead of all nine.",
     )
     parser.add_argument(
         "--schema-only",

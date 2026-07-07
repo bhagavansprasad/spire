@@ -66,13 +66,17 @@ async def test_kg_entity_has_five_rows():
 
 @pytest.mark.asyncio
 async def test_kg_table_row_counts_match_v1_1():
-    """All 8 KG tables match the v1.1 row counts.
+    """All 9 KG tables match the current row counts.
 
     v1.0 had 5 tables; v1.1 added 3 more (kg_pattern_binding,
     kg_entity_tool, kg_edge_tool) for the planner.
+    The KG-expansion work added a 9th (kg_entity_filter) to hold filter
+    definitions formerly hardcoded in the planner.
     v1.0 had 2 patterns (status_filter, country_filter_via_address);
     F2 added a 3rd (no_child_in_N_months) for the negation-by-absence
     semantic.
+    kg_entity_tool is now 3 (Supplier default, Supplier country, Invoice
+    default).
     """
     persona = load_persona("default_dev")
     expected = {
@@ -82,7 +86,8 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 42,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 2,
+        "kg_entity_tool": 3,
+        "kg_entity_filter": 3,
         "kg_edge_tool": 3,
     }
     async with OracleClient(persona) as oc:

@@ -67,7 +67,8 @@ EOF
 🔵 **ONE-TIME** (safe to re-run any time the schema needs a reset)
 ```bash
 python scripts/rebuild_kg.py
-python scripts/print_kg.py        # verify row counts
+python scripts/print_kg.py
+python scripts/print_kg.py --counts-only
 ```
 
 ---
