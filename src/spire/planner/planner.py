@@ -1,3 +1,4 @@
+
 """
 Planner for the KG-driven path (Architecture Option 3).
 
@@ -563,14 +564,14 @@ def resolve_vocab(vocab_kind: str, term: str) -> str:
         resolve_vocab('po_status', 'active')  -> 'OPEN'
 
     Raises ``KeyError`` if no matching row exists for the
-    (vocab_kind, term) pair. Match is case-sensitive.
+    (vocab_kind, term) pair. Match is case-insensitive on the term.
     """
     with _kg_cursor() as cursor:
         cursor.execute(
             """
             SELECT canonical_value
             FROM kg_vocabulary
-            WHERE vocab_kind = :vocab_kind AND term = :term
+            WHERE vocab_kind = :vocab_kind AND LOWER(term) = LOWER(:term)
             """,
             vocab_kind=vocab_kind,
             term=term,
@@ -635,9 +636,13 @@ def generate_plan(
     step_id = 1
 
     # ── Block 1: entity fetch ─────────────────────────────────────
+    # All entity-level filters go to the entity's single default
+    # fetcher (kg_entity_tool filter_type='none'), combined into one
+    # tool_args dict. This lets filters stack (e.g. active US suppliers
+    # named Lee) instead of each needing its own fetcher tool.
     entity_filter_type = _pick_entity_filter(intent.filters)
-    fetcher_tool = find_entity_tool(intent.target_entity, entity_filter_type)
-    fetcher_args = _build_fetcher_args(entity_filter_type, intent.filters)
+    fetcher_tool = find_entity_tool(intent.target_entity, "none")
+    fetcher_args = _build_entity_fetcher_args(intent.filters)
 
     plan.append(
         Step(
@@ -876,6 +881,44 @@ def _build_fetcher_args(
         normalized = raw_value
 
     return {filter_type: normalized}
+
+
+def _build_entity_fetcher_args(
+    filters: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Build combined ``tool_args`` for the per-entity default fetcher.
+
+    Loops over every entity-level filter in the intent and maps each to
+    the tool argument name declared in the KG (kg_entity_filter.
+    tool_arg_name). Values are vocab-normalized when a vocab kind is
+    registered for the filter. This lets a single fetcher receive
+    several filters at once (e.g. status + country + name).
+
+    Example:
+        [{"type":"status","value":"active"},
+         {"type":"country","value":"United States"}]
+          -> {"status": "ACTIVE", "country": "US"}
+    """
+    defs = _load_filter_defs()
+    vocab_kinds = _filter_value_vocab_kind()
+    entity_level = _entity_level_filter_types()
+
+    args: dict[str, Any] = {}
+    for f in filters:
+        ftype = f.get("type")
+        if ftype not in entity_level:
+            continue
+        arg_name = defs[ftype].get("tool_arg_name")
+        if not arg_name:
+            continue
+        raw_value = f.get("value")
+        vocab_kind = vocab_kinds.get(ftype)
+        if vocab_kind is not None:
+            args[arg_name] = resolve_vocab(vocab_kind, raw_value)
+        else:
+            args[arg_name] = raw_value
+    return args
 
 
 def _filters_needing_edge_traversal(
@@ -1150,5 +1193,7 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
