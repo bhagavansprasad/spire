@@ -36,7 +36,7 @@ dicts), not the KG. Phases 1–2 fix this.
 
 ## Phase 1 — Add `kg_entity_filter` table (seed only)
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** Add a KG table that holds filter definitions. Seed it to match
 today's hardcoded values exactly. Nothing reads it yet.
@@ -64,7 +64,7 @@ Full suite unchanged (nothing reads the table yet).
 
 ## Phase 2 — Rewire planner to read `kg_entity_filter`
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** Planner reads filter definitions from the KG table. Delete the
 hardcoded dicts. Behavior must be identical.
@@ -218,4 +218,7 @@ across all entities.
 
 ## Change log
 
-- _(empty — update as phases complete)_
+- Phase 1 done: added `kg_entity_filter` table, seeded to match the
+  prior hardcoded values. `print_kg.py` updated for the 9th table.
+- Phase 2 done: planner and `load_kg_menu` read filters from
+  `kg_entity_filter`; four hardcoded dicts removed. Behavior unchanged.
