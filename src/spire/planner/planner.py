@@ -193,16 +193,17 @@ def _load_filter_defs() -> dict[str, dict[str, Any]]:
     defs: dict[str, dict[str, Any]] = {}
     with _kg_cursor() as cursor:
         cursor.execute(
-            "SELECT filter_type, mechanism, tool_arg_name, vocab_kind, "
-            "target_entity, kg_filter_type, implicit_vocab_kind, "
+            "SELECT filter_type, mechanism, tool_arg_name, tool_arg_name_hi, "
+            "vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, "
             "implicit_term FROM kg_entity_filter"
         )
         for row in cursor.fetchall():
-            (ftype, mechanism, tool_arg, vocab_kind, target,
+            (ftype, mechanism, tool_arg, tool_arg_hi, vocab_kind, target,
              kg_filter_type, imp_vocab, imp_term) = row
             defs[ftype] = {
                 "mechanism": mechanism,
                 "tool_arg_name": tool_arg,
+                "tool_arg_name_hi": tool_arg_hi,
                 "vocab_kind": vocab_kind,
                 "target_entity": target,
                 "kg_filter_type": kg_filter_type,
@@ -927,16 +928,18 @@ def _build_entity_fetcher_args(
             continue
         raw_value = f.get("value")
 
-        # Range filters carry a dict value, e.g. created_date ->
-        # {"from": "...", "to": "..."}. Expand each present bound to its
-        # own tool arg. tool_arg_name is the base ("created"); the arg
-        # names are "<base>_from" / "<base>_to".
+        # Range filters carry a dict value with a low and/or high bound.
+        # The two tool args come from the KG (tool_arg_name = low,
+        # tool_arg_name_hi = high). Accept either {"from","to"} (dates)
+        # or {"min","max"} (amounts) as the value keys.
+        arg_name_hi = defs[ftype].get("tool_arg_name_hi")
         if isinstance(raw_value, dict):
-            base = arg_name.removesuffix("_from")
-            if raw_value.get("from"):
-                args[f"{base}_from"] = raw_value["from"]
-            if raw_value.get("to"):
-                args[f"{base}_to"] = raw_value["to"]
+            low = raw_value.get("from", raw_value.get("min"))
+            high = raw_value.get("to", raw_value.get("max"))
+            if low is not None:
+                args[arg_name] = low
+            if high is not None and arg_name_hi:
+                args[arg_name_hi] = high
             continue
 
         # The Invoice 'supplier' filter carries a supplier reference whose

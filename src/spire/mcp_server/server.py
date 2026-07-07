@@ -81,14 +81,17 @@ async def search_invoices(
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
     invoice_date_before: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion invoices.
 
     Use this to find invoices for a specific supplier, optionally filtered
-    by date. For the question "are there invoices for supplier X in the
-    last N months?" pass the supplier's number plus an invoice_date_after
-    of (today - N months) and check whether the result is empty.
+    by date and/or amount. For the question "are there invoices for
+    supplier X in the last N months?" pass the supplier's number plus an
+    invoice_date_after of (today - N months) and check whether the result
+    is empty.
 
     For a calendar month, combine the bounds: Jan 2022 is
     invoice_date_after="2022-01-01" and invoice_date_before="2022-02-01".
@@ -102,6 +105,8 @@ async def search_invoices(
             or after this date (inclusive).
         invoice_date_before: ISO date "YYYY-MM-DD". Returns invoices
             strictly before this date (exclusive).
+        amount_min: Lower bound on InvoiceAmount (inclusive).
+        amount_max: Upper bound on InvoiceAmount (inclusive).
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
@@ -111,6 +116,8 @@ async def search_invoices(
             supplier_name=supplier_name,
             invoice_date_after=invoice_date_after,
             invoice_date_before=invoice_date_before,
+            amount_min=amount_min,
+            amount_max=amount_max,
             limit=limit,
         )
         return result.to_dict()

@@ -187,6 +187,7 @@ CREATE TABLE kg_entity_filter (
   filter_type          VARCHAR2(64)  NOT NULL,
   mechanism            VARCHAR2(32)  NOT NULL,
   tool_arg_name        VARCHAR2(64),
+  tool_arg_name_hi     VARCHAR2(64),
   vocab_kind           VARCHAR2(32),
   target_entity        VARCHAR2(64),
   kg_filter_type       VARCHAR2(64),
@@ -549,9 +550,19 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Name substring match. Single-clause q=Supplier LIKE ''%value%'' is reliable server-side.'
 );
 
-INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
-  'Supplier', 'created_date', 'entity_level', 'created_from', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '>=',
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, tool_arg_name_hi, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'created_date', 'entity_level', 'created_from', 'created_to', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '>=',
   'Creation-date range. Lower bound via q=CreationDate >= ''x'' server-side; upper bound filtered client-side (composite q= fails on this pod).'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, tool_arg_name_hi, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'invoice_date', 'entity_level', 'invoice_date_after', 'invoice_date_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'InvoiceDate', '>=',
+  'Invoice-date range. Lower bound via q=InvoiceDate >= ''x'' server-side; upper bound client-side.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, tool_arg_name_hi, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'invoice_amount', 'entity_level', 'amount_min', 'amount_max', NULL, NULL, NULL, NULL, NULL, 'client_side', 'InvoiceAmount', 'range',
+  'Invoice-amount range. Both bounds filtered client-side against InvoiceAmount.'
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
@@ -571,6 +582,6 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (7 rows).
+PROMPT Seeded kg_entity_filter (9 rows).
 
 -- ============================================================
