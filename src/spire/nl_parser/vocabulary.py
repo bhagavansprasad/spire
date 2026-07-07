@@ -1,3 +1,4 @@
+
 """
 Synchronous KG vocabulary read for the NL parser.
 
@@ -14,16 +15,15 @@ An Intent is only useful if the PLANNER can execute it. So the menu must
 reflect what the planner can ACTUALLY do, not merely what the KG declares:
 
 - Valid ``target_entity`` values = entities that have an entity-level fetcher,
-  i.e. an (entity, 'none') row in kg_entity_tool. Today that is Supplier only.
-  (Invoice / PurchaseOrder are reachable as edge targets but have no
-  entity-level fetcher, so they cannot be a target_entity in v1.)
-- Valid filter types = the planner's own supported set:
-  _ENTITY_LEVEL_FILTER_TYPES | _EDGE_TRAVERSAL_FILTERS. These are currently
-  HARDCODED in the planner (the planner flags moving them into the KG as a
-  v1.2 candidate). We import them from the planner so there is a single source
-  of truth — if we re-declared them here they could drift from what
-  _validate_intent_filters actually accepts, and the two-way validation (Q2
-  direction 2) would then pass Intents the planner later crashes on.
+  i.e. an (entity, 'none') row in kg_entity_tool. Today that is Supplier
+  and Invoice.
+- Valid filter types = the planner's own supported set, now read from the
+  KG table kg_entity_filter via the planner's accessor functions
+  (_entity_level_filter_types / _edge_traversal_filters). We call them
+  through the planner so there is a single source of truth — if we
+  re-declared them here they could drift from what _validate_intent_filters
+  actually accepts, and the two-way validation (Q2 direction 2) would then
+  pass Intents the planner later crashes on.
 
 Entity/vocabulary DETAIL (descriptions, country synonyms, etc.) is read from
 the KG to enrich the prompt — that part is genuinely declarative.
@@ -38,8 +38,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from spire.planner.planner import (
-    _ENTITY_LEVEL_FILTER_TYPES,
-    _EDGE_TRAVERSAL_FILTERS,
+    _entity_level_filter_types,
+    _edge_traversal_filters,
     _kg_cursor,
 )
 
@@ -108,11 +108,10 @@ def load_kg_menu() -> KGMenu:
         Anything oracledb raises (connection failure, etc.) propagates — same
         convention as the planner's KG lookups.
     """
-    # Filter set comes from the planner's real capability surface, not the KG
-    # (see module docstring). A shallow copy so callers can't mutate the
-    # planner's module-level constants.
-    filter_types: set[str] = set(_ENTITY_LEVEL_FILTER_TYPES) | set(
-        _EDGE_TRAVERSAL_FILTERS
+    # Filter set comes from the planner's KG-backed filter definitions
+    # (kg_entity_filter). A fresh set so callers can't mutate anything.
+    filter_types: set[str] = (
+        _entity_level_filter_types() | set(_edge_traversal_filters())
     )
 
     entity_descriptions: dict[str, str] = {}
@@ -149,3 +148,5 @@ def load_kg_menu() -> KGMenu:
         entity_descriptions=entity_descriptions,
         country_terms=country_terms,
     )
+
+
