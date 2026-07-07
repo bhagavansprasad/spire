@@ -212,7 +212,7 @@ No supplier → clean refusal.
 
 ## Phase 7 — Column projection (generalized, cross-entity)
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
 **Goal:** When a prompt names fields, return only those fields. Works
 across all entities.
@@ -260,3 +260,7 @@ across all entities.
   supplier or country; planner refuses if neither given. Added
   AddressRecord/AddressResponse with id validation. 3 entity_tool, 11
   filter rows.
+- Phase 7 done: cross-entity column projection. LLM fills Intent.fields
+  with exact column names (from a per-entity list the menu reads from
+  kg_entity_field). Graph trims raw output to those columns; synthesized
+  prose and validation use full records. Roadmap complete.
