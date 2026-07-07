@@ -1,139 +1,216 @@
 # Spire KG Expansion — Phase Tracker
 
-Tracks the phased work to widen Spire's KG scope, starting with Invoice
-as a queryable target entity.
+Tracks the phased work to widen Spire's KG scope.
 
-**Principles (carried across all phases):**
+**Principles (all phases):**
 - KG logic handles classes of prompts, not specific ones. No per-prompt branches.
 - KG does not hardcode columns. Field selection is prompt-driven, backed by `kg_entity_field`.
+- Filters are data-driven from the KG, not hardcoded constants.
 - Build one piece, verify against the live pod, then proceed.
-- Each phase: branch → implement → test → PR → merge.
 
 **Workflow per phase:** branch off master → implement → test on live pod →
-open PR → merge → mark phase done here.
+open PR → merge → mark phase done here. Separate branch, PR, commit per phase.
 
 ---
 
 ## Baseline (before expansion)
 
-What works today, verified:
+Works today, verified:
 - Target entity: **Supplier** only.
 - Filters: `country`, `has_open_PO`, `has_no_recent_invoices`.
 - Aggregation: supplier spend ranking (top-N, optional date window).
 
 Refused cleanly (correct, out of scope):
 - Invoice / Address / PurchaseOrder / Buyer as a **target** entity.
-- Count and other aggregations beyond spend ranking.
-- Field projection, status filters, date-created filters, name-fragment filters.
+- Count and aggregations beyond spend ranking.
+- Field projection, status filters, creation-date filters, name-fragment filters.
 
 KG size at baseline: 5 entities, 27 fields, 4 edges, 3 patterns,
-42 vocabulary rows, 3 pattern bindings, 2 entity tools, 3 edge tools.
+42 vocabulary rows, 3 pattern bindings, 3 entity tools, 3 edge tools.
+
+Known internal issue: filter types come from hardcoded Python constants
+(`_ENTITY_LEVEL_FILTER_TYPES`, `_EDGE_TRAVERSAL_FILTERS`, plus two mapping
+dicts), not the KG. Phases 1–2 fix this.
 
 ---
 
-## Phase 1 — Invoice as a queryable target
+## Phase 1 — Add `kg_entity_filter` table (seed only)
 
 **Status:** NOT STARTED
 
-**Goal:** Let the user root a query on Invoice, filtered by supplier.
-Return default invoice fields.
+**Goal:** Add a KG table that holds filter definitions. Seed it to match
+today's hardcoded values exactly. Nothing reads it yet.
 
-**Scope:**
-- Parser admits `Invoice` as a valid `target_entity`.
-- Supplier identified by **number or name**.
-  - Number → direct (matches `HAS_INVOICE` join key `SupplierNumber`).
-  - Name → resolve name → `SupplierNumber` first, then fetch invoices.
-- Planner routes Invoice-target to `search_invoices` (tool already exists).
-- Synthesizer gets an Invoice response shape (sibling model per existing pattern).
-- Default fields only. No amount/date filters yet (Phase 2).
-- No column projection yet (Phase 4). Prompts naming specific fields
-  return the default set.
+**Supported before:** filters live in four hardcoded Python dicts.
 
-**Anchor prompts:**
-1. `Show me invoices for supplier 1252` — by number.
-2. `Invoices for Lee Supplies` — by name; exercises name→number lookup.
-3. `Get Sun Pvt Ltd supplier with invoice number and invoice amount`
-   — by name; returns default fields in this phase (projection deferred).
+**New after:** same behavior. The KG now *also* carries the filter
+definitions, ready for Phase 2 to consume. No user-facing change.
 
-**KG changes:**
-- No new endpoint (invoices endpoint already modeled).
-- Confirm Invoice entity is targetable, not just a child.
-- Bind Invoice-target to `search_invoices` in `kg_entity_tool`.
+**KG change:** new table `kg_entity_filter`. Proposed columns:
+entity_name, filter_type, mechanism (entity_level / edge_traversal),
+tool_arg_name, vocab_kind, target_entity, kg_filter_type.
+Seeded rows reproduce: country, has_open_PO, has_no_recent_invoices.
 
-**Test:** all three anchor prompts return invoice records against the
-live pod. Full existing suite still passes.
+**Sample prompts (regression — must behave identically):**
+- `Suppliers in US` → 25 US suppliers, as today.
+- `US suppliers with open purchase orders` → open-PO suppliers, as today.
 
-**Done when:** anchor prompts pass, suite green, merged to master.
+**Test:** KG rebuilds cleanly. `print_kg.py` shows the new table.
+Full suite unchanged (nothing reads the table yet).
+
+**Done when:** table seeded, KG rebuilds, suite green, merged.
 
 ---
 
-## Phase 2 — Invoice filters (amount, date)
+## Phase 2 — Rewire planner to read `kg_entity_filter`
 
 **Status:** NOT STARTED
 
-**Goal:** Add general filter types for invoices: amount and date.
+**Goal:** Planner reads filter definitions from the KG table. Delete the
+hardcoded dicts. Behavior must be identical.
+
+**Supported before:** planner routes filters via hardcoded constants.
+
+**New after:** planner routes filters via the KG. Filters are fully
+data-driven. Adding a filter later = a KG row, not code.
+
+**Code change:** rewire the six functions that consume the constants
+(`_pick_entity_filter`, `_filters_needing_edge_traversal`,
+`_build_fetcher_args`, `_filter_target_entity`, value-vocab resolution,
+validation). Remove the four dicts.
+
+**Sample prompts (regression — must behave identically):**
+- `Suppliers in US` → same result as Phase 1.
+- `US suppliers with no invoices in 6 months` → same as today.
+- `US suppliers with open POs, including the buyer` → same as today.
+
+**Test:** full suite passes byte-identically. No behavior drift.
+
+**Done when:** dicts deleted, suite green, merged.
+
+---
+
+## Phase 3 — New visible supplier filters
+
+**Status:** NOT STARTED
+
+**Goal:** Add supplier filters that fail today. Each is a KG row on the
+new mechanism, proving generalization works.
+
+**Filters added:** status (active/inactive), creation date (range),
+name fragment.
+
+**Supported before:** these prompts refuse.
+
+**New after:** these prompts return results.
+
+**Open item:** status definition — is "inactive" a `Status` value or
+`InactiveDate is not null`? Confirm via curl at phase start.
+
+**Sample prompts and expected results:**
+- `Get list of active suppliers` → suppliers with ACTIVE status.
+- `List suppliers which are inactive` → inactive suppliers (definition TBD).
+- `Suppliers created between Jan and Mar 2025` → suppliers in that date range.
+- `Suppliers named Lee` → suppliers whose name contains "Lee".
+
+**Test:** each filter returns correct subset vs a direct curl.
+
+**Done when:** all four prompts pass, suite green, merged.
+
+---
+
+## Phase 4 — Invoice as a queryable target
+
+**Status:** PARTIAL (KG row already added: Invoice is targetable)
+
+**Goal:** Root a query on Invoice, filtered by supplier. Default fields.
+
+**Supported before:** Invoice refused as a target.
+
+**New after:** Invoice queries work when a supplier is given.
+No supplier → clean refusal.
 
 **Scope:**
-- New filter types (generalized, not prompt-specific):
-  - `amount` comparison (e.g. `> 10000`).
-  - `invoice_date` window.
-- Still Invoice target. Builds on Phase 1.
-- Filters expressed as KG-backed filter types, routed deterministically.
+- Supplier by number (direct) or name (substring). Tool `search_invoices`
+  already supports both.
+- Supplier is required. No supplier → refuse.
+- Uses the generalized filter mechanism from Phase 2.
+- Synthesizer gets an Invoice response shape.
 
-**Anchor prompts (draft — confirm at phase start):**
-1. `Invoices over $10,000`
-2. `Invoices for supplier 1252 in 2023`
+**Sample prompts and expected results:**
+- `Show me invoices for supplier 1252` → invoices for Lee Supplies.
+- `Invoices for Lee Supplies` → same, via name lookup.
+- `Get Sun Pvt Ltd supplier with invoice number and invoice amount`
+  → invoices for Sun Pvt Ltd; default fields (projection is Phase 7).
 
-**Test:** amount and date filters return correct subsets vs a direct
-curl against the invoices endpoint.
+**Test:** all three return invoice records vs live pod. Suite green.
 
 **Done when:** anchor prompts pass, suite green, merged.
 
 ---
 
-## Phase 3 — Address as a queryable target
+## Phase 5 — Invoice filters (amount, date)
 
 **Status:** NOT STARTED
 
-**Goal:** Let the user root a query on Address. Proves the "add a target
-entity" path repeats cleanly.
+**Goal:** Add amount and date filters for invoices.
 
-**Scope:**
-- Parser admits `Address` as a valid `target_entity`.
-- Fetched via `suppliers?expand=addresses` (no standalone endpoint).
-- Synthesizer gets an Address response shape.
-- Default fields only (projection is Phase 4).
+**Supported before:** invoices filterable by supplier only.
 
-**Anchor prompts (draft — confirm at phase start):**
-1. `Suppliers with their addresses`
-2. `Lee Supplies address`
+**New after:** invoices filterable by amount and date too.
 
-**Test:** address records returned against live pod. Suite green.
+**Sample prompts and expected results:**
+- `Invoices over 10000 for supplier 1252` → invoices above that amount.
+- `Invoices for supplier 1252 in 2023` → invoices in that date window.
+
+**Test:** filtered subsets match a direct curl.
 
 **Done when:** anchor prompts pass, suite green, merged.
 
 ---
 
-## Phase 4 — Column projection (generalized, cross-entity)
+## Phase 6 — Address as a queryable target
 
 **Status:** NOT STARTED
 
-**Goal:** When a prompt names specific fields, return exactly those
-fields. Works across all entities, not one.
+**Goal:** Root a query on Address. Fetched via `suppliers?expand=addresses`.
+
+**Supported before:** Address refused as a target.
+
+**New after:** Address queries work.
+
+**Sample prompts and expected results:**
+- `Suppliers with their addresses` → suppliers plus their address rows.
+- `Lee Supplies address` → address(es) for Lee Supplies.
+
+**Test:** address records returned vs live pod. Suite green.
+
+**Done when:** anchor prompts pass, suite green, merged.
+
+---
+
+## Phase 7 — Column projection (generalized, cross-entity)
+
+**Status:** NOT STARTED
+
+**Goal:** When a prompt names fields, return only those fields. Works
+across all entities.
+
+**Supported before:** output always returns default fields.
+
+**New after:** output returns exactly the requested fields, any entity.
 
 **Scope:**
 - Prompt-driven field selection, backed by `kg_entity_field`.
-- Generic: applies to Supplier, Invoice, Address — every entity.
 - No hardcoded column lists.
-- Deferred prompts from earlier phases (e.g. Phase 1 anchor #3,
-  Phase 3 "specific columns") now return only the named fields.
+- Deferred prompts from earlier phases now honor field selection.
 
-**Anchor prompts (draft — confirm at phase start):**
-1. `Get SupplierName and SupplierNumber for India`
-2. `Get Sun Pvt Ltd supplier with invoice number and invoice amount`
+**Sample prompts and expected results:**
+- `Get SupplierName and SupplierNumber for India` → only those two fields.
+- `Get Sun Pvt Ltd supplier with invoice number and invoice amount`
+  → only invoice number and amount.
 
-**Test:** output contains only requested fields, across multiple
-entities. Suite green.
+**Test:** output contains only requested fields, across entities. Suite green.
 
 **Done when:** anchor prompts pass, suite green, merged.
 

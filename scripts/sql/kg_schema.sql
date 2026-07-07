@@ -450,9 +450,16 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Country-filtered fetcher. Uses expand=addresses under the hood; address data is bundled with the response.'
 );
 
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'Invoice',
+  'none',
+  'search_invoices',
+  'Default fetcher for Invoice. Requires a supplier (number or name); refuses if none given.'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_entity_tool (2 rows).
+PROMPT Seeded kg_entity_tool (3 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
