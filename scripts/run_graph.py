@@ -74,7 +74,7 @@ async def _run(prompt: str) -> int:
     print()
     print(_format_plan(state["plan"]))
     print()
-    print(_format_outputs(state["outputs"]))
+    print(_format_outputs(state.get("projected_outputs") or state["outputs"]))
     print()
     print(_format_synthesized(state["response"]))
     print()

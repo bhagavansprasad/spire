@@ -1,3 +1,4 @@
+
 """
 Design 3 pipeline expressed as a LangGraph custom graph.
 
@@ -57,6 +58,7 @@ class GraphState(TypedDict, total=False):
     refusal: Optional[Any]
     plan: Optional[Any]
     outputs: Optional[dict]
+    projected_outputs: Optional[dict]
     truncation_by_step: Optional[dict]
     response: Optional[Any]
     error: Optional[str]
@@ -80,6 +82,30 @@ def plan_node(state: GraphState) -> dict:
         return {"error": f"plan: {exc}"}
 
 
+def _project_outputs(outputs: dict, fields: list) -> dict:
+    """Trim each record in each output bucket to the requested fields.
+
+    Phase 7 projection. Only columns named in `fields` are kept; a record
+    missing all of them is left untouched (better to show something than
+    an empty row). Returns a new dict; the original outputs are unchanged,
+    so the synthesizer still sees full records.
+    """
+    if not fields:
+        return outputs
+    wanted = list(fields)
+    projected: dict = {}
+    for name, records in outputs.items():
+        new_records = []
+        for rec in records:
+            if not isinstance(rec, dict):
+                new_records.append(rec)
+                continue
+            trimmed = {k: rec[k] for k in wanted if k in rec}
+            new_records.append(trimmed if trimmed else rec)
+        projected[name] = new_records
+    return projected
+
+
 async def execute_node(state: GraphState) -> dict:
     try:
         outputs, truncation = await execute_plan(
@@ -87,7 +113,13 @@ async def execute_node(state: GraphState) -> dict:
             state["session"],
             progress_handler=state.get("progress_handler"),
         )
-        return {"outputs": outputs, "truncation_by_step": truncation}
+        fields = getattr(state.get("intent"), "fields", []) or []
+        projected = _project_outputs(outputs, fields)
+        return {
+            "outputs": outputs,
+            "projected_outputs": projected,
+            "truncation_by_step": truncation,
+        }
     except Exception as exc:
         return {"error": f"execute: {exc}"}
 
@@ -176,3 +208,5 @@ def _maybe_save_png(compiled) -> None:
 
 # Module-level compiled graph (compilation is cheap and reusable).
 GRAPH = build_graph()
+
+

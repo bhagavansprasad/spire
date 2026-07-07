@@ -279,6 +279,11 @@ class Intent:
     target_entity: str
     filters: list[dict[str, Any]] = field(default_factory=list)
     include: list[str] = field(default_factory=list)
+    # Phase 7: when the prompt names specific columns, the LLM fills this
+    # with exact column names (from kg_entity_field). Empty means "return
+    # the default field set". Projection trims the raw output records to
+    # these columns; the synthesized prose answer is unaffected.
+    fields: list[str] = field(default_factory=list)
     # Feature 7: when set, the question is an aggregation, not a list.
     # The LLM parser fills this when it detects aggregation/ranking
     # wording; it is None for ordinary list queries (the default), so

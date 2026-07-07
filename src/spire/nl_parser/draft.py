@@ -1,3 +1,4 @@
+
 """
 Pydantic mirror of the planner's ``Intent`` dataclass, for the LLM's
 structured output.
@@ -141,6 +142,16 @@ class DraftIntent(BaseModel):
             "Related entities to fetch alongside, e.g. ['Buyer']. Empty if none."
         ),
     )
+    fields: list[str] = Field(
+        default_factory=list,
+        description=(
+            "When the question asks for specific columns (e.g. 'get the "
+            "supplier name and number', 'with invoice number and amount'), "
+            "list the EXACT column names from the target entity's column "
+            "list below. Empty if the question does not name specific "
+            "columns. Use only names that appear in that list."
+        ),
+    )
     aggregate: DraftAggregate | None = Field(
         default=None,
         description=(
@@ -185,6 +196,7 @@ class DraftIntent(BaseModel):
             target_entity=self.target_entity,
             filters=decoded_filters,
             include=list(self.include),
+            fields=list(self.fields),
             aggregate=(
                 {
                     "op": self.aggregate.op,
@@ -196,4 +208,6 @@ class DraftIntent(BaseModel):
                 else None
             ),
         )
+
+
 

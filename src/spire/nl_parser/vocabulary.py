@@ -1,4 +1,5 @@
 
+
 """
 Synchronous KG vocabulary read for the NL parser.
 
@@ -67,6 +68,7 @@ class KGMenu:
     filter_types: set[str] = field(default_factory=set)
     entity_descriptions: dict[str, str] = field(default_factory=dict)
     country_terms: dict[str, str] = field(default_factory=dict)
+    entity_columns: dict[str, list[str]] = field(default_factory=dict)
 
     def is_known_entity(self, entity_name: str) -> bool:
         """True if the entity exists in the KG at all (valid or not as a
@@ -117,6 +119,7 @@ def load_kg_menu() -> KGMenu:
     entity_descriptions: dict[str, str] = {}
     target_entities: set[str] = set()
     country_terms: dict[str, str] = {}
+    entity_columns: dict[str, list[str]] = {}
 
     with _kg_cursor() as cursor:
         # All known entities + descriptions.
@@ -142,11 +145,24 @@ def load_kg_menu() -> KGMenu:
         for term, canonical in cursor.fetchall():
             country_terms[term] = canonical
 
+        # Projectable columns per entity, from kg_entity_field. Lets the
+        # LLM emit exact column names when the prompt asks for specific
+        # fields (Phase 7 projection).
+        cursor.execute(
+            "SELECT entity_name, field_name FROM kg_entity_field "
+            "ORDER BY entity_name, field_name"
+        )
+        for entity_name, field_name in cursor.fetchall():
+            entity_columns.setdefault(entity_name, []).append(field_name)
+
     return KGMenu(
         target_entities=target_entities,
         filter_types=filter_types,
         entity_descriptions=entity_descriptions,
         country_terms=country_terms,
+        entity_columns=entity_columns,
     )
+
+
 
 

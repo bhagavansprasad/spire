@@ -95,6 +95,10 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "MUST include a supplier or a country.\n"
     "- 'include the buyer' / 'with the buyer' / 'show the buyer assigned' -> "
     "add 'Buyer' to include.\n"
+    "- 'get the supplier name and number' / 'with invoice number and "
+    "amount' / 'show only the city and country' -> put the EXACT column "
+    "names in 'fields' (from the COLUMNS list below). Leave 'fields' empty "
+    "when the question does not name specific columns.\n"
     "If a prompt mentions several of these, emit ALL of them. A common error "
     "is dropping a constraint (e.g. forgetting the country, or omitting the "
     "buyer include) — do not do this.\n\n"
@@ -144,6 +148,16 @@ def _format_menu(menu: KGMenu) -> str:
     for ft in sorted(menu.filter_types):
         lines.append(f"  - {ft}")
     lines.append("")
+
+    if menu.entity_columns:
+        lines.append(
+            "COLUMNS per entity (use these EXACT names when the question "
+            "asks for specific fields; put them in 'fields'):"
+        )
+        for e in sorted(menu.entity_columns):
+            cols = ", ".join(menu.entity_columns[e])
+            lines.append(f"  - {e}: {cols}")
+        lines.append("")
 
     lines.append(
         "COUNTRY values accepted (map any of these terms to the canonical "
