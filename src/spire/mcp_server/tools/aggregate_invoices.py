@@ -60,7 +60,7 @@ INVOICES_PATH = "/fscmRestApi/resources/11.13.18.05/invoices"
 # Page size per fetch. The pod's practical max before things slow is ~200
 # (see the endpoints reference), so we page at 200 rather than grabbing
 # one big page.
-_PAGE_SIZE = 200
+_PAGE_SIZE = 500
 
 # Max pages to fetch before stopping. Bounds the work on very large
 # ranges: at _PAGE_SIZE=200, 50 pages = 10,000 invoices. If a range has

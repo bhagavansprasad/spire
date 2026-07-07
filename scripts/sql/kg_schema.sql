@@ -564,8 +564,13 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Edge filter: supplier has no invoices in N months. Value is explicit ({months: N}).'
 );
 
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'supplier', 'entity_level', 'supplier', NULL, NULL, NULL, NULL, NULL, 'server_q', 'SupplierNumber', 'equals',
+  'Invoice-by-supplier. Value is a supplier reference; the planner routes an all-digit value to supplier_number, otherwise supplier_name. Required for Invoice queries.'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (6 rows).
+PROMPT Seeded kg_entity_filter (7 rows).
 
 -- ============================================================

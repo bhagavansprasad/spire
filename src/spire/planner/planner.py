@@ -630,6 +630,19 @@ def generate_plan(
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
 
+    # Invoice queries require a supplier reference. Without it the fetch
+    # would pull every invoice on the pod. Refuse loudly instead.
+    if intent.target_entity == "Invoice":
+        has_supplier = any(
+            f.get("type") == "supplier" for f in intent.filters
+        )
+        if not has_supplier:
+            raise ValueError(
+                "Invoice queries require a supplier. Name the supplier by "
+                "number (e.g. 'invoices for supplier 1252') or by name "
+                "(e.g. 'invoices for Lee Supplies')."
+            )
+
     ref_date = reference_date if reference_date is not None else date.today()
 
     plan: Plan = []
@@ -924,6 +937,17 @@ def _build_entity_fetcher_args(
                 args[f"{base}_from"] = raw_value["from"]
             if raw_value.get("to"):
                 args[f"{base}_to"] = raw_value["to"]
+            continue
+
+        # The Invoice 'supplier' filter carries a supplier reference whose
+        # arg depends on its shape: an all-digit value is a SupplierNumber;
+        # anything else is treated as a name substring.
+        if arg_name == "supplier":
+            value_str = str(raw_value).strip()
+            if value_str.isdigit():
+                args["supplier_number"] = value_str
+            else:
+                args["supplier_name"] = value_str
             continue
 
         vocab_kind = vocab_kinds.get(ftype)
