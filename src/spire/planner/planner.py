@@ -40,26 +40,10 @@ import oracledb
 # small and the KG schema stays simple.
 # ─────────────────────────────────────────────────────────────────────
 
-# Intent filter types that have a dedicated entity-level fetcher tool.
-# Anything not in this set is assumed to require an edge traversal.
-_ENTITY_LEVEL_FILTER_TYPES: set[str] = {"country"}
-
-# Intent filter types that require an edge traversal to a child entity.
-# Maps the intent filter type to (target_entity, kg_filter_type) so
-# the orchestrator knows which edge to walk and which pattern binding
-# to look up.
-_EDGE_TRAVERSAL_FILTERS: dict[str, tuple[str, str]] = {
-    "has_open_PO": ("PurchaseOrder", "status"),
-    "has_no_recent_invoices": ("Invoice", "no_recent_invoices"),
-}
-
-# Per-edge-traversal filter, the vocab kind to resolve the implicit value.
-# 'has_open_PO' implies status='open'; we resolve 'open' via po_status vocab.
-# 'has_no_recent_invoices' has no implicit vocab term — the value is
-# explicit (e.g. {"months": 6}), so this dict has no entry for it.
-_EDGE_FILTER_IMPLICIT_VALUES: dict[str, tuple[str, str]] = {
-    "has_open_PO": ("po_status", "open"),
-}
+# Filter definitions (entity-level vs edge-traversal, vocab kinds,
+# implicit values) are no longer hardcoded here. They live in the KG
+# table kg_entity_filter and are read lazily by _load_filter_defs()
+# below. See the "Filter definitions" section further down.
 
 # Map MCP tool name -> primary argument name (the one the executor
 # substitutes $iteration_value into when iterating).
@@ -68,14 +52,6 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "search_invoices": "supplier_number",
     "search_purchase_orders": "supplier_id",
     "get_buyer": "buyer_id",
-}
-
-# Map intent filter type -> the vocab_kind used to resolve its value.
-# Only filter types with a free-form value need this; entity-level
-# filters whose value is already canonical (country='US') still go
-# through resolve_vocab for normalization (e.g., 'United States' -> 'US').
-_FILTER_VALUE_VOCAB_KIND: dict[str, str] = {
-    "country": "country",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -190,6 +166,85 @@ def _read_clob(value: Any) -> str:
         return value
     # Sync oracledb.LOB: .read() is synchronous (unlike AsyncLOB).
     return value.read()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Filter definitions — loaded from kg_entity_filter (lazy, cached).
+#
+# Replaces the hardcoded filter dicts. Read once on first use, cached
+# for the process lifetime. Mirrors the lazy-read style of the other
+# KG lookups in this module.
+# ─────────────────────────────────────────────────────────────────────
+
+_FILTER_DEFS_CACHE: dict[str, dict[str, Any]] | None = None
+
+
+def _load_filter_defs() -> dict[str, dict[str, Any]]:
+    """Read kg_entity_filter once; cache by filter_type.
+
+    Each value carries: mechanism, tool_arg_name, vocab_kind,
+    target_entity, kg_filter_type, implicit_vocab_kind, implicit_term.
+    """
+    global _FILTER_DEFS_CACHE
+    if _FILTER_DEFS_CACHE is not None:
+        return _FILTER_DEFS_CACHE
+
+    defs: dict[str, dict[str, Any]] = {}
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            "SELECT filter_type, mechanism, tool_arg_name, vocab_kind, "
+            "target_entity, kg_filter_type, implicit_vocab_kind, "
+            "implicit_term FROM kg_entity_filter"
+        )
+        for row in cursor.fetchall():
+            (ftype, mechanism, tool_arg, vocab_kind, target,
+             kg_filter_type, imp_vocab, imp_term) = row
+            defs[ftype] = {
+                "mechanism": mechanism,
+                "tool_arg_name": tool_arg,
+                "vocab_kind": vocab_kind,
+                "target_entity": target,
+                "kg_filter_type": kg_filter_type,
+                "implicit_vocab_kind": imp_vocab,
+                "implicit_term": imp_term,
+            }
+    _FILTER_DEFS_CACHE = defs
+    return defs
+
+
+def _entity_level_filter_types() -> set[str]:
+    """Filter types with a dedicated entity-level fetcher."""
+    return {
+        ftype for ftype, d in _load_filter_defs().items()
+        if d["mechanism"] == "entity_level"
+    }
+
+
+def _edge_traversal_filters() -> dict[str, tuple[str, str]]:
+    """Edge-traversal filters: type -> (target_entity, kg_filter_type)."""
+    return {
+        ftype: (d["target_entity"], d["kg_filter_type"])
+        for ftype, d in _load_filter_defs().items()
+        if d["mechanism"] == "edge_traversal"
+    }
+
+
+def _edge_filter_implicit_values() -> dict[str, tuple[str, str]]:
+    """Edge filters with an implicit value: type -> (vocab_kind, term)."""
+    return {
+        ftype: (d["implicit_vocab_kind"], d["implicit_term"])
+        for ftype, d in _load_filter_defs().items()
+        if d["implicit_vocab_kind"] is not None
+    }
+
+
+def _filter_value_vocab_kind() -> dict[str, str]:
+    """Filter types whose value resolves via a vocab kind."""
+    return {
+        ftype: d["vocab_kind"]
+        for ftype, d in _load_filter_defs().items()
+        if d["vocab_kind"] is not None
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -747,7 +802,7 @@ def _validate_intent_filters(filters: list[dict[str, Any]]) -> None:
     Called from generate_plan before any other work, so unknown filter
     types raise loudly instead of being silently dropped further down
     the pipeline. (v1's _filters_needing_edge_traversal would otherwise
-    silently exclude filters whose type isn't in _EDGE_TRAVERSAL_FILTERS,
+    silently exclude filters whose type isn't an edge-traversal filter,
     which means an intent like {"type": "has_no_recent_invoices", ...}
     would execute as if that clause weren't in the prompt — a silent
     miss that's worse than a crash.)
@@ -755,7 +810,7 @@ def _validate_intent_filters(filters: list[dict[str, Any]]) -> None:
     Raises NotImplementedError listing ALL unknown filter types at once,
     with a message naming the v1-supported alternatives.
     """
-    known_types = _ENTITY_LEVEL_FILTER_TYPES | set(_EDGE_TRAVERSAL_FILTERS)
+    known_types = _entity_level_filter_types() | set(_edge_traversal_filters())
     unknown = [
         f.get("type") for f in filters if f.get("type") not in known_types
     ]
@@ -763,9 +818,9 @@ def _validate_intent_filters(filters: list[dict[str, Any]]) -> None:
         raise NotImplementedError(
             f"Intent contains filter types not supported in v1: {unknown}. "
             f"Supported entity-level filters: "
-            f"{sorted(_ENTITY_LEVEL_FILTER_TYPES)}. "
+            f"{sorted(_entity_level_filter_types())}. "
             f"Supported edge-traversal filters: "
-            f"{sorted(_EDGE_TRAVERSAL_FILTERS)}."
+            f"{sorted(_edge_traversal_filters())}."
         )
 
 
@@ -778,12 +833,13 @@ def _pick_entity_filter(filters: list[dict[str, Any]]) -> str:
         [{"type": "country", ...}, {"type": "has_open_PO", ...}] -> 'country'
         [{"type": "has_open_PO", ...}]                            -> 'none'
 
-    v1: checks against _ENTITY_LEVEL_FILTER_TYPES (module-level constant).
+    Checks against the entity-level filter types from the KG.
     Returns the FIRST matching filter type. v1's anchor intent has at
     most one entity-level filter, so order-stability suffices.
     """
+    entity_level = _entity_level_filter_types()
     for f in filters:
-        if f.get("type") in _ENTITY_LEVEL_FILTER_TYPES:
+        if f.get("type") in entity_level:
             return f["type"]
     return "none"
 
@@ -813,7 +869,7 @@ def _build_fetcher_args(
     raw_value = matching["value"]
 
     # Normalize via vocab if a vocab kind is registered.
-    vocab_kind = _FILTER_VALUE_VOCAB_KIND.get(filter_type)
+    vocab_kind = _filter_value_vocab_kind().get(filter_type)
     if vocab_kind is not None:
         normalized = resolve_vocab(vocab_kind, raw_value)
     else:
@@ -829,7 +885,7 @@ def _filters_needing_edge_traversal(
     Return the subset of filters not handled by the entity-level fetcher
     and therefore needing a separate edge traversal step.
 
-    v1: returns filters whose type is in _EDGE_TRAVERSAL_FILTERS.
+    Returns filters whose type is an edge-traversal filter (from the KG).
     Entity-level filters (already consumed by Block 1) and unknown
     filter types are excluded.
 
@@ -838,7 +894,8 @@ def _filters_needing_edge_traversal(
     _validate_intent_filters is now called from generate_plan before
     this function runs, so unknown types raise before reaching here.
     """
-    return [f for f in filters if f.get("type") in _EDGE_TRAVERSAL_FILTERS]
+    edge_filters = _edge_traversal_filters()
+    return [f for f in filters if f.get("type") in edge_filters]
 
 
 def _filter_target_entity(filter_spec: dict[str, Any]) -> str:
@@ -850,12 +907,13 @@ def _filter_target_entity(filter_spec: dict[str, Any]) -> str:
     Raises KeyError if the filter type is unknown to v1.
     """
     filter_type = filter_spec.get("type")
-    if filter_type not in _EDGE_TRAVERSAL_FILTERS:
+    edge_filters = _edge_traversal_filters()
+    if filter_type not in edge_filters:
         raise KeyError(
             f"Filter type {filter_type!r} has no edge-traversal target "
-            "in v1's mapping table."
+            "in the KG filter table."
         )
-    target_entity, _kg_filter_type = _EDGE_TRAVERSAL_FILTERS[filter_type]
+    target_entity, _kg_filter_type = edge_filters[filter_type]
     return target_entity
 
 
@@ -879,12 +937,13 @@ def _resolve_client_filters(
         -> [{"field": "StatusCode", "op": "equals", "value": "OPEN"}]
     """
     intent_filter_type = filter_spec.get("type")
-    if intent_filter_type not in _EDGE_TRAVERSAL_FILTERS:
+    edge_filters = _edge_traversal_filters()
+    if intent_filter_type not in edge_filters:
         raise KeyError(
             f"Filter type {intent_filter_type!r} is not an edge-traversal "
             "filter and has no client-filter mapping."
         )
-    _target_entity, kg_filter_type = _EDGE_TRAVERSAL_FILTERS[intent_filter_type]
+    _target_entity, kg_filter_type = edge_filters[intent_filter_type]
 
     binding = find_pattern_for_filter(target_entity, kg_filter_type)
     pattern_name = binding["pattern_name"]
@@ -893,7 +952,7 @@ def _resolve_client_filters(
     if pattern_name == "status_filter":
         # bindings carry: X (entity), status_field, status_term_param.
         field_name = bindings["status_field"]
-        vocab_kind, implicit_term = _EDGE_FILTER_IMPLICIT_VALUES[intent_filter_type]
+        vocab_kind, implicit_term = _edge_filter_implicit_values()[intent_filter_type]
         canonical = resolve_vocab(vocab_kind, implicit_term)
         return [{"field": field_name, "op": "equals", "value": canonical}]
 
@@ -1037,7 +1096,7 @@ def _make_output_name(
         matching = next((f for f in filters if f.get("type") == "country"), None)
         if matching is not None:
             country_value = matching["value"]
-            vocab_kind = _FILTER_VALUE_VOCAB_KIND.get("country")
+            vocab_kind = _filter_value_vocab_kind().get("country")
             if vocab_kind is not None:
                 try:
                     country_value = resolve_vocab(vocab_kind, country_value)
@@ -1091,4 +1150,5 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
 
