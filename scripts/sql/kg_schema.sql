@@ -485,9 +485,16 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Default fetcher for Invoice. Requires a supplier (number or name); refuses if none given.'
 );
 
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'Address',
+  'none',
+  'search_addresses',
+  'Default fetcher for Address. Flattens supplier.addresses[] via expand=addresses. Requires a supplier or country; refuses if none given.'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_entity_tool (2 rows).
+PROMPT Seeded kg_entity_tool (3 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -580,8 +587,18 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Invoice-by-supplier. Value is a supplier reference; the planner routes an all-digit value to supplier_number, otherwise supplier_name. Required for Invoice queries.'
 );
 
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Address', 'supplier', 'entity_level', 'supplier', NULL, NULL, NULL, NULL, NULL, 'server_q', 'SupplierNumber', 'equals',
+  'Address-by-supplier. Value is a supplier reference; planner routes all-digit to supplier_number, else supplier_name. One of supplier/country required for Address queries.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Address', 'country', 'entity_level', 'country', 'country', NULL, NULL, NULL, NULL, 'client_side', 'Country', 'equals',
+  'Address-by-country. Matched client-side against each address CountryCode/Country. One of supplier/country required for Address queries.'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (9 rows).
+PROMPT Seeded kg_entity_filter (11 rows).
 
 -- ============================================================

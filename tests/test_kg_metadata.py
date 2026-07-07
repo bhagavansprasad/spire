@@ -76,9 +76,9 @@ async def test_kg_table_row_counts_match_v1_1():
     v1.0 had 2 patterns (status_filter, country_filter_via_address);
     F2 added a 3rd (no_child_in_N_months) for the negation-by-absence
     semantic.
-    kg_entity_tool is now 2 (Supplier default, Invoice default). The
-    country filter no longer has its own tool; it routes through the
-    default supplier fetcher with combined args.
+    kg_entity_tool is now 3 (Supplier default, Invoice default, Address
+    default). The country filter has no dedicated tool; it routes through
+    the default supplier fetcher with combined args.
     """
     persona = load_persona("default_dev")
     expected = {
@@ -88,8 +88,8 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 44,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 2,
-        "kg_entity_filter": 9,
+        "kg_entity_tool": 3,
+        "kg_entity_filter": 11,
         "kg_edge_tool": 3,
     }
     async with OracleClient(persona) as oc:

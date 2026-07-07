@@ -1,4 +1,5 @@
 
+
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -87,6 +88,11 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "1000 and 5000' -> an 'invoice_amount' filter with value "
     "{\"min\": N, \"max\": N} (numbers, not strings). Include only the "
     "bounds given; omit the other key.\n"
+    "- 'addresses for supplier X' / 'supplier 1252 addresses' / 'US "
+    "supplier addresses' / 'addresses in the UK' -> target_entity "
+    "'Address' with a 'supplier' filter (the supplier reference as "
+    "written) and/or a 'country' filter (canonical code). Address queries "
+    "MUST include a supplier or a country.\n"
     "- 'include the buyer' / 'with the buyer' / 'show the buyer assigned' -> "
     "add 'Buyer' to include.\n"
     "If a prompt mentions several of these, emit ALL of them. A common error "
@@ -266,6 +272,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 
