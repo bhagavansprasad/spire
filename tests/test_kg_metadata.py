@@ -89,7 +89,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_vocabulary": 44,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 2,
-        "kg_entity_filter": 6,
+        "kg_entity_filter": 7,
         "kg_edge_tool": 3,
     }
     async with OracleClient(persona) as oc:
