@@ -90,32 +90,53 @@ validation). Remove the four dicts.
 
 ---
 
-## Phase 3 — New visible supplier filters
+## Phase 3a — Visible supplier filters: status, name
 
-**Status:** NOT STARTED
+**Status:** DONE (merged to master)
 
-**Goal:** Add supplier filters that fail today. Each is a KG row on the
-new mechanism, proving generalization works.
+**Goal:** Add status and name-fragment filters, and merge the two
+supplier tools into one per-entity fetcher so filters combine.
 
-**Filters added:** status (active/inactive), creation date (range),
-name fragment.
+**Supported before:** status/name prompts refused. Country had its own
+tool and could not combine with other filters.
 
-**Supported before:** these prompts refuse.
+**New after:** status and name work. All supplier filters live on one
+`search_suppliers` and stack (e.g. "active US suppliers named Lee").
+Country routes through the merged fetcher; its dedicated tool is gone.
 
-**New after:** these prompts return results.
-
-**Open item:** status definition — is "inactive" a `Status` value or
-`InactiveDate is not null`? Confirm via curl at phase start.
+**Status definition:** settled Status-based. active=ACTIVE,
+inactive=INACTIVE, matched client-side. Not InactiveDate-based.
 
 **Sample prompts and expected results:**
 - `Get list of active suppliers` → suppliers with ACTIVE status.
-- `List suppliers which are inactive` → inactive suppliers (definition TBD).
-- `Suppliers created between Jan and Mar 2025` → suppliers in that date range.
+- `List suppliers which are inactive` → the INACTIVE suppliers.
 - `Suppliers named Lee` → suppliers whose name contains "Lee".
+- `active US suppliers` → active suppliers with a US address (combo).
 
-**Test:** each filter returns correct subset vs a direct curl.
+---
 
-**Done when:** all four prompts pass, suite green, merged.
+## Phase 3b — Supplier creation-date filter
+
+**Status:** NOT STARTED
+
+**Goal:** Add the creation-date range filter for suppliers.
+
+**Supported before:** creation-date prompts refuse.
+
+**New after:** creation-date range works.
+
+**Note:** the merged tool already accepts `created_from`/`created_to`.
+Remaining work is parser-side: teach the parser the value shape for a
+date range, then route it. Lower bound is server-side q=; upper bound
+client-side (composite q= fails on this pod).
+
+**Sample prompts and expected results:**
+- `Suppliers created between Jan and Mar 2025` → suppliers in that range.
+- `Suppliers created after 2022` → suppliers with CreationDate >= 2022.
+
+**Test:** range returns correct subset vs a direct curl.
+
+**Done when:** anchor prompts pass, suite green, merged.
 
 ---
 
@@ -222,3 +243,7 @@ across all entities.
   prior hardcoded values. `print_kg.py` updated for the 9th table.
 - Phase 2 done: planner and `load_kg_menu` read filters from
   `kg_entity_filter`; four hardcoded dicts removed. Behavior unchanged.
+- Phase 3a done: status and name filters added; the two supplier tools
+  merged into one combinable `search_suppliers`; country row removed;
+  resolve_vocab made case-insensitive. Phase 3 split into 3a (status +
+  name, done) and 3b (created_date, open).
