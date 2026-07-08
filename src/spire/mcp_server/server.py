@@ -47,6 +47,7 @@ async def search_suppliers(
     country: str | None = None,
     created_from: str | None = None,
     created_to: str | None = None,
+    include_addresses: bool = False,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion suppliers by any combination of filters.
@@ -67,6 +68,9 @@ async def search_suppliers(
             resource. Three-letter codes like "USA" are not supported.
         created_from: Lower bound on CreationDate ("YYYY-MM-DD").
         created_to: Upper bound on CreationDate ("YYYY-MM-DD").
+        include_addresses: When True, nest each supplier's addresses under
+            an 'addresses' key (via expand=addresses). Use for "suppliers
+            with their addresses".
         limit: Max records to return (default 25).
     """
     async with FusionClient(_persona) as client:
@@ -78,6 +82,7 @@ async def search_suppliers(
             country=country,
             created_from=created_from,
             created_to=created_to,
+            include_addresses=include_addresses,
             limit=limit,
         )
         return result.to_dict()

@@ -677,6 +677,14 @@ def generate_plan(
     fetcher_tool = find_entity_tool(intent.target_entity, "none")
     fetcher_args = _build_entity_fetcher_args(intent.filters)
 
+    # Address include on a supplier-rooted query is satisfied by expanding
+    # the addresses child on the supplier fetch itself (Path B), NOT by a
+    # separate edge-traversal step. Flag it here; Block 3 skips Address so
+    # it isn't also fetched as an edge. Concrete Supplier+Address case
+    # only — not a general expand mechanism.
+    if intent.target_entity == "Supplier" and "Address" in intent.include:
+        fetcher_args["include_addresses"] = True
+
     plan.append(
         Step(
             step_id=step_id,
@@ -758,6 +766,12 @@ def generate_plan(
 
     # ── Block 3: includes ─────────────────────────────────────────
     for include_entity in intent.include:
+        # Address on a supplier query is already handled by expand in
+        # Block 1 (include_addresses on the supplier fetch); don't also
+        # fetch it as an edge step. There is no HAS_ADDRESS edge tool
+        # binding anyway, so this would otherwise raise.
+        if intent.target_entity == "Supplier" and include_entity == "Address":
+            continue
         edge = find_edge(previous_entity, include_entity)
         tool = find_edge_tool(edge["edge_name"])
         if tool is None:
@@ -1252,6 +1266,8 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
 

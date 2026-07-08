@@ -68,6 +68,8 @@ DEFAULT_PROMPTS: list[str] = [
     "Invoices for Lee Supplies in 2023",
     # — address (Phase 6) —
     "Addresses for supplier 1252",
+    # — nested addresses on a supplier query (Phase 9) —
+    "Suppliers with their addresses",
     # — refusal (out of scope) —
     "Show me contract renewals due next quarter",
 ]

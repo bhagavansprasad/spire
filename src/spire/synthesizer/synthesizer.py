@@ -64,6 +64,25 @@ class BuyerInfo(BaseModel):
     display_name: str = Field(description="The buyer's display name.")
 
 
+class AddressInfo(BaseModel):
+    """One address nested under a supplier in a supplier-rooted response.
+
+    address_id is validated against the executor's output after synthesis
+    — it MUST appear there. Used for the "suppliers with their addresses"
+    shape, where addresses hang off each supplier record."""
+
+    address_id: int = Field(
+        description="The address's SupplierAddressId (numeric key). "
+        "Must appear in the data."
+    )
+    country: str = Field(default="", description="Full country name, if present.")
+    city: str = Field(default="", description="City, if present.")
+    state: str = Field(default="", description="State/province, if present.")
+    formatted_address: str = Field(
+        default="", description="One-line formatted address, if present."
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Per-entity record models
 # ─────────────────────────────────────────────────────────────────────
@@ -88,6 +107,12 @@ class SupplierRecord(BaseModel):
         default_factory=list,
         description="Buyers assigned to this supplier's open POs. Each "
         "buyer's person_id must appear in the executor's buyers output.",
+    )
+    addresses: list[AddressInfo] = Field(
+        default_factory=list,
+        description="This supplier's addresses, when the query asked for "
+        "them (nested from the supplier fetch's expand=addresses). Empty "
+        "otherwise. Each address_id must appear in the executor's output.",
     )
 
 
@@ -331,6 +356,13 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 invoice_ids.add(iid)
             if (aid := item.get("SupplierAddressId")) is not None:
                 address_ids.add(aid)
+            # Phase 9: a supplier-rooted query with addresses nests each
+            # supplier's addresses under "addresses"; harvest their ids so
+            # the nested AddressInfo entries validate.
+            if isinstance(item.get("addresses"), list):
+                for addr in item["addresses"]:
+                    if (na := addr.get("SupplierAddressId")) is not None:
+                        address_ids.add(na)
             # Feature 7: an aggregation ranking carries its suppliers
             # nested under "rows", each with a lowercase "supplier_number".
             if isinstance(item.get("rows"), list):
@@ -382,7 +414,12 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "orders by supplier: open_po_count is the exact count of that "
         "supplier's POs in the open_pos bucket. List each unique buyer "
         "assigned to that supplier's POs; each buyer's person_id must "
-        "appear in the buyers bucket."
+        "appear in the buyers bucket. If a supplier record carries an "
+        "'addresses' list (the query asked for supplier addresses), emit "
+        "each one under that supplier's 'addresses' with its address_id "
+        "and the country, city, state, and formatted_address when present; "
+        "each address_id must appear in the data. If a supplier has no "
+        "addresses field, leave its 'addresses' empty."
     ),
     "Invoice": (
         "This is an INVOICE-rooted query. For each invoice in the final "
@@ -473,6 +510,7 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
     bad_sid: list[int] = []
     bad_snum: list[str] = []
     bad_pid: list[int] = []
+    bad_aid: list[int] = []
     for s in response.suppliers:
         if s.supplier_id not in valid["supplier_ids"]:
             bad_sid.append(s.supplier_id)
@@ -481,6 +519,9 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
         for b in s.buyers:
             if b.person_id not in valid["person_ids"]:
                 bad_pid.append(b.person_id)
+        for a in s.addresses:
+            if a.address_id not in valid["address_ids"]:
+                bad_aid.append(a.address_id)
     parts = []
     if bad_sid:
         parts.append(f"supplier_ids={bad_sid}")
@@ -488,6 +529,8 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
         parts.append(f"supplier_numbers={bad_snum}")
     if bad_pid:
         parts.append(f"person_ids={bad_pid}")
+    if bad_aid:
+        parts.append(f"address_ids={bad_aid}")
     _raise_if_bad(parts)
 
 
@@ -661,6 +704,8 @@ def synthesize_response(
 
     _validate_no_hallucinated_ids(response, outputs)
     return response
+
+
 
 
 
