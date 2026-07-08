@@ -233,17 +233,28 @@ def expand_pattern(
             results.append(rel)
     else:
         # Treat as a glob (e.g., "docs/spire_handoff_*.md").
+        matched = False
         for path in sorted(repo_root.glob(pattern)):
             if path.is_file():
                 rel = path.relative_to(repo_root)
                 if not is_excluded(rel, excludes):
                     results.append(rel)
+                    matched = True
             elif path.is_dir():
                 for sub in sorted(path.rglob("*")):
                     if sub.is_file():
                         rel = sub.relative_to(repo_root)
                         if not is_excluded(rel, excludes):
                             results.append(rel)
+                            matched = True
+        # An explicit path (no glob chars) that matched nothing is almost
+        # certainly a stale or mistyped entry — warn loudly. A real glob
+        # matching nothing is normal, so stay silent for those.
+        if not matched and not any(c in pattern for c in "*?["):
+            print(
+                f"[warn] listed path not found: {pattern}",
+                file=sys.stderr,
+            )
 
     return results
 

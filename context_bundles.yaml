@@ -1,16 +1,22 @@
 bundles:
   handoff:
   - docs/spire_handoff_*.md
-  - docs/prompt_coverage.md
+  - prompt_coverage.md
   - docs/feature_roadmap.md
   - README.md
   planning:
-  - docs/prompt_coverage.md
+  - prompt_coverage.md
   - docs/feature_roadmap.md
   - docs/spire_handoff_*.md
   core:
   - src/spire/config.py
-  - src/spire/nl_parser
+  - src/spire/nl_parser/__init__.py
+  - src/spire/nl_parser/capability.py
+  - src/spire/nl_parser/draft.py
+  - src/spire/nl_parser/parser.py
+  - src/spire/nl_parser/result.py
+  - src/spire/nl_parser/validation.py
+  - src/spire/nl_parser/vocabulary.py
   - src/spire/planner/planner.py
   - src/spire/executor/executor.py
   - src/spire/synthesizer/synthesizer.py
@@ -18,7 +24,13 @@ bundles:
   - scripts/run_graph.py
   - scripts/run_plan.py
   parser:
-  - src/spire/nl_parser
+  - src/spire/nl_parser/__init__.py
+  - src/spire/nl_parser/capability.py
+  - src/spire/nl_parser/draft.py
+  - src/spire/nl_parser/parser.py
+  - src/spire/nl_parser/result.py
+  - src/spire/nl_parser/validation.py
+  - src/spire/nl_parser/vocabulary.py
   - src/spire/config.py
   - tests/test_nl_parser.py
   - tests/test_nl_parser_capability.py
@@ -42,19 +54,28 @@ bundles:
   - tests/test_graph_pipeline.py
   mcp:
   - src/spire/mcp_server/server.py
-  - src/spire/mcp_server/tools
+  - src/spire/mcp_server/tools/__init__.py
+  - src/spire/mcp_server/tools/addresses.py
+  - src/spire/mcp_server/tools/aggregate_invoices.py
+  - src/spire/mcp_server/tools/buyer.py
+  - src/spire/mcp_server/tools/invoices.py
+  - src/spire/mcp_server/tools/purchase_orders.py
+  - src/spire/mcp_server/tools/suppliers.py
+  - src/spire/mcp_server/tools/suppliers_by_country.py
+  - src/spire/mcp_server/tools/tool_result.py
   - tests/test_buyer_tool.py
   - tests/test_suppliers_tool.py
   - tests/test_suppliers_by_country_tool.py
   - tests/test_purchase_orders_tool.py
   - tests/test_invoices_tool.py
   kg:
-  - src/spire/kg
+  - src/spire/kg/__init__.py
+  - src/spire/kg/loader.py
   - tests/test_kg_loader.py
   - tests/test_kg_metadata.py
   - scripts/sql/kg_schema.sql
   - scripts/rebuild_kg.sh
-  - scripts/print_kg.sh
+  - scripts/print_kg.py
   - docs/designs/kg_schema_v1.md
   - docs/designs/kg_evaluation_framework.md
   demo:
@@ -73,8 +94,6 @@ bundles:
   - scripts
   tests:
   - tests
-  everything:
-  - .
 excludes:
 - traces
 - traces/*
