@@ -411,6 +411,71 @@ async def _execute_filter_source_step(
     return kept
 
 
+async def _execute_filter_source_nonempty_step(
+    step: Step,
+    session: Client,
+    outputs: dict[str, list[dict]],
+) -> list[dict]:
+    """
+    Execute a step whose semantic is "keep the source item when its
+    per-iteration call returns anything" — the mirror of
+    _execute_filter_source_step (Phase 11).
+
+    For each item in the source step's output:
+      - Read the iteration field's value (e.g. SupplierNumber).
+      - If None: SKIP (no join key).
+      - Otherwise: call the tool with the value substituted (plus any
+        value filter already in tool_args, e.g. amount_min). Apply
+        client_filters.
+        If the result is NON-empty -> KEEP the source item.
+        If the result is empty     -> DROP the source item.
+
+    Returns kept source items (full source dicts, e.g. Supplier records)
+    in original order — NOT the iteration results.
+
+    The point: handle "X that HAS a Y matching a condition" — e.g.
+    "suppliers with an invoice over 10000". The child call carries the
+    value filter (amount_min); a non-empty result means the supplier has
+    at least one qualifying invoice.
+    """
+    if step.iterate_over is None:
+        raise RuntimeError(
+            f"Step {step.step_id} has filter_source_when_nonempty=True but "
+            "iterate_over is None. Planner bug: these fields are coupled."
+        )
+
+    substitution_key = _find_substitution_key(step.tool_args)
+    from_step = step.iterate_over["from_step"]
+    iter_field = step.iterate_over["field"]
+
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"filter_source_when_nonempty step references unknown output "
+            f"{from_step!r}. Planner bug."
+        )
+    source_items = outputs[from_step]
+
+    kept: list[dict] = []
+    for source_item in source_items:
+        iteration_value = source_item.get(iter_field)
+        if iteration_value is None:
+            continue
+
+        per_iter_args = dict(step.tool_args)
+        per_iter_args[substitution_key] = iteration_value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+
+        # Presence with a value test: a non-empty result means the source
+        # item has at least one qualifying child.
+        if items:
+            kept.append(source_item)
+
+    return kept
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────
@@ -459,9 +524,9 @@ async def execute_plan(
 
     for step in plan:
         if step.iterate_over is None:
-            if step.filter_source_when_empty:
+            if step.filter_source_when_empty or step.filter_source_when_nonempty:
                 raise RuntimeError(
-                    f"Step {step.step_id} has filter_source_when_empty=True "
+                    f"Step {step.step_id} has a filter_source_when_* flag "
                     "but iterate_over is None. Planner bug: these fields "
                     "are coupled."
                 )
@@ -472,8 +537,13 @@ async def execute_plan(
                 truncation_by_step[step.output_name] = truncation
         elif step.filter_source_when_empty:
             items = await _execute_filter_source_step(step, session, outputs)
+        elif step.filter_source_when_nonempty:
+            items = await _execute_filter_source_nonempty_step(
+                step, session, outputs
+            )
         else:
             items = await _execute_iterating_step(step, session, outputs)
         outputs[step.output_name] = items
 
     return outputs, truncation_by_step
+

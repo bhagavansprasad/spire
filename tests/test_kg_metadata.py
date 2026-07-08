@@ -82,6 +82,8 @@ async def test_kg_table_row_counts_match_v1_1():
     the default supplier fetcher with combined args.
     Phase 8 added the supplier business_relationship filter: +1 filter row
     (kg_entity_filter 11->12) and +2 vocab rows (kg_vocabulary 44->46).
+    Phase 11 added the has_invoice_over_amount edge filter: +1 filter row
+    (kg_entity_filter 12->13).
     """
     persona = load_persona("default_dev")
     expected = {
@@ -92,7 +94,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_vocabulary": 46,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 3,
-        "kg_entity_filter": 12,
+        "kg_entity_filter": 13,
         "kg_edge_tool": 3,
     }
     async with OracleClient(persona) as oc:
