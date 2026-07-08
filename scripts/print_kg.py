@@ -99,7 +99,7 @@ TABLES: list[dict] = [
         "sql": "SELECT vocab_kind, term, canonical_value, notes "
                "FROM kg_vocabulary ORDER BY vocab_kind, term",
         "clob_cols": set(),
-        "expected_rows": 44,
+        "expected_rows": 46,
     },
     {
         "name": "kg_pattern_binding",
@@ -139,7 +139,7 @@ TABLES: list[dict] = [
                "filter_field, filter_op, notes "
                "FROM kg_entity_filter ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 11,
+        "expected_rows": 12,
     },
     {
         "name": "kg_edge_tool",

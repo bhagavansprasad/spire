@@ -239,7 +239,7 @@ across all entities.
 
 ## Phase 8 — Business relationship filter
 
-**Status:** OPEN (next)
+**Status:** DONE (merged to master)
 
 **Goal:** Filter suppliers by BusinessRelationship. Two values exist on
 the pod, confirmed via curl across 500 rows: `Spend Authorized` and
@@ -467,14 +467,15 @@ be, addressed.
 | 8 | Get list of active suppliers | Fixed | Status filter (Phase 3a) |
 | 9 | Only SupplierName and SupplierNumber | Fixed | Column projection (Phase 7) |
 | 10 | Sun Pvt Ltd invoices, number + amount | Fixed | Invoice target (Phase 4) + projection (Phase 7); empty only because that supplier has no invoices on the pod |
-| 11 | Business relationship filter | Planned | Business relationship filter (Phase 8) |
+| 11 | Business relationship filter | Fixed | Business relationship filter (Phase 8) |
 | 12 | Suppliers by invoice amount over N | Planned | Cross-entity value filter (Phase 11) |
 | 13 | Top 10 suppliers by spend | Worked | Spend ranking (pre-existing) |
 | 14 | Count of suppliers | Planned | Supplier count (Phase 10) |
 | 16 | Inactive suppliers | Fixed | Status filter (Phase 3a) |
 | 17 | Business classifications | Planned | New classifications endpoint (Phase 13) |
 
-Suggested order for the open phases: 8 → 9 → 10 → 11 → 12 → 13. Quick wins
+Suggested order for the remaining open phases: 9 → 10 → 11 → 12 → 13
+(Phase 8 done). Quick wins
 first; the two new-endpoint phases last, since they need a live-data
 session before their KG rows can be authored.
 
@@ -514,3 +515,13 @@ session before their KG rows can be authored.
   coverage table is now the "SME coverage" section above. Ordered
   easiest-first; the two new-endpoint phases need curl discovery before
   their KG rows can be authored.
+- Phase 8 done: supplier business_relationship filter. Two pod values
+  (`Spend Authorized`, `Prospective`), canonical = the literal display
+  strings. Client-side equals, mirroring status (server-side q= works on
+  this field but client-side keeps it combinable). Added the tool arg on
+  search_suppliers + server registration, a supplier_business_relationship
+  vocab kind (2 rows) and a business_relationship filter row
+  (kg_entity_filter 11->12, kg_vocabulary 44->46), and a parser line for
+  both the bare-adjective and explicit phrasings. Verified end-to-end on
+  the pod; prompt added to run_prompt_set. print_kg and the kg-metadata
+  test updated for the new counts.

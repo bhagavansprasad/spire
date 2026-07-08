@@ -1,3 +1,4 @@
+
 SET ECHO ON
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
@@ -148,7 +149,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'entity_synonym', 'relationship_phrase'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -409,6 +410,11 @@ INSERT INTO kg_vocabulary VALUES ('po_status', 'cancelled', 'CANCELED',   'Briti
 INSERT INTO kg_vocabulary VALUES ('supplier_status', 'active',   'ACTIVE',   'Supplier is active.');
 INSERT INTO kg_vocabulary VALUES ('supplier_status', 'inactive', 'INACTIVE', 'Supplier is inactive.');
 
+-- supplier_business_relationship (Supplier.BusinessRelationship; pod values
+-- are the display strings 'Spend Authorized' / 'Prospective')
+INSERT INTO kg_vocabulary VALUES ('supplier_business_relationship', 'spend authorized', 'Spend Authorized', 'Supplier is spend-authorized.');
+INSERT INTO kg_vocabulary VALUES ('supplier_business_relationship', 'prospective',      'Prospective',      'Supplier is prospective.');
+
 -- entity_synonym
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'supplier',         'Supplier',      NULL);
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'vendor',           'Supplier',      'Synonym.');
@@ -553,6 +559,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'business_relationship', 'entity_level', 'business_relationship', 'supplier_business_relationship', NULL, NULL, NULL, NULL, 'client_side', 'BusinessRelationship', 'equals',
+  'Supplier Spend Authorized/Prospective. Server-side q= works on this field, but applied client-side to keep it combinable (only one server q= clause is reliable per call).'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'Supplier', 'name_fragment', 'entity_level', 'supplier_name_contains', NULL, NULL, NULL, NULL, NULL, 'server_q', 'Supplier', 'LIKE',
   'Name substring match. Single-clause q=Supplier LIKE ''%value%'' is reliable server-side.'
 );
@@ -602,3 +613,5 @@ COMMIT;
 PROMPT Seeded kg_entity_filter (11 rows).
 
 -- ============================================================
+
+
