@@ -54,6 +54,7 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "search_invoices": "supplier_number",
     "search_purchase_orders": "supplier_id",
     "get_buyer": "buyer_id",
+    "search_suppliers_by_site_bu": "supplier_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -86,6 +87,7 @@ _FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
 # the mirror of _FILTER_SOURCE_NAME_SUFFIX. Maps type -> output suffix.
 _FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
     "has_invoice_over_amount": "has_invoice_over_amount",
+    "has_site_in_bu": "has_site_in_bu",
 }
 
 
@@ -1161,6 +1163,21 @@ def _build_iteration_args_with_computed(
                 f"(the amount threshold); got {filter_spec.get('value')!r}."
             )
         args["amount_min"] = amount
+        return args
+
+    if intent_filter_type == "has_site_in_bu":
+        # The BU value rides in as the canonical display string (already
+        # resolved from supplier_site_bu vocab by the parser). Route it to
+        # the child sites call's business_unit arg. A non-empty child
+        # result means the supplier has a site in that BU.
+        value = filter_spec.get("value")
+        bu = value.get("business_unit") if isinstance(value, dict) else value
+        if not isinstance(bu, str) or not bu.strip():
+            raise ValueError(
+                f"has_site_in_bu requires a business-unit string; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        args["business_unit"] = bu
         return args
 
     # Other filter types with computed args would dispatch here.

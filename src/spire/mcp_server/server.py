@@ -12,6 +12,7 @@ Tools currently exposed:
 - search_invoices
 - search_addresses
 - search_purchase_orders
+- search_suppliers_by_site_bu
 - get_buyer
 """
 
@@ -29,6 +30,9 @@ from spire.mcp_server.tools.purchase_orders import (
 )
 from spire.mcp_server.tools.suppliers import search_suppliers as _search_suppliers
 from spire.mcp_server.tools.addresses import search_addresses as _search_addresses
+from spire.mcp_server.tools.supplier_sites import (
+    search_suppliers_by_site_bu as _search_suppliers_by_site_bu,
+)
 
 
 PERSONA_NAME = "default_dev"
@@ -195,6 +199,40 @@ async def search_purchase_orders(
             supplier_name=supplier_name,
             supplier_id=supplier_id,
             status=status,
+            limit=limit,
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def search_suppliers_by_site_bu(
+    supplier_id: int,
+    business_unit: str,
+    limit: int = 25,
+) -> dict:
+    """Check whether one supplier has a site in a given business unit.
+
+    Edge tool: called once per supplier to filter suppliers by their
+    sites' ProcurementBU. For "suppliers with a site in business unit X",
+    the executor calls this per supplier and keeps those whose result is
+    non-empty. ProcurementBU filters server-side on the sites child.
+
+    Args:
+        supplier_id: The SupplierId of the supplier to check. Get this
+            from search_suppliers.
+        business_unit: Exact ProcurementBU display string, e.g.
+            "US1 Business Unit".
+        limit: Max site records to return.
+
+    Returns:
+        A ToolResult dict whose items are the supplier's matching sites.
+        Empty items means the supplier has no site in that BU.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_suppliers_by_site_bu(
+            client,
+            supplier_id=supplier_id,
+            business_unit=business_unit,
             limit=limit,
         )
         return result.to_dict()

@@ -38,3 +38,6 @@ Suppliers with invoice amount greater than 10000
 Top 10 suppliers by spend in 2022
 Top 5 suppliers by spend in 2022
 Which suppliers did we spend the most with in 2022
+
+# — supplier sites by business unit 
+List suppliers with a site in the US1 business unit
