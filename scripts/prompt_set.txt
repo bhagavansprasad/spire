@@ -1,0 +1,37 @@
+# Spire prompt set — read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+# Ordered fast-first; the slow aggregation prompts are at the end.
+
+# — ordinary list —
+Show me invoices for supplier 1252
+List US suppliers
+
+# — supplier filters (Phase 3) —
+Get list of active suppliers
+Suppliers named Lee
+active US suppliers
+Suppliers created between Jan and Mar 2025
+
+# — business relationship (Phase 8) —
+Prospective suppliers
+
+# — count (Phase 10) —
+Count of suppliers
+
+# — invoice filters (Phase 5) —
+Invoices for supplier 1252 over 100000
+Invoices for Lee Supplies in 2023
+
+# — address (Phase 6) —
+Addresses for supplier 1252
+
+# — nested addresses on a supplier query (Phase 9) —
+Suppliers with their addresses
+
+# — refusal (out of scope) —
+Show me contract renewals due next quarter
+
+# — aggregation (SLOW: each paginates a full year, ~2 min) —
+Top 10 suppliers by spend in 2022
+Top 5 suppliers by spend in 2022
+Which suppliers did we spend the most with in 2022

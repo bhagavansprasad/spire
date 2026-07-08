@@ -65,6 +65,7 @@ from spire.agent.tracing import make_trace_logger
 from spire.executor.executor import execute_plan
 from spire.planner.planner import Intent, Plan, generate_plan
 from spire.synthesizer.synthesizer import (
+    CountResponse,
     HallucinationError,
     InvoiceResponse,
     PurchaseOrderResponse,
@@ -386,6 +387,13 @@ def _format_synthesized(response) -> str:
             )
         return "\n".join(lines)
 
+    if isinstance(response, CountResponse):
+        qualifier = "" if response.count_is_exact else " (at least)"
+        lines.append(
+            f"Count: {response.count}{qualifier} {response.entity.lower()}(s)."
+        )
+        return "\n".join(lines)
+
     # Should be unreachable — every schema in SYNTHESIS_SCHEMAS is handled.
     lines.append("(Unrecognized response shape.)")
     return "\n".join(lines)
@@ -415,6 +423,9 @@ def _format_summary(
         n, label = len(response.purchase_orders), "purchase order(s)"
     elif isinstance(response, SupplierSpendRankingResponse):
         n, label = len(response.suppliers), "ranked supplier(s)"
+    elif isinstance(response, CountResponse):
+        n = response.count if response.count is not None else 0
+        label = f"{response.entity.lower()}(s) counted"
     else:
         n, label = 0, "record(s)"
     lines.append(f"  Synthesized answer:   {n} {label}")
@@ -610,4 +621,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
 

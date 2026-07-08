@@ -30,6 +30,7 @@ import argparse
 import asyncio
 import sys
 import time
+from pathlib import Path
 
 from fastmcp import Client
 
@@ -48,31 +49,22 @@ from run_plan import (
 )
 
 
-DEFAULT_PROMPTS: list[str] = [
-    # — aggregation —
-    "Top 10 suppliers by spend in 2022",
-    "Top 5 suppliers by spend in 2022",
-    "Which suppliers did we spend the most with in 2022",
-    # — ordinary list —
-    "Show me invoices for supplier 1252",
-    "List US suppliers",
-    # — supplier filters (Phase 3) —
-    "Get list of active suppliers",
-    "Suppliers named Lee",
-    "active US suppliers",
-    "Suppliers created between Jan and Mar 2025",
-    # — business relationship (Phase 8) —
-    "Prospective suppliers",
-    # — invoice filters (Phase 5) —
-    "Invoices for supplier 1252 over 100000",
-    "Invoices for Lee Supplies in 2023",
-    # — address (Phase 6) —
-    "Addresses for supplier 1252",
-    # — nested addresses on a supplier query (Phase 9) —
-    "Suppliers with their addresses",
-    # — refusal (out of scope) —
-    "Show me contract renewals due next quarter",
-]
+# The prompt set lives in a plain-text file alongside this script:
+# one prompt per line, blank lines and '#' comment lines ignored.
+# Slow aggregation prompts are ordered last there.
+DEFAULT_PROMPT_FILE = Path(__file__).with_name("prompt_set.txt")
+
+
+def load_prompts(path: Path) -> list[str]:
+    """Read prompts from a text file: one per line, skipping blank lines
+    and '#' comment lines."""
+    prompts: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        prompts.append(line)
+    return prompts
 
 
 async def _run_one(prompt: str, menu, client) -> str:
@@ -152,10 +144,16 @@ def main() -> int:
     parser.add_argument(
         "--prompts",
         nargs="+",
-        help="Override the default prompt set with your own prompts.",
+        help="Override the prompt set with your own prompts (inline).",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        type=Path,
+        default=DEFAULT_PROMPT_FILE,
+        help=f"Prompt file to read (default: {DEFAULT_PROMPT_FILE.name}).",
     )
     args = parser.parse_args()
-    prompts = args.prompts if args.prompts else DEFAULT_PROMPTS
+    prompts = args.prompts if args.prompts else load_prompts(args.prompt_file)
 
     print(f"Running {len(prompts)} prompt(s) through the live pipeline.")
     print("(Requires the MCP server up, the pod reachable, and Gemini.)")

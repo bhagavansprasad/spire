@@ -282,7 +282,30 @@ class SupplierSpendRankingResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
-# Backward-compatible alias: the supplier schema was the original
+class CountResponse(BaseModel):
+    """Count response: the size of a (possibly filtered) entity set.
+
+    Built deterministically, without the LLM — the count is already in the
+    executor output / truncation block, so there is nothing to synthesize
+    and no risk of an invented number. Phase 10."""
+
+    summary: str = Field(
+        description="One-sentence statement of the count."
+    )
+    entity: str = Field(description="The entity counted, e.g. 'Supplier'.")
+    count: int | None = Field(
+        description="The exact count, or null when the true total is not "
+        "known (a client-side filter exceeded the examine cap)."
+    )
+    count_is_exact: bool = Field(
+        description="True when count is the exact total; False when it is a "
+        "lower bound (the true total was not fully retrieved)."
+    )
+    truncation_notes: list[str] = Field(
+        default_factory=list,
+        description="Unused for counts (the count itself carries the total); "
+        "present for formatter compatibility with other responses.",
+    )
 # SynthesizedResponse. Keeping the name means supplier-path code and
 # tests that import SynthesizedResponse / SupplierSummary still work.
 SynthesizedResponse = SupplierResponse
@@ -628,11 +651,66 @@ def _validate_no_hallucinated_ids(
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _build_count_response(
+    outputs: dict[str, list[dict]],
+    target_entity: str,
+    truncation_by_step: dict[str, dict] | None,
+) -> CountResponse:
+    """Build a count response deterministically — no LLM (Phase 10).
+
+    Count source, in order of preference:
+      1. A truncation entry's total_available (authoritative; e.g. the
+         unfiltered totalResults count, or the exact filtered total).
+      2. If truncation says total_available is null, the true count is not
+         known — a client-side filter exceeded the examine cap. Report the
+         examined count as a lower bound.
+      3. No truncation block: every matching record was returned, so the
+         length of the single output bucket is the exact count.
+    """
+    # The count query runs one fetch → one output bucket.
+    bucket = next(iter(outputs.values()), [])
+    examined = len(bucket)
+
+    total_available = None
+    examined_note = examined
+    if truncation_by_step:
+        entry = next(iter(truncation_by_step.values()), {})
+        total_available = entry.get("total_available")
+        examined_note = entry.get("examined", examined)
+
+    if total_available is not None:
+        count = int(total_available)
+        exact = True
+        summary = f"There are {count} {target_entity.lower()}s."
+    elif truncation_by_step:
+        # total known-unknown: filter exceeded the cap. Lower bound only.
+        count = int(examined_note)
+        exact = False
+        summary = (
+            f"There are more than {count} {target_entity.lower()}s — the "
+            f"exact total was not retrieved (more than the examine cap "
+            f"matched)."
+        )
+    else:
+        # No truncation: complete set returned.
+        count = examined
+        exact = True
+        summary = f"There are {count} {target_entity.lower()}s."
+
+    return CountResponse(
+        summary=summary,
+        entity=target_entity,
+        count=count,
+        count_is_exact=exact,
+    )
+
+
 def synthesize_response(
     outputs: dict[str, list[dict]],
     target_entity: str,
     llm: Any | None = None,
     truncation_by_step: dict[str, dict] | None = None,
+    count_only: bool = False,
 ) -> BaseModel:
     """Turn the executor's output into a validated structured response,
     using the schema for the Intent's target_entity.
@@ -657,6 +735,11 @@ def synthesize_response(
         Pydantic ValidationError if the LLM output doesn't fit the schema.
         Anything raised by the LLM call propagates.
     """
+    # Phase 10: a count query needs no LLM — the count is already in the
+    # executor output / truncation block. Build it deterministically.
+    if count_only:
+        return _build_count_response(outputs, target_entity, truncation_by_step)
+
     # Feature 7: an aggregation produces a ranking, not an entity list.
     # It has no target_entity (the Intent carried an aggregate block
     # instead), so select the schema from the data shape. The executor

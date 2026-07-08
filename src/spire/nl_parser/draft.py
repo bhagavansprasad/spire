@@ -163,6 +163,19 @@ class DraftIntent(BaseModel):
         ),
     )
 
+    count_only: bool = Field(
+        default=False,
+        description=(
+            "Set true when the question asks HOW MANY / the COUNT of a set "
+            "rather than for the records themselves — e.g. 'count of "
+            "suppliers', 'how many active suppliers', 'how many US "
+            "suppliers'. Set target_entity and any filters as normal (the "
+            "count is of that filtered set); this flag just says to report "
+            "the count instead of listing. Leave false for ordinary list "
+            "questions. Do NOT set both this and aggregate."
+        ),
+    )
+
     def to_intent(self) -> Intent:
         """Convert to the planner's ``Intent`` dataclass.
 
@@ -207,6 +220,7 @@ class DraftIntent(BaseModel):
                 if self.aggregate is not None
                 else None
             ),
+            count_only=self.count_only,
         )
 
 

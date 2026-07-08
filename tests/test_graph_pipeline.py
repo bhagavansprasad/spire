@@ -1,3 +1,4 @@
+
 """
 Tests for the LangGraph pipeline graph (spire.graph.pipeline).
 
@@ -44,7 +45,7 @@ def patch_nodes(monkeypatch):
     monkeypatch.setattr(pipeline, "execute_plan", fake_execute)
     monkeypatch.setattr(
         pipeline, "synthesize_response",
-        lambda outputs, target_entity, truncation_by_step=None: "ANSWER",
+        lambda outputs, target_entity, truncation_by_step=None, count_only=False: "ANSWER",
     )
     return monkeypatch
 
@@ -93,3 +94,5 @@ async def test_plan_error_short_circuits(patch_nodes):
     assert state.get("error", "").startswith("plan:")
     assert state.get("outputs") is None
     assert state.get("response") is None
+
+
