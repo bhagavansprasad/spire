@@ -55,6 +55,24 @@ def _address_matches_country(address: dict, country: str) -> bool:
     return code == q.upper() or name == q.lower()
 
 
+def _flatten_address(address: dict) -> dict:
+    """Trim a raw expanded address child to the fields Spire nests.
+
+    Mirrors the synthesizer's AddressRecord shape (address_id, country,
+    city, state, formatted_address) plus the country code, so a nested
+    address looks the same as a standalone one.
+    """
+    return {
+        "SupplierAddressId": address.get("SupplierAddressId"),
+        "AddressName": address.get("AddressName"),
+        "Country": address.get("Country"),
+        "CountryCode": address.get("CountryCode"),
+        "City": address.get("City"),
+        "State": address.get("State"),
+        "FormattedAddress": address.get("FormattedAddress"),
+    }
+
+
 async def _fetch_total_for_clause(
     client: FusionClient, server_clause: str | None
 ) -> int | None:
@@ -79,6 +97,7 @@ async def search_suppliers(
     country: str | None = None,
     created_from: str | None = None,
     created_to: str | None = None,
+    include_addresses: bool = False,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion suppliers by any combination of filters.
@@ -98,6 +117,10 @@ async def search_suppliers(
             server-side via q= when no name fragment is present.
         created_to: Upper bound on CreationDate ('YYYY-MM-DD'), applied
             client-side (composite q= is unreliable on this pod).
+        include_addresses: When True, fetch each supplier's addresses via
+            expand=addresses and nest them (flattened) under an
+            'addresses' key on each returned record. Used for the
+            "suppliers with their addresses" shape.
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -115,8 +138,11 @@ async def search_suppliers(
         server_clause = f"CreationDate >= '{created_from}'"
         created_from_client = None  # handled server-side
 
-    # Country needs the addresses child resource.
-    needs_expand = country is not None
+    # Country needs the addresses child resource. So does an explicit
+    # include_addresses request (the "suppliers with their addresses"
+    # shape) — same expand, but the addresses are kept rather than just
+    # matched against.
+    needs_expand = country is not None or include_addresses
 
     # We must filter client-side if any non-server filter is in play.
     needs_client_filter = (
@@ -168,6 +194,9 @@ async def search_suppliers(
         row = {k: item.get(k) for k in _PROJECTED_FIELDS}
         if country is not None:
             row["MatchedCountry"] = country
+        if include_addresses:
+            raw_addresses = item.get("addresses") or []
+            row["addresses"] = [_flatten_address(a) for a in raw_addresses]
         projected.append(row)
 
     # ---- total_available / truncated ----
