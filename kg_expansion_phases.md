@@ -346,7 +346,7 @@ total_available.
 
 ## Phase 11 — Suppliers by invoice amount over N
 
-**Status:** OPEN
+**Status:** DONE (merged to master)
 
 **Goal:** Root on Supplier, keep suppliers that have at least one invoice
 over an amount — a value comparison across the edge, not just presence.
@@ -468,14 +468,14 @@ be, addressed.
 | 9 | Only SupplierName and SupplierNumber | Fixed | Column projection (Phase 7) |
 | 10 | Sun Pvt Ltd invoices, number + amount | Fixed | Invoice target (Phase 4) + projection (Phase 7); empty only because that supplier has no invoices on the pod |
 | 11 | Business relationship filter | Fixed | Business relationship filter (Phase 8) |
-| 12 | Suppliers by invoice amount over N | Planned | Cross-entity value filter (Phase 11) |
+| 12 | Suppliers by invoice amount over N | Fixed | Cross-entity value filter (Phase 11) |
 | 13 | Top 10 suppliers by spend | Worked | Spend ranking (pre-existing) |
 | 14 | Count of suppliers | Fixed | Supplier count (Phase 10) |
 | 16 | Inactive suppliers | Fixed | Status filter (Phase 3a) |
 | 17 | Business classifications | Planned | New classifications endpoint (Phase 13) |
 
-Suggested order for the remaining open phases: 11 → 12 → 13
-(Phases 8, 9, 10 done). Quick wins
+Suggested order for the remaining open phases: 12 → 13
+(Phases 8-11 done). Both need curl discovery
 first; the two new-endpoint phases last, since they need a live-data
 session before their KG rows can be authored.
 
@@ -550,3 +550,17 @@ session before their KG rows can be authored.
   fabricated total. Verified live: 412 suppliers, 409 active, 145 US.
   Parser sets count_only; graph passes it through; run_plan formats the
   count line. Closes Test 14.
+- Phase 11 done: suppliers by invoice amount over N ("suppliers with
+  invoice amount greater than 10000"). New edge-filter shape,
+  has_invoice_over_amount: walk Supplier -> Invoice, pass the threshold as
+  amount_min on the child invoice call, keep the supplier when that call
+  returns anything. Implemented as filter_source_when_nonempty in the
+  executor (the mirror of filter_source_when_empty), routed in planner
+  Block 2, with a KG edge-filter row (kg_entity_filter 12->13). Reuses the
+  Phase 5 amount_min invoice filter; no new tool, no synthesizer change.
+  Closes Test 12. Verified end-to-end on the pod.
+  Known limitation (shared by all edge filters, not new here): the base
+  supplier fetch is capped (25 by default), so the answer considers only
+  that first page of suppliers, not every supplier on the pod. Widening
+  this means paginating the base fetch across all edge filters — a
+  separate change, not in scope for Phase 11.
