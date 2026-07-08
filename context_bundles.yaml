@@ -82,6 +82,8 @@ bundles:
   - docs/spire_handoff_*.md
   - scripts/run_graph.py
   - scripts/run_plan.py
+  - scripts/run_prompt_set.py
+  - scripts/prompt_set.txt
   - how-to-run.md
   - docs/design3_measurement_report.md
   - docs/design3_gap_analysis.md
