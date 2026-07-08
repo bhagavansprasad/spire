@@ -313,7 +313,7 @@ Phase 6.
 
 ## Phase 10 — Supplier count
 
-**Status:** OPEN
+**Status:** DONE (merged to master)
 
 **Goal:** Answer "count of suppliers", and by extension simple counts of
 a filtered entity set.
@@ -470,12 +470,12 @@ be, addressed.
 | 11 | Business relationship filter | Fixed | Business relationship filter (Phase 8) |
 | 12 | Suppliers by invoice amount over N | Planned | Cross-entity value filter (Phase 11) |
 | 13 | Top 10 suppliers by spend | Worked | Spend ranking (pre-existing) |
-| 14 | Count of suppliers | Planned | Supplier count (Phase 10) |
+| 14 | Count of suppliers | Fixed | Supplier count (Phase 10) |
 | 16 | Inactive suppliers | Fixed | Status filter (Phase 3a) |
 | 17 | Business classifications | Planned | New classifications endpoint (Phase 13) |
 
-Suggested order for the remaining open phases: 10 → 11 → 12 → 13
-(Phases 8 and 9 done). Quick wins
+Suggested order for the remaining open phases: 11 → 12 → 13
+(Phases 8, 9, 10 done). Quick wins
 first; the two new-endpoint phases last, since they need a live-data
 session before their KG rows can be authored.
 
@@ -539,3 +539,14 @@ session before their KG rows can be authored.
   child addresses than a single-supplier q= expand (30 vs 25 for 1252,
   all ACTIVE) — recorded in the endpoints reference; the bulk path is the
   complete set.
+- Phase 10 done: supplier count ("how many X" / "count of X"). Count is
+  its own intent marker (count_only), separate from the aggregate block —
+  it reuses the entity's default fetcher and reports the fetch's
+  total_available rather than routing to an aggregation tool. Built
+  deterministically in the synthesizer (new CountResponse), no LLM call:
+  the count is already in the executor output / truncation block.
+  Honest about the unknown case — when a client-side filter exceeds the
+  examine cap, reports a lower bound ("more than N") rather than a
+  fabricated total. Verified live: 412 suppliers, 409 active, 145 US.
+  Parser sets count_only; graph passes it through; run_plan formats the
+  count line. Closes Test 14.

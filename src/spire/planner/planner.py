@@ -294,6 +294,13 @@ class Intent:
     # op names the bounded aggregation tool (one op per tool, by design).
     aggregate: dict[str, Any] | None = None
 
+    # Phase 10: when True, the question asks "how many X" — report the
+    # count, not a record list. The normal fetch still runs (its
+    # total_available carries the count); the synthesizer emits a count
+    # summary. Kept separate from aggregate (which routes to bounded
+    # aggregation tools) — count reuses the entity's default fetcher.
+    count_only: bool = False
+
 
 @dataclass
 class Step:

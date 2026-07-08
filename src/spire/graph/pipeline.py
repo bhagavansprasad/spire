@@ -1,4 +1,5 @@
 
+
 """
 Design 3 pipeline expressed as a LangGraph custom graph.
 
@@ -126,11 +127,13 @@ async def execute_node(state: GraphState) -> dict:
 
 def synthesize_node(state: GraphState) -> dict:
     try:
-        target_entity = state["intent"].target_entity
+        intent = state["intent"]
+        target_entity = intent.target_entity
         response = synthesize_response(
             state["outputs"],
             target_entity=target_entity,
             truncation_by_step=state.get("truncation_by_step"),
+            count_only=getattr(intent, "count_only", False),
         )
         return {"response": response}
     except Exception as exc:
@@ -208,5 +211,7 @@ def _maybe_save_png(compiled) -> None:
 
 # Module-level compiled graph (compilation is cheap and reusable).
 GRAPH = build_graph()
+
+
 
 
