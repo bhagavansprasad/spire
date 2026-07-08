@@ -81,6 +81,13 @@ _FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
     "has_no_recent_invoices": "no_recent_invoices",
 }
 
+# Phase 11: edge-traversal filters that keep the PARENT when the child
+# call returns something (after a value filter carried in tool_args) —
+# the mirror of _FILTER_SOURCE_NAME_SUFFIX. Maps type -> output suffix.
+_FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
+    "has_invoice_over_amount": "has_invoice_over_amount",
+}
+
 
 # ─────────────────────────────────────────────────────────────────────
 # KG connection
@@ -320,6 +327,11 @@ class Step:
       filters like "suppliers with NO invoices in the last 6 months".
       The executor honors this flag; it defaults to False so existing
       steps behave unchanged.
+    - ``filter_source_when_nonempty`` (Phase 11): the mirror — the
+      step's output is the SOURCE items whose per-iteration call returned
+      SOMETHING (after any value filter in tool_args, e.g. amount_min).
+      Used for "X that HAS a Y matching a condition" — e.g. "suppliers
+      with an invoice over 10000". Defaults to False.
     """
 
     step_id: int
@@ -330,6 +342,7 @@ class Step:
     output_name: str
     output_dedupe_by: str | None
     filter_source_when_empty: bool = False
+    filter_source_when_nonempty: bool = False
 
 
 Plan = list[Step]
@@ -731,10 +744,19 @@ def generate_plan(
         # - negation-by-absence filters (has_no_recent_invoices): no
         #   client filter; output is the PARENT items whose per-iteration
         #   call returned empty. filter_source_when_empty=True.
+        #
+        # - presence-with-value filters (has_invoice_over_amount, Phase
+        #   11): the child call carries a value filter (e.g. amount_min);
+        #   output is the PARENT items whose per-iteration call returned
+        #   something. filter_source_when_nonempty=True.
         filter_source_when_empty = filter_type in _FILTER_SOURCE_NAME_SUFFIX
+        filter_source_when_nonempty = (
+            filter_type in _FILTER_SOURCE_NONEMPTY_SUFFIX
+        )
 
-        if filter_source_when_empty:
-            # Build args including computed values (e.g. invoice_date_after).
+        if filter_source_when_empty or filter_source_when_nonempty:
+            # Build args including computed / value args (e.g.
+            # invoice_date_after, amount_min).
             tool_args = _build_iteration_args_with_computed(
                 filter_spec, tool, ref_date
             )
@@ -765,6 +787,7 @@ def generate_plan(
                 output_name=output_name,
                 output_dedupe_by=None,
                 filter_source_when_empty=filter_source_when_empty,
+                filter_source_when_nonempty=filter_source_when_nonempty,
             )
         )
         previous_entity = new_previous_entity
@@ -1126,6 +1149,20 @@ def _build_iteration_args_with_computed(
         args["invoice_date_after"] = cutoff.isoformat()
         return args
 
+    if intent_filter_type == "has_invoice_over_amount":
+        # The threshold rides in as a plain number; route it to the
+        # child invoice call's amount_min (Phase 5 filter). A non-empty
+        # result means the supplier has an invoice at/over the amount.
+        value = filter_spec.get("value")
+        amount = value.get("amount") if isinstance(value, dict) else value
+        if not isinstance(amount, (int, float)) or isinstance(amount, bool):
+            raise ValueError(
+                f"has_invoice_over_amount requires a numeric value "
+                f"(the amount threshold); got {filter_spec.get('value')!r}."
+            )
+        args["amount_min"] = amount
+        return args
+
     # Other filter types with computed args would dispatch here.
     raise NotImplementedError(
         f"Computed iteration args not implemented for filter type "
@@ -1240,20 +1277,25 @@ def _make_filtered_source_output_name(
 ) -> str:
     """
     Compose the output name for a step that filters its source items by
-    iteration-emptiness (filter_source_when_empty=True).
+    iteration-emptiness (filter_source_when_empty) or by iteration
+    non-emptiness (filter_source_when_nonempty, Phase 11).
 
     Example: source='us_suppliers', filter='has_no_recent_invoices'
         -> 'us_suppliers_no_recent_invoices'
+    Example: source='suppliers', filter='has_invoice_over_amount'
+        -> 'suppliers_has_invoice_over_amount'
 
-    Raises KeyError if filter_type has no suffix mapping in
-    _FILTER_SOURCE_NAME_SUFFIX.
+    Raises KeyError if filter_type has no suffix in either
+    _FILTER_SOURCE_NAME_SUFFIX or _FILTER_SOURCE_NONEMPTY_SUFFIX.
     """
-    if filter_type not in _FILTER_SOURCE_NAME_SUFFIX:
+    suffix = _FILTER_SOURCE_NAME_SUFFIX.get(
+        filter_type
+    ) or _FILTER_SOURCE_NONEMPTY_SUFFIX.get(filter_type)
+    if suffix is None:
         raise KeyError(
-            f"No filter-source name suffix for {filter_type!r}. "
-            "Add it to _FILTER_SOURCE_NAME_SUFFIX."
+            f"No filter-source name suffix for {filter_type!r}. Add it to "
+            "_FILTER_SOURCE_NAME_SUFFIX or _FILTER_SOURCE_NONEMPTY_SUFFIX."
         )
-    suffix = _FILTER_SOURCE_NAME_SUFFIX[filter_type]
     return f"{source_output_name}_{suffix}"
 
 

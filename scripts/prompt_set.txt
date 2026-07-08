@@ -31,6 +31,9 @@ Suppliers with their addresses
 # — refusal (out of scope) —
 Show me contract renewals due next quarter
 
+# — cross-entity value filter (Phase 11, SLOW: one invoice call per supplier) —
+Suppliers with invoice amount greater than 10000
+
 # — aggregation (SLOW: each paginates a full year, ~2 min) —
 Top 10 suppliers by spend in 2022
 Top 5 suppliers by spend in 2022
