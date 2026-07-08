@@ -149,7 +149,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'entity_synonym', 'relationship_phrase'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -243,7 +243,13 @@ INSERT INTO kg_entity VALUES (
   'A supplier''s address. Modeled as a separate entity because a supplier can have addresses in multiple countries. Not exposed as a top-level resource; only accessible as a child of Supplier via expand=addresses.'
 );
 
-PROMPT Seeded kg_entity (5 rows).
+INSERT INTO kg_entity VALUES (
+  'Site', 'SupplierSiteId', 'SupplierSite',
+  '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/sites',
+  'A supplier site (assignment point). Modeled as a separate entity because a supplier can have many sites, each in a different ProcurementBU. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/sites. ProcurementBU on a site filters reliably server-side via q= (unlike Status on Supplier).'
+);
+
+PROMPT Seeded kg_entity (6 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -320,7 +326,14 @@ INSERT INTO kg_edge VALUES (
   'CROSS-PILLAR: PO is in FSCM; Buyer is in HCM. There is no /fscmRestApi/.../buyers endpoint on this pod. BuyerId on a PO equals PersonId on publicWorkers.'
 );
 
-PROMPT Seeded kg_edge (4 rows).
+INSERT INTO kg_edge VALUES (
+  'HAS_SITE', 'Supplier', 'Site', 'SupplierId', 'SupplierId', 'one_to_many',
+  'first_filter_only',
+  'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/sites?q=ProcurementBU=''<value>''. The BU filter IS reliable server-side on this child (confirmed on pod: a matching value returns the site, a non-existent value returns empty).',
+  'Per-supplier child call; there is no bulk expand=sites on this pod (silently ignored). One HTTP call per parent supplier, so the scan window is bounded (SITE_SCAN_LIMIT in the tool).'
+);
+
+PROMPT Seeded kg_edge (5 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -414,6 +427,20 @@ INSERT INTO kg_vocabulary VALUES ('supplier_status', 'inactive', 'INACTIVE', 'Su
 -- are the display strings 'Spend Authorized' / 'Prospective')
 INSERT INTO kg_vocabulary VALUES ('supplier_business_relationship', 'spend authorized', 'Spend Authorized', 'Supplier is spend-authorized.');
 INSERT INTO kg_vocabulary VALUES ('supplier_business_relationship', 'prospective',      'Prospective',      'Supplier is prospective.');
+
+-- supplier_site_bu (ProcurementBU on supplier sites; pod values are the
+-- display strings, e.g. 'US1 Business Unit'. Representative set seeded;
+-- more exist on the pod and can be added when a prompt needs them.)
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'us1',           'US1 Business Unit',           'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'uk',            'UK Business Unit',            'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'france',        'France Business Unit',        'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'germany',       'Germany Business Unit',       'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'italy',         'Italy Business Unit',         'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'china',         'China Business Unit',         'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'japan',         'Japan Business Unit',         'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'india',         'India Business Unit',         'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'sweden',        'Sweden Business Unit',        'Procurement BU on supplier sites.');
+INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'healthcare us', 'Healthcare US Business Unit', 'Procurement BU on supplier sites.');
 
 -- entity_synonym
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'supplier',         'Supplier',      NULL);
@@ -530,9 +557,15 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes buyer_id. Cross-pillar: maps BuyerId (FSCM) to PersonId (HCM).'
 );
 
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_SITE',
+  'search_suppliers_by_site_bu',
+  'Takes business_unit (exact ProcurementBU display string). Walks each parent supplier to its sites child, keeps the parent when a site in that BU exists (keep-parent-when-nonempty).'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_edge_tool (3 rows).
+PROMPT Seeded kg_edge_tool (4 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -599,6 +632,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'has_site_in_bu', 'edge_traversal', NULL, 'supplier_site_bu', 'Site', 'has_site_in_bu', NULL, NULL, NULL, NULL, NULL,
+  'Edge filter: supplier has at least one site in a given ProcurementBU. Value is the canonical BU display string (resolved via supplier_site_bu vocab); routed to the child sites call as business_unit (keep-parent-when-nonempty). Mirror of has_invoice_over_amount, but the value is a vocab string, not a number.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'Invoice', 'supplier', 'entity_level', 'supplier', NULL, NULL, NULL, NULL, NULL, 'server_q', 'SupplierNumber', 'equals',
   'Invoice-by-supplier. Value is a supplier reference; the planner routes an all-digit value to supplier_number, otherwise supplier_name. Required for Invoice queries.'
 );
@@ -615,7 +653,7 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (11 rows).
+PROMPT Seeded kg_entity_filter (12 rows).
 
 -- ============================================================
 
