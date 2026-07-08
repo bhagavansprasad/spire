@@ -61,6 +61,8 @@ DEFAULT_PROMPTS: list[str] = [
     "Suppliers named Lee",
     "active US suppliers",
     "Suppliers created between Jan and Mar 2025",
+    # — business relationship (Phase 8) —
+    "Prospective suppliers",
     # — invoice filters (Phase 5) —
     "Invoices for supplier 1252 over 100000",
     "Invoices for Lee Supplies in 2023",

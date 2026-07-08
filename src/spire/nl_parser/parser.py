@@ -1,5 +1,6 @@
 
 
+
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -68,6 +69,9 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "over a time window, you MUST emit this filter.\n"
     "- 'active suppliers' / 'inactive suppliers' -> a 'status' filter with "
     "value 'active' or 'inactive'.\n"
+    "- 'spend authorized suppliers' / 'prospective suppliers' / 'suppliers "
+    "with business relationship X' -> a 'business_relationship' filter with "
+    "value 'spend authorized' or 'prospective'.\n"
     "- 'suppliers named X' / 'called X' / 'with X in the name' -> a "
     "'name_fragment' filter with value the substring X.\n"
     "- 'created after X' / 'created between X and Y' / 'created in <period>' "
@@ -286,6 +290,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 

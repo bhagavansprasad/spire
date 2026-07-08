@@ -1,4 +1,5 @@
 
+
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
@@ -42,6 +43,7 @@ _persona = load_persona(PERSONA_NAME)
 async def search_suppliers(
     supplier_name_contains: str | None = None,
     status: str | None = None,
+    business_relationship: str | None = None,
     country: str | None = None,
     created_from: str | None = None,
     created_to: str | None = None,
@@ -57,6 +59,9 @@ async def search_suppliers(
         supplier_name_contains: Optional substring to match in supplier name.
         status: Exact Status match (e.g., "ACTIVE", "INACTIVE"). Applied
             client-side. Use for "active suppliers" / "inactive suppliers".
+        business_relationship: Exact BusinessRelationship match (e.g.,
+            "Spend Authorized", "Prospective"). Applied client-side. Use
+            for "spend authorized suppliers" / "prospective suppliers".
         country: ISO-2 code (e.g., "US", "GB") or full name (e.g.,
             "United States"). Matched against the addresses child
             resource. Three-letter codes like "USA" are not supported.
@@ -69,6 +74,7 @@ async def search_suppliers(
             client,
             supplier_name_contains=supplier_name_contains,
             status=status,
+            business_relationship=business_relationship,
             country=country,
             created_from=created_from,
             created_to=created_to,
@@ -247,6 +253,8 @@ async def get_buyer(buyer_id: int) -> dict | None:
 
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+
+
 
 
 

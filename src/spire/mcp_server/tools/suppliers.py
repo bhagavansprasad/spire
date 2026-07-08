@@ -13,6 +13,8 @@ Filters supported:
 - created_to:   CreationDate <  'YYYY-MM-DD' (client-side upper bound)
 - status: exact match on Status, e.g. ACTIVE/INACTIVE (client-side;
   Fusion REST rejects q=Status='...' on this endpoint)
+- business_relationship: exact match on BusinessRelationship, e.g.
+  "Spend Authorized" / "Prospective" (client-side)
 - country: ISO-2 code or full name, matched against the addresses
   child resource (client-side; requires expand=addresses)
 - limit: max records returned after client-side filtering (default 25)
@@ -73,6 +75,7 @@ async def search_suppliers(
     client: FusionClient,
     supplier_name_contains: str | None = None,
     status: str | None = None,
+    business_relationship: str | None = None,
     country: str | None = None,
     created_from: str | None = None,
     created_to: str | None = None,
@@ -85,6 +88,9 @@ async def search_suppliers(
             sent server-side via q=.
         status: Exact match on Status (e.g., "ACTIVE", "INACTIVE"),
             applied client-side.
+        business_relationship: Exact match on BusinessRelationship
+            (e.g., "Spend Authorized", "Prospective"), applied
+            client-side.
         country: ISO-2 code (e.g., "US") or full name (e.g., "United
             States"), matched against the addresses child resource.
             Requires expand=addresses; applied client-side.
@@ -115,6 +121,7 @@ async def search_suppliers(
     # We must filter client-side if any non-server filter is in play.
     needs_client_filter = (
         status is not None
+        or business_relationship is not None
         or country is not None
         or created_to is not None
         or created_from_client is not None
@@ -133,6 +140,11 @@ async def search_suppliers(
 
     def matches(item: dict) -> bool:
         if status is not None and item.get("Status") != status:
+            return False
+        if (
+            business_relationship is not None
+            and item.get("BusinessRelationship") != business_relationship
+        ):
             return False
         if created_from_client is not None:
             cd = item.get("CreationDate") or ""
@@ -186,3 +198,4 @@ async def search_suppliers(
         limit_applied=limit,
         total_available=len(filtered),
     )
+
