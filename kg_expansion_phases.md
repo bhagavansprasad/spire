@@ -281,7 +281,7 @@ applied client-side. Added to the server registration.
 
 ## Phase 9 — Nested addresses on a supplier query
 
-**Status:** OPEN
+**Status:** DONE (merged to master)
 
 **Goal:** Root on Supplier, return each supplier with its addresses
 nested underneath.
@@ -460,9 +460,9 @@ be, addressed.
 |---|---|---|---|
 | 1 | Suppliers created in a time window | Fixed | Created-date range filter (Phase 3b) |
 | 2 | Supplier sites by business unit | Planned | New sites endpoint (Phase 12) |
-| 3 | Suppliers with their addresses | Partly | Address works standalone; nested shape (Phase 9) |
+| 3 | Suppliers with their addresses | Fixed | Nested addresses on a supplier query (Phase 9) |
 | 4 | Suppliers we spent most with in 2022 | Worked | Spend ranking (pre-existing) |
-| 5 | Suppliers with their addresses | Partly | Same as Test 3 (Phase 9) |
+| 5 | Suppliers with their addresses | Fixed | Same as Test 3 (Phase 9) |
 | 6 | Suppliers with open purchase orders | Worked | has_open_PO filter (pre-existing) |
 | 8 | Get list of active suppliers | Fixed | Status filter (Phase 3a) |
 | 9 | Only SupplierName and SupplierNumber | Fixed | Column projection (Phase 7) |
@@ -474,8 +474,8 @@ be, addressed.
 | 16 | Inactive suppliers | Fixed | Status filter (Phase 3a) |
 | 17 | Business classifications | Planned | New classifications endpoint (Phase 13) |
 
-Suggested order for the remaining open phases: 9 → 10 → 11 → 12 → 13
-(Phase 8 done). Quick wins
+Suggested order for the remaining open phases: 10 → 11 → 12 → 13
+(Phases 8 and 9 done). Quick wins
 first; the two new-endpoint phases last, since they need a live-data
 session before their KG rows can be authored.
 
@@ -525,3 +525,17 @@ session before their KG rows can be authored.
   both the bare-adjective and explicit phrasings. Verified end-to-end on
   the pod; prompt added to run_prompt_set. print_kg and the kg-metadata
   test updated for the new counts.
+- Phase 9 done: nested addresses on a supplier query ("Suppliers with
+  their addresses"). Path B — expand-based, not an edge step: the
+  supplier fetch runs with expand=addresses (include_addresses arg on
+  search_suppliers) and nests each supplier's flattened addresses under
+  an 'addresses' key. Planner sets the flag when Supplier is the target
+  and Address is included, and skips Address in the include loop (no
+  HAS_ADDRESS edge tool). Parser maps the phrasing to target Supplier +
+  Address-in-include, kept distinct from the address-as-target phrasing.
+  Synthesizer's SupplierRecord gained a nested AddressInfo list, with id
+  harvest and validation extended to the nested address ids. Closes Test
+  3/5. Verified end-to-end on the pod. Note: a bulk expand returns more
+  child addresses than a single-supplier q= expand (30 vs 25 for 1252,
+  all ACTIVE) — recorded in the endpoints reference; the bulk path is the
+  complete set.
