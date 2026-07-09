@@ -34,10 +34,13 @@ Show me contract renewals due next quarter
 # — cross-entity value filter (Phase 11, SLOW: one invoice call per supplier) —
 Suppliers with invoice amount greater than 10000
 
+# — supplier sites by business unit (Phase 12, SLOW: one sites call per supplier) —
+List suppliers with a site in the US1 business unit
+
+# — supplier business classification (Phase 13, SLOW: one classifications call per supplier) —
+List suppliers that are small business
+
 # — aggregation (SLOW: each paginates a full year, ~2 min) —
 Top 10 suppliers by spend in 2022
 Top 5 suppliers by spend in 2022
 Which suppliers did we spend the most with in 2022
-
-# — supplier sites by business unit 
-List suppliers with a site in the US1 business unit

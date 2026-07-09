@@ -55,6 +55,7 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "search_purchase_orders": "supplier_id",
     "get_buyer": "buyer_id",
     "search_suppliers_by_site_bu": "supplier_id",
+    "search_suppliers_by_classification": "supplier_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -88,6 +89,7 @@ _FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
 _FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
     "has_invoice_over_amount": "has_invoice_over_amount",
     "has_site_in_bu": "has_site_in_bu",
+    "has_classification": "has_classification",
 }
 
 
@@ -1178,6 +1180,22 @@ def _build_iteration_args_with_computed(
                 f"got {filter_spec.get('value')!r}."
             )
         args["business_unit"] = bu
+        return args
+
+    if intent_filter_type == "has_classification":
+        # The classification value rides in as the canonical display
+        # string (already resolved from supplier_classification vocab by
+        # the parser). Route it to the child businessClassifications
+        # call's classification arg. A non-empty child result means the
+        # supplier has a matching classification.
+        value = filter_spec.get("value")
+        cls = value.get("classification") if isinstance(value, dict) else value
+        if not isinstance(cls, str) or not cls.strip():
+            raise ValueError(
+                f"has_classification requires a classification string; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        args["classification"] = cls
         return args
 
     # Other filter types with computed args would dispatch here.

@@ -149,7 +149,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'supplier_classification', 'entity_synonym', 'relationship_phrase'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -249,7 +249,13 @@ INSERT INTO kg_entity VALUES (
   'A supplier site (assignment point). Modeled as a separate entity because a supplier can have many sites, each in a different ProcurementBU. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/sites. ProcurementBU on a site filters reliably server-side via q= (unlike Status on Supplier).'
 );
 
-PROMPT Seeded kg_entity (6 rows).
+INSERT INTO kg_entity VALUES (
+  'Classification', 'ClassificationId', 'Classification',
+  '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/businessClassifications',
+  'A supplier business classification (e.g. Small Business, Woman Owned, ISO 14001). Modeled as a separate entity because a supplier can hold many. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/businessClassifications. Classification (display) filters reliably server-side via single-clause q=. Status (CURRENT/expired) cannot be AND-combined with Classification in one q= (composite quirk), so Status is not constrained here.'
+);
+
+PROMPT Seeded kg_entity (7 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -333,7 +339,14 @@ INSERT INTO kg_edge VALUES (
   'Per-supplier child call; there is no bulk expand=sites on this pod (silently ignored). One HTTP call per parent supplier, so the scan window is bounded (SITE_SCAN_LIMIT in the tool).'
 );
 
-PROMPT Seeded kg_edge (5 rows).
+INSERT INTO kg_edge VALUES (
+  'HAS_CLASSIFICATION', 'Supplier', 'Classification', 'SupplierId', 'SupplierId', 'one_to_many',
+  'first_filter_only',
+  'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/businessClassifications?q=Classification=''<value>''. The Classification filter IS reliable server-side on this child (confirmed on pod: a matching value returns the row, a non-existent value returns empty).',
+  'Per-supplier child call; one HTTP call per parent supplier, so the scan window is bounded. Status cannot be AND-combined with Classification in one q= (composite quirk); Classification-only is sent server-side.'
+);
+
+PROMPT Seeded kg_edge (6 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -441,6 +454,19 @@ INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'japan',         'Japan Bu
 INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'india',         'India Business Unit',         'Procurement BU on supplier sites.');
 INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'sweden',        'Sweden Business Unit',        'Procurement BU on supplier sites.');
 INSERT INTO kg_vocabulary VALUES ('supplier_site_bu', 'healthcare us', 'Healthcare US Business Unit', 'Procurement BU on supplier sites.');
+
+-- supplier_classification (Classification on supplier businessClassifications;
+-- pod values are the display strings, e.g. 'Small Business'. All values seen
+-- across the first 50 suppliers are seeded.)
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'small business',                 'Small Business',                  'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'woman owned',                    'Woman Owned',                     'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'minority owned',                 'Minority Owned',                  'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'veteran owned',                  'Veteran Owned',                   'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'hub zone',                       'Hub Zone',                        'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'iso 14001',                      'ISO 14001',                       'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'general liability insurance',    'General Liability Insurance',     'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'workers compensation insurance', 'Workers'' Compensation Insurance', 'Business classification on supplier.');
+INSERT INTO kg_vocabulary VALUES ('supplier_classification', 'kbis',                           'Kbis',                            'Business classification on supplier.');
 
 -- entity_synonym
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'supplier',         'Supplier',      NULL);
@@ -563,9 +589,15 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes business_unit (exact ProcurementBU display string). Walks each parent supplier to its sites child, keeps the parent when a site in that BU exists (keep-parent-when-nonempty).'
 );
 
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_CLASSIFICATION',
+  'search_suppliers_by_classification',
+  'Takes classification (exact Classification display string). Walks each parent supplier to its businessClassifications child, keeps the parent when a matching classification exists (keep-parent-when-nonempty).'
+);
+
 COMMIT;
 
-PROMPT Seeded kg_edge_tool (4 rows).
+PROMPT Seeded kg_edge_tool (5 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -637,6 +669,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Supplier', 'has_classification', 'edge_traversal', NULL, 'supplier_classification', 'Classification', 'has_classification', NULL, NULL, NULL, NULL, NULL,
+  'Edge filter: supplier has at least one business classification matching a value. Value is the canonical Classification display string (resolved via supplier_classification vocab); routed to the child businessClassifications call as classification (keep-parent-when-nonempty). Mirror of has_site_in_bu.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'Invoice', 'supplier', 'entity_level', 'supplier', NULL, NULL, NULL, NULL, NULL, 'server_q', 'SupplierNumber', 'equals',
   'Invoice-by-supplier. Value is a supplier reference; the planner routes an all-digit value to supplier_number, otherwise supplier_name. Required for Invoice queries.'
 );
@@ -653,7 +690,7 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (12 rows).
+PROMPT Seeded kg_entity_filter (13 rows).
 
 -- ============================================================
 

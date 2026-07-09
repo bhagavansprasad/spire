@@ -5,7 +5,7 @@
 **For:** The KG experiment POC, where the property graph encodes which endpoint to call for what purpose and which join keys connect them.
 
 **Pod:** `https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`
-**Auth:** Basic Auth (use `-u "$FUSION_USERNAME:$FUSION_PASSWORD"`)
+**Auth:** Basic Auth (use `-u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD"`)
 **API version path:** `/fscmRestApi/resources/11.13.18.05/` (FSCM) and `/hcmRestApi/resources/11.13.18.05/` (HCM)
 
 ---
@@ -22,18 +22,20 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-05-22 | /suppliers      | Composite `q=` clauses (e.g., `q=Supplier LIKE '%Lee%' AND Status='ACTIVE'`) silently return 0 items with HTTP 200, even when matches exist. Confirms the composite-`q=` quirk is not just on `/invoices` and `/purchaseOrders` — it applies to `/suppliers` too. Likely applies across all Fusion REST endpoints on this pod. |
 | 2026-07-08 | /suppliers      | Server-side `q=BusinessRelationship='Spend Authorized'` **works** (returned `totalResults: 372`) — unlike `Status`, this field is reliable via `q=`. Two values on the pod: `Spend Authorized` (372), `Prospective` (40), confirmed across 500 rows. Spire still applies this filter client-side by choice, to keep it combinable (only one server `q=` clause is reliable per call). |
 | 2026-07-08 | /suppliers      | `expand=addresses` returns a DIFFERENT child count depending on query shape. A bulk fetch (`limit=500`, no `q=`) returned 30 addresses for supplier 1252; a single-supplier fetch (`q=SupplierNumber='1252'&expand=addresses`) returned 25. All 30 are ACTIVE — the extra 5 are real, not inactive/junk. The single-supplier `q=` path appears to cap or filter child rows. Use the bulk path for the complete active address set; do not treat a single-supplier expand as ground truth for address counts. |
+| 2026-07-09 | /suppliers/{id}/child/sites | Supplier sites carry `ProcurementBU` (display, e.g. `"US1 Business Unit"`), `ProcurementBUId` (numeric), `SupplierSiteId`, `SupplierSite`. Single-clause `q=ProcurementBU='...'` **works server-side** on this child (positive returns the row, non-existent value returns empty — both verified). No SupplierId in the child body; join key is the URL path. **`expand=sites` on the bulk supplier fetch is silently ignored** (HTTP 200, no `sites` key) — child data is only reachable per-supplier via the `/child/sites` path. Used for Phase 12 (`has_site_in_bu`). |
+| 2026-07-09 | /suppliers/{id}/child/businessClassifications | Classifications carry `Classification` (display, e.g. `"Small Business"`), `ClassificationCode` (`"SMALL_BUSINESS"`), `Status` (`"CURRENT"`), `CertifyingAgency` (`"SBA"`), `ClassificationId`. Single-clause `q=Classification='...'` **works server-side** (positive returns the row, non-existent value returns empty — both verified). Suppliers carry multiple classifications; no SupplierId in the child body (join key is the path). A `Status='CURRENT'` condition cannot be AND-combined with `Classification` in one `q=` (composite quirk) — apply Status client-side if needed. Used for Phase 13 (`has_classification`). |
 ---
 
 ## Environment setup (run once in your shell)
 
 ```bash
-export FUSION_BASE_URL="https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com"
-export FUSION_USERNAME="<your username>"
-export FUSION_PASSWORD="<your password>"
+export IKS_FUSION_BASE_URL="https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com"
+export IKS_FUSION_USERNAME="<your username>"
+export IKS_FUSION_PASSWORD="<your password>"
 
 # Sanity check
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?limit=1" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?limit=1" \
   -w "\nHTTP %{http_code}\n"
 ```
 
@@ -96,8 +98,8 @@ These hit you on more than one endpoint, so call them out once:
 **Curl — search for "Lee":**
 
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?q=Supplier+LIKE+%27%25Lee%25%27&fields=SupplierId,SupplierNumber,Supplier,Status&limit=25" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?q=Supplier+LIKE+%27%25Lee%25%27&fields=SupplierId,SupplierNumber,Supplier,Status&limit=25" \
   | python -m json.tool
 ```
 
@@ -150,8 +152,8 @@ curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
 **Curl — find US suppliers:**
 
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?expand=addresses&fields=SupplierId,SupplierNumber,Supplier,Status,addresses&limit=200" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?expand=addresses&fields=SupplierId,SupplierNumber,Supplier,Status,addresses&limit=200" \
   | python -m json.tool
 ```
 
@@ -202,8 +204,8 @@ curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
 **Curl — invoices for supplier 1252 since 2025-11-19:**
 
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices?q=SupplierNumber%3D%271252%27&fields=InvoiceId,InvoiceNumber,SupplierNumber,Supplier,InvoiceDate,InvoiceAmount,InvoiceCurrency,PaidStatus,ApprovalStatus&limit=200" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices?q=SupplierNumber%3D%271252%27&fields=InvoiceId,InvoiceNumber,SupplierNumber,Supplier,InvoiceDate,InvoiceAmount,InvoiceCurrency,PaidStatus,ApprovalStatus&limit=200" \
   | python -m json.tool
 ```
 
@@ -263,8 +265,8 @@ The `invoice_date_after` parameter on the Spire tool becomes a client-side filte
 **Curl — open POs for supplier_id 300000047572113:**
 
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders?q=SupplierId%3D300000047572113&fields=POHeaderId,OrderNumber,SupplierId,Supplier,StatusCode,BuyerId,Buyer,ApprovedDate,Ordered,Total&limit=200" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders?q=SupplierId%3D300000047572113&fields=POHeaderId,OrderNumber,SupplierId,Supplier,StatusCode,BuyerId,Buyer,ApprovedDate,Ordered,Total&limit=200" \
   | python -m json.tool
 ```
 
@@ -325,8 +327,8 @@ Composite `q=` is broken here too. Spire does:
 **Curl — look up buyer with BuyerId 300000047340498:**
 
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/hcmRestApi/resources/11.13.18.05/publicWorkers?q=PersonId%3D300000047340498&fields=PersonId,PersonNumber,DisplayName,WorkEmail,Username&limit=1" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/hcmRestApi/resources/11.13.18.05/publicWorkers?q=PersonId%3D300000047340498&fields=PersonId,PersonNumber,DisplayName,WorkEmail,Username&limit=1" \
   | python -m json.tool
 ```
 
@@ -419,36 +421,36 @@ Then filter dates where `<DateField> >= cutoff_iso`.
 
 ## Curl command quick reference (copy-paste for testing)
 
-All commands assume `FUSION_BASE_URL`, `FUSION_USERNAME`, `FUSION_PASSWORD` are set.
+All commands assume `IKS_FUSION_BASE_URL`, `IKS_FUSION_USERNAME`, `IKS_FUSION_PASSWORD` are set.
 
 ### 1. Find suppliers with "Lee" in name
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?q=Supplier+LIKE+%27%25Lee%25%27&fields=SupplierId,SupplierNumber,Supplier,Status&limit=25"
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?q=Supplier+LIKE+%27%25Lee%25%27&fields=SupplierId,SupplierNumber,Supplier,Status&limit=25"
 ```
 
 ### 2. List all US suppliers (with addresses expanded)
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?expand=addresses&fields=SupplierId,SupplierNumber,Supplier,Status,addresses&limit=200"
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?expand=addresses&fields=SupplierId,SupplierNumber,Supplier,Status,addresses&limit=200"
 ```
 
 ### 3. Get all invoices for supplier number "1252"
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices?q=SupplierNumber%3D%271252%27&fields=InvoiceId,InvoiceNumber,SupplierNumber,Supplier,InvoiceDate,InvoiceAmount,InvoiceCurrency,PaidStatus,ApprovalStatus&limit=200"
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices?q=SupplierNumber%3D%271252%27&fields=InvoiceId,InvoiceNumber,SupplierNumber,Supplier,InvoiceDate,InvoiceAmount,InvoiceCurrency,PaidStatus,ApprovalStatus&limit=200"
 ```
 
 ### 4. Get all POs for supplier_id 300000047572113
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders?q=SupplierId%3D300000047572113&fields=POHeaderId,OrderNumber,SupplierId,Supplier,StatusCode,BuyerId,Buyer,ApprovedDate,Ordered,Total&limit=200"
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders?q=SupplierId%3D300000047572113&fields=POHeaderId,OrderNumber,SupplierId,Supplier,StatusCode,BuyerId,Buyer,ApprovedDate,Ordered,Total&limit=200"
 ```
 
 ### 5. Look up buyer with PersonId 300000047340498
 ```bash
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
-  "$FUSION_BASE_URL/hcmRestApi/resources/11.13.18.05/publicWorkers?q=PersonId%3D300000047340498&fields=PersonId,PersonNumber,DisplayName,WorkEmail,Username&limit=1"
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+  "$IKS_FUSION_BASE_URL/hcmRestApi/resources/11.13.18.05/publicWorkers?q=PersonId%3D300000047340498&fields=PersonId,PersonNumber,DisplayName,WorkEmail,Username&limit=1"
 ```
 
 ### 6 Date-range queries on /invoices (workaround)
@@ -457,13 +459,13 @@ Fusion's q= clause supports `>=` and `<` separately but not compounded
 (see Composite-q quirk above). To get records in a date range, send the
 lower bound via q= and filter the upper bound client-side.
 
-curl -s -u "$FUSION_USERNAME:$FUSION_PASSWORD" \
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
   --get \
   --data-urlencode "q=InvoiceDate >= '2022-01-01'" \
   --data-urlencode "fields=InvoiceDate" \
   --data-urlencode "limit=500" \
   --data-urlencode "onlyData=true" \
-  "$FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
 
 Verified 2026-05-30: For Jan 2022 query, first 500 records span
 2022-01-01 to 2022-03-14, so client-side filtering for Jan 2022 is
@@ -506,10 +508,10 @@ If the KG experiment needs any of these, you'll be building net-new tool integra
 
 ## 6. Supplier filter experiments (KG expansion session)
 
-**Note on the credential prefix.** The curls above use `$FUSION_*`. From
-the KG-expansion session onward the shell vars are `IKS_`-prefixed:
-`$IKS_FUSION_BASE_URL`, `$IKS_FUSION_USERNAME`, `$IKS_FUSION_PASSWORD`
-(set in `.bashrc`). The examples below use the new prefix. The pod and
+**Note on credentials.** All curls in this document use the three shell
+variables `$IKS_FUSION_BASE_URL`, `$IKS_FUSION_USERNAME`,
+`$IKS_FUSION_PASSWORD` (set in `.bashrc`). These are the only credential
+variables used anywhere; no other names apply. The pod and
 paths are unchanged.
 
 These experiments confirmed how each new supplier/invoice/address filter
@@ -631,17 +633,70 @@ curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
 | invoice by supplier | /invoices | Yes (=) | server |
 | address by supplier | /suppliers (expand) | Yes (supplier q=) | server + flatten |
 | address by country | /suppliers (expand) | No | client-side on child |
+| site business unit | /suppliers/{id}/child/sites | Yes (=), tested | server on the child (per-supplier edge walk) |
+| classification | /suppliers/{id}/child/businessClassifications | Yes (=), tested | server on the child (per-supplier edge walk) |
 
-### 6.10 Endpoints not yet experimented (SME follow-up)
+### 6.10 Supplier child endpoints (curled 2026-07-09)
 
-Two child endpoints are named in the SME feedback but **not yet curled**.
-Discover field names, filterability, and join keys before authoring KG
-rows:
+Both child endpoints named in the SME feedback have now been discovered
+live. Both filter by a single-clause server-side `q=` on the child, and
+both are consumed by a per-supplier edge walk (keep the parent supplier
+when the filtered child call returns something). Neither child body
+carries `SupplierId` — the join key is the URL path.
 
-- `/suppliers/{SupplierId}/child/sites` — supplier sites; filter by
-  procurement business unit (Test 2 / Phase 12).
-- `/suppliers/{SupplierId}/child/businessClassifications` — supplier
-  classifications (Test 17 / Phase 13).
+#### `/suppliers/{SupplierId}/child/sites` (Test 2 / Phase 12)
+
+Fields: `SupplierSiteId`, `SupplierSite`, `ProcurementBU` (display,
+e.g. `"US1 Business Unit"`), `ProcurementBUId` (numeric), plus `Status`,
+`Address`, and many purchasing/invoicing config flags.
+
+Filter: `q=ProcurementBU='<display>'` — reliable server-side (verified
+positive and negative). Example:
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "fields=SupplierSiteId,SupplierSite,ProcurementBU,ProcurementBUId" \
+  --data-urlencode "q=ProcurementBU='US1 Business Unit'" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers/300000047414503/child/sites"
+```
+
+Caveat: **`expand=sites` on the bulk supplier fetch is silently dropped**
+(HTTP 200, no `sites` key), so sites are only reachable per-supplier via
+this child path — one child call per parent supplier.
+
+#### `/suppliers/{SupplierId}/child/businessClassifications` (Test 17 / Phase 13)
+
+Fields: `ClassificationId`, `Classification` (display, e.g.
+`"Small Business"`), `ClassificationCode` (`"SMALL_BUSINESS"`), `Status`
+(`"CURRENT"`), `CertifyingAgency` (`"SBA"`), plus certificate
+number/dates, notes, and provided-by contact fields (mostly null on the
+demo pod).
+
+Filter: `q=Classification='<display>'` — reliable server-side (verified
+positive and negative). Example:
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "fields=ClassificationId,Classification,ClassificationCode,Status" \
+  --data-urlencode "q=Classification='Small Business'" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers/300000047414503/child/businessClassifications"
+```
+
+Distinct `Classification` values seen across the first 50 suppliers:
+Hub Zone (6), Workers' Compensation Insurance (4), General Liability
+Insurance (4), Woman Owned (3), Small Business (3), ISO 14001 (3),
+Veteran Owned (2), Minority Owned (1), Kbis (1).
+
+Caveat: a `Status='CURRENT'` condition **cannot** be AND-combined with
+`Classification` in one `q=` (composite quirk — returns empty). Send
+`Classification` as the single server clause; if "current only" is ever
+required, filter `Status` client-side.
+
+Note: `expand=businessClassifications` on the bulk fetch was not
+separately tested; assume it behaves like `expand=sites` (silently
+dropped) until proven otherwise.
 
 ---
 
