@@ -15,7 +15,6 @@ ENV/
 
 # Project-specific
 how-to-run.md
-personas.yaml
 traces/
 temp/
 
@@ -28,3 +27,4 @@ temp/
 *.egg-info/
 context_out/
 spire_handoff_2026-05-30.md
+
