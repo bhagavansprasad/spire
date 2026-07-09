@@ -1,60 +1,36 @@
 bundles:
-  handoff:
-  - docs/spire_handoff_*.md
-  - prompt_coverage.md
-  - docs/feature_roadmap.md
+  # ── project root (content files only; tooling and secrets excluded) ──
+  root:
   - README.md
-  planning:
+  - how-to-run.md
+  - how-to-run-02.md
   - prompt_coverage.md
-  - docs/feature_roadmap.md
-  - docs/spire_handoff_*.md
-  core:
+  - kg_expansion_phases.md
+  - spire_context_handoff.md
+  - spire_fusion_endpoints_reference.md
+  - build_context.py
+  - context_bundles.yaml
   - src/spire/config.py
-  - src/spire/nl_parser/__init__.py
-  - src/spire/nl_parser/capability.py
-  - src/spire/nl_parser/draft.py
-  - src/spire/nl_parser/parser.py
-  - src/spire/nl_parser/result.py
-  - src/spire/nl_parser/validation.py
-  - src/spire/nl_parser/vocabulary.py
-  - src/spire/planner/planner.py
-  - src/spire/executor/executor.py
-  - src/spire/synthesizer/synthesizer.py
-  - src/spire/graph/pipeline.py
+  scripts:
+  - scripts/draw_graph.py
+  - scripts/print_kg.py
+  - scripts/rebuild_kg.py
   - scripts/run_graph.py
   - scripts/run_plan.py
-  parser:
-  - src/spire/nl_parser/__init__.py
-  - src/spire/nl_parser/capability.py
-  - src/spire/nl_parser/draft.py
-  - src/spire/nl_parser/parser.py
-  - src/spire/nl_parser/result.py
-  - src/spire/nl_parser/validation.py
-  - src/spire/nl_parser/vocabulary.py
-  - src/spire/config.py
-  - tests/test_nl_parser.py
-  - tests/test_nl_parser_capability.py
-  - tests/test_nl_parser_integration.py
-  - docs/designs/feature_1_nl_parser_design.md
-  planner:
-  - src/spire/planner/planner.py
-  - tests/test_planner.py
-  - docs/designs/phase_2_planner_design.md
-  executor:
+  - scripts/run_prompt_set.py
+  - scripts/prompt_set.txt
+  - scripts/test_kg_connection.py
+  - scripts/verify_invoices.py
+  - scripts/verify_business_relationship.py
+  - scripts/verify_nested_addresses.py
+  graph_kg:
+  - scripts/sql/kg_schema.sql
   - src/spire/executor/executor.py
-  - tests/test_executor.py
-  synthesizer:
-  - src/spire/synthesizer/synthesizer.py
-  - src/spire/config.py
-  - tests/test_synthesizer.py
-  - tests/test_synthesizer_aggregation.py
-  graph:
+  - src/spire/fusion/client.py
   - src/spire/graph/pipeline.py
-  - scripts/run_graph.py
-  - tests/test_graph_pipeline.py
-  mcp:
+  - src/spire/kg/loader.py
+  mcp_server_tools:
   - src/spire/mcp_server/server.py
-  - src/spire/mcp_server/tools/__init__.py
   - src/spire/mcp_server/tools/addresses.py
   - src/spire/mcp_server/tools/aggregate_invoices.py
   - src/spire/mcp_server/tools/buyer.py
@@ -63,39 +39,39 @@ bundles:
   - src/spire/mcp_server/tools/suppliers.py
   - src/spire/mcp_server/tools/suppliers_by_country.py
   - src/spire/mcp_server/tools/tool_result.py
+  parser_planner:
+  - src/spire/nl_parser/capability.py
+  - src/spire/nl_parser/draft.py
+  - src/spire/nl_parser/parser.py
+  - src/spire/nl_parser/result.py
+  - src/spire/nl_parser/validation.py
+  - src/spire/nl_parser/vocabulary.py
+  - src/spire/oracle/client.py
+  - src/spire/planner/planner.py
+  - src/spire/synthesizer/synthesizer.py
+  tests:
+  - tests/spire_sme_validation_checklist.md
+  - tests/test_aggregate_invoices_tool.py
+  - tests/test_aggregation_routing.py
   - tests/test_buyer_tool.py
-  - tests/test_suppliers_tool.py
-  - tests/test_suppliers_by_country_tool.py
-  - tests/test_purchase_orders_tool.py
+  - tests/test_config.py
+  - tests/test_executor.py
+  - tests/test_fusion_client.py
+  - tests/test_graph_pipeline.py
   - tests/test_invoices_tool.py
-  kg:
-  - src/spire/kg/__init__.py
-  - src/spire/kg/loader.py
   - tests/test_kg_loader.py
   - tests/test_kg_metadata.py
-  - scripts/sql/kg_schema.sql
-  - scripts/rebuild_kg.sh
-  - scripts/print_kg.py
-  - docs/designs/kg_schema_v1.md
-  - docs/designs/kg_evaluation_framework.md
-  demo:
-  - docs/spire_handoff_*.md
-  - scripts/run_graph.py
-  - scripts/run_plan.py
-  - scripts/run_prompt_set.py
-  - scripts/prompt_set.txt
-  - how-to-run.md
-  - docs/design3_measurement_report.md
-  - docs/design3_gap_analysis.md
-  docs:
-  - docs
-  - README.md
-  - how-to-run.md
-  src:
-  - src
-  - scripts
-  tests:
-  - tests
+  - tests/test_nl_parser.py
+  - tests/test_nl_parser_capability.py
+  - tests/test_nl_parser_integration.py
+  - tests/test_oracle_client.py
+  - tests/test_planner.py
+  - tests/test_purchase_orders_tool.py
+  - tests/test_suppliers_by_country_tool.py
+  - tests/test_suppliers_tool.py
+  - tests/test_synthesizer.py
+  - tests/test_synthesizer_aggregation.py
+  - tests/test_tool_result.py
 excludes:
 - traces
 - traces/*
@@ -113,7 +89,5 @@ excludes:
 - '*.pdf'
 - context_out
 - context_out/*
-- build_context.py
-- context_bundles.yaml
-- "docs/archive/*"
+- docs/archive/*
 - archive
