@@ -110,6 +110,15 @@ useful review comments.
 
 ---
 
+## Other scripts available
+
+- **Batch end-to-end** — run any prompt file through the full pipeline:
+  `python scripts/run_prompt_set.py --prompt-file scripts/02_test_prompts_e2e.txt`
+- **Parser check (fast, no pod)** — score prompts on routing only, PASS/FAIL:
+  `python scripts/score_parser_prompts.py --file scripts/01_test_prompts_parser.txt`
+
+---
+
 ## Troubleshooting (quick)
 
 - **`ModuleNotFoundError: No module named 'spire'`** — run `pip install -e .`
