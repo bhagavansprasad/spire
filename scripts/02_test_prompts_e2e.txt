@@ -1,0 +1,68 @@
+# Spire END-TO-END stress set — full pipeline per prompt (SLOW).
+# Read by scripts/run_prompt_set.py --prompt-file this-file.
+# Goal: find where the FULL pipeline (parse -> plan -> execute -> synthesize)
+# fails, not just the parser. Includes collision traps and should-refuse cases.
+# Ordered fast-first; slow edge-filters and aggregation last.
+
+# ===== FAST: single-filter, paraphrase variety =====
+List active suppliers
+which suppliers are currently active
+suppliers that are not inactive
+List US suppliers
+suppliers based in America
+which suppliers are located in the UK
+suppliers from India
+suppliers named Lee
+find vendors with Corp in the name
+prospective suppliers
+show me spend authorized suppliers
+suppliers created between Jan and Mar 2025
+vendors added in 2024
+
+# ===== FAST: invoice + address targets =====
+invoices for supplier 1252
+show me invoices for Lee Supplies in 2023
+invoices over 100000 for supplier 1252
+Addresses for supplier 1252
+Suppliers with their addresses
+
+# ===== FAST: count =====
+count of suppliers
+how many active suppliers are there
+
+# ===== COMBINATIONS =====
+active US suppliers
+active prospective suppliers
+woman owned suppliers in the US
+
+# ===== COLLISION TRAPS (most likely to misroute end-to-end) =====
+US suppliers
+suppliers in the US1 business unit
+small business suppliers
+suppliers with a UK business unit site
+
+# ===== OUT OF SCOPE (should refuse cleanly) =====
+show me contract renewals due next quarter
+which suppliers have the best rating
+who should we stop buying from
+suppliers with net 30 payment terms
+show me purchase order line items
+
+# ===== AMBIGUOUS / UNDERSPECIFIED =====
+show me suppliers
+recent invoices
+
+# ===== SLOW: edge filters (one child call per supplier) =====
+suppliers with open purchase orders
+suppliers with no invoices in the last 6 months
+suppliers with invoice amount greater than 10000
+which suppliers invoiced more than 50000
+List suppliers with a site in the US1 business unit
+suppliers with a site in the France business unit
+suppliers that are small business
+woman owned suppliers
+which suppliers are veteran owned
+
+# ===== SLOW: aggregation (paginates a full year, ~2 min each) =====
+top 10 suppliers by spend in 2022
+which suppliers did we spend the most with in 2022

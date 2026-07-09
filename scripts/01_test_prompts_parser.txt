@@ -1,0 +1,107 @@
+# Spire parser-correctness stress set — 60 prompts.
+# Format: EXPECT=<what should happen> ||| <prompt>
+# EXPECT values:
+#   filter:<type>       -> intent should carry this supplier filter
+#   target:<entity>     -> intent target_entity
+#   count               -> count_only=true
+#   aggregate           -> aggregate block set
+#   refuse              -> should be an out-of-scope refusal
+#   combo:<a+b>         -> multiple filters expected
+# The goal is to FIND FAILURES. Traps and refusals are the point, not noise.
+#
+# Run with the scorer: it strips EXPECT, runs the prompt, compares the intent.
+
+# ---------- 1. STATUS (paraphrase variety) ----------
+filter:status ||| List active suppliers
+filter:status ||| which suppliers are currently active
+filter:status ||| show me all the active vendors
+filter:status ||| suppliers that are not inactive
+filter:status ||| give me inactive suppliers
+filter:status ||| suppliers whose status is inactive
+
+# ---------- 2. COUNTRY (paraphrase + collision with BU) ----------
+filter:country ||| List US suppliers
+filter:country ||| suppliers based in America
+filter:country ||| vendors in the United States
+filter:country ||| which suppliers are located in the UK
+filter:country ||| suppliers from India
+filter:country ||| show me suppliers in Great Britain
+
+# ---------- 3. NAME FRAGMENT ----------
+filter:name_fragment ||| suppliers named Lee
+filter:name_fragment ||| find vendors with "Corp" in the name
+filter:name_fragment ||| any supplier called Dell
+
+# ---------- 4. BUSINESS RELATIONSHIP ----------
+filter:business_relationship ||| prospective suppliers
+filter:business_relationship ||| show me spend authorized suppliers
+filter:business_relationship ||| which vendors are prospective
+
+# ---------- 5. CREATED DATE ----------
+filter:created_date ||| suppliers created between Jan and Mar 2025
+filter:created_date ||| vendors added in 2024
+filter:created_date ||| suppliers created after June 2025
+
+# ---------- 6. SITE BUSINESS UNIT (Phase 12 + collision traps) ----------
+filter:has_site_in_bu ||| List suppliers with a site in the US1 business unit
+filter:has_site_in_bu ||| suppliers with a site in the France business unit
+filter:has_site_in_bu ||| which suppliers operate in the Germany business unit
+filter:has_site_in_bu ||| suppliers with a supplier site based on business unit India
+
+# ---------- 7. CLASSIFICATION (Phase 13 + traps) ----------
+filter:has_classification ||| suppliers that are small business
+filter:has_classification ||| woman owned suppliers
+filter:has_classification ||| show me minority owned vendors
+filter:has_classification ||| which suppliers are veteran owned
+filter:has_classification ||| suppliers with ISO 14001 certification
+filter:has_classification ||| hub zone suppliers
+
+# ---------- 8. EDGE: invoice-over-amount ----------
+filter:has_invoice_over_amount ||| suppliers with invoice amount greater than 10000
+filter:has_invoice_over_amount ||| which suppliers invoiced more than 50000
+filter:has_invoice_over_amount ||| vendors who billed us over 100k
+
+# ---------- 9. EDGE: open PO / no recent invoices ----------
+filter:has_open_PO ||| suppliers with open purchase orders
+filter:has_no_recent_invoices ||| suppliers with no invoices in the last 6 months
+filter:has_no_recent_invoices ||| vendors who haven't invoiced us in a year
+
+# ---------- 10. INVOICE TARGET ----------
+target:Invoice ||| invoices for supplier 1252
+target:Invoice ||| show me invoices for Lee Supplies in 2023
+target:Invoice ||| invoices over 100000 for supplier 1252
+
+# ---------- 11. COUNT ----------
+count ||| count of suppliers
+count ||| how many suppliers do we have
+count ||| how many active suppliers are there
+
+# ---------- 12. AGGREGATION ----------
+aggregate ||| top 10 suppliers by spend in 2022
+aggregate ||| which suppliers did we spend the most with in 2022
+
+# ---------- 13. COMBINATIONS (stacked filters) ----------
+combo:status+country ||| active US suppliers
+combo:status+business_relationship ||| active prospective suppliers
+combo:country+has_classification ||| woman owned suppliers in the US
+
+# ---------- 14. COLLISION TRAPS (most likely to misroute) ----------
+filter:country ||| US suppliers
+filter:has_site_in_bu ||| suppliers in the US1 business unit
+filter:has_classification ||| small suppliers
+filter:has_classification ||| small business suppliers
+filter:country ||| suppliers in the UK
+filter:has_site_in_bu ||| suppliers with a UK business unit site
+
+# ---------- 15. OUT OF SCOPE (should refuse cleanly) ----------
+refuse ||| show me contract renewals due next quarter
+refuse ||| which suppliers have the best rating
+refuse ||| who should we stop buying from
+refuse ||| suppliers with net 30 payment terms
+refuse ||| show me purchase order line items
+refuse ||| suppliers with the highest quality score
+
+# ---------- 16. AMBIGUOUS / UNDERSPECIFIED ----------
+target:Supplier ||| show me suppliers
+refuse ||| recent invoices
+target:Supplier ||| everything about supplier 1252
