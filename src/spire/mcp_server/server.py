@@ -13,6 +13,7 @@ Tools currently exposed:
 - search_addresses
 - search_purchase_orders
 - search_suppliers_by_site_bu
+- search_suppliers_by_classification
 - get_buyer
 """
 
@@ -32,6 +33,9 @@ from spire.mcp_server.tools.suppliers import search_suppliers as _search_supplie
 from spire.mcp_server.tools.addresses import search_addresses as _search_addresses
 from spire.mcp_server.tools.supplier_sites import (
     search_suppliers_by_site_bu as _search_suppliers_by_site_bu,
+)
+from spire.mcp_server.tools.supplier_classifications import (
+    search_suppliers_by_classification as _search_suppliers_by_classification,
 )
 
 
@@ -233,6 +237,41 @@ async def search_suppliers_by_site_bu(
             client,
             supplier_id=supplier_id,
             business_unit=business_unit,
+            limit=limit,
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def search_suppliers_by_classification(
+    supplier_id: int,
+    classification: str,
+    limit: int = 25,
+) -> dict:
+    """Check whether one supplier has a given business classification.
+
+    Edge tool: called once per supplier to filter suppliers by their
+    business classifications. For "suppliers that are small business /
+    woman owned / minority owned", the executor calls this per supplier
+    and keeps those whose result is non-empty. Classification filters
+    server-side on the businessClassifications child.
+
+    Args:
+        supplier_id: The SupplierId of the supplier to check. Get this
+            from search_suppliers.
+        classification: Exact Classification display string, e.g.
+            "Small Business".
+        limit: Max classification records to return.
+
+    Returns:
+        A ToolResult dict whose items are the supplier's matching
+        classifications. Empty items means no match.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_suppliers_by_classification(
+            client,
+            supplier_id=supplier_id,
+            classification=classification,
             limit=limit,
         )
         return result.to_dict()

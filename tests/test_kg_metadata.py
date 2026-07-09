@@ -55,11 +55,13 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_six_rows():
-    """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site.
+async def test_kg_entity_has_seven_rows():
+    """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
+    Classification.
 
-    Phase 12 added Site (supplier sites child), used by the
-    has_site_in_bu edge filter.
+    Phase 12 added Site (supplier sites child). Phase 13 added
+    Classification (supplier businessClassifications child), used by the
+    has_classification edge filter.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -68,7 +70,8 @@ async def test_kg_entity_has_six_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "Address", "Buyer", "Invoice", "PurchaseOrder", "Site", "Supplier"
+        "Address", "Buyer", "Classification", "Invoice", "PurchaseOrder",
+        "Site", "Supplier"
     ]
 
 
@@ -94,18 +97,23 @@ async def test_kg_table_row_counts_match_v1_1():
     ProcurementBU): +1 entity (Site, 5->6), +1 edge (HAS_SITE, 4->5),
     +1 edge tool (HAS_SITE, 3->4), +1 filter row (kg_entity_filter
     13->14), and +10 vocab rows (supplier_site_bu, 46->56).
+    Phase 13 added the has_classification edge filter (suppliers by
+    business classification): +1 entity (Classification, 6->7), +1 edge
+    (HAS_CLASSIFICATION, 5->6), +1 edge tool (HAS_CLASSIFICATION, 4->5),
+    +1 filter row (kg_entity_filter 14->15), and +9 vocab rows
+    (supplier_classification, 56->65).
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 6,
+        "kg_entity": 7,
         "kg_entity_field": 27,
-        "kg_edge": 5,
+        "kg_edge": 6,
         "kg_pattern": 3,
-        "kg_vocabulary": 56,
+        "kg_vocabulary": 65,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 3,
-        "kg_entity_filter": 14,
-        "kg_edge_tool": 4,
+        "kg_entity_filter": 15,
+        "kg_edge_tool": 5,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():
