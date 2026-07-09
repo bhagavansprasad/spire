@@ -1,0 +1,8 @@
+# Re-test of the 5 prompts that failed the parser scorer.
+# The 3 site-BU ones should now PASS after the bullet fix.
+# The 2 label cases (small suppliers / show me suppliers) are debatable, not bugs.
+filter:has_site_in_bu ||| suppliers with a site in the France business unit
+filter:has_site_in_bu ||| which suppliers operate in the Germany business unit
+filter:has_site_in_bu ||| suppliers with a UK business unit site
+refuse ||| small suppliers
+refuse ||| show me suppliers
