@@ -12,7 +12,7 @@ Branch convention: `po-phase-N-description`.
 | Phase | Goal | Branch | Status | PR |
 |---|---|---|---|---|
 | P1 | Dedupe + discovery scope | `po-phase-1-dedupe` | done (docs-only) | — |
-| P2 | PO detail + lines + projection | `po-phase-2-po-lines` | not started | — |
+| P2 | PO detail + lines + projection | `po-phase-2-po-lines` | merged | merged to master |
 | P3 | PO schedules + distributions | `po-phase-3-schedules-distributions` | not started | — |
 | P4 | Supplier contacts | `po-phase-4-supplier-contacts` | not started | — |
 | P5 | Receipt requests + invoices-by-PO | `po-phase-5-receipt-requests` | not started | — |
