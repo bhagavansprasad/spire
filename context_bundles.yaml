@@ -4,10 +4,15 @@ bundles:
   - README.md
   - how-to-run.md
   - how-to-run-02.md
+  - how-to-run-after-pull.md
   - prompt_coverage.md
   - kg_expansion_phases.md
-  - spire_context_handoff.md
-  - spire_fusion_endpoints_reference.md
+  - po_expansion_plan.md
+  - spire_handoff_context.md
+  - spire_expansion_endpoints.md
+  - spire_integration_coverage.md
+  - docs/spire_fusion_endpoints_reference.md
+  - docs/feature_roadmap.md
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
@@ -38,6 +43,8 @@ bundles:
   - src/spire/mcp_server/tools/purchase_orders.py
   - src/spire/mcp_server/tools/suppliers.py
   - src/spire/mcp_server/tools/suppliers_by_country.py
+  - src/spire/mcp_server/tools/supplier_sites.py
+  - src/spire/mcp_server/tools/supplier_classifications.py
   - src/spire/mcp_server/tools/tool_result.py
   parser_planner:
   - src/spire/nl_parser/capability.py
@@ -66,6 +73,7 @@ bundles:
   - tests/test_nl_parser_integration.py
   - tests/test_oracle_client.py
   - tests/test_planner.py
+  - tests/test_prompts.py
   - tests/test_purchase_orders_tool.py
   - tests/test_suppliers_by_country_tool.py
   - tests/test_suppliers_tool.py
