@@ -20,8 +20,10 @@ Prerequisites (same as a manual run_plan.py run):
   - GEMINI_API_KEY set; KG reachable
 
 Usage:
-  python scripts/run_prompt_set.py
-  python scripts/run_prompt_set.py --prompts "Top 5 suppliers by spend in 2022" "List US suppliers"
+  python scripts/run_prompt_set.py                 # all modules
+  python scripts/run_prompt_set.py --all           # all modules (explicit)
+  python scripts/run_prompt_set.py --prompt-file scripts/prompt_set_po.txt
+  python scripts/run_prompt_set.py --prompts "List US suppliers" "Show PO 2144 and its lines"
 """
 
 from __future__ import annotations
@@ -49,10 +51,10 @@ from run_plan import (
 )
 
 
-# The prompt set lives in a plain-text file alongside this script:
-# one prompt per line, blank lines and '#' comment lines ignored.
-# Slow aggregation prompts are ordered last there.
-DEFAULT_PROMPT_FILE = Path(__file__).with_name("prompt_set.txt")
+# Prompts live in per-module files alongside this script
+# (prompt_set_<module>.txt): one prompt per line, blank lines and '#'
+# comment lines ignored, slow prompts ordered last within each file.
+# With no args, every module file is run (equivalent to --all).
 
 
 def load_prompts(path: Path) -> list[str]:
@@ -64,6 +66,23 @@ def load_prompts(path: Path) -> list[str]:
         if not line or line.startswith("#"):
             continue
         prompts.append(line)
+    return prompts
+
+
+def load_all_module_prompts(scripts_dir: Path) -> list[str]:
+    """Load and concatenate every per-module prompt file
+    (prompt_set_*.txt) in scripts_dir, sorted by filename for stable
+    order. Fast/slow ordering is preserved WITHIN each module file; the
+    files themselves run in alphabetical order (po before supplier, etc.).
+    """
+    module_files = sorted(scripts_dir.glob("prompt_set_*.txt"))
+    if not module_files:
+        raise SystemExit(
+            f"No prompt_set_*.txt files found in {scripts_dir}."
+        )
+    prompts: list[str] = []
+    for path in module_files:
+        prompts.extend(load_prompts(path))
     return prompts
 
 
@@ -149,11 +168,36 @@ def main() -> int:
     parser.add_argument(
         "--prompt-file",
         type=Path,
-        default=DEFAULT_PROMPT_FILE,
-        help=f"Prompt file to read (default: {DEFAULT_PROMPT_FILE.name}).",
+        default=None,
+        help=(
+            "Run a single prompt file instead of all modules. With no "
+            "flags, every prompt_set_*.txt module file is run."
+        ),
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help=(
+            "Run every per-module prompt file (prompt_set_*.txt) in the "
+            "scripts dir, concatenated. Mutually exclusive with "
+            "--prompt-file."
+        ),
     )
     args = parser.parse_args()
-    prompts = args.prompts if args.prompts else load_prompts(args.prompt_file)
+
+    if args.all and args.prompt_file is not None:
+        parser.error("--all and --prompt-file are mutually exclusive.")
+
+    scripts_dir = Path(__file__).parent
+    if args.prompts:
+        prompts = args.prompts
+    elif args.all:
+        prompts = load_all_module_prompts(scripts_dir)
+    elif args.prompt_file is not None:
+        prompts = load_prompts(args.prompt_file)
+    else:
+        # No flags: run every module file.
+        prompts = load_all_module_prompts(scripts_dir)
 
     print(f"Running {len(prompts)} prompt(s) through the live pipeline.")
     print("(Requires the MCP server up, the pod reachable, and Gemini.)")
