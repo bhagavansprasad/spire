@@ -55,14 +55,15 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_nine_rows():
+async def test_kg_entity_has_ten_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
     Phase 12 added Site (supplier sites child). Phase 13 added
     Classification (supplier businessClassifications child), used by the
     has_classification edge filter. P2 added PurchaseOrderLine (the PO
-    lines child), used by the HAS_LINE expansion edge.
+    lines child), used by the HAS_LINE expansion edge. P4 added Contact (supplier contacts child), used by
+    the HAS_CONTACT expansion edge.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -71,8 +72,9 @@ async def test_kg_entity_has_nine_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "Address", "Buyer", "Classification", "Invoice", "POSchedule",
-        "PurchaseOrder", "PurchaseOrderLine", "Site", "Supplier"
+        "Address", "Buyer", "Classification", "Contact", "Invoice",
+        "POSchedule", "PurchaseOrder", "PurchaseOrderLine", "Site",
+        "Supplier"
     ]
 
 
@@ -113,15 +115,15 @@ async def test_kg_table_row_counts_match_v1_1():
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 9,
-        "kg_entity_field": 53,
-        "kg_edge": 8,
+        "kg_entity": 10,
+        "kg_entity_field": 61,
+        "kg_edge": 9,
         "kg_pattern": 3,
-        "kg_vocabulary": 67,
+        "kg_vocabulary": 69,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 4,
         "kg_entity_filter": 16,
-        "kg_edge_tool": 7,
+        "kg_edge_tool": 8,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

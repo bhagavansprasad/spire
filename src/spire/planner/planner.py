@@ -62,6 +62,8 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "get_purchase_order_lines": "po_header_id",
     # P3: PO schedules (flat endpoint), one-hop expansion by POHeaderId.
     "get_purchase_order_schedules": "po_header_id",
+    # P4: supplier contacts, per-supplier child expansion by SupplierId.
+    "get_supplier_contacts": "supplier_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op

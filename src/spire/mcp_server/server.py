@@ -18,6 +18,7 @@ Tools currently exposed:
 - get_purchase_order_by_id
 - get_purchase_order_lines
 - get_purchase_order_schedules
+- get_supplier_contacts
 """
 
 from fastmcp import Context, FastMCP
@@ -48,6 +49,9 @@ from spire.mcp_server.tools.purchase_order_lines import (
 )
 from spire.mcp_server.tools.purchase_order_schedules import (
     get_purchase_order_schedules as _get_purchase_order_schedules,
+)
+from spire.mcp_server.tools.supplier_contacts import (
+    get_supplier_contacts as _get_supplier_contacts,
 )
 
 
@@ -415,6 +419,32 @@ async def get_purchase_order_schedules(
     async with FusionClient(_persona) as client:
         result = await _get_purchase_order_schedules(
             client, po_header_id=po_header_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_supplier_contacts(
+    supplier_id: int, limit: int = 25
+) -> dict:
+    """Fetch the contact people of one supplier.
+
+    Use this for "show supplier 1262 and its contacts" or "who are the
+    contacts for EIP Inc". Each contact gives a name, email, optional job
+    title, status, and a flag marking the primary (administrative) contact.
+
+    Args:
+        supplier_id: The numeric SupplierId of the supplier.
+        limit: Max contact records to return (default 25).
+
+    Returns:
+        A dict with the supplier's contacts: ContactName, FirstName,
+        LastName, Email, JobTitle, Status and AdministrativeContactFlag
+        per contact.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_supplier_contacts(
+            client, supplier_id=supplier_id, limit=limit
         )
         return result.to_dict()
 
