@@ -1,17 +1,12 @@
-# Spire prompt set — read by scripts/run_prompt_set.py.
+# Spire prompt set — SUPPLIER module. Read by scripts/run_prompt_set.py.
 # One prompt per line. Blank lines and lines starting with # are ignored.
-# Ordered fast-first; the slow aggregation prompts are at the end.
+# Ordered fast-first; the slow prompts are at the end.
+# Cross-module prompts whose ROOT entity is Supplier live here
+# (e.g. "suppliers with open POs" roots on Supplier).
 
 # — ordinary list —
 Show me invoices for supplier 1252
 List US suppliers
-
-# — PO detail + lines (P2) —
-Show PO 2144 and its lines
-What is purchase order 2144 about?
-
-# — PO schedules (P3) —
-Show PO 2144 and its schedules
 
 # — supplier filters (Phase 3) —
 Get list of active suppliers
