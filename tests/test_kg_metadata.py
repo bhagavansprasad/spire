@@ -55,13 +55,14 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_seven_rows():
+async def test_kg_entity_has_eight_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
-    Classification.
+    Classification, PurchaseOrderLine.
 
     Phase 12 added Site (supplier sites child). Phase 13 added
     Classification (supplier businessClassifications child), used by the
-    has_classification edge filter.
+    has_classification edge filter. P2 added PurchaseOrderLine (the PO
+    lines child), used by the HAS_LINE expansion edge.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -71,7 +72,7 @@ async def test_kg_entity_has_seven_rows():
     names = [row[0] for row in rows]
     assert names == [
         "Address", "Buyer", "Classification", "Invoice", "PurchaseOrder",
-        "Site", "Supplier"
+        "PurchaseOrderLine", "Site", "Supplier"
     ]
 
 
@@ -102,18 +103,25 @@ async def test_kg_table_row_counts_match_v1_1():
     (HAS_CLASSIFICATION, 5->6), +1 edge tool (HAS_CLASSIFICATION, 4->5),
     +1 filter row (kg_entity_filter 14->15), and +9 vocab rows
     (supplier_classification, 56->65).
+    P2 (PO detail + lines) added a single-PO fetch and its line
+    children: +1 entity (PurchaseOrderLine, 7->8), +12 line fields
+    plus +2 PurchaseOrder projection fields (Total, TotalTax)
+    (kg_entity_field 27->41), +1 edge (HAS_LINE, 6->7), +1 edge tool
+    (HAS_LINE, 5->6), +1 entity tool (PurchaseOrder by_id, 3->4), and
+    +1 filter row (PurchaseOrder by_id, kg_entity_filter 15->16). No
+    new vocab.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 7,
-        "kg_entity_field": 27,
-        "kg_edge": 6,
+        "kg_entity": 8,
+        "kg_entity_field": 41,
+        "kg_edge": 7,
         "kg_pattern": 3,
         "kg_vocabulary": 65,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 3,
-        "kg_entity_filter": 15,
-        "kg_edge_tool": 5,
+        "kg_entity_tool": 4,
+        "kg_entity_filter": 16,
+        "kg_edge_tool": 6,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():
@@ -254,6 +262,8 @@ async def test_no_child_in_n_months_pattern_has_parseable_parameters():
     params = json.loads(params_str)
     param_names = {p["name"] for p in params}
     assert param_names == {"parent", "child_edge", "date_field", "months_param"}
+
+
 
 
 

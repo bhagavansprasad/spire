@@ -136,6 +136,16 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "MUST include a supplier or a country.\n"
     "- 'include the buyer' / 'with the buyer' / 'show the buyer assigned' -> "
     "add 'Buyer' to include.\n"
+    "- 'PO 2144' / 'purchase order 2144' / 'what is PO US164932 about' / "
+    "'show PO 162352' -> target_entity 'PurchaseOrder' with a 'by_id' "
+    "filter whose value is the purchase-order id or number exactly as "
+    "written (e.g. '2144'). A single purchase order named by its id or "
+    "order number is ALWAYS a 'by_id' filter — never invent an "
+    "'OrderNumber' or other filter. PurchaseOrder queries MUST include a "
+    "'by_id' filter.\n"
+    "- 'and its lines' / 'show its lines' / 'with the line items' / 'show "
+    "the PO lines' on a purchase-order question -> add 'PurchaseOrderLine' "
+    "to include (alongside the 'by_id' filter).\n"
     "- 'suppliers with their addresses' / 'list suppliers with their "
     "address' / 'suppliers and their addresses' -> target_entity "
     "'Supplier' (NOT Address) with 'Address' added to include. This roots "
@@ -341,6 +351,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 

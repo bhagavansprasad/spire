@@ -255,7 +255,13 @@ INSERT INTO kg_entity VALUES (
   'A supplier business classification (e.g. Small Business, Woman Owned, ISO 14001). Modeled as a separate entity because a supplier can hold many. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/businessClassifications. Classification (display) filters reliably server-side via single-clause q=. Status (CURRENT/expired) cannot be AND-combined with Classification in one q= (composite quirk), so Status is not constrained here.'
 );
 
-PROMPT Seeded kg_entity (7 rows).
+INSERT INTO kg_entity VALUES (
+  'PurchaseOrderLine', 'POLineId', 'LineNumber',
+  '/fscmRestApi/resources/11.13.18.05/purchaseOrders/{POHeaderId}/child/lines',
+  'A line on a purchase order. Modeled as a separate entity because a PO has many lines. Not a top-level resource; only accessible as a child of PurchaseOrder at /purchaseOrders/{POHeaderId}/child/lines. Unlike the supplier children (sites/classifications), the line body carries the parent id (both POHeaderId and OrderNumber), so the join key is present in the body. Lines are fetched as a plain expansion (no server filter needed).'
+);
+
+PROMPT Seeded kg_entity (8 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -298,7 +304,25 @@ INSERT INTO kg_entity_field VALUES ('Buyer', 'PersonNumber', 'display_id',   'st
 INSERT INTO kg_entity_field VALUES ('Address', 'CountryCode', 'projection', 'string', 'ISO-2 country code (e.g. ''US''). Match against vocab_kind=''country'' canonical_value.');
 INSERT INTO kg_entity_field VALUES ('Address', 'Country',     'projection', 'string', 'Full country name (e.g. ''United States''). Match against vocab_kind=''country'' term forms.');
 
-PROMPT Seeded kg_entity_field (27 rows).
+-- PurchaseOrder (P2: money projection fields)
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'Total',    'projection', 'numeric', 'PO total amount including tax. Display/projection only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'TotalTax', 'projection', 'numeric', 'Tax portion of the PO total. Display/projection only.');
+
+-- PurchaseOrderLine (P2)
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'POLineId',    'canonical_id', 'numeric', 'System primary key for the line.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'LineNumber',  'display_id',   'numeric', 'Human-readable line number within the PO (the "Line" column).');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'OrderNumber', 'reference',    'string',  'Parent PO OrderNumber; present in the line body. Join key back to PurchaseOrder.OrderNumber.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Description', 'projection',   'string',  'Line description.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Category',    'projection',   'string',  'Purchasing category display name (e.g. "Marketing General").');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Quantity',    'projection',   'numeric', 'Ordered quantity for the line.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Price',       'projection',   'numeric', 'Unit price for the line.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Ordered',     'amount',       'numeric', 'Line extended amount (excluding tax).');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'TotalTax',    'amount',       'numeric', 'Tax on the line (the "Tax" column).');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Total',       'amount',       'numeric', 'Line total including tax.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'StatusCode',  'status',       'string',  'Code form of the line status (e.g. CLOSED).');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'Status',      'projection',   'string',  'Human-readable line status. Display only.');
+
+PROMPT Seeded kg_entity_field (41 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -346,7 +370,14 @@ INSERT INTO kg_edge VALUES (
   'Per-supplier child call; one HTTP call per parent supplier, so the scan window is bounded. Status cannot be AND-combined with Classification in one q= (composite quirk); Classification-only is sent server-side.'
 );
 
-PROMPT Seeded kg_edge (6 rows).
+INSERT INTO kg_edge VALUES (
+  'HAS_LINE', 'PurchaseOrder', 'PurchaseOrderLine', 'POHeaderId', 'POHeaderId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../purchaseOrders/{po.POHeaderId}/child/lines. A plain expansion: fetch all lines for the PO. No server filter needed; ?fields= projection works on the child.',
+  'Per-PO child call, one HTTP call per PO. The line body carries POHeaderId and OrderNumber, so the parent id is present in each row (unlike the supplier children, which omit it). Expansion edge (join_only), not a keep-parent existence filter like HAS_SITE / HAS_CLASSIFICATION.'
+);
+
+PROMPT Seeded kg_edge (7 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -553,7 +584,14 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
 
 COMMIT;
 
-PROMPT Seeded kg_entity_tool (3 rows).
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'PurchaseOrder',
+  'by_id',
+  'get_purchase_order_by_id',
+  'Fetches ONE purchase order by POHeaderId (the single-record path). Distinct from search_purchase_orders (which filters a collection by supplier/status). Returns None on a 404 for an unknown id (prompt "DOES-NOT-EXIST" error case).'
+);
+
+PROMPT Seeded kg_entity_tool (4 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -597,7 +635,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
 
 COMMIT;
 
-PROMPT Seeded kg_edge_tool (5 rows).
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_LINE',
+  'get_purchase_order_lines',
+  'Takes po_header_id. Plain expansion: returns the PO''s lines as a ToolResult. No filter, no keep-parent logic.'
+);
+
+PROMPT Seeded kg_edge_tool (6 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -690,8 +734,15 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 
 COMMIT;
 
-PROMPT Seeded kg_entity_filter (13 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'by_id', 'entity_level', 'po_header_id', NULL, NULL, NULL, NULL, NULL, 'server_q', 'POHeaderId', 'equals',
+  'Fetch one PO by POHeaderId via the single-record path /purchaseOrders/{id}. Dedicated fetcher get_purchase_order_by_id; returns None on 404.'
+);
+
+PROMPT Seeded kg_entity_filter (16 rows).
 
 -- ============================================================
+
+
 
 

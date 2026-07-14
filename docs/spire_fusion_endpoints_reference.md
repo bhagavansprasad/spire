@@ -700,5 +700,81 @@ dropped) until proven otherwise.
 
 ---
 
+# Endpoints reference — P2 patch (PO detail + lines)
 
-**End of reference. Verify each curl against the live pod before relying on the exact field names — Fusion's response shapes can vary slightly by pod configuration.**
+Paste-in additions for `docs/spire_fusion_endpoints_reference.md`, from the
+P2 discovery session (PO 2144, EIP Inc, on esll-dev37).
+
+---
+
+## A. Add these rows to the Discovery log table
+
+| Date | Endpoint | Discovery |
+|---|---|---|
+| 2026-07-14 | /purchaseOrders/{id} | Single-PO fetch by `POHeaderId` returns ONE record (HTTP 200, ~90 header attributes) — not a collection. `POHeaderId` is a small integer on this pod (e.g. `2144`), not the long 3000000… form. Both `Ordered` (pre-tax) and `Total` (tax-incl) plus `TotalTax` are on the default header. Real header names confirmed: `Buyer`/`BuyerId`, `Supplier`/`SupplierId`, `SupplierSite`/`SupplierSiteId`, `SupplierContact`/`SupplierContactId`, `PaymentTerms`/`PaymentTermsId`, `ShipToLocationCode`/`ShipToLocationAddress`, `BillToLocation`, `FreightTerms`, `FOB`, `ShippingMethod`, `OrderDate`, `ProcurementBU`. |
+| 2026-07-14 | /purchaseOrders/{id}/child/lines | Lines child returns per-line rows. **Line body carries BOTH `POHeaderId` and `OrderNumber`** — the join key is IN the body here, opposite to the supplier children (sites/classifications) which omit the parent id. Real line names: `POLineId`, `LineNumber` (= "Line"), `LineType`, `Description`, `Category`/`CategoryCode`/`CategoryId`, `Quantity`, `UOM`, `BasePrice`, `Price`, `Ordered`, `TotalTax` (= "Tax"), `Total`, `Status`/`StatusCode`. |
+| 2026-07-14 | /purchaseOrders (+child/lines) | `?fields=` projection **works on both** the PO header collection and the lines child — verified returning exactly the requested subset. Strict-on-invalid quirk still applies (one bad name → whole response empty). |
+
+---
+
+## B. New endpoint section
+
+Add after the existing `/purchaseOrders` entry.
+
+### `/purchaseOrders/{POHeaderId}` — single PO header
+
+**Purpose:** Full detail for one PO. Returns ~90 attributes.
+
+**Curl (PO 2144):**
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders/2144"
+```
+
+**Returns one record** (HTTP 200), not a collection.
+
+**Fields Spire cares about (P2):**
+- Identity: `POHeaderId`, `OrderNumber`, `Status`, `StatusCode`
+- Supplier: `Supplier`, `SupplierId`, `SupplierSite`, `SupplierSiteId`,
+  `SupplierContact`, `SupplierContactId`
+- Buyer: `Buyer`, `BuyerId`, `BuyerDisplayName`
+- Money: `Ordered`, `Total`, `TotalTax`, `CurrencyCode`, `Currency`
+- Terms/logistics: `PaymentTerms`, `PaymentTermsId`, `ShipToLocationCode`,
+  `ShipToLocationAddress`, `BillToLocation`, `FreightTerms`, `FOB`,
+  `ShippingMethod`
+- Dates: `OrderDate`, `CreationDate`, `LastUpdateDate`
+- Context: `Description`, `ProcurementBU`, `RequisitioningBU`
+
+(Full ~90-field list captured in the P2 discovery paste; register a subset
+now, expand later without re-curl.)
+
+### `/purchaseOrders/{POHeaderId}/child/lines` — PO lines
+
+**Purpose:** Line-level detail for one PO.
+
+**Curl (lines of PO 2144, projected):**
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "fields=LineNumber,Description,Category,Quantity,Price,Ordered,TotalTax,Status" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders/2144/child/lines"
+```
+
+**Fields Spire cares about (P2):**
+`POLineId`, `POHeaderId`, `LineNumber`, `OrderNumber`, `LineType`,
+`Description`, `Category`, `CategoryCode`, `Quantity`, `UOM`, `BasePrice`,
+`Price`, `Ordered`, `TotalTax`, `Total`, `Status`, `StatusCode`.
+
+**Join key:** present in the body (`POHeaderId` / `OrderNumber`) — no need to
+rely on the URL path, unlike supplier children.
+
+---
+
+## C. Add to the join-key matrix
+
+| To search this | Join key | Numeric or string? |
+|---|---|---|
+| `/purchaseOrders/{id}/child/lines` | `POHeaderId` (in body) | numeric (e.g. `2144`) |

@@ -56,6 +56,9 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "get_buyer": "buyer_id",
     "search_suppliers_by_site_bu": "supplier_id",
     "search_suppliers_by_classification": "supplier_id",
+    # P2: single-PO fetch and its lines child. Both key off POHeaderId.
+    "get_purchase_order_by_id": "po_header_id",
+    "get_purchase_order_lines": "po_header_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -687,6 +690,21 @@ def generate_plan(
                 "addresses'."
             )
 
+    # PurchaseOrder is a valid root only for a single-PO fetch (by_id).
+    # It has no unfiltered default fetcher (no (PurchaseOrder,'none') row),
+    # so a PO-rooted query without a PO id has nothing to fetch. Refuse
+    # cleanly rather than crash. General PO listing is reached via the
+    # supplier->PO edge today (and PO aggregates arrive in a later phase).
+    if intent.target_entity == "PurchaseOrder":
+        has_by_id = any(f.get("type") == "by_id" for f in intent.filters)
+        if not has_by_id:
+            raise ValueError(
+                "Purchase-order queries require a PO id. For example "
+                "'show PO 2144 and its lines'. To list a supplier's POs, "
+                "ask about the supplier (e.g. 'open POs for supplier "
+                "EIP Inc')."
+            )
+
     ref_date = reference_date if reference_date is not None else date.today()
 
     plan: Plan = []
@@ -698,7 +716,19 @@ def generate_plan(
     # tool_args dict. This lets filters stack (e.g. active US suppliers
     # named Lee) instead of each needing its own fetcher tool.
     entity_filter_type = _pick_entity_filter(intent.filters)
-    fetcher_tool = find_entity_tool(intent.target_entity, "none")
+    # Most entity-level filters (status, country, name) deliberately share
+    # the ONE default fetcher (filter_type='none') so they can stack. A few
+    # filters instead have their OWN dedicated fetcher registered in the KG
+    # as a distinct (entity, filter_type) row in kg_entity_tool — e.g.
+    # (PurchaseOrder, by_id) -> get_purchase_order_by_id. Prefer that
+    # dedicated fetcher when the KG declares one; otherwise use the shared
+    # default. This keeps routing KG-driven rather than hardcoded.
+    try:
+        fetcher_tool = find_entity_tool(
+            intent.target_entity, entity_filter_type
+        )
+    except KeyError:
+        fetcher_tool = find_entity_tool(intent.target_entity, "none")
     fetcher_args = _build_entity_fetcher_args(intent.filters)
 
     # Address include on a supplier-rooted query is satisfied by expanding
@@ -1299,9 +1329,15 @@ def _make_output_name(
                     pass  # Fall back to the raw value.
             return f"{country_value.lower()}_{base}"
 
-    # v1 special-case: PurchaseOrder steps in the anchor plan always
-    # carry the open-PO filter, so the canonical output name is 'open_pos'.
+    # PurchaseOrder output naming. The anchor plan's PO step always carries
+    # the open-PO filter, so its canonical output name is 'open_pos'. P2's
+    # single-PO fetch (by_id) is a different shape — name it 'po' so a
+    # by-id fetch isn't mislabeled as a list of open POs. Additive: only
+    # the by_id path changes; every existing PO plan still yields
+    # 'open_pos'.
     if entity_name == "PurchaseOrder":
+        if filter_type == "by_id":
+            return "po"
         return "open_pos"
 
     return base
@@ -1350,6 +1386,8 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
 
