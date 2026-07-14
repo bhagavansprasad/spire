@@ -94,7 +94,7 @@ Amount (not Ordered), ShipToLocation (not ShipToLocationCode).
 
 ---
 
-## P3b — PO distributions (deferred; blocked on planner work)
+## P3b — PO distributions (design; blocked on planner work)
 
 **Goal:** Distribution accounts (charge / accrual / variance) per schedule.
 
@@ -106,12 +106,89 @@ Amount (not Ordered), ShipToLocation (not ShipToLocationCode).
 **Catalog prompts:** 14 (distribution accounts behind a PO's schedules).
 
 **Blocker.** The nested path needs THREE ids per parent schedule row
-(POHeaderId, POLineId, LineLocationId). Iterating distributions over a PO's
-schedules therefore needs multi-field iteration — passing several parent-row
-fields into the tool's args. Block 3 today threads a single
-`$iteration_value` per parent, so this requires a planner (and executor)
-enhancement. Scoped as its own phase so that enhancement is designed and
-tested in isolation, not bolted onto the simple schedules build.
+(POHeaderId, POLineId, LineLocationId), all carried on each schedule row (P3
+already projects POLineId and LineLocationId for this). The natural traversal
+iterates over a PO's schedules, passing three fields per row to the tool. But
+the executor's iteration (`_collect_iteration_values` /
+`_execute_iterating_step`) threads a SINGLE `$iteration_value` per parent:
+`iterate_over = {from_step, field}` with one field → one arg. So P3b needs an
+additive multi-field iteration enhancement.
+
+### Design (review before code)
+
+**Principle — additive, single-field path untouched.** Lines, schedules,
+contacts, invoices, buyer, and every supplier edge filter use the single-field
+path and must not change. The multi-field path is a NEW branch entered ONLY
+when a step declares it; every existing plan runs the same code as today.
+
+**Edge direction.** The edge is `POSchedule → PODistribution` (the traversal
+iterates over schedules), so the include chain is
+PurchaseOrder → POSchedule → PODistribution — two sequential include hops,
+which Block 3 already chains via `previous_entity`.
+
+**KG shape.** New entity `PODistribution` (canonical `PODistributionId`,
+display `DistributionNumber`, include-only). ~13 fields: the three parent id
+references, DistributionNumber, POChargeAccount, POAccrualAccount,
+POVarianceAccount, DeliverToLocationCode, Percentage, Quantity, Ordered,
+Status. New edge `HAS_DISTRIBUTION` plus edge-tool binding.
+
+The multi-id edge needs to declare it requires three parent fields mapped to
+three tool args. **Chosen: a new nullable `iter_fields_json` column on
+kg_edge** holding `{tool_arg: parent_field}` — present only for multi-field
+edges, NULL for all existing edges (so single-field edges are untouched).
+`from_join_field`/`to_join_field` stay `LineLocationId` (the primary id) so any
+code reading a single field still works. The HAS_DISTRIBUTION map:
+`{"po_header_id": "POHeaderId", "po_line_id": "POLineId", "line_location_id": "LineLocationId"}`.
+(Rejected alternative: overloading `from_join_field` as a comma list by
+convention — implicit and fragile.)
+
+**Tool.**
+`get_purchase_order_distributions(po_header_id, po_line_id, line_location_id, limit=25)`
+— nested-path fetch, returns a ToolResult, 404→empty guard. Three ids instead
+of one.
+
+**Executor (the core change, additive).**
+- `_collect_iteration_values`: if `iterate_over` has a `fields` map, return a
+  list of DICTS (one per parent row, `{tool_arg: row[parent_field]}`); rows
+  missing any required field are dropped; dedupe on the value tuple. The
+  existing `field` branch is unchanged (returns scalars).
+- `_execute_iterating_step`: if the collected values are dicts, merge each into
+  a copy of `tool_args` (several sentinel keys); if scalars, run the existing
+  single-key substitution. Dispatch by shape, so no existing step reaches the
+  new branch.
+
+**Planner (Block 3).** When the edge carries `iter_fields_json`, emit
+`tool_args={arg: "$iteration_value" for arg in fields}` and
+`iterate_over={from_step, fields}`. When absent (every existing edge), emit the
+current single-field form unchanged.
+
+**Parser.** Hint: "and its distributions" / "the distribution accounts" on a PO
+question → include POSchedule AND PODistribution. **Chosen: auto-include the
+POSchedule hop** (asking for distributions implies the schedule traversal);
+surface distributions in the answer.
+
+**Executor value shape.** **Chosen: list of dicts** for the multi-field case —
+simplest, smallest diff.
+
+**Tripwires.** entity 10→11, field 61→74, edge 9→10, edge_tool 8→9, vocab
+69→71, plus the entity-names test and the new `iter_fields_json` column in
+the CREATE.
+
+**Regression (load-bearing).** Rerun ALL existing includes (lines, schedules,
+contacts) end to end AND the full suite, to prove the single-field path is
+byte-for-byte unaffected by the executor change.
+
+### Build order
+1. Live curl: re-confirm the distributions path + capture full field list.
+2. Standalone tool, verified live.
+3. KG: add `iter_fields_json` column; PODistribution entity/fields;
+   HAS_DISTRIBUTION edge with the fields map; edge-tool; vocab. Rebuild.
+4. Executor: additive multi-field branch; unit-test single-field (unchanged)
+   AND multi-field paths.
+5. Planner Block 3 multi-field emission; parser hint; server wrapper;
+   tripwire bumps.
+6. Verify end to end; rerun all includes; full suite.
+7. Git branch `po-phase-3b-distributions`, PR, merge.
 
 ---
 
