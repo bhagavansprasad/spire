@@ -15,6 +15,8 @@ Tools currently exposed:
 - search_suppliers_by_site_bu
 - search_suppliers_by_classification
 - get_buyer
+- get_purchase_order_by_id
+- get_purchase_order_lines
 """
 
 from fastmcp import Context, FastMCP
@@ -36,6 +38,12 @@ from spire.mcp_server.tools.supplier_sites import (
 )
 from spire.mcp_server.tools.supplier_classifications import (
     search_suppliers_by_classification as _search_suppliers_by_classification,
+)
+from spire.mcp_server.tools.purchase_order_by_id import (
+    get_purchase_order_by_id as _get_purchase_order_by_id,
+)
+from spire.mcp_server.tools.purchase_order_lines import (
+    get_purchase_order_lines as _get_purchase_order_lines,
 )
 
 
@@ -333,8 +341,58 @@ async def get_buyer(buyer_id: int) -> dict | None:
         return await _get_buyer(client, buyer_id=buyer_id)
 
 
+@mcp.tool()
+async def get_purchase_order_by_id(po_header_id: int) -> dict | None:
+    """Fetch one purchase order by its POHeaderId.
+
+    Use this to answer questions about a specific purchase order, e.g.
+    "what is PO 2144 about" or "show PO 2144". POHeaderId is the numeric
+    id of the PO. To also see the PO's line items, call
+    get_purchase_order_lines with the same id.
+
+    Args:
+        po_header_id: The numeric POHeaderId of the purchase order.
+
+    Returns:
+        A dict of the PO header fields (OrderNumber, Supplier, Status,
+        Buyer, Ordered, Total, TotalTax, PaymentTerms, ship-to/bill-to,
+        OrderDate, and more), or null if no PO with that id exists.
+    """
+    async with FusionClient(_persona) as client:
+        return await _get_purchase_order_by_id(
+            client, po_header_id=po_header_id
+        )
+
+
+@mcp.tool()
+async def get_purchase_order_lines(
+    po_header_id: int, limit: int = 25
+) -> dict:
+    """Fetch the line items of one purchase order.
+
+    Use this for "show the lines of PO 2144" or as the second half of
+    "what is PO 2144 about, show its lines" (call get_purchase_order_by_id
+    for the header, then this for the lines).
+
+    Args:
+        po_header_id: The numeric POHeaderId of the parent purchase order.
+        limit: Max line records to return (default 25).
+
+    Returns:
+        A dict with the PO's lines: LineNumber, Description, Category,
+        Quantity, Price, Ordered, TotalTax, Total, and Status per line.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_purchase_order_lines(
+            client, po_header_id=po_header_id, limit=limit
+        )
+        return result.to_dict()
+
+
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+
+
 
 
 

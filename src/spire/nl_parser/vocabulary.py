@@ -129,10 +129,17 @@ def load_kg_menu() -> KGMenu:
         for entity_name, description in cursor.fetchall():
             entity_descriptions[entity_name] = _read_clob(description)
 
-        # Valid target entities = those with an entity-level fetcher, i.e. a
-        # (entity, 'none') row in kg_entity_tool.
+        # Valid target entities = those with ANY fetcher in kg_entity_tool.
+        # Most entities have an unfiltered default fetcher ((entity,'none'));
+        # some are rootable only through a specific fetcher (e.g.
+        # (PurchaseOrder,'by_id') -> get_purchase_order_by_id). Either makes
+        # the entity a legal query root. Entities that are only reachable as
+        # children of another entity (e.g. Site, Classification,
+        # PurchaseOrderLine) have no kg_entity_tool row and so are correctly
+        # excluded here. The planner enforces any per-entity requirements
+        # (e.g. a PurchaseOrder root needs a PO id).
         cursor.execute(
-            "SELECT entity_name FROM kg_entity_tool WHERE filter_type = 'none'"
+            "SELECT DISTINCT entity_name FROM kg_entity_tool"
         )
         for (entity_name,) in cursor.fetchall():
             target_entities.add(entity_name)
@@ -162,6 +169,8 @@ def load_kg_menu() -> KGMenu:
         country_terms=country_terms,
         entity_columns=entity_columns,
     )
+
+
 
 
 

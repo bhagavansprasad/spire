@@ -6,6 +6,10 @@
 Show me invoices for supplier 1252
 List US suppliers
 
+# — PO detail + lines (P2) —
+Show PO 2144 and its lines
+What is purchase order 2144 about?
+
 # — supplier filters (Phase 3) —
 Get list of active suppliers
 Suppliers named Lee
