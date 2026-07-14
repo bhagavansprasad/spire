@@ -1,5 +1,6 @@
 
 
+
 SET ECHO ON
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
@@ -268,7 +269,13 @@ INSERT INTO kg_entity VALUES (
   'A shipment schedule on a purchase order. Reachable as a FLAT top-level collection (/purchaseOrderSchedules?q=POHeaderId=<id>) on this pod, so it is a one-hop fetch by POHeaderId (unlike PO lines, which are a nested child). The schedule row carries the full parent id chain (POHeaderId, POLineId, LineLocationId), which a later distributions phase needs. Include-only: not a root query target.'
 );
 
-PROMPT Seeded kg_entity (9 rows).
+INSERT INTO kg_entity VALUES (
+  'Contact', 'SupplierContactId', 'ContactName',
+  '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/contacts',
+  'A contact person on a supplier. A child of the supplier record at /suppliers/{SupplierId}/child/contacts. Like the other supplier children (sites, businessClassifications), the contact body does NOT carry the parent SupplierId, so the join key is the URL path. Include-only: attached to a supplier via HAS_CONTACT; not a root query target and not a filter.'
+);
+
+PROMPT Seeded kg_entity (10 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -344,7 +351,19 @@ INSERT INTO kg_entity_field VALUES ('POSchedule', 'UOM',                   'proj
 INSERT INTO kg_entity_field VALUES ('POSchedule', 'Amount',                'amount',       'numeric', 'Scheduled amount. Flat-endpoint name (nested view calls it Ordered).');
 INSERT INTO kg_entity_field VALUES ('POSchedule', 'ScheduleStatus',        'status',       'string',  'Schedule status (e.g. Closed). Flat-endpoint name (nested view calls it Status).');
 
-PROMPT Seeded kg_entity_field (53 rows).
+-- Contact (P4). Supplier contacts child. Phone/fax fields exist on the
+-- endpoint but are empty on this pod's data; register the useful display
+-- fields now (record-all, register-subset).
+INSERT INTO kg_entity_field VALUES ('Contact', 'SupplierContactId',         'canonical_id', 'numeric', 'System primary key for the supplier contact.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'ContactName',               'display_name', 'string',  'Display name, last-first (e.g. "Kim, John").');
+INSERT INTO kg_entity_field VALUES ('Contact', 'FirstName',                 'projection',   'string',  'Contact first name.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'LastName',                  'projection',   'string',  'Contact last name.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'Email',                     'projection',   'string',  'Contact email address.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'JobTitle',                  'projection',   'string',  'Contact job title (often null on this pod).');
+INSERT INTO kg_entity_field VALUES ('Contact', 'Status',                    'status',       'string',  'Contact status (e.g. ACTIVE).');
+INSERT INTO kg_entity_field VALUES ('Contact', 'AdministrativeContactFlag', 'projection',   'boolean', 'True marks the primary/administrative contact.');
+
+PROMPT Seeded kg_entity_field (61 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -406,7 +425,14 @@ INSERT INTO kg_edge VALUES (
   'One call per PO against the flat purchaseOrderSchedules endpoint (not a nested child path). Expansion edge (join_only), same shape as HAS_LINE. The schedule row carries POHeaderId, POLineId and LineLocationId.'
 );
 
-PROMPT Seeded kg_edge (8 rows).
+INSERT INTO kg_edge VALUES (
+  'HAS_CONTACT', 'Supplier', 'Contact', 'SupplierId', 'SupplierId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/contacts. A plain expansion: fetch all contacts for the supplier. One HTTP call per supplier; ?fields= projection works.',
+  'Per-supplier child call, one HTTP call per supplier. The contact body omits the parent SupplierId (join key is the URL path), same as HAS_SITE / HAS_CLASSIFICATION. Expansion edge (join_only), include-only.'
+);
+
+PROMPT Seeded kg_edge (9 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -555,6 +581,9 @@ COMMIT;
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'schedule', 'POSchedule', 'PO shipment schedule.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'shipment schedule', 'POSchedule', 'PO shipment schedule.');
 
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contact', 'Contact', 'Supplier contact person.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contacts', 'Contact', 'Supplier contact people.');
+
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -679,7 +708,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes po_header_id. Plain expansion: returns the PO''s schedules as a ToolResult via the flat purchaseOrderSchedules endpoint. No filter, no keep-parent logic.'
 );
 
-PROMPT Seeded kg_edge_tool (7 rows).
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_CONTACT',
+  'get_supplier_contacts',
+  'Takes supplier_id. Plain expansion: returns the supplier''s contacts as a ToolResult via the contacts child. No filter, no keep-parent logic.'
+);
+
+PROMPT Seeded kg_edge_tool (8 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -780,6 +815,8 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 PROMPT Seeded kg_entity_filter (16 rows).
 
 -- ============================================================
+
+
 
 
 

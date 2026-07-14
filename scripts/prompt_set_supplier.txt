@@ -17,6 +17,9 @@ Suppliers created between Jan and Mar 2025
 # — business relationship (Phase 8) —
 Prospective suppliers
 
+# — supplier contacts (P4) —
+Show supplier EIP Inc and its contacts
+
 # — count (Phase 10) —
 Count of suppliers
 
