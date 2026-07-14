@@ -17,6 +17,7 @@ Tools currently exposed:
 - get_buyer
 - get_purchase_order_by_id
 - get_purchase_order_lines
+- get_purchase_order_schedules
 """
 
 from fastmcp import Context, FastMCP
@@ -44,6 +45,9 @@ from spire.mcp_server.tools.purchase_order_by_id import (
 )
 from spire.mcp_server.tools.purchase_order_lines import (
     get_purchase_order_lines as _get_purchase_order_lines,
+)
+from spire.mcp_server.tools.purchase_order_schedules import (
+    get_purchase_order_schedules as _get_purchase_order_schedules,
 )
 
 
@@ -384,6 +388,32 @@ async def get_purchase_order_lines(
     """
     async with FusionClient(_persona) as client:
         result = await _get_purchase_order_lines(
+            client, po_header_id=po_header_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_purchase_order_schedules(
+    po_header_id: int, limit: int = 25
+) -> dict:
+    """Fetch the shipment schedules of one purchase order.
+
+    Use this for "show the schedules for PO 2144" or "what is PO 2144
+    about, show its schedules". Each schedule gives the ship-to location,
+    requested (need-by) delivery date, quantity, amount and status.
+
+    Args:
+        po_header_id: The numeric POHeaderId of the purchase order.
+        limit: Max schedule records to return (default 25).
+
+    Returns:
+        A dict with the PO's schedules: ScheduleNumber, ShipToLocation,
+        RequestedDeliveryDate, Quantity, Amount and ScheduleStatus per
+        schedule.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_purchase_order_schedules(
             client, po_header_id=po_header_id, limit=limit
         )
         return result.to_dict()

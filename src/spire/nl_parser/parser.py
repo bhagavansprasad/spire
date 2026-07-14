@@ -1,6 +1,7 @@
 
 
 
+
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -146,6 +147,9 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "- 'and its lines' / 'show its lines' / 'with the line items' / 'show "
     "the PO lines' on a purchase-order question -> add 'PurchaseOrderLine' "
     "to include (alongside the 'by_id' filter).\n"
+    "- 'and its schedules' / 'show its schedules' / 'with the shipment "
+    "schedules' on a purchase-order question -> add 'POSchedule' to include "
+    "(alongside the 'by_id' filter).\n"
     "- 'suppliers with their addresses' / 'list suppliers with their "
     "address' / 'suppliers and their addresses' -> target_entity "
     "'Supplier' (NOT Address) with 'Address' added to include. This roots "
@@ -351,6 +355,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 

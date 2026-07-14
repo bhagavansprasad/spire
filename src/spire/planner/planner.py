@@ -1,5 +1,6 @@
 
 
+
 """
 Planner for the KG-driven path (Architecture Option 3).
 
@@ -59,6 +60,8 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # P2: single-PO fetch and its lines child. Both key off POHeaderId.
     "get_purchase_order_by_id": "po_header_id",
     "get_purchase_order_lines": "po_header_id",
+    # P3: PO schedules (flat endpoint), one-hop expansion by POHeaderId.
+    "get_purchase_order_schedules": "po_header_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -1386,6 +1389,8 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
 
