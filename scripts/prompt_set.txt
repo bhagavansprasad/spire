@@ -10,6 +10,9 @@ List US suppliers
 Show PO 2144 and its lines
 What is purchase order 2144 about?
 
+# — PO schedules (P3) —
+Show PO 2144 and its schedules
+
 # — supplier filters (Phase 3) —
 Get list of active suppliers
 Suppliers named Lee
