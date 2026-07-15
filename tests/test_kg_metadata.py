@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_ten_rows():
+async def test_kg_entity_has_eleven_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -63,7 +63,9 @@ async def test_kg_entity_has_ten_rows():
     Classification (supplier businessClassifications child), used by the
     has_classification edge filter. P2 added PurchaseOrderLine (the PO
     lines child), used by the HAS_LINE expansion edge. P4 added Contact (supplier contacts child), used by
-    the HAS_CONTACT expansion edge.
+    the HAS_CONTACT expansion edge. P3b added PODistribution (the
+    deepest PO child), used by the HAS_DISTRIBUTION multi-field
+    iteration edge.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -73,8 +75,8 @@ async def test_kg_entity_has_ten_rows():
     names = [row[0] for row in rows]
     assert names == [
         "Address", "Buyer", "Classification", "Contact", "Invoice",
-        "POSchedule", "PurchaseOrder", "PurchaseOrderLine", "Site",
-        "Supplier"
+        "PODistribution", "POSchedule", "PurchaseOrder",
+        "PurchaseOrderLine", "Site", "Supplier"
     ]
 
 
@@ -115,15 +117,15 @@ async def test_kg_table_row_counts_match_v1_1():
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 10,
-        "kg_entity_field": 61,
-        "kg_edge": 9,
+        "kg_entity": 11,
+        "kg_entity_field": 77,
+        "kg_edge": 10,
         "kg_pattern": 3,
-        "kg_vocabulary": 69,
+        "kg_vocabulary": 71,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 4,
         "kg_entity_filter": 16,
-        "kg_edge_tool": 8,
+        "kg_edge_tool": 9,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():
