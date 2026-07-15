@@ -1,6 +1,7 @@
 
 
 
+
 SET ECHO ON
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
@@ -124,6 +125,7 @@ CREATE TABLE kg_edge (
   server_filter_rule  VARCHAR2(32)   DEFAULT 'join_only' NOT NULL,
   traversal_hint      VARCHAR2(2000) NOT NULL,
   notes               VARCHAR2(2000),
+  iter_fields_json    VARCHAR2(2000),
   CONSTRAINT pk_kg_edge PRIMARY KEY (edge_name),
   CONSTRAINT fk_kg_edge_from
     FOREIGN KEY (from_entity) REFERENCES kg_entity (entity_name),
@@ -275,7 +277,13 @@ INSERT INTO kg_entity VALUES (
   'A contact person on a supplier. A child of the supplier record at /suppliers/{SupplierId}/child/contacts. Like the other supplier children (sites, businessClassifications), the contact body does NOT carry the parent SupplierId, so the join key is the URL path. Include-only: attached to a supplier via HAS_CONTACT; not a root query target and not a filter.'
 );
 
-PROMPT Seeded kg_entity (10 rows).
+INSERT INTO kg_entity VALUES (
+  'PODistribution', 'PODistributionId', 'DistributionNumber',
+  '/fscmRestApi/resources/11.13.18.05/purchaseOrders/{POHeaderId}/child/lines/{POLineId}/child/schedules/{LineLocationId}/child/distributions',
+  'A distribution on a PO schedule: the charge/accrual/variance accounts the schedule amount is booked to. The deepest PO child. No flat endpoint; reachable only on the deep nested path needing three ids (POHeaderId, POLineId, LineLocationId), all carried on the parent POSchedule row. Include-only; reached via HAS_DISTRIBUTION from POSchedule.'
+);
+
+PROMPT Seeded kg_entity (11 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -363,7 +371,25 @@ INSERT INTO kg_entity_field VALUES ('Contact', 'JobTitle',                  'pro
 INSERT INTO kg_entity_field VALUES ('Contact', 'Status',                    'status',       'string',  'Contact status (e.g. ACTIVE).');
 INSERT INTO kg_entity_field VALUES ('Contact', 'AdministrativeContactFlag', 'projection',   'boolean', 'True marks the primary/administrative contact.');
 
-PROMPT Seeded kg_entity_field (61 rows).
+-- PODistribution (P3b). Deepest PO child: distribution accounts.
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'PODistributionId',     'canonical_id', 'numeric', 'System primary key for the distribution.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'DistributionNumber',   'display_id',   'numeric', 'Distribution number within the schedule.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'POHeaderId',           'reference',    'numeric', 'Parent PO id (carried in the body).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'POLineId',             'reference',    'numeric', 'Parent PO line id (carried in the body).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'OrderNumber',          'reference',    'string',  'Parent PO OrderNumber (carried in the body).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'ScheduleNumber',       'projection',   'numeric', 'Parent schedule number.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'POChargeAccount',      'projection',   'string',  'Charge account code combination.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'POAccrualAccount',     'projection',   'string',  'Accrual account code combination.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'POVarianceAccount',    'projection',   'string',  'Variance account code combination.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'DeliverToLocationCode','projection',   'string',  'Deliver-to location (e.g. "Seattle").');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'Percentage',           'projection',   'numeric', 'Percentage of the schedule allocated to this distribution.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'Quantity',             'projection',   'numeric', 'Distributed quantity.');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'Ordered',              'amount',       'numeric', 'Distributed amount (excluding tax).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'Total',                'amount',       'numeric', 'Distributed total (including tax).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'Status',               'projection',   'string',  'Distribution status (e.g. Delivered).');
+INSERT INTO kg_entity_field VALUES ('PODistribution', 'StatusCode',           'status',       'string',  'Code form of the distribution status.');
+
+PROMPT Seeded kg_entity_field (77 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -373,66 +399,83 @@ INSERT INTO kg_edge VALUES (
   'HAS_INVOICE', 'Supplier', 'Invoice', 'SupplierNumber', 'SupplierNumber', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../invoices?q=SupplierNumber=''{supplier.SupplierNumber}'' (optionally with InvoiceDate filter).',
-  'The invoices endpoint exposes SupplierNumber, not SupplierId. Use SupplierNumber here even though SupplierId is the canonical id on Supplier. Composite q= clauses are unreliable on this pod; apply additional filters client-side after over-fetch.'
+  'The invoices endpoint exposes SupplierNumber, not SupplierId. Use SupplierNumber here even though SupplierId is the canonical id on Supplier. Composite q= clauses are unreliable on this pod; apply additional filters client-side after over-fetch.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_ADDRESS', 'Supplier', 'Address', 'SupplierId', 'SupplierId', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../suppliers?expand=addresses. Address is a child resource; addresses come back inline as supplier.addresses[].',
-  'There is no standalone Address endpoint. Always use expand=addresses on the supplier query. Country filtering is client-side: iterate supplier.addresses[] and match on CountryCode or Country.'
+  'There is no standalone Address endpoint. Always use expand=addresses on the supplier query. Country filtering is client-side: iterate supplier.addresses[] and match on CountryCode or Country.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_PURCHASE_ORDER', 'Supplier', 'PurchaseOrder', 'SupplierId', 'SupplierId', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../purchaseOrders?q=SupplierId={supplier.SupplierId} (optionally with status filter).',
-  'Use SupplierId (numeric), not SupplierNumber, on this endpoint. This is the asymmetry with HAS_INVOICE. Composite q= clauses are unreliable; apply status filter client-side after over-fetch.'
+  'Use SupplierId (numeric), not SupplierNumber, on this endpoint. This is the asymmetry with HAS_INVOICE. Composite q= clauses are unreliable; apply status filter client-side after over-fetch.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'ASSIGNED_TO', 'PurchaseOrder', 'Buyer', 'BuyerId', 'PersonId', 'many_to_one',
   'join_only',
   'GET /hcmRestApi/.../publicWorkers?q=PersonId={po.BuyerId}',
-  'CROSS-PILLAR: PO is in FSCM; Buyer is in HCM. There is no /fscmRestApi/.../buyers endpoint on this pod. BuyerId on a PO equals PersonId on publicWorkers.'
+  'CROSS-PILLAR: PO is in FSCM; Buyer is in HCM. There is no /fscmRestApi/.../buyers endpoint on this pod. BuyerId on a PO equals PersonId on publicWorkers.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_SITE', 'Supplier', 'Site', 'SupplierId', 'SupplierId', 'one_to_many',
   'first_filter_only',
   'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/sites?q=ProcurementBU=''<value>''. The BU filter IS reliable server-side on this child (confirmed on pod: a matching value returns the site, a non-existent value returns empty).',
-  'Per-supplier child call; there is no bulk expand=sites on this pod (silently ignored). One HTTP call per parent supplier, so the scan window is bounded (SITE_SCAN_LIMIT in the tool).'
+  'Per-supplier child call; there is no bulk expand=sites on this pod (silently ignored). One HTTP call per parent supplier, so the scan window is bounded (SITE_SCAN_LIMIT in the tool).',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_CLASSIFICATION', 'Supplier', 'Classification', 'SupplierId', 'SupplierId', 'one_to_many',
   'first_filter_only',
   'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/businessClassifications?q=Classification=''<value>''. The Classification filter IS reliable server-side on this child (confirmed on pod: a matching value returns the row, a non-existent value returns empty).',
-  'Per-supplier child call; one HTTP call per parent supplier, so the scan window is bounded. Status cannot be AND-combined with Classification in one q= (composite quirk); Classification-only is sent server-side.'
+  'Per-supplier child call; one HTTP call per parent supplier, so the scan window is bounded. Status cannot be AND-combined with Classification in one q= (composite quirk); Classification-only is sent server-side.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_LINE', 'PurchaseOrder', 'PurchaseOrderLine', 'POHeaderId', 'POHeaderId', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../purchaseOrders/{po.POHeaderId}/child/lines. A plain expansion: fetch all lines for the PO. No server filter needed; ?fields= projection works on the child.',
-  'Per-PO child call, one HTTP call per PO. The line body carries POHeaderId and OrderNumber, so the parent id is present in each row (unlike the supplier children, which omit it). Expansion edge (join_only), not a keep-parent existence filter like HAS_SITE / HAS_CLASSIFICATION.'
+  'Per-PO child call, one HTTP call per PO. The line body carries POHeaderId and OrderNumber, so the parent id is present in each row (unlike the supplier children, which omit it). Expansion edge (join_only), not a keep-parent existence filter like HAS_SITE / HAS_CLASSIFICATION.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_SCHEDULE', 'PurchaseOrder', 'POSchedule', 'POHeaderId', 'POHeaderId', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../purchaseOrderSchedules?q=POHeaderId=<po.POHeaderId>. A plain expansion via the FLAT schedules collection: one server-side call per PO, single-clause q= on POHeaderId. ?fields= projection works.',
-  'One call per PO against the flat purchaseOrderSchedules endpoint (not a nested child path). Expansion edge (join_only), same shape as HAS_LINE. The schedule row carries POHeaderId, POLineId and LineLocationId.'
+  'One call per PO against the flat purchaseOrderSchedules endpoint (not a nested child path). Expansion edge (join_only), same shape as HAS_LINE. The schedule row carries POHeaderId, POLineId and LineLocationId.',
+  NULL
 );
 
 INSERT INTO kg_edge VALUES (
   'HAS_CONTACT', 'Supplier', 'Contact', 'SupplierId', 'SupplierId', 'one_to_many',
   'join_only',
   'GET /fscmRestApi/.../suppliers/{supplier.SupplierId}/child/contacts. A plain expansion: fetch all contacts for the supplier. One HTTP call per supplier; ?fields= projection works.',
-  'Per-supplier child call, one HTTP call per supplier. The contact body omits the parent SupplierId (join key is the URL path), same as HAS_SITE / HAS_CLASSIFICATION. Expansion edge (join_only), include-only.'
+  'Per-supplier child call, one HTTP call per supplier. The contact body omits the parent SupplierId (join key is the URL path), same as HAS_SITE / HAS_CLASSIFICATION. Expansion edge (join_only), include-only.',
+  NULL
 );
 
-PROMPT Seeded kg_edge (9 rows).
+INSERT INTO kg_edge VALUES (
+  'HAS_DISTRIBUTION', 'POSchedule', 'PODistribution', 'LineLocationId', 'LineLocationId', 'one_to_many',
+  'join_only',
+  'GET /purchaseOrders/{POHeaderId}/child/lines/{POLineId}/child/schedules/{LineLocationId}/child/distributions. Deepest nested path; needs three ids from the parent schedule row.',
+  'Multi-field iteration edge: the distributions path needs POHeaderId, POLineId and LineLocationId, all carried on each POSchedule row. iter_fields_json maps the tool args to those parent fields. from_join_field stays LineLocationId (the primary id) so single-field readers still work.',
+  '{"po_header_id": "POHeaderId", "po_line_id": "POLineId", "line_location_id": "LineLocationId"}'
+);
+
+PROMPT Seeded kg_edge (10 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -584,6 +627,9 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'shipment schedule', 'POSche
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contact', 'Contact', 'Supplier contact person.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contacts', 'Contact', 'Supplier contact people.');
 
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distribution', 'PODistribution', 'PO distribution account line.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distributions', 'PODistribution', 'PO distribution account lines.');
+
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -714,7 +760,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes supplier_id. Plain expansion: returns the supplier''s contacts as a ToolResult via the contacts child. No filter, no keep-parent logic.'
 );
 
-PROMPT Seeded kg_edge_tool (8 rows).
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_DISTRIBUTION',
+  'get_purchase_order_distributions',
+  'Takes po_header_id, po_line_id, line_location_id (multi-field iteration). Returns the schedule''s distributions as a ToolResult.'
+);
+
+PROMPT Seeded kg_edge_tool (9 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -815,6 +867,8 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 PROMPT Seeded kg_entity_filter (16 rows).
 
 -- ============================================================
+
+
 
 
 
