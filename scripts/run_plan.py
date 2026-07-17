@@ -68,7 +68,10 @@ from spire.synthesizer.synthesizer import (
     CountResponse,
     HallucinationError,
     InvoiceResponse,
+    OpenPOSummaryResponse,
+    POStatusBreakdownResponse,
     PurchaseOrderResponse,
+    SupplierPOValueRankingResponse,
     SupplierResponse,
     SupplierSpendRankingResponse,
     UnsupportedEntityError,
@@ -414,6 +417,43 @@ def _format_synthesized(response) -> str:
             )
         return "\n".join(lines)
 
+    if isinstance(response, SupplierPOValueRankingResponse):
+        if not response.suppliers:
+            lines.append("(No suppliers in the ranking.)")
+            return "\n".join(lines)
+        lines.append("Supplier PO-value ranking:")
+        for i, s in enumerate(response.suppliers, 1):
+            # SupplierId, not SupplierNumber — POs carry no supplier number.
+            lines.append(
+                f"  {i}. {s.supplier_name} "
+                f"(SupplierId={s.supplier_id}) — "
+                f"{s.total_ordered:,.2f} across {s.po_count} PO(s)"
+            )
+        return "\n".join(lines)
+
+    if isinstance(response, POStatusBreakdownResponse):
+        if not response.statuses:
+            lines.append("(No purchase orders in the breakdown.)")
+            return "\n".join(lines)
+        lines.append(
+            f"PO status breakdown — {response.total_pos} PO(s), "
+            f"{response.total_ordered:,.2f} total:"
+        )
+        for row in response.statuses:
+            lines.append(
+                f"  {row.status:<22} {row.po_count:>5} PO(s)  "
+                f"{row.total_ordered:>16,.2f}"
+            )
+        return "\n".join(lines)
+
+    if isinstance(response, OpenPOSummaryResponse):
+        lines.append(
+            f"Open POs: {response.po_count} worth "
+            f"{response.total_ordered:,.2f} across "
+            f"{response.supplier_count} supplier(s)."
+        )
+        return "\n".join(lines)
+
     if isinstance(response, CountResponse):
         qualifier = "" if response.count_is_exact else " (at least)"
         lines.append(
@@ -421,7 +461,12 @@ def _format_synthesized(response) -> str:
         )
         return "\n".join(lines)
 
-    # Should be unreachable — every schema in SYNTHESIS_SCHEMAS is handled.
+    # Should be unreachable — every schema in SYNTHESIS_SCHEMAS and
+    # AGGREGATION_SCHEMAS is handled above. It fired for all of P6's first
+    # run: the schemas existed but this formatter didn't know them, so the
+    # prose came through while the block reported "0 record(s)" for a
+    # 5-row ranking. Add a schema, add a branch — here AND in the count
+    # summary below.
     lines.append("(Unrecognized response shape.)")
     return "\n".join(lines)
 
@@ -450,6 +495,12 @@ def _format_summary(
         n, label = len(response.purchase_orders), "purchase order(s)"
     elif isinstance(response, SupplierSpendRankingResponse):
         n, label = len(response.suppliers), "ranked supplier(s)"
+    elif isinstance(response, SupplierPOValueRankingResponse):
+        n, label = len(response.suppliers), "ranked supplier(s)"
+    elif isinstance(response, POStatusBreakdownResponse):
+        n, label = len(response.statuses), "status(es)"
+    elif isinstance(response, OpenPOSummaryResponse):
+        n, label = response.po_count, "open PO(s)"
     elif isinstance(response, CountResponse):
         n = response.count if response.count is not None else 0
         label = f"{response.entity.lower()}(s) counted"

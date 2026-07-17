@@ -22,5 +22,16 @@ How much of PO 2144 was received?
 # — invoices by PO (P5) —
 Which invoices were raised against PO 162034?
 
+# — top suppliers by PO value (P6, prompt 19) —
+# NOTE: unfiltered, so it pages all ~3,362 POs (~60s). "by PO value" must
+# route to po_value_by_supplier, NOT the invoice spend ranking.
+Top 5 suppliers by purchase order value
+
+# — PO status breakdown (P6, prompt 7, SLOW: full scan ~60s) —
+How many purchase orders are there and what are they worth?
+
+# — committed spend (P6, prompt 18) —
+How much have we committed in open purchase orders?
+
 # — refusal: PO queries need an id —
 List all purchase orders

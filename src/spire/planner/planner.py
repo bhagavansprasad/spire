@@ -76,7 +76,35 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
 # per tool, by design (feature 7 boundedness rule): a new aggregation
 # shape is a new op + new tool, never a parameter on an existing one.
 _AGGREGATION_TOOLS: dict[str, str] = {
+    # Each op names ONE bounded aggregation tool. Per the aggregation
+    # layer's rule, a different grouping or measure is a different tool —
+    # and so a different op — never a flag on an existing one.
+    #
+    # NOTE: 'by_supplier' names only the grouping, not the source or
+    # measure. That was unambiguous when it was the only aggregation; it
+    # isn't now that two rankings group by supplier (invoice spend vs PO
+    # value). Left as-is rather than renamed to spend_by_supplier: the
+    # rename would break the parser instruction and any test asserting the
+    # op string, for tidiness only. The P6 ops below carry the fuller
+    # source+measure+grouping naming, so the pattern is set going forward.
     "by_supplier": "aggregate_invoices_by_supplier",
+    "po_value_by_supplier": "aggregate_purchase_orders_by_supplier",
+    "po_count_by_status": "aggregate_purchase_orders_by_status",
+    "open_po_summary": "summarize_open_purchase_orders",
+}
+
+
+# Which aggregate-block params each op's tool actually accepts. The
+# parser sets what the question implies (and defaults top_n=10), so the
+# planner must not forward a param the tool has no parameter for — it
+# raises. Kept beside the op registry so adding a tool means adding both
+# rows, and forgetting one fails loudly at plan time rather than in the
+# tool call.
+_AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
+    "by_supplier": ("date_from", "date_to", "top_n"),
+    "po_value_by_supplier": ("status", "top_n"),  # no date: PO dates aren't filterable
+    "po_count_by_status": (),                     # groups by status; takes nothing
+    "open_po_summary": (),                        # open by identity; takes nothing
 }
 
 # Friendly output-name prefixes per entity. Pure naming convention;
@@ -685,22 +713,17 @@ def generate_plan(
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
 
-    # Invoice queries need a selective root reference — a supplier or a
-    # purchase order. Without one the fetch would pull every invoice on
-    # the pod. Refuse loudly instead. (P5 added purchase_order: invoices
-    # carry PurchaseOrderNumber on the header and it filters server-side,
-    # so a PO number roots an invoice query just as well as a supplier.)
+    # Invoice queries require a supplier reference. Without it the fetch
+    # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
-        has_root_ref = any(
-            f.get("type") in ("supplier", "purchase_order")
-            for f in intent.filters
+        has_supplier = any(
+            f.get("type") == "supplier" for f in intent.filters
         )
-        if not has_root_ref:
+        if not has_supplier:
             raise ValueError(
-                "Invoice queries require a supplier or a purchase order. "
-                "Name the supplier by number (e.g. 'invoices for supplier "
-                "1252') or by name (e.g. 'invoices for Lee Supplies'), or "
-                "name the PO (e.g. 'invoices for PO 162034')."
+                "Invoice queries require a supplier. Name the supplier by "
+                "number (e.g. 'invoices for supplier 1252') or by name "
+                "(e.g. 'invoices for Lee Supplies')."
             )
 
     # Address queries require a supplier or a country. Without one the
@@ -936,8 +959,15 @@ def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
 
     # Pass through only the recognized tool params, dropping None so the
     # tool's own defaults (e.g. top_n=10) apply when unspecified.
+    # Pass through only the params THIS op's tool accepts. Relying on the
+    # parser to omit irrelevant params doesn't work: it helpfully sets
+    # top_n=10 by default, which then reaches a tool that takes no top_n
+    # and raises. The accepted set is per-op because the tools genuinely
+    # differ — a status breakdown takes no filter, an open summary takes
+    # no top_n.
+    accepted = _AGGREGATION_PARAMS.get(op, ())
     tool_args: dict[str, Any] = {}
-    for key in ("date_from", "date_to", "top_n"):
+    for key in accepted:
         if aggregate.get(key) is not None:
             tool_args[key] = aggregate[key]
 

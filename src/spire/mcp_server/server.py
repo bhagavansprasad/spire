@@ -20,6 +20,9 @@ Tools currently exposed:
 - get_purchase_order_schedules
 - get_supplier_contacts
 - get_purchase_order_distributions
+- aggregate_purchase_orders_by_supplier
+- aggregate_purchase_orders_by_status
+- summarize_open_purchase_orders
 """
 
 from fastmcp import Context, FastMCP
@@ -28,6 +31,11 @@ from spire.config import load_persona
 from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.aggregate_invoices import (
     aggregate_invoices_by_supplier as _aggregate_invoices_by_supplier,
+)
+from spire.mcp_server.tools.aggregate_purchase_orders import (
+    aggregate_purchase_orders_by_supplier as _aggregate_purchase_orders_by_supplier,
+    aggregate_purchase_orders_by_status as _aggregate_purchase_orders_by_status,
+    summarize_open_purchase_orders as _summarize_open_purchase_orders,
 )
 from spire.mcp_server.tools.buyer import get_buyer as _get_buyer
 from spire.mcp_server.tools.invoices import search_invoices as _search_invoices
@@ -497,6 +505,94 @@ async def get_purchase_order_distributions(
             limit=limit,
         )
         return result.to_dict()
+
+
+@mcp.tool()
+async def aggregate_purchase_orders_by_supplier(
+    ctx: Context,
+    status: str | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Rank suppliers by total committed purchase-order value.
+
+    Use this for "top 5 suppliers by purchase order value" or "which
+    suppliers have we committed the most to". Groups POs by supplier and
+    sums Ordered (the committed value, excluding tax).
+
+    NOT the same as aggregate_invoices_by_supplier: that ranks by what was
+    INVOICED; this ranks by what was ORDERED. A supplier can top one and
+    not the other.
+
+    No date range: PO dates are not filterable on this pod.
+
+    Args:
+        status: Optional StatusCode to restrict to, e.g. "OPEN". Bounds
+            the fetch server-side. Omit to aggregate every PO.
+        top_n: Number of suppliers to return (default 10).
+
+    Returns:
+        A "supplier_po_value_ranking" dict: ranked rows of
+        {supplier, supplier_id, total_ordered, po_count} plus
+        total_suppliers, returned, truncated, and the echoed status.
+        Note supplier_id — POs carry no supplier number.
+    """
+    async with FusionClient(_persona) as client:
+        return await _aggregate_purchase_orders_by_supplier(
+            client,
+            status=status,
+            top_n=top_n,
+            report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def aggregate_purchase_orders_by_status(ctx: Context) -> dict:
+    """Break purchase orders down by status: count and value per status.
+
+    Use this for "how many purchase orders are there and what are they
+    worth" or "break POs down by status". Groups every PO by StatusCode,
+    counting them and summing Ordered per status.
+
+    Takes no filter by design — grouping BY status needs every status, so
+    nothing can be pushed to the server. This scans the whole collection
+    (~3,362 POs, ~17 pages, about a minute); progress is reported per page.
+
+    Returns:
+        A "po_status_breakdown" dict: total_pos, total_ordered, truncated,
+        and rows of {status, po_count, total_ordered} ordered by value.
+        Statuses on this pod include CLOSED, OPEN, CLOSED FOR RECEIVING,
+        REJECTED, PENDING APPROVAL, WITHDRAWN, INCOMPLETE, CLOSED FOR
+        INVOICING, PENDING SIGNATURE, CANCELED and ON HOLD — the three
+        closed-ish states are distinct and are not merged.
+    """
+    async with FusionClient(_persona) as client:
+        return await _aggregate_purchase_orders_by_status(
+            client,
+            report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def summarize_open_purchase_orders(ctx: Context) -> dict:
+    """Committed spend and open-PO count.
+
+    Use this for "how much have we committed in open purchase orders" or
+    "what is our open PO commitment". Sums Ordered across open POs and
+    counts them.
+
+    Open-only by identity, not by parameter — a summary of another status
+    is a different question; use aggregate_purchase_orders_by_status for
+    the full breakdown.
+
+    Returns:
+        An "open_po_summary" dict: po_count, total_ordered,
+        supplier_count, truncated.
+    """
+    async with FusionClient(_persona) as client:
+        return await _summarize_open_purchase_orders(
+            client,
+            report_progress=ctx.report_progress,
+        )
 
 
 if __name__ == "__main__":
