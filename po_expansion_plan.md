@@ -249,6 +249,47 @@ PO 2144 / 162352 has **no** invoices, so it is not a usable anchor for
 prompt 5.
 
 
+## P5b — Synthesizer: narrate child entities  (before P6)
+
+**Goal:** Make the synthesized prose actually answer the questions whose
+data we already fetch.
+
+**Why this comes before P6.** Every phase since P2 fetches child data
+correctly — PO lines, schedules, distributions, contacts, and the
+received/billed figures — but the synthesizer describes only the parent
+(the PO header or the supplier) and ignores the children entirely. The data
+sits in the outputs; the answer never mentions it. So several catalog
+prompts are **data-complete but answer-incomplete**:
+
+- prompt 2 ("PO detail + lines") — 2 lines fetched, not narrated
+- prompt 3 ("received vs ordered") — the comparison IS the question; the
+  answer currently describes the PO's status and buyer instead
+- prompt 4 ("supplier + contacts") — 10 contacts fetched, not narrated
+- prompt 10 ("schedules, ship-to + need-by") — fetched, not narrated
+- prompt 14 ("distribution accounts") — fetched, not narrated
+
+P6's value is **entirely prose** (summaries, rankings, concentration risk).
+Fixing the synthesizer first means P6 builds on something that can speak.
+
+**Scope:**
+- Narrate child entities generically: PurchaseOrderLine, POSchedule,
+  PODistribution, Contact. The synthesizer is currently entity-shaped
+  around Supplier/PurchaseOrder only.
+- Received-vs-ordered comparison (prompt 3): compare Quantity/Amount against
+  ReceivedQuantity/ReceivedAmount/BilledQuantity/BilledAmount per schedule.
+- Fix the pre-existing boilerplate: "0 open PO(s); buyer(s): (no buyer)"
+  fires on every supplier query regardless of relevance.
+
+**Note:** logged as an open item from P2 onward, it grew with every phase.
+It is now the bottleneck — not the fetching.
+
+**Different in kind:** every phase so far has been fetch-shaped (discover an
+endpoint, write a tool, wire the KG, check the rows come back). P5b is
+output-shaped: the data is already there. Verification is qualitative —
+"does this answer the question?" — not "did the right rows return?"
+
+---
+
 ## P6 — PO aggregates
 
 **Goal:** Count, sum, ranking, concentration analysis over POs.
