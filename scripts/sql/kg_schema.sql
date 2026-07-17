@@ -737,7 +737,14 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Fetches ONE purchase order by POHeaderId (the single-record path). Distinct from search_purchase_orders (which filters a collection by supplier/status). Returns None on a 404 for an unknown id (prompt "DOES-NOT-EXIST" error case).'
 );
 
-PROMPT Seeded kg_entity_tool (4 rows).
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'PurchaseOrder',
+  'none',
+  'search_purchase_orders',
+  'Default fetcher for PurchaseOrder — the collection search. Handles the entity-level filters that are not by_id (created_before, created_since, and any future PO list filter), stacking their args like the Supplier default fetcher does. P2 made PurchaseOrder rootable via its by_id fetcher alone and deferred this row; P6''s date filters made it necessary, because Block 1 falls back to (entity, ''none'') for any filter without its own dedicated tool and that fallback had nothing to find.'
+);
+
+PROMPT Seeded kg_entity_tool (5 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -908,7 +915,17 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Invoices raised against a PO. Value is the PO NUMBER (e.g. "162034"), not POHeaderId — invoices carry PurchaseOrderNumber on the header and it filters server-side (single clause). Most selective invoice filter, so it wins the server q= clause.'
 );
 
-PROMPT Seeded kg_entity_filter (17 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'created_before', 'entity_level', 'created_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '<',
+  'POs created BEFORE a date — the bound a "stale POs / older than N months" question needs. Filters server-side. NOTE: CreationDate, not OrderDate — OrderDate is projectable but NOT queryable on this pod (HTTP 400). Two rows (created_before / created_since) rather than one range row: the KG shape is one row = one op, and the two are genuinely different questions.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'created_since', 'entity_level', 'created_since', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '>=',
+  'POs created ON OR AFTER a date. Filters server-side. Both bounds work standalone on this pod but cannot be composited (single-clause rule), so one goes to the server and the other is filtered client-side.'
+);
+
+PROMPT Seeded kg_entity_filter (19 rows).
 
 -- ============================================================
 

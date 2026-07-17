@@ -745,13 +745,21 @@ def generate_plan(
     # cleanly rather than crash. General PO listing is reached via the
     # supplier->PO edge today (and PO aggregates arrive in a later phase).
     if intent.target_entity == "PurchaseOrder":
-        has_by_id = any(f.get("type") == "by_id" for f in intent.filters)
-        if not has_by_id:
+        # A PO-rooted query needs SOMETHING selective, or the fetch pulls
+        # every PO on the pod. A PO id is one such thing; so is a date
+        # bound (P6: "POs created before 2015" is bounded and answerable).
+        # Same widening as the Invoice guard, which accepts a supplier OR
+        # a purchase order.
+        has_root_ref = any(
+            f.get("type") in ("by_id", "created_before", "created_since")
+            for f in intent.filters
+        )
+        if not has_root_ref:
             raise ValueError(
-                "Purchase-order queries require a PO id. For example "
-                "'show PO 2144 and its lines'. To list a supplier's POs, "
-                "ask about the supplier (e.g. 'open POs for supplier "
-                "EIP Inc')."
+                "Purchase-order queries require a PO id or a date bound. "
+                "For example 'show PO 2144 and its lines', or 'POs created "
+                "before 2015'. To list a supplier's POs, ask about the "
+                "supplier (e.g. 'open POs for supplier EIP Inc')."
             )
 
     ref_date = reference_date if reference_date is not None else date.today()

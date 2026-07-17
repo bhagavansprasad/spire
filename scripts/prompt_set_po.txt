@@ -33,5 +33,13 @@ How many purchase orders are there and what are they worth?
 # — committed spend (P6, prompt 18) —
 How much have we committed in open purchase orders?
 
+# — PO date bound (P6 commit 2, prompt 20) —
+# An absolute date satisfies the PO root requirement — no PO id needed.
+Purchase orders created before 2015
+
+# — refusal: relative PO date windows aren't supported —
+# Must refuse rather than let the LLM compute a cutoff itself.
+Purchase orders older than 6 months
+
 # — refusal: PO queries need an id —
 List all purchase orders

@@ -215,21 +215,34 @@ async def search_purchase_orders(
     supplier_name: str | None = None,
     supplier_id: int | None = None,
     status: str | None = None,
+    created_before: str | None = None,
+    created_since: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion purchase orders.
 
     Use this to find POs for a specific supplier, optionally filtered by
     status. For "find open POs for supplier X" pass supplier_name or
-    supplier_id along with status="OPEN".
+    supplier_id along with status="OPEN". For "POs created before 2015"
+    pass created_before="2015-01-01".
+
+    Dates filter CreationDate, NOT OrderDate — OrderDate is not queryable
+    on this pod. Pass ABSOLUTE dates only; this tool does no relative-date
+    arithmetic.
 
     Args:
         supplier_name: Substring match on Supplier name (LIKE). Use when
             you have the supplier name as a string.
         supplier_id: Exact SupplierId match (numeric). Get this from
             search_suppliers if available.
-        status: Exact StatusCode match. Common values: "OPEN", "CLOSED",
-            "INCOMPLETE", "CANCELED".
+        status: Exact StatusCode match. The pod has eleven values — OPEN,
+            CLOSED, CLOSED FOR RECEIVING, REJECTED, PENDING APPROVAL,
+            WITHDRAWN, INCOMPLETE, CLOSED FOR INVOICING, PENDING
+            SIGNATURE, CANCELED, ON HOLD (spaces, not underscores).
+        created_before: ISO "YYYY-MM-DD". POs whose CreationDate is
+            strictly before this date.
+        created_since: ISO "YYYY-MM-DD". POs whose CreationDate is on or
+            after this date.
         limit: Max records to return.
     """
     async with FusionClient(_persona) as client:
@@ -238,6 +251,8 @@ async def search_purchase_orders(
             supplier_name=supplier_name,
             supplier_id=supplier_id,
             status=status,
+            created_before=created_before,
+            created_since=created_since,
             limit=limit,
         )
         return result.to_dict()
