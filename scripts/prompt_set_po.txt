@@ -1,6 +1,10 @@
 # Spire prompt set — PURCHASE ORDER module. Read by scripts/run_prompt_set.py.
 # One prompt per line. Blank lines and lines starting with # are ignored.
-# Ordered fast-first. PO-rooted prompts (P2, P3, and later PO phases).
+# Ordered fast-first. PO-rooted prompts (P2, P3, P3b, P5).
+#
+# Anchors: PO 2144 (OrderNumber 162352, EIP Inc) has 2 lines, 2 schedules
+# and distributions. PO 162034 (Lee Supplies) has invoice 162034inv — note
+# PO 162352 has NO invoices, so it cannot anchor the invoices-by-PO prompt.
 
 # — PO detail + lines (P2) —
 Show PO 2144 and its lines
@@ -10,4 +14,13 @@ What is purchase order 2144 about?
 Show PO 2144 and its schedules
 
 # — PO distributions (P3b) —
-Show PO 680869 and its distributions
+Show PO 2144 and its distributions
+
+# — received vs ordered (P5) —
+How much of PO 2144 was received?
+
+# — invoices by PO (P5) —
+Which invoices were raised against PO 162034?
+
+# — refusal: PO queries need an id —
+List all purchase orders

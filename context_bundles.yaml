@@ -2,13 +2,11 @@ bundles:
   # ── project root (content files only; tooling and secrets excluded) ──
   root:
   - README.md
-  - how-to-run.md
   - how-to-run-02.md
   - how-to-run-after-pull.md
   - prompt_coverage.md
   - kg_expansion_phases.md
   - po_expansion_plan.md
-  - spire_handoff_context.md
   - spire_expansion_endpoints.md
   - spire_integration_coverage.md
   - docs/spire_fusion_endpoints_reference.md
@@ -23,11 +21,17 @@ bundles:
   - scripts/run_graph.py
   - scripts/run_plan.py
   - scripts/run_prompt_set.py
-  - scripts/prompt_set.txt
   - scripts/test_kg_connection.py
   - scripts/verify_invoices.py
   - scripts/verify_business_relationship.py
   - scripts/verify_nested_addresses.py
+  - scripts/01_test_prompts_parser.txt
+  - scripts/02_test_prompts_e2e.txt
+  - scripts/03_test_prompts_failed.txt
+  - scripts/prompt_set_po.txt
+  - scripts/prompt_set_supplier.txt
+  - scripts/spire_v1.2_review_prompts.txt
+
   graph_kg:
   - scripts/sql/kg_schema.sql
   - src/spire/executor/executor.py

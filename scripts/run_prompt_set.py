@@ -115,8 +115,18 @@ async def _run_one(prompt: str, menu, client) -> str:
         return "refused (expected for out-of-scope)"
 
     if state.get("error"):
-        print(f"ERROR: {state['error']}", file=sys.stderr)
-        return f"error: {state['error']}"
+        err = str(state["error"])
+        # A planner guard rejecting an under-specified query is a REFUSAL,
+        # not a failure: "Invoice queries require a supplier or a purchase
+        # order", "Purchase-order queries require a PO id", "Address
+        # queries require a supplier or a country". These are the system
+        # correctly declining, so the prompt set should count them as
+        # expected — same as a parser refusal.
+        if err.startswith("plan: ") and "require" in err:
+            print(f"REFUSED (planner guard): {err}")
+            return "refused (expected — planner guard)"
+        print(f"ERROR: {err}", file=sys.stderr)
+        return f"error: {err}"
 
     print(_format_intent(state["intent"]))
     print()

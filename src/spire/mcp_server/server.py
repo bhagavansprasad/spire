@@ -118,6 +118,7 @@ async def search_suppliers(
 
 @mcp.tool()
 async def search_invoices(
+    purchase_order: str | None = None,
     supplier_number: str | None = None,
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
@@ -128,8 +129,10 @@ async def search_invoices(
 ) -> dict:
     """Search Oracle Fusion invoices.
 
-    Use this to find invoices for a specific supplier, optionally filtered
-    by date and/or amount. For the question "are there invoices for
+    Use this to find invoices for a specific supplier OR for a specific
+    purchase order, optionally filtered by date and/or amount. For "which
+    invoices were raised against PO 162034?" pass purchase_order="162034"
+    (the PO NUMBER as shown on the order, not POHeaderId). For the question "are there invoices for
     supplier X in the last N months?" pass the supplier's number plus an
     invoice_date_after of (today - N months) and check whether the result
     is empty.
@@ -138,6 +141,9 @@ async def search_invoices(
     invoice_date_after="2022-01-01" and invoice_date_before="2022-02-01".
 
     Args:
+        purchase_order: Exact PurchaseOrderNumber, e.g. "162034". Returns
+            the invoices raised against that PO. This is the PO NUMBER
+            (OrderNumber), not POHeaderId.
         supplier_number: Exact SupplierNumber, e.g., "1252". Get this from
             search_suppliers first.
         supplier_name: Substring match on Supplier name. Use when the
@@ -153,6 +159,7 @@ async def search_invoices(
     async with FusionClient(_persona) as client:
         result = await _search_invoices(
             client,
+            purchase_order=purchase_order,
             supplier_number=supplier_number,
             supplier_name=supplier_name,
             invoice_date_after=invoice_date_after,

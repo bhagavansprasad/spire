@@ -685,17 +685,22 @@ def generate_plan(
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
 
-    # Invoice queries require a supplier reference. Without it the fetch
-    # would pull every invoice on the pod. Refuse loudly instead.
+    # Invoice queries need a selective root reference — a supplier or a
+    # purchase order. Without one the fetch would pull every invoice on
+    # the pod. Refuse loudly instead. (P5 added purchase_order: invoices
+    # carry PurchaseOrderNumber on the header and it filters server-side,
+    # so a PO number roots an invoice query just as well as a supplier.)
     if intent.target_entity == "Invoice":
-        has_supplier = any(
-            f.get("type") == "supplier" for f in intent.filters
+        has_root_ref = any(
+            f.get("type") in ("supplier", "purchase_order")
+            for f in intent.filters
         )
-        if not has_supplier:
+        if not has_root_ref:
             raise ValueError(
-                "Invoice queries require a supplier. Name the supplier by "
-                "number (e.g. 'invoices for supplier 1252') or by name "
-                "(e.g. 'invoices for Lee Supplies')."
+                "Invoice queries require a supplier or a purchase order. "
+                "Name the supplier by number (e.g. 'invoices for supplier "
+                "1252') or by name (e.g. 'invoices for Lee Supplies'), or "
+                "name the PO (e.g. 'invoices for PO 162034')."
             )
 
     # Address queries require a supplier or a country. Without one the
