@@ -342,14 +342,29 @@ def _format_synthesized(response) -> str:
             return "\n".join(lines)
         lines.append("Suppliers:")
         for s in response.suppliers:
-            buyer_str = ", ".join(
-                f"{b.display_name} (id={b.person_id})" for b in s.buyers
-            ) or "(no buyer)"
-            lines.append(
+            line = (
                 f"  - {s.supplier_name} "
-                f"(SupplierId={s.supplier_id}, SupplierNumber={s.supplier_number}) "
-                f"— {s.open_po_count} open PO(s); buyer(s): {buyer_str}"
+                f"(SupplierId={s.supplier_id}, SupplierNumber={s.supplier_number})"
             )
+            # open_po_count is None when the query never asked about POs
+            # (P5b made it optional). Only render the PO/buyer clause when
+            # there was actually an open_pos bucket — otherwise every
+            # supplier answer carried "0 open PO(s); buyer(s): (no buyer)"
+            # regardless of the question.
+            if s.open_po_count is not None:
+                buyer_str = ", ".join(
+                    f"{b.display_name} (id={b.person_id})" for b in s.buyers
+                ) or "(no buyer)"
+                line += f" — {s.open_po_count} open PO(s); buyer(s): {buyer_str}"
+            if s.contacts:
+                admin = next(
+                    (c.contact_name for c in s.contacts if c.is_administrative),
+                    None,
+                )
+                line += f" — {len(s.contacts)} contact(s)"
+                if admin:
+                    line += f"; admin: {admin}"
+            lines.append(line)
         return "\n".join(lines)
  
     if isinstance(response, InvoiceResponse):

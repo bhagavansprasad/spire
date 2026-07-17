@@ -88,6 +88,112 @@ class AddressInfo(BaseModel):
 # ─────────────────────────────────────────────────────────────────────
 
 
+class LineInfo(BaseModel):
+    """One PO line nested under a purchase order.
+
+    po_line_id is validated against the executor's output after synthesis
+    — it MUST appear there."""
+
+    po_line_id: int = Field(
+        description="The line's POLineId (numeric key). Must appear in the data."
+    )
+    line_number: int = Field(description="The line number within the PO.")
+    description: str = Field(default="", description="Line description.")
+    category: str = Field(default="", description="Purchasing category.")
+    quantity: float | None = Field(default=None, description="Ordered quantity.")
+    amount: float | None = Field(
+        default=None, description="Line amount (the Ordered field, excl. tax)."
+    )
+
+
+class ScheduleInfo(BaseModel):
+    """One shipment schedule nested under a purchase order.
+
+    line_location_id is validated against the executor's output after
+    synthesis — it MUST appear there.
+
+    Carries the ordered figures alongside the received/billed ones so the
+    summary can state received-vs-ordered. Copy the numbers as given; do
+    NOT compute percentages or deltas."""
+
+    line_location_id: int = Field(
+        description="The schedule's LineLocationId (numeric key). Must appear "
+        "in the data."
+    )
+    schedule_number: int = Field(description="Schedule number within the line.")
+    ship_to_location: str = Field(default="", description="Ship-to location.")
+    requested_delivery_date: str = Field(
+        default="", description="Requested (need-by) delivery date, if present."
+    )
+    ordered_quantity: float | None = Field(
+        default=None, description="Quantity ordered (the Quantity field)."
+    )
+    ordered_amount: float | None = Field(
+        default=None, description="Amount ordered (the Amount field)."
+    )
+    received_quantity: float | None = Field(
+        default=None, description="Quantity received."
+    )
+    billed_quantity: float | None = Field(
+        default=None, description="Quantity billed."
+    )
+    received_amount: float | None = Field(
+        default=None, description="Amount received."
+    )
+    billed_amount: float | None = Field(default=None, description="Amount billed.")
+
+
+class DistributionInfo(BaseModel):
+    """One distribution nested under a purchase order — the accounts a
+    schedule's amount is booked to.
+
+    po_distribution_id is validated against the executor's output after
+    synthesis — it MUST appear there."""
+
+    po_distribution_id: int = Field(
+        description="The distribution's PODistributionId (numeric key). Must "
+        "appear in the data."
+    )
+    distribution_number: int = Field(description="Distribution number.")
+    charge_account: str = Field(
+        default="", description="POChargeAccount code combination."
+    )
+    accrual_account: str = Field(
+        default="", description="POAccrualAccount code combination."
+    )
+    variance_account: str = Field(
+        default="", description="POVarianceAccount code combination."
+    )
+    percentage: float | None = Field(
+        default=None, description="Percentage of the schedule allocated here."
+    )
+    amount: float | None = Field(
+        default=None, description="Distributed amount (the Ordered field)."
+    )
+
+
+class ContactInfo(BaseModel):
+    """One contact nested under a supplier.
+
+    supplier_contact_id is validated against the executor's output after
+    synthesis — it MUST appear there."""
+
+    supplier_contact_id: int = Field(
+        description="The contact's SupplierContactId (numeric key). Must "
+        "appear in the data."
+    )
+    contact_name: str = Field(
+        description="The contact's display name (last-first, e.g. 'Kim, John')."
+    )
+    email: str = Field(default="", description="Contact email, if present.")
+    job_title: str = Field(default="", description="Job title, if present.")
+    is_administrative: bool = Field(
+        default=False,
+        description="True if this is the primary/administrative contact "
+        "(AdministrativeContactFlag).",
+    )
+
+
 class SupplierRecord(BaseModel):
     """One supplier in a supplier-rooted response.
 
@@ -99,9 +205,13 @@ class SupplierRecord(BaseModel):
         description="The supplier's SupplierNumber (human-readable id)."
     )
     supplier_name: str = Field(description="The supplier's display name.")
-    open_po_count: int = Field(
-        description="Number of open purchase orders for this supplier "
-        "in the executor's open_pos output. 0 if none."
+    open_po_count: int | None = Field(
+        default=None,
+        description="Number of open purchase orders for this supplier in the "
+        "executor's open_pos output. Set this ONLY when an open_pos bucket is "
+        "actually present in the data — leave it null when the query had "
+        "nothing to do with purchase orders. Do not report 0 for a query that "
+        "never asked about POs.",
     )
     buyers: list[BuyerInfo] = Field(
         default_factory=list,
@@ -113,6 +223,12 @@ class SupplierRecord(BaseModel):
         description="This supplier's addresses, when the query asked for "
         "them (nested from the supplier fetch's expand=addresses). Empty "
         "otherwise. Each address_id must appear in the executor's output.",
+    )
+    contacts: list[ContactInfo] = Field(
+        default_factory=list,
+        description="This supplier's contacts, when the query asked for them "
+        "(a 'contact' bucket in the data). Empty otherwise. Each "
+        "supplier_contact_id must appear in the executor's output.",
     )
 
 
@@ -152,6 +268,25 @@ class PurchaseOrderRecord(BaseModel):
         default=None,
         description="The buyer assigned to this PO, if one is in the data. "
         "person_id must appear in the executor's buyers output.",
+    )
+    lines: list[LineInfo] = Field(
+        default_factory=list,
+        description="This PO's lines, when the query asked for them (a "
+        "'purchaseorderline' bucket in the data). Empty otherwise. Each "
+        "po_line_id must appear in the executor's output.",
+    )
+    schedules: list[ScheduleInfo] = Field(
+        default_factory=list,
+        description="This PO's shipment schedules, when the query asked for "
+        "them (a 'poschedule' bucket in the data). Empty otherwise. Each "
+        "line_location_id must appear in the executor's output.",
+    )
+    distributions: list[DistributionInfo] = Field(
+        default_factory=list,
+        description="This PO's distributions — the accounts its amounts are "
+        "booked to — when the query asked for them (a 'podistribution' "
+        "bucket). Empty otherwise. Each po_distribution_id must appear in "
+        "the executor's output.",
     )
 
 
@@ -363,6 +498,11 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     person_ids: set = set()
     invoice_ids: set = set()
     address_ids: set = set()
+    # P5b: the PO child hierarchy and supplier contacts.
+    po_line_ids: set = set()
+    line_location_ids: set = set()
+    po_distribution_ids: set = set()
+    contact_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -379,6 +519,15 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 invoice_ids.add(iid)
             if (aid := item.get("SupplierAddressId")) is not None:
                 address_ids.add(aid)
+            # P5b: PO children and supplier contacts.
+            if (plid := item.get("POLineId")) is not None:
+                po_line_ids.add(plid)
+            if (llid := item.get("LineLocationId")) is not None:
+                line_location_ids.add(llid)
+            if (pdid := item.get("PODistributionId")) is not None:
+                po_distribution_ids.add(pdid)
+            if (scid := item.get("SupplierContactId")) is not None:
+                contact_ids.add(scid)
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -399,6 +548,10 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "person_ids": person_ids,
         "invoice_ids": invoice_ids,
         "address_ids": address_ids,
+        "po_line_ids": po_line_ids,
+        "line_location_ids": line_location_ids,
+        "po_distribution_ids": po_distribution_ids,
+        "contact_ids": contact_ids,
     }
 
 
@@ -433,16 +586,27 @@ _SYSTEM_PROMPT_PREAMBLE = (
 _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
     "Supplier": (
         "This is a SUPPLIER-rooted query. For each supplier in the final "
-        "filtered set, emit one entry under 'suppliers'. Group purchase "
-        "orders by supplier: open_po_count is the exact count of that "
-        "supplier's POs in the open_pos bucket. List each unique buyer "
-        "assigned to that supplier's POs; each buyer's person_id must "
-        "appear in the buyers bucket. If a supplier record carries an "
-        "'addresses' list (the query asked for supplier addresses), emit "
-        "each one under that supplier's 'addresses' with its address_id "
-        "and the country, city, state, and formatted_address when present; "
-        "each address_id must appear in the data. If a supplier has no "
-        "addresses field, leave its 'addresses' empty."
+        "filtered set, emit one entry under 'suppliers'. "
+        "ONLY IF an open_pos bucket is present in the data: set "
+        "open_po_count to the exact count of that supplier's POs in it, and "
+        "list each unique buyer assigned to those POs (each buyer's "
+        "person_id must appear in the buyers bucket). If there is NO "
+        "open_pos bucket, leave open_po_count null and buyers empty, and do "
+        "not mention purchase orders or buyers in the summary at all — the "
+        "question did not ask about them. "
+        "If a supplier record carries an 'addresses' list (the query asked "
+        "for supplier addresses), emit each one under that supplier's "
+        "'addresses' with its address_id and the country, city, state, and "
+        "formatted_address when present; each address_id must appear in the "
+        "data. If a supplier has no addresses field, leave its 'addresses' "
+        "empty. "
+        "If the data has a 'contact' bucket (the query asked for the "
+        "supplier's contacts), emit each contact under that supplier's "
+        "'contacts' with its supplier_contact_id, contact_name, and the "
+        "email, job_title and is_administrative flag when present; each "
+        "supplier_contact_id must appear in the data. When contacts are "
+        "present, the summary MUST say how many there are and name the "
+        "administrative contact if one is flagged."
     ),
     "Invoice": (
         "This is an INVOICE-rooted query. For each invoice in the final "
@@ -464,7 +628,27 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "set, emit one entry under 'purchase_orders' with its header id, "
         "order number, status, and supplier name/id. supplier_id must "
         "appear in the data. If a buyer is present for the PO, include it; "
-        "the buyer's person_id must appear in the buyers bucket."
+        "the buyer's person_id must appear in the buyers bucket.\n"
+        "CHILD DETAIL — the question asked for it if the bucket is there, so "
+        "the summary MUST describe it, not just the PO header:\n"
+        "- 'purchaseorderline' bucket: emit each line under that PO's "
+        "'lines' (po_line_id, line_number, description, category, quantity, "
+        "amount). The summary must say how many lines and what they are for.\n"
+        "- 'poschedule' bucket: emit each schedule under 'schedules' "
+        "(line_location_id, schedule_number, ship_to_location, "
+        "requested_delivery_date, and the ordered/received/billed quantities "
+        "and amounts). The summary must state ship-to and need-by, and — "
+        "when received or billed figures are present — state received "
+        "against ordered as plain counts, e.g. '1 of 1 received; 33000 of "
+        "33000 billed'. COPY these numbers exactly as given. Do NOT compute "
+        "percentages, deltas, or any other arithmetic.\n"
+        "- 'podistribution' bucket: emit each distribution under "
+        "'distributions' (po_distribution_id, distribution_number, the "
+        "charge/accrual/variance accounts, percentage, amount). The summary "
+        "must name the charge account(s) the PO is booked to.\n"
+        "Every po_line_id, line_location_id and po_distribution_id must "
+        "appear in the data. If a bucket is absent, leave that list empty "
+        "and do not mention it."
     ),
     "SupplierSpendRanking": (
         "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
@@ -534,6 +718,7 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
     bad_snum: list[str] = []
     bad_pid: list[int] = []
     bad_aid: list[int] = []
+    bad_cid: list[int] = []
     for s in response.suppliers:
         if s.supplier_id not in valid["supplier_ids"]:
             bad_sid.append(s.supplier_id)
@@ -545,6 +730,9 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
         for a in s.addresses:
             if a.address_id not in valid["address_ids"]:
                 bad_aid.append(a.address_id)
+        for c in s.contacts:
+            if c.supplier_contact_id not in valid["contact_ids"]:
+                bad_cid.append(c.supplier_contact_id)
     parts = []
     if bad_sid:
         parts.append(f"supplier_ids={bad_sid}")
@@ -554,6 +742,8 @@ def _validate_supplier(response: SupplierResponse, valid: dict[str, set]) -> Non
         parts.append(f"person_ids={bad_pid}")
     if bad_aid:
         parts.append(f"address_ids={bad_aid}")
+    if bad_cid:
+        parts.append(f"supplier_contact_ids={bad_cid}")
     _raise_if_bad(parts)
 
 
@@ -594,16 +784,36 @@ def _validate_purchase_order(
 ) -> None:
     bad_sid: list[int] = []
     bad_pid: list[int] = []
+    bad_line: list[int] = []
+    bad_sched: list[int] = []
+    bad_dist: list[int] = []
     for po in response.purchase_orders:
         if po.supplier_id not in valid["supplier_ids"]:
             bad_sid.append(po.supplier_id)
         if po.buyer is not None and po.buyer.person_id not in valid["person_ids"]:
             bad_pid.append(po.buyer.person_id)
+        # P5b: the PO child hierarchy. These fields are exactly where
+        # invented detail would surface, so every id is cross-referenced.
+        for ln in po.lines:
+            if ln.po_line_id not in valid["po_line_ids"]:
+                bad_line.append(ln.po_line_id)
+        for sch in po.schedules:
+            if sch.line_location_id not in valid["line_location_ids"]:
+                bad_sched.append(sch.line_location_id)
+        for d in po.distributions:
+            if d.po_distribution_id not in valid["po_distribution_ids"]:
+                bad_dist.append(d.po_distribution_id)
     parts = []
     if bad_sid:
         parts.append(f"supplier_ids={bad_sid}")
     if bad_pid:
         parts.append(f"person_ids={bad_pid}")
+    if bad_line:
+        parts.append(f"po_line_ids={bad_line}")
+    if bad_sched:
+        parts.append(f"line_location_ids={bad_sched}")
+    if bad_dist:
+        parts.append(f"po_distribution_ids={bad_dist}")
     _raise_if_bad(parts)
 
 
@@ -787,6 +997,8 @@ def synthesize_response(
 
     _validate_no_hallucinated_ids(response, outputs)
     return response
+
+
 
 
 
