@@ -283,6 +283,70 @@ Fixing the synthesizer first means P6 builds on something that can speak.
 **Note:** logged as an open item from P2 onward, it grew with every phase.
 It is now the bottleneck — not the fetching.
 
+### Design (review before code)
+
+**Three things change together — schema, prompt, validator.** They are
+coupled: the schema decides what CAN be said, the prompt decides when it IS
+said, the validator decides whether it can be trusted. Changing one alone
+does nothing.
+
+**1. Sub-models (follow the existing `AddressInfo` precedent).** Four, each
+summary-shaped — only the fields its prompt needs, not every column we fetch
+(verbosity burns context and invites invention):
+
+- `LineInfo` — line_number, description, category, quantity, amount
+- `ScheduleInfo` — schedule_number, ship_to_location,
+  requested_delivery_date, ordered_quantity, ordered_amount,
+  received_quantity, billed_quantity, received_amount, billed_amount
+- `DistributionInfo` — distribution_number, charge_account, accrual_account,
+  variance_account, percentage, amount
+- `ContactInfo` — contact_name, email, job_title, is_administrative
+
+**2. Nest them on the parent record**, exactly as `addresses` nests on
+`SupplierRecord` — optional lists, `default_factory=list`, empty when the
+query didn't ask:
+
+- `PurchaseOrderRecord`: + `lines`, `schedules`, `distributions`
+- `SupplierRecord`: + `contacts`
+
+**3. Make `open_po_count` optional** (`int | None = None`). It is currently a
+REQUIRED int, so every supplier answer must state it — which is exactly why
+"0 open PO(s); buyer(s): (no buyer)" appears on queries that never mentioned
+POs. Populate only when an open_pos bucket is present.
+
+**4. Prompt blocks.** The PurchaseOrder block currently says "emit header id,
+order number, status, supplier name/id... include the buyer if present" — it
+is silent on children, matching the schema. Extend both blocks to say when to
+emit each child list, and (Supplier) to leave open_po_count null when there
+is no open_pos bucket.
+
+**5. Received-vs-ordered (prompt 3).** Expose the raw ordered/received/billed
+numbers on `ScheduleInfo`; let the summary state the comparison ("1 of 1
+received; 33,000 of 33,000 billed"). Do NOT ask the LLM to compute
+percentages or deltas — follow the SupplierSpendRanking block's existing
+"the totals are already computed, do not do arithmetic" discipline. The LLM
+is unreliable at arithmetic (cf. the date-computation lesson).
+
+**6. Hallucination guard.** Every new id must be cross-referenced against the
+executor's output, as supplier_id/person_id/address_id are today: POLineId,
+LineLocationId, PODistributionId, SupplierContactId. Without this, the new
+fields are precisely where invented data would appear — a schema that permits
+detail without validating it is worse than one that says nothing.
+
+**Verification is qualitative.** Unlike every previous phase, "did the right
+rows come back?" is already true. The question is "does the answer answer the
+question?" — so verification means reading the prose for prompts 2, 3, 4, 10
+and 14, not asserting row counts. The schema and validator changes are
+unit-testable; the narration is judged by eye.
+
+### Build order
+1. Sub-models + nest on the two records + open_po_count optional.
+2. Extend the two prompt blocks.
+3. Extend the validators for the four new id types.
+4. Re-run prompts 2/3/4/10/14 and read the answers.
+5. Full suite (synthesizer has 32 tests + 6 aggregation tests).
+6. Git branch `po-phase-5b-synthesizer`, PR, merge.
+
 **Different in kind:** every phase so far has been fetch-shaped (discover an
 endpoint, write a tool, wire the KG, check the rows come back). P5b is
 output-shaped: the data is already there. Verification is qualitative —
