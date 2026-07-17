@@ -16,9 +16,9 @@ Branch convention: `po-phase-N-description`.
 | P3 | PO schedules (flat endpoint, one-hop) | `po-phase-3-schedules` | merged | merged to master |
 | P3b | PO distributions (multi-field iteration) | `po-phase-3b-distributions` | merged | merged to master |
 | P4 | Supplier contacts | `po-phase-4-supplier-contacts` | merged | merged to master |
-| P5 | Received-vs-ordered + invoices-by-PO | `po-phase-5-received-invoices-by-po` | in progress | — |
+| P5 | Received-vs-ordered + invoices-by-PO | `po-phase-5-received-invoices-by-po` | merged | merged to master |
 | P5b | Synthesizer: narrate child entities | `po-phase-5b-synthesizer` | merged | merged to master |
-| P6 | PO aggregates | `po-phase-6-aggregates` | not started | — |
+| P6 | PO aggregates | `po-phase-6-aggregates` | in progress | commit 1 of 2 merged |
 
 ---
 
@@ -45,4 +45,17 @@ Branch convention: `po-phase-N-description`.
   encode a data-volume assumption that held on esll-dev37 and doesn't on
   eqjz. Fixing them properly is part of the deferred test-portability work
   — do not "fix" by weakening the assertion or raising the cap.
+- **P6 is half done.** Commit 1 (merged): the three single-source PO
+  aggregations — by supplier value, by status, and the open-PO summary —
+  plus their synthesizer shapes, the planner/parser wiring, and the ELEVEN
+  po_status vocab rows (the KG knew four; the pod has eleven, with spaces
+  not underscores). Commit 2 (not started): prompt 20 (stale POs — needs a
+  CreationDate filter, since OrderDate is NOT queryable, plus widening the
+  PO guard to accept a date filter as a valid root) and prompts 21-24 (the
+  two-source join: POs + invoices matched on PurchaseOrderNumber, then
+  invoiced-vs-ordered and concentration risk). The open design question for
+  commit 2: is the two-source join a bounded TOOL that reads two endpoints,
+  or a planner shape with a join step? The aggregation layer's rule
+  ("grouping and measure are fixed by identity") argues for a tool — making
+  the planner do joins is the generic engine that rule exists to prevent.
 - Keep rows short; update status as each phase moves.
