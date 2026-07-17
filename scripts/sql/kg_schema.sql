@@ -389,7 +389,25 @@ INSERT INTO kg_entity_field VALUES ('PODistribution', 'Total',                'a
 INSERT INTO kg_entity_field VALUES ('PODistribution', 'Status',               'projection',   'string',  'Distribution status (e.g. Delivered).');
 INSERT INTO kg_entity_field VALUES ('PODistribution', 'StatusCode',           'status',       'string',  'Code form of the distribution status.');
 
-PROMPT Seeded kg_entity_field (77 rows).
+-- Invoice (P5). The PO number is on the invoice HEADER and filters
+-- server-side; it is the join key to PurchaseOrder.OrderNumber (a string,
+-- not POHeaderId) — consistent with invoices joining on SupplierNumber.
+INSERT INTO kg_entity_field VALUES ('Invoice', 'PurchaseOrderNumber', 'reference', 'string', 'PO number the invoice was raised against (e.g. "162034"). Join key to PurchaseOrder.OrderNumber. Filters server-side via q=PurchaseOrderNumber.');
+
+-- POSchedule (P5): received-vs-ordered. Fusion records what was actually
+-- received/billed on the schedule row, alongside the ordered Quantity and
+-- Amount. This is the source for "how much of PO X was received" — the
+-- receipts resources are unusable here (receivingTransactions 403;
+-- receivingReceipts needs a receipt number; receivingReceiptRequests is a
+-- staging interface with no PO reference).
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'ReceivedQuantity', 'projection', 'numeric', 'Quantity actually received against the schedule. Compare with Quantity (ordered).');
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'BilledQuantity',   'projection', 'numeric', 'Quantity invoiced against the schedule.');
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'ShippedQuantity',  'projection', 'numeric', 'Quantity shipped against the schedule.');
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'AcceptedQuantity', 'projection', 'numeric', 'Quantity accepted against the schedule.');
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'ReceivedAmount',   'amount',     'numeric', 'Amount received against the schedule. Compare with Amount (ordered).');
+INSERT INTO kg_entity_field VALUES ('POSchedule', 'BilledAmount',     'amount',     'numeric', 'Amount invoiced against the schedule.');
+
+PROMPT Seeded kg_entity_field (84 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -864,7 +882,12 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Fetch one PO by POHeaderId via the single-record path /purchaseOrders/{id}. Dedicated fetcher get_purchase_order_by_id; returns None on 404.'
 );
 
-PROMPT Seeded kg_entity_filter (16 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'purchase_order', 'entity_level', 'purchase_order', NULL, NULL, NULL, NULL, NULL, 'server_q', 'PurchaseOrderNumber', 'equals',
+  'Invoices raised against a PO. Value is the PO NUMBER (e.g. "162034"), not POHeaderId — invoices carry PurchaseOrderNumber on the header and it filters server-side (single clause). Most selective invoice filter, so it wins the server q= clause.'
+);
+
+PROMPT Seeded kg_entity_filter (17 rows).
 
 -- ============================================================
 

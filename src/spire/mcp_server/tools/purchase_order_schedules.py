@@ -18,6 +18,11 @@ ShipToLocationCode). We key off the flat names here.
 Note the pod's single-clause q= rule: q=POHeaderId=<id> is one clause and
 works server-side. Any further filtering would be client-side.
 
+The projection also carries the received/billed figures
+(ReceivedQuantity, BilledQuantity, ShippedQuantity, AcceptedQuantity,
+ReceivedAmount, BilledAmount) alongside the ordered Quantity/Amount — this
+row is Fusion's record of received-vs-ordered for the PO.
+
 Returns a ToolResult (like the other child/collection tools) so callers
 can tell a complete result from a capped subset.
 """
@@ -43,6 +48,18 @@ _PROJECTED_FIELDS = [
     "UOM",
     "Amount",
     "ScheduleStatus",
+    # P5: received-vs-ordered. The schedule row is where Fusion records
+    # what was actually received/billed against the ordered Quantity and
+    # Amount, so "how much of PO X was received" is answered here rather
+    # than from a receipts resource (receivingTransactions is 403 for us;
+    # receivingReceipts needs a receipt number; receivingReceiptRequests
+    # is a staging interface with no PO reference).
+    "ReceivedQuantity",
+    "BilledQuantity",
+    "ShippedQuantity",
+    "AcceptedQuantity",
+    "ReceivedAmount",
+    "BilledAmount",
 ]
 
 

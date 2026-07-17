@@ -161,3 +161,56 @@ async def test_search_invoices_month_range_for_supplier():
     for item in result.items:
         assert item["SupplierNumber"] == "1252"
         assert "2022-01-01" <= item["InvoiceDate"] < "2023-01-01"
+
+
+
+
+# ── P5: invoices by purchase order ──
+#
+# Invoices carry PurchaseOrderNumber on the HEADER and it filters
+# server-side, so "which invoices were raised against PO X" is a single
+# selective query. The value is the PO NUMBER (OrderNumber), not
+# POHeaderId — consistent with invoices joining on SupplierNumber rather
+# than SupplierId.
+#
+# Anchors: PO 162034 (Lee Supplies) has invoice 162034inv. PO 162352
+# (POHeaderId 2144) is ordered but never invoiced — a useful negative case.
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_by_purchase_order():
+    """P5: invoices raised against a PO, filtered server-side on
+    PurchaseOrderNumber."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, purchase_order="162034", limit=10)
+    assert isinstance(result, ToolResult)
+    assert len(result.items) >= 1
+    for item in result.items:
+        assert item["PurchaseOrderNumber"] == "162034"
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_by_purchase_order_no_invoices():
+    """A PO with no invoices returns empty — not an error."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, purchase_order="162352", limit=10)
+    assert isinstance(result, ToolResult)
+    assert result.items == []
+
+
+@pytest.mark.asyncio
+async def test_purchase_order_filter_wins_server_clause():
+    """purchase_order is the most selective filter, so it takes the single
+    server q= clause even when a supplier is also given. The supplier is
+    then applied client-side, so results must satisfy BOTH."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client, purchase_order="162034", supplier_name="Lee", limit=10
+        )
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["PurchaseOrderNumber"] == "162034"
+        assert "Lee" in (item.get("Supplier") or "")

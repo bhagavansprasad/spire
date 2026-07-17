@@ -207,25 +207,47 @@ prompt 4 is already covered — only contacts is new.
 
 ---
 
-## P5 — Receipt requests + invoices-by-PO
+## P5 — Received-vs-ordered + invoices-by-PO
 
-**Goal:** Received-versus-ordered via receiving receipts, plus filtering
-invoices by PO.
+**Goal:** Answer "how much of PO X was received vs ordered" and "which
+invoices were raised against PO X".
 
-**Endpoints:**
-- `/receivingReceiptRequests`
-- `/invoices` (new filter: by PO rather than by supplier)
+**Discovery reshaped this phase.** The original plan assumed a
+`/receivingReceiptRequests` endpoint and a hard invoice→PO join. Neither
+holds:
 
-**Catalog prompts:** 3 (received vs ordered for a PO), 5 (invoices raised
-against a PO).
+- `receivingTransactions` — **403 Forbidden** for our user. This is the
+  natural receipts query resource; access would need a receiving role.
+- `receivingReceipts` — **400**: requires ShipmentHeaderId or
+  ReceiptNumber. It is a lookup-by-receipt resource; you cannot query it
+  by PO.
+- `receivingReceiptRequests` — exists with data, but it is an
+  **interface/staging** resource (HeaderInterfaceId, ProcessingStatusCode,
+  submitForApproval action). Its header carries **no PO reference** at all.
+- `purchaseOrderSchedules` — already carries **ReceivedQuantity,
+  BilledQuantity, ShippedQuantity, AcceptedQuantity, ReceivedAmount,
+  BilledAmount** alongside ordered Quantity/Amount. This IS received-vs-
+  ordered, per schedule, on a resource P3 already fetches.
+- `/invoices` — carries **PurchaseOrderNumber on the HEADER** (not just on
+  lines, as assumed). `q=PurchaseOrderNumber=<num>` filters **server-side**
+  (single clause, per the pod rule).
 
-**Notes:** New top-level resource for receipts. Discovery must find the join
-key back to PO (header id vs order number) and confirm which fields filter
-server-side. For prompt 5, confirm the PO reference field on `/invoices`
-(e.g. PO number vs POHeaderId) — the existing invoice tool filters by
-supplier only.
+**Scope (both halves are small; no new endpoint, tool, entity or edge):**
 
----
+- **Prompt 3 (received vs ordered)** — add the received/billed fields to the
+  schedules tool projection and register them as POSchedule
+  `kg_entity_field` rows. The data is already being fetched.
+- **Prompt 5 (invoices by PO)** — one new `kg_entity_filter` row on Invoice
+  (`purchase_order` → server_q on PurchaseOrderNumber) plus the arg on the
+  existing `search_invoices` tool.
+
+**Join key:** the PO **number** (string, e.g. "162034"), not POHeaderId —
+consistent with invoices joining on SupplierNumber rather than SupplierId.
+
+**Anchors:** PO 162034 (Lee Supplies) has invoice 162034inv (830.01). Note
+PO 2144 / 162352 has **no** invoices, so it is not a usable anchor for
+prompt 5.
+
 
 ## P6 — PO aggregates
 

@@ -11,6 +11,10 @@ the most selective single clause via q=, filter remaining clauses in
 Python. Over-fetch is capped at OVERFETCH_LIMIT.
 
 Filters supported:
+- purchase_order: exact match on PurchaseOrderNumber (the PO NUMBER, e.g.
+  "162034" — not POHeaderId). Invoices carry the PO number on the header
+  and it filters server-side. Most selective filter, so it wins the single
+  server q= clause when present.
 - supplier_number: exact match on SupplierNumber
 - supplier_name: substring match (LIKE) on Supplier
 - invoice_date_after: ISO date string; matches invoices on or after this date
@@ -69,6 +73,7 @@ async def _fetch_total_for_clause(
 
 async def search_invoices(
     client: FusionClient,
+    purchase_order: str | None = None,
     supplier_number: str | None = None,
     supplier_name: str | None = None,
     invoice_date_after: str | None = None,
@@ -80,6 +85,8 @@ async def search_invoices(
     """Search Oracle Fusion invoices.
 
     Args:
+        purchase_order: Exact PurchaseOrderNumber, e.g. "162034". This is
+            the PO NUMBER (as shown on the PO), not POHeaderId.
         supplier_number: Exact SupplierNumber, e.g., "1252".
         supplier_name: Substring match on Supplier name.
         invoice_date_after: ISO date "YYYY-MM-DD". Matches invoices on
@@ -100,11 +107,14 @@ async def search_invoices(
           - truncated: True iff we know more records match than returned
     """
     # Pick the most selective filter to send to Fusion via q=.
-    # Priority: exact match (supplier_number) > LIKE > date lower bound.
+    # Priority: purchase_order (one PO) > supplier_number (exact) > LIKE
+    # > date lower bound.
     # invoice_date_before is intentionally never the server clause; it
     # stays a pure client-side filter to keep the truncation logic intact.
     server_clause: str | None = None
-    if supplier_number:
+    if purchase_order:
+        server_clause = f"PurchaseOrderNumber='{purchase_order}'"
+    elif supplier_number:
         server_clause = f"SupplierNumber='{supplier_number}'"
     elif supplier_name:
         server_clause = f"Supplier LIKE '%{supplier_name}%'"
@@ -115,6 +125,7 @@ async def search_invoices(
     needs_client_filter = sum(
         bool(x)
         for x in (
+            purchase_order,
             supplier_number,
             supplier_name,
             invoice_date_after,
@@ -134,6 +145,8 @@ async def search_invoices(
 
     # Apply remaining filters in Python.
     def matches(item: dict) -> bool:
+        if purchase_order and item.get("PurchaseOrderNumber") != purchase_order:
+            return False
         if supplier_number and item.get("SupplierNumber") != supplier_number:
             return False
         if supplier_name and supplier_name.lower() not in (item.get("Supplier") or "").lower():

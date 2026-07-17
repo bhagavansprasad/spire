@@ -13,10 +13,11 @@ Branch convention: `po-phase-N-description`.
 |---|---|---|---|---|
 | P1 | Dedupe + discovery scope | `po-phase-1-dedupe` | done (docs-only) | — |
 | P2 | PO detail + lines + projection | `po-phase-2-po-lines` | merged | merged to master |
-| P3 | PO schedules (flat endpoint, one-hop) | `po-phase-3-schedules` | not started | — |
+| P3 | PO schedules (flat endpoint, one-hop) | `po-phase-3-schedules` | merged | merged to master |
 | P3b | PO distributions (multi-field iteration) | `po-phase-3b-distributions` | merged | merged to master |
 | P4 | Supplier contacts | `po-phase-4-supplier-contacts` | merged | merged to master |
-| P5 | Receipt requests + invoices-by-PO | `po-phase-5-receipt-requests` | not started | — |
+| P5 | Received-vs-ordered + invoices-by-PO | `po-phase-5-received-invoices-by-po` | in progress | — |
+| P5b | Synthesizer: narrate child entities | `po-phase-5b-synthesizer` | not started | — |
 | P6 | PO aggregates | `po-phase-6-aggregates` | not started | — |
 
 ---
@@ -25,10 +26,15 @@ Branch convention: `po-phase-N-description`.
 
 - P1 dedupe result feeds back into the plan — P2–P6 scope may tighten.
 - P3 was split: schedules (flat `/purchaseOrderSchedules` endpoint, a clean
-  one-hop fetch by POHeaderId) ships as P3. Distributions became P3b because
-  it has no flat endpoint — it lives only on the deep nested path and needs
-  three ids per parent row (POHeaderId, POLineId, LineLocationId). Iterating
-  it over schedules requires multi-field iteration, which Block 3 does not
-  yet support (it threads one `$iteration_value` per parent). P3b is blocked
-  on that planner enhancement.
+  one-hop fetch by POHeaderId) shipped as P3. Distributions became P3b
+  because they have no flat endpoint — only the deep nested path, needing
+  three ids per parent row (POHeaderId, POLineId, LineLocationId). That
+  required multi-field iteration, which P3b added to the executor and
+  planner as an additive branch. Both are merged.
+- P5b (synthesizer) is sequenced BEFORE P6. Every phase since P2 fetches
+  child data correctly but the synthesized prose ignores it — lines,
+  schedules, contacts, distributions and received-vs-ordered are all in the
+  outputs yet absent from the answer. Several catalog prompts (2, 3, 4, 10,
+  14) are therefore data-complete but answer-incomplete. P6's value is
+  entirely prose, so the synthesizer is fixed first.
 - Keep rows short; update status as each phase moves.

@@ -62,7 +62,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 77,
+        "expected_rows": 84,
     },
     {
         "name": "kg_edge",
@@ -139,7 +139,7 @@ TABLES: list[dict] = [
                "filter_field, filter_op, notes "
                "FROM kg_entity_filter ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 16,
+        "expected_rows": 17,
     },
     {
         "name": "kg_edge_tool",
