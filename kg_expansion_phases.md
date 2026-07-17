@@ -37,4 +37,12 @@ Branch convention: `po-phase-N-description`.
   outputs yet absent from the answer. Several catalog prompts (2, 3, 4, 10,
   14) are therefore data-complete but answer-incomplete. P6's value is
   entirely prose, so the synthesizer is fixed first.
+- **Known test failures (not bugs).** Three supplier tests assert
+  `truncated is False` on an empty result and fail on pods with more
+  suppliers than OVERFETCH_LIMIT (500): `search_suppliers` over-fetches,
+  examines 500, finds no match, and honestly reports truncated=True
+  ("there may be more I didn't examine"). The code is correct; the tests
+  encode a data-volume assumption that held on esll-dev37 and doesn't on
+  eqjz. Fixing them properly is part of the deferred test-portability work
+  — do not "fix" by weakening the assertion or raising the cap.
 - Keep rows short; update status as each phase moves.
