@@ -356,22 +356,60 @@ output-shaped: the data is already there. Verification is qualitative —
 
 ## P6 — PO aggregates
 
-**Goal:** Count, sum, ranking, concentration analysis over POs.
+**Goal:** Every PO aggregate prompt in the catalog works. Nothing is dropped —
+the split below is about landable commits, not scope.
 
-**Endpoints:**
-- `/purchaseOrders` (+ client-side aggregation)
-- `/purchaseOrders` + `/invoices` (invoiced vs ordered)
+**The architectural rule (from `aggregate_invoices.py`).** "Grouping and the
+measure are FIXED BY IDENTITY — they are not parameters. A different grouping
+or measure is a different tool, never a flag on this one. This is the line that
+keeps the aggregation layer a set of bounded tools rather than a generic
+engine." P6 obeys this: each distinct grouping/measure is its own tool.
 
-**Catalog prompts:** 7 (status + total value), 17 (high-level summary),
-18 (committed spend + open count), 19 (top 5 suppliers by value),
-20 (stale POs), 21–24 (invoiced vs ordered, health summary, concentration
-risk).
+Judged against that rule, the catalog's prompts are three kinds of work:
 
-**Notes:** Page-limit cap (~200 on POs, ~25 on suppliers) — aggregates scan
-a bounded window only; state this honestly in output. Reuse the aggregation
-pattern from Phase 7 / `aggregate_invoices.py`.
+| Prompt | Grouping | Measure | Kind |
+|---|---|---|---|
+| 19 — top N suppliers by PO value | supplier | sum(Ordered) | single-source aggregation |
+| 7 — PO count + total value by status | status | count + sum | single-source aggregation |
+| 18 — committed spend + open PO count | none | sum + count | single-source aggregation |
+| 20 — stale POs | none | none — a date filter + list | PO list query, not aggregation |
+| 21-24 — invoiced vs ordered, concentration | two sources | comparison | two-source join |
 
----
+### Commit 1 — single-source aggregations (7, 18, 19)
+
+Three tools mirroring `aggregate_invoices_by_supplier`: page the source, group,
+measure, return a small structured result; the LLM never does the arithmetic.
+Each gets a synthesizer shape alongside `supplier_spend_ranking`.
+
+- `aggregate_purchase_orders_by_supplier` — group by supplier, sum `Ordered`,
+  rank, top_n. Near-twin of the invoice tool; different source and measure.
+- `aggregate_purchase_orders_by_status` — group by `StatusCode`, count + sum.
+- `summarize_open_purchase_orders` — no grouping; committed spend + open count.
+
+### Commit 2 — stale POs (20) and two-source comparison (21-24)
+
+**Prompt 20 needs a PO date filter.** `search_purchase_orders` cannot filter by
+date today, and the planner guard refuses PO-rooted queries without an id.
+**Decision: add a PO date filter and let it satisfy the guard** — exactly as
+P5's `purchase_order` filter now satisfies the Invoice guard. The rule becomes
+"PO queries need an id OR a date filter", so a bounded PO list is allowed while
+an unbounded one still refuses.
+
+**Prompts 21-24 need a two-source join**: fetch POs, fetch invoices, match on
+`PurchaseOrderNumber` (the P5 join key — a string, not POHeaderId), compare
+ordered against invoiced. Concentration risk is that ranking plus a stated
+judgement; the judgement must come from the synthesizer phrasing computed
+numbers, never from the LLM doing arithmetic.
+
+**Both commits land on one branch, one PR.**
+
+### Honest constraints
+- **Bounded window.** `aggregate_invoices` pages to MAX_PAGES and flags the
+  result truncated at the cap; sums are then lower bounds. The PO tools inherit
+  this. A "total value" answer is honest only about what was examined — the
+  synthesizer must say so when truncated.
+- **Composite `q=` fails**, so each tool sends one selective server clause and
+  filters the rest client-side, like every other tool here.
 
 ## Open items (logged, not blocking)
 
