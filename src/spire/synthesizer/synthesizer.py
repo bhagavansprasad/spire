@@ -417,6 +417,96 @@ class SupplierSpendRankingResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class SupplierPOValueRow(BaseModel):
+    """One supplier in a PO-value ranking (P6 aggregation).
+
+    Note supplier_ID, not supplier_number: purchase orders do not carry a
+    SupplierNumber (the PO header has SupplierId and Supplier only), so
+    this ranking cannot reuse SupplierSpendRow. Validated against the
+    ranking the executor produced — the LLM must not invent or reorder
+    suppliers."""
+
+    supplier_name: str = Field(description="The supplier's display name.")
+    supplier_id: int = Field(
+        description="The supplier's SupplierId (numeric key). Must appear "
+        "in the ranking data."
+    )
+    total_ordered: float = Field(
+        description="Total committed PO value for this supplier, copied "
+        "exactly from the ranking data. Never recompute."
+    )
+    po_count: int = Field(
+        description="Number of purchase orders for this supplier, copied "
+        "from the ranking data."
+    )
+
+
+class SupplierPOValueRankingResponse(BaseModel):
+    """Aggregation response: suppliers ranked by committed PO value."""
+
+    summary: str = _SUMMARY_FIELD
+    suppliers: list[SupplierPOValueRow] = Field(
+        default_factory=list,
+        description="Suppliers in ranked order (highest committed value "
+        "first), copied from the ranking data. Do not reorder, add, or "
+        "drop suppliers.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+class POStatusRow(BaseModel):
+    """One status bucket in a PO status breakdown (P6 aggregation)."""
+
+    status: str = Field(
+        description="The StatusCode, copied exactly (e.g. 'OPEN', "
+        "'CLOSED FOR RECEIVING'). Note the pod uses spaces, not "
+        "underscores."
+    )
+    po_count: int = Field(
+        description="Number of POs in this status, copied from the data."
+    )
+    total_ordered: float = Field(
+        description="Total committed value in this status, copied exactly. "
+        "Never recompute."
+    )
+
+
+class POStatusBreakdownResponse(BaseModel):
+    """Aggregation response: PO count and value broken down by status."""
+
+    summary: str = _SUMMARY_FIELD
+    total_pos: int = Field(
+        description="Grand count across all statuses, copied from the data."
+    )
+    total_ordered: float = Field(
+        description="Grand total value across all statuses, copied exactly."
+    )
+    statuses: list[POStatusRow] = Field(
+        default_factory=list,
+        description="One row per status, value descending, copied from the "
+        "data. Do not reorder, add, drop, or merge statuses.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+class OpenPOSummaryResponse(BaseModel):
+    """Aggregation response: committed spend and open-PO count (P6)."""
+
+    summary: str = _SUMMARY_FIELD
+    po_count: int = Field(
+        description="Number of open POs, copied from the data."
+    )
+    total_ordered: float = Field(
+        description="Total committed value across the open POs, copied "
+        "exactly. Never recompute."
+    )
+    supplier_count: int = Field(
+        description="Number of distinct suppliers with an open PO, copied "
+        "from the data."
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class CountResponse(BaseModel):
     """Count response: the size of a (possibly filtered) entity set.
 
@@ -454,6 +544,42 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "Address": AddressResponse,
     "PurchaseOrder": PurchaseOrderResponse,
 }
+
+
+# Aggregation responses are selected by the SHAPE TAG the tool stamps on
+# its result, not by target_entity (an aggregation Intent carries an
+# aggregate block instead of a target entity). The executor puts that
+# result under the "aggregation" bucket. Mirrors SYNTHESIS_SCHEMAS above:
+# one entry per shape, so a new aggregation tool is a new row here rather
+# than another branch in the routing.
+AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
+    "supplier_spend_ranking": (
+        SupplierSpendRankingResponse,
+        "SupplierSpendRanking",
+    ),
+    "supplier_po_value_ranking": (
+        SupplierPOValueRankingResponse,
+        "SupplierPOValueRanking",
+    ),
+    "po_status_breakdown": (POStatusBreakdownResponse, "POStatusBreakdown"),
+    "open_po_summary": (OpenPOSummaryResponse, "OpenPOSummary"),
+}
+
+
+def _aggregation_shape(outputs: dict[str, list[dict]]) -> str | None:
+    """Return the shape tag of an aggregation result, or None if the
+    outputs are an entity list rather than an aggregation.
+
+    The aggregation tools each stamp their result with a 'shape'; the
+    executor wraps it in a one-element list under 'aggregation'."""
+    bucket = outputs.get("aggregation")
+    if not bucket:
+        return None
+    first = bucket[0]
+    if not isinstance(first, dict):
+        return None
+    shape = first.get("shape")
+    return shape if isinstance(shape, str) else None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -537,10 +663,16 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                         address_ids.add(na)
             # Feature 7: an aggregation ranking carries its suppliers
             # nested under "rows", each with a lowercase "supplier_number".
+            # P6: the PO-value ranking's rows carry "supplier_id" instead
+            # (POs have no supplier number), so harvest both — otherwise
+            # every id in a PO ranking looks invented and the guard fires
+            # on legitimate data.
             if isinstance(item.get("rows"), list):
                 for row in item["rows"]:
                     if (rn := row.get("supplier_number")) is not None:
                         supplier_numbers.add(rn)
+                    if (rsid := row.get("supplier_id")) is not None:
+                        supplier_ids.add(rsid)
 
     return {
         "supplier_ids": supplier_ids,
@@ -663,6 +795,46 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "name the top one or two with their totals. If 'truncated' is true, "
         "say plainly that the totals are based on a sample of invoices and "
         "may understate actual spend."
+    ),
+    "SupplierPOValueRanking": (
+        "This is a SUPPLIER PO-VALUE RANKING (an aggregation). The data has "
+        "a single 'aggregation' bucket containing one ranking object with a "
+        "'rows' list, already sorted by committed value (highest first). For "
+        "each row, emit one entry under 'suppliers' in the SAME order, "
+        "copying supplier (as supplier_name), supplier_id, total_ordered and "
+        "po_count EXACTLY. Note these carry supplier_ID, not supplier_number "
+        "— purchase orders do not have a supplier number. Do not reorder, "
+        "recompute, add, or drop suppliers, and do no arithmetic — the "
+        "totals are already computed. In the summary, say how many suppliers "
+        "were ranked (total_suppliers), name the top one or two with their "
+        "committed values, and state the status filter if 'status' is set "
+        "(e.g. 'open POs only'). If 'truncated' is true, say plainly that "
+        "the totals are based on a sample of purchase orders and may "
+        "understate the true committed value."
+    ),
+    "POStatusBreakdown": (
+        "This is a PO STATUS BREAKDOWN (an aggregation). The data has a "
+        "single 'aggregation' bucket containing one object with a 'rows' "
+        "list, already sorted by value (highest first), plus total_pos and "
+        "total_ordered grand figures. Copy total_pos and total_ordered "
+        "EXACTLY into the response. For each row, emit one entry under "
+        "'statuses' in the SAME order, copying status, po_count and "
+        "total_ordered EXACTLY. Do not reorder, recompute, add, drop, or "
+        "MERGE statuses — 'CLOSED', 'CLOSED FOR RECEIVING' and 'CLOSED FOR "
+        "INVOICING' are genuinely different states and must stay separate. "
+        "Do no arithmetic. In the summary, state the grand total count and "
+        "value, then the two or three largest statuses by value. If "
+        "'truncated' is true, say plainly that the figures cover only the "
+        "purchase orders examined."
+    ),
+    "OpenPOSummary": (
+        "This is an OPEN-PO SUMMARY (an aggregation). The data has a single "
+        "'aggregation' bucket containing one object with po_count, "
+        "total_ordered and supplier_count. Copy all three EXACTLY into the "
+        "response and do no arithmetic. In the summary, state the committed "
+        "value, how many open purchase orders it spans, and across how many "
+        "suppliers. If 'truncated' is true, say plainly that the figures "
+        "cover only the purchase orders examined."
     ),
 }
 
@@ -830,12 +1002,52 @@ def _validate_supplier_spend_ranking(
     _raise_if_bad(parts)
 
 
+def _validate_supplier_po_value_ranking(
+    response: SupplierPOValueRankingResponse, valid: dict[str, set]
+) -> None:
+    """Cross-reference the ranking's supplier_ids against the executor's
+    data.
+
+    Checks supplier_IDS, not supplier_numbers — purchase orders carry no
+    SupplierNumber, which is exactly why this ranking has its own row type
+    rather than reusing SupplierSpendRow."""
+    bad = [
+        r.supplier_id
+        for r in response.suppliers
+        if r.supplier_id not in valid["supplier_ids"]
+    ]
+    parts = []
+    if bad:
+        parts.append(f"supplier_ids={bad}")
+    _raise_if_bad(parts)
+
+
+def _validate_no_ids(response: BaseModel, valid: dict[str, set]) -> None:
+    """No-op validator for aggregation shapes that carry no identifiers.
+
+    The status breakdown and the open-PO summary report only counts and
+    sums — there is no id in them to invent, so there is nothing to
+    cross-reference. Registered explicitly rather than left out: the
+    dispatch raises for unregistered response types (fail loud rather
+    than skip validation silently), so "nothing to check" must be stated,
+    not implied by absence.
+
+    The numbers themselves are not validated here. They cannot be: they
+    are computed by the tool, and the prompt tells the LLM to copy them
+    exactly. A miscopied total would slip through — the guard against
+    that is the instruction plus zero-temperature, not this function."""
+    return
+
+
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
     InvoiceResponse: _validate_invoice,
     AddressResponse: _validate_address,
     PurchaseOrderResponse: _validate_purchase_order,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
+    SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
+    POStatusBreakdownResponse: _validate_no_ids,
+    OpenPOSummaryResponse: _validate_no_ids,
 }
 
 
@@ -955,9 +1167,16 @@ def synthesize_response(
     # instead), so select the schema from the data shape. The executor
     # places the ranking under "aggregation" as a single object whose
     # "shape" identifies it.
-    if _is_supplier_spend_ranking(outputs):
-        schema: type[BaseModel] = SupplierSpendRankingResponse
-        prompt_key = "SupplierSpendRanking"
+    shape = _aggregation_shape(outputs)
+    if shape is not None:
+        entry = AGGREGATION_SCHEMAS.get(shape)
+        if entry is None:
+            raise UnsupportedEntityError(
+                f"No synthesizer schema for aggregation shape {shape!r}. "
+                f"Supported: {sorted(AGGREGATION_SCHEMAS)}."
+            )
+        schema: type[BaseModel] = entry[0]
+        prompt_key = entry[1]
     else:
         schema = SYNTHESIS_SCHEMAS.get(target_entity)
         if schema is None:
