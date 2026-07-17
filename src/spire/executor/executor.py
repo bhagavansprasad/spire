@@ -1,3 +1,4 @@
+
 """
 Executor for the KG-driven path (Architecture Option 3).
 
@@ -8,6 +9,13 @@ Scope (current):
 - Non-iterating steps (A.1)
 - Iterating steps with $iteration_value substitution and
   output_dedupe_by handling (A.2)
+- Multi-field iterating steps: when iterate_over declares a "fields"
+  map ({tool_arg: parent_field}) instead of a single "field", the step
+  carries several sentinel-valued args and each iteration substitutes
+  ALL of them from one parent row. Needed where a resource requires
+  more than one id (PO distributions need POHeaderId + POLineId +
+  LineLocationId). Purely additive: steps declaring "field" run the
+  original single-field path untouched.
 - Negation-by-absence steps (filter_source_when_empty=True): for each
   source item, call the tool; KEEP the source item iff the call
   returns an empty list. Output is the FILTERED source items, not
@@ -225,21 +233,35 @@ def _find_substitution_key(tool_args: dict[str, Any]) -> str:
 
 def _collect_iteration_values(
     outputs: dict[str, list[dict]],
-    iterate_over: dict[str, str],
+    iterate_over: dict[str, Any],
     dedupe: bool,
 ) -> list[Any]:
     """
     Extract the values to iterate over from a previous step's output.
 
-    Pulls iterate_over.field from each item in
-    outputs[iterate_over.from_step]. Drops None values. If dedupe is
-    True, dedupes while preserving order of first occurrence.
+    Two shapes, dispatched on what iterate_over declares:
+
+    SINGLE-FIELD (the default, unchanged): iterate_over carries
+    "field". Pulls that one field from each item in
+    outputs[iterate_over.from_step], returning a list of scalars.
+    Drops None values.
+
+    MULTI-FIELD: iterate_over carries "fields", a {tool_arg:
+    parent_field} map. Returns a list of DICTS — one per source item,
+    each {tool_arg: value} — so a step can pass several parent fields
+    into one tool call. Used where a resource needs more than one id
+    (e.g. PO distributions need POHeaderId + POLineId +
+    LineLocationId, all carried on the parent schedule row). An item
+    missing ANY required field is dropped, mirroring the single-field
+    None-drop.
+
+    If dedupe is True, dedupes while preserving order of first
+    occurrence (multi-field dedupes on the tuple of values).
 
     Raises:
         RuntimeError if from_step is not in outputs (planner bug).
     """
     from_step = iterate_over["from_step"]
-    field = iterate_over["field"]
     if from_step not in outputs:
         raise RuntimeError(
             f"Iterating step references unknown output {from_step!r}. "
@@ -248,6 +270,36 @@ def _collect_iteration_values(
         )
 
     source_items = outputs[from_step]
+
+    # ---- Multi-field branch ----
+    fields_map = iterate_over.get("fields")
+    if fields_map:
+        multi_values: list[dict] = []
+        for item in source_items:
+            arg_values = {
+                arg: item.get(parent_field)
+                for arg, parent_field in fields_map.items()
+            }
+            # Drop the item if ANY required field is absent — we cannot
+            # build a complete call without every id.
+            if any(v is None for v in arg_values.values()):
+                continue
+            multi_values.append(arg_values)
+
+        if not dedupe:
+            return multi_values
+
+        seen_keys: set[tuple] = set()
+        deduped_multi: list[dict] = []
+        for av in multi_values:
+            key = tuple(av[arg] for arg in sorted(av))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                deduped_multi.append(av)
+        return deduped_multi
+
+    # ---- Single-field branch (unchanged) ----
+    field = iterate_over["field"]
     raw_values = [item.get(field) for item in source_items]
     # Drop None: an item that didn't carry the field shouldn't be
     # iterated. This is a real condition (Fusion responses can be
@@ -329,14 +381,26 @@ async def _execute_iterating_step(
             "is None."
         )
 
-    substitution_key = _find_substitution_key(step.tool_args)
+    # Multi-field steps declare iterate_over.fields and carry SEVERAL
+    # sentinel-valued args; single-field steps carry exactly one.
+    # _find_substitution_key enforces the one-sentinel contract, so only
+    # call it on the single-field path.
+    multi_field = bool(step.iterate_over.get("fields"))
+    substitution_key = (
+        None if multi_field else _find_substitution_key(step.tool_args)
+    )
     dedupe = step.output_dedupe_by is not None
     values = _collect_iteration_values(outputs, step.iterate_over, dedupe)
 
     aggregated: list[dict] = []
     for value in values:
         per_iter_args = dict(step.tool_args)  # shallow copy is enough
-        per_iter_args[substitution_key] = value
+        if multi_field:
+            # value is a {tool_arg: value} dict — merge it in, replacing
+            # every sentinel-valued arg at once.
+            per_iter_args.update(value)
+        else:
+            per_iter_args[substitution_key] = value
 
         call_result = await session.call_tool(step.tool_name, per_iter_args)
         items = _parse_tool_result(call_result)
@@ -546,4 +610,6 @@ async def execute_plan(
         outputs[step.output_name] = items
 
     return outputs, truncation_by_step
+
+
 

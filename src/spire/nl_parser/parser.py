@@ -2,6 +2,7 @@
 
 
 
+
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -153,6 +154,11 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "- 'and its schedules' / 'show its schedules' / 'with the shipment "
     "schedules' on a purchase-order question -> add 'POSchedule' to include "
     "(alongside the 'by_id' filter).\n"
+    "- 'and its distributions' / 'show the distribution accounts' / 'what "
+    "accounts is it booked to' on a purchase-order question -> add BOTH "
+    "'POSchedule' AND 'PODistribution' to include, in that order "
+    "(alongside the 'by_id' filter). Distributions hang off schedules, so "
+    "the schedule hop is always needed to reach them.\n"
     "- 'contacts for supplier X' / 'show supplier X and its contacts' / "
     "'who are the contacts for X' / 'with the contacts' -> target_entity "
     "'Supplier' with a 'name_fragment' filter whose value is the supplier "
@@ -366,6 +372,8 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
+
 
 
 

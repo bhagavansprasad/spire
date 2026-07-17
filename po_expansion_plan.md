@@ -94,7 +94,7 @@ Amount (not Ordered), ShipToLocation (not ShipToLocationCode).
 
 ---
 
-## P3b — PO distributions (design; blocked on planner work)
+## P3b — PO distributions  ✓ built
 
 **Goal:** Distribution accounts (charge / accrual / variance) per schedule.
 
@@ -105,7 +105,7 @@ Amount (not Ordered), ShipToLocation (not ShipToLocationCode).
 
 **Catalog prompts:** 14 (distribution accounts behind a PO's schedules).
 
-**Blocker.** The nested path needs THREE ids per parent schedule row
+**The problem (now solved).** The nested path needs THREE ids per parent schedule row
 (POHeaderId, POLineId, LineLocationId), all carried on each schedule row (P3
 already projects POLineId and LineLocationId for this). The natural traversal
 iterates over a PO's schedules, passing three fields per row to the tool. But
@@ -170,9 +170,9 @@ surface distributions in the answer.
 **Executor value shape.** **Chosen: list of dicts** for the multi-field case —
 simplest, smallest diff.
 
-**Tripwires.** entity 10→11, field 61→74, edge 9→10, edge_tool 8→9, vocab
+**Tripwires.** entity 10→11, field 61→77, edge 9→10, edge_tool 8→9, vocab
 69→71, plus the entity-names test and the new `iter_fields_json` column in
-the CREATE.
+the CREATE. (16 distribution fields registered, not the ~13 first estimated.)
 
 **Regression (load-bearing).** Rerun ALL existing includes (lines, schedules,
 contacts) end to end AND the full suite, to prove the single-field path is

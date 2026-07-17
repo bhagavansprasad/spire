@@ -19,6 +19,7 @@ Tools currently exposed:
 - get_purchase_order_lines
 - get_purchase_order_schedules
 - get_supplier_contacts
+- get_purchase_order_distributions
 """
 
 from fastmcp import Context, FastMCP
@@ -52,6 +53,9 @@ from spire.mcp_server.tools.purchase_order_schedules import (
 )
 from spire.mcp_server.tools.supplier_contacts import (
     get_supplier_contacts as _get_supplier_contacts,
+)
+from spire.mcp_server.tools.purchase_order_distributions import (
+    get_purchase_order_distributions as _get_purchase_order_distributions,
 )
 
 
@@ -445,6 +449,45 @@ async def get_supplier_contacts(
     async with FusionClient(_persona) as client:
         result = await _get_supplier_contacts(
             client, supplier_id=supplier_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_purchase_order_distributions(
+    po_header_id: int,
+    po_line_id: int,
+    line_location_id: int,
+    limit: int = 25,
+) -> dict:
+    """Fetch the distribution accounts of one PO schedule.
+
+    Use this for "show PO 2144 and its distributions" or "what accounts
+    is this PO booked to". Distributions are the deepest PO detail: the
+    charge, accrual and variance accounts a schedule's amount is booked
+    to. All three ids come from the parent schedule row (see
+    get_purchase_order_schedules), because the distributions resource
+    exists only on the deep nested path.
+
+    Args:
+        po_header_id: The numeric POHeaderId of the PO.
+        po_line_id: The numeric POLineId of the line.
+        line_location_id: The numeric LineLocationId (schedule id).
+        limit: Max distribution records to return (default 25).
+
+    Returns:
+        A dict with the schedule's distributions: DistributionNumber,
+        POChargeAccount, POAccrualAccount, POVarianceAccount,
+        DeliverToLocationCode, Percentage, Quantity, Ordered, Total and
+        Status per distribution.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_purchase_order_distributions(
+            client,
+            po_header_id=po_header_id,
+            po_line_id=po_line_id,
+            line_location_id=line_location_id,
+            limit=limit,
         )
         return result.to_dict()
 

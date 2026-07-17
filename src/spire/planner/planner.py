@@ -1,6 +1,7 @@
 
 
 
+
 """
 Planner for the KG-driven path (Architecture Option 3).
 
@@ -64,6 +65,11 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "get_purchase_order_schedules": "po_header_id",
     # P4: supplier contacts, per-supplier child expansion by SupplierId.
     "get_supplier_contacts": "supplier_id",
+    # P3b: PO distributions. Multi-field iteration (needs three ids), so
+    # Block 3 builds its args from the edge's iter_fields map rather than
+    # this table. Registered anyway for any single-arg reader; the primary
+    # id is the schedule's LineLocationId.
+    "get_purchase_order_distributions": "line_location_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -446,7 +452,14 @@ def find_edge(from_entity: str, to_entity: str) -> dict[str, Any]:
 
     Returns a dict with keys:
         edge_name, from_join_field, to_join_field,
-        cardinality, server_filter_rule, traversal_hint, notes
+        cardinality, server_filter_rule, traversal_hint, notes,
+        iter_fields
+
+    ``iter_fields`` is the parsed iter_fields_json column: a
+    {tool_arg: parent_field} map for edges whose traversal needs SEVERAL
+    parent fields per call (e.g. HAS_DISTRIBUTION needs POHeaderId,
+    POLineId and LineLocationId). It is None for every single-field
+    edge, which is all of them except HAS_DISTRIBUTION.
 
     Raises ``KeyError`` if no edge connects from_entity to to_entity.
     Note: edges are directional. find_edge('Supplier', 'PurchaseOrder')
@@ -457,7 +470,8 @@ def find_edge(from_entity: str, to_entity: str) -> dict[str, Any]:
         cursor.execute(
             """
             SELECT edge_name, from_join_field, to_join_field,
-                   cardinality, server_filter_rule, traversal_hint, notes
+                   cardinality, server_filter_rule, traversal_hint, notes,
+                   iter_fields_json
             FROM kg_edge
             WHERE from_entity = :from_entity
               AND to_entity   = :to_entity
@@ -480,6 +494,7 @@ def find_edge(from_entity: str, to_entity: str) -> dict[str, Any]:
         server_filter_rule,
         traversal_hint,
         notes,
+        iter_fields_json,
     ) = row
     return {
         "edge_name": edge_name,
@@ -489,6 +504,7 @@ def find_edge(from_entity: str, to_entity: str) -> dict[str, Any]:
         "server_filter_rule": server_filter_rule,
         "traversal_hint": traversal_hint,
         "notes": notes,
+        "iter_fields": json.loads(iter_fields_json) if iter_fields_json else None,
     }
 
 
@@ -848,15 +864,32 @@ def generate_plan(
                 f"Edge {edge['edge_name']!r} has no tool binding; "
                 "cannot satisfy include."
             )
+        # Most edges traverse on ONE parent field -> one tool arg. A few
+        # need SEVERAL parent fields per call (e.g. HAS_DISTRIBUTION: the
+        # nested distributions path needs POHeaderId, POLineId and
+        # LineLocationId, all carried on the parent schedule row). Those
+        # edges declare an iter_fields map in the KG; emit the multi-field
+        # step shape for them. Every other edge (iter_fields is None) emits
+        # the original single-field shape unchanged.
+        iter_fields = edge.get("iter_fields")
+        if iter_fields:
+            step_tool_args = {arg: "$iteration_value" for arg in iter_fields}
+            step_iterate_over = {
+                "from_step": previous_output_name,
+                "fields": iter_fields,
+            }
+        else:
+            step_tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
+            step_iterate_over = {
+                "from_step": previous_output_name,
+                "field": edge["from_join_field"],
+            }
         plan.append(
             Step(
                 step_id=step_id,
                 tool_name=tool,
-                tool_args={_arg_name_for_tool(tool): "$iteration_value"},
-                iterate_over={
-                    "from_step": previous_output_name,
-                    "field": edge["from_join_field"],
-                },
+                tool_args=step_tool_args,
+                iterate_over=step_iterate_over,
                 client_filters=[],
                 output_name=_make_output_name(include_entity, None, []),
                 output_dedupe_by=edge["from_join_field"],
@@ -1391,6 +1424,8 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
+
 
 
 

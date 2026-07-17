@@ -276,6 +276,18 @@ def _format_plan(plan: Plan) -> str:
         lines.append(f"    tool_args:      {step.tool_args}")
         if step.iterate_over is None:
             lines.append("    iterate_over:   (none — runs once)")
+        elif step.iterate_over.get("fields"):
+            # Multi-field iteration: several parent fields feed one call
+            # (e.g. distributions need POHeaderId + POLineId +
+            # LineLocationId). Render arg=field pairs.
+            pairs = ", ".join(
+                f"{arg}={parent_field}"
+                for arg, parent_field in step.iterate_over["fields"].items()
+            )
+            lines.append(
+                f"    iterate_over:   {step.iterate_over['from_step']}"
+                f".{{{pairs}}}"
+            )
         else:
             lines.append(
                 f"    iterate_over:   {step.iterate_over['from_step']}"

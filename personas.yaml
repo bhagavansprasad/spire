@@ -1,11 +1,21 @@
 default_dev:
   fusion:
-    base_url: "https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com"
-    username: "mskrishna.om@gmail.com"
-    password: "KS4j%j#5"
+    # base_url: "https://fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com"
+    # username: "mskrishna.om@gmail.com"
+    # password: "KS4j%j#5"
+    
+    # base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
+    # username: "Jared.White"
+    # password: "jO#R5G8g"
+
+    base_url: "https://eqjz.ds-fa.oraclepdemos.com"
+    username: "Jasper.Ashford"
+    password: "hu*4HiQO"
+
     auth_type: "basic"
   oracle:
     dsn: "localhost:1521/FREEPDB1"
     username: "spire"
     password: "jnjnuh"
-    
+
+

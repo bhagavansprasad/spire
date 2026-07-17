@@ -8,3 +8,6 @@ What is purchase order 2144 about?
 
 # — PO schedules (P3) —
 Show PO 2144 and its schedules
+
+# — PO distributions (P3b) —
+Show PO 680869 and its distributions
