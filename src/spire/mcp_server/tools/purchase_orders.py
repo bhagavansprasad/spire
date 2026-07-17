@@ -12,7 +12,23 @@ Filters supported:
 - supplier_name: substring match on Supplier
 - supplier_id: exact match on SupplierId (numeric)
 - status: exact match on StatusCode (e.g., "OPEN", "CLOSED")
+- created_before: CreationDate < this ISO date (exclusive upper bound)
+- created_since: CreationDate >= this ISO date (inclusive lower bound)
 - limit: max records returned after client-side filtering (default 25)
+
+DATE FILTERING — READ THIS
+The date filters work on **CreationDate, not OrderDate**. OrderDate is
+projectable but NOT queryable on this pod ("The attribute(s) [OrderDate]
+are not queriable", HTTP 400). CreationDate is queryable. They are minutes
+apart in the demo data but they are not the same thing — a PO can be
+created well before it is ordered. The params are named for what they
+actually filter rather than for what a "stale PO" question is really
+asking.
+
+Unusually, BOTH bounds work server-side standalone (verified: `>=` and
+`<` each return rows). They still cannot be composited — the pod's
+single-clause rule applies as everywhere else — so one bound goes to the
+server and the other is filtered client-side.
 
 Returns a ToolResult so callers can distinguish a complete result from
 a capped subset.
@@ -63,6 +79,8 @@ async def search_purchase_orders(
     supplier_name: str | None = None,
     supplier_id: int | None = None,
     status: str | None = None,
+    created_before: str | None = None,
+    created_since: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion purchase orders.
@@ -70,8 +88,16 @@ async def search_purchase_orders(
     Args:
         supplier_name: Substring match on Supplier name.
         supplier_id: Exact SupplierId match (numeric).
-        status: Exact StatusCode match. Common values: "OPEN", "CLOSED",
-            "INCOMPLETE", "CANCELED".
+        status: Exact StatusCode match. The pod has eleven values —
+            OPEN, CLOSED, CLOSED FOR RECEIVING, REJECTED, PENDING
+            APPROVAL, WITHDRAWN, INCOMPLETE, CLOSED FOR INVOICING,
+            PENDING SIGNATURE, CANCELED, ON HOLD (spaces, not
+            underscores).
+        created_before: ISO "YYYY-MM-DD". CreationDate strictly BEFORE
+            this date. This is the bound a "stale POs / older than N
+            months" question needs.
+        created_since: ISO "YYYY-MM-DD". CreationDate on or after this
+            date.
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -81,17 +107,34 @@ async def search_purchase_orders(
           - limit_applied: the limit value used
           - truncated: True iff we know more records match than returned
     """
-    # Priority for server-side clause: exact id > status > LIKE.
+    # Only ONE clause can go to the server (the pod cannot AND-combine),
+    # so pick the most selective. Priority: exact id > status > dates >
+    # LIKE. The dates sit above LIKE because a stale-PO question usually
+    # carries nothing else, and without a server clause it would page the
+    # whole collection (~3,362 POs). They sit below status because status
+    # is an exact match and cheaper. Whichever bound loses the slot is
+    # still applied client-side.
     server_clause: str | None = None
     if supplier_id is not None:
         server_clause = f"SupplierId={supplier_id}"
     elif status:
         server_clause = f"StatusCode='{status}'"
+    elif created_before:
+        server_clause = f"CreationDate < '{created_before}'"
+    elif created_since:
+        server_clause = f"CreationDate >= '{created_since}'"
     elif supplier_name:
         server_clause = f"Supplier LIKE '%{supplier_name}%'"
 
     needs_client_filter = sum(
-        bool(x) for x in (supplier_name, supplier_id is not None, status)
+        bool(x)
+        for x in (
+            supplier_name,
+            supplier_id is not None,
+            status,
+            created_before,
+            created_since,
+        )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
 
@@ -108,6 +151,13 @@ async def search_purchase_orders(
         if status and item.get("StatusCode") != status:
             return False
         if supplier_name and supplier_name.lower() not in (item.get("Supplier") or "").lower():
+            return False
+        # Dates are ISO timestamps ("2014-03-04T05:26:50+00:00"); a
+        # date-only bound compares correctly as a string prefix.
+        created = item.get("CreationDate") or ""
+        if created_before and created >= created_before:
+            return False
+        if created_since and created < created_since:
             return False
         return True
 
