@@ -17,7 +17,7 @@ Branch convention: `po-phase-N-description`.
 | P3b | PO distributions (multi-field iteration) | `po-phase-3b-distributions` | merged | merged to master |
 | P4 | Supplier contacts | `po-phase-4-supplier-contacts` | merged | merged to master |
 | P5 | Received-vs-ordered + invoices-by-PO | `po-phase-5-received-invoices-by-po` | in progress | — |
-| P5b | Synthesizer: narrate child entities | `po-phase-5b-synthesizer` | not started | — |
+| P5b | Synthesizer: narrate child entities | `po-phase-5b-synthesizer` | merged | merged to master |
 | P6 | PO aggregates | `po-phase-6-aggregates` | not started | — |
 
 ---
