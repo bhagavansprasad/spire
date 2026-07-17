@@ -435,6 +435,25 @@ states should collapse under "closed" is a judgement call to make explicitly
 rather than by omission — they are genuinely different states, so the default
 is to keep them distinct and add separate terms.
 
+### Discovered: vocabulary alone doesn't unlock status questions
+
+Adding the eleven `po_status` rows makes the terms resolvable, but
+"suppliers with rejected purchase orders" still refuses — correctly, and
+with a precise reason:
+
+> There is no filter to find suppliers based on the status of their
+> purchase orders (other than 'open').
+
+`has_open_PO` is the only supplier-to-PO status filter and its status is
+hardcoded (`implicit_term='open'`). A general `has_PO_with_status` filter
+taking the status as a value would unlock the other ten — that is a filter
+change, not a vocabulary one, and belongs to its own phase. The vocab rows
+still earn their place: they serve the aggregations and are the
+prerequisite for any such filter.
+
+Worth noting the refusal is the system diagnosing its own gap accurately —
+better than answering wrongly.
+
 ### Honest constraints
 - **Bounded window.** `aggregate_invoices` pages to MAX_PAGES and flags the
   result truncated at the cap; sums are then lower bounds. The PO tools inherit

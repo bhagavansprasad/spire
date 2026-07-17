@@ -578,6 +578,27 @@ INSERT INTO kg_vocabulary VALUES ('po_status', 'incomplete','INCOMPLETE', NULL);
 INSERT INTO kg_vocabulary VALUES ('po_status', 'draft',     'INCOMPLETE', 'Synonym for incomplete.');
 INSERT INTO kg_vocabulary VALUES ('po_status', 'canceled',  'CANCELED',   NULL);
 INSERT INTO kg_vocabulary VALUES ('po_status', 'cancelled', 'CANCELED',   'British spelling.');
+-- P6: the remaining seven StatusCodes, found by running the status
+-- breakdown over all 3,362 POs. The KG knew four of eleven, so "POs on
+-- hold" / "rejected POs" / "POs pending approval" could not be asked at
+-- all. Note the pod's values use SPACES, not underscores.
+INSERT INTO kg_vocabulary VALUES ('po_status', 'rejected',   'REJECTED',   NULL);
+INSERT INTO kg_vocabulary VALUES ('po_status', 'withdrawn',  'WITHDRAWN',  NULL);
+INSERT INTO kg_vocabulary VALUES ('po_status', 'on hold',    'ON HOLD',    'Pod value has a space, not an underscore.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'held',       'ON HOLD',    'Synonym for on hold.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'pending approval',  'PENDING APPROVAL',  'Pod value has a space, not an underscore.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'awaiting approval', 'PENDING APPROVAL',  'Synonym for pending approval.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'unapproved',        'PENDING APPROVAL',  'Synonym for pending approval.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'pending signature', 'PENDING SIGNATURE', 'Pod value has a space, not an underscore.');
+-- The three closed-ish states are kept DISTINCT rather than collapsed
+-- under 'closed'. They are genuinely different: CLOSED FOR RECEIVING
+-- means no more receipts while invoicing may continue. Consequence:
+-- "closed POs" resolves to CLOSED only (2,732 POs), NOT the 223 in the
+-- other two states. Whether a procurement user means all three by
+-- "closed" is a question for an SME — collapsing them here would decide
+-- it silently.
+INSERT INTO kg_vocabulary VALUES ('po_status', 'closed for receiving', 'CLOSED FOR RECEIVING', 'Distinct from CLOSED: no more receipts, invoicing may continue.');
+INSERT INTO kg_vocabulary VALUES ('po_status', 'closed for invoicing', 'CLOSED FOR INVOICING', 'Distinct from CLOSED: no more invoicing, receiving may continue.');
 
 -- supplier_status (distinct from po_status; Supplier.Status is ACTIVE/INACTIVE)
 INSERT INTO kg_vocabulary VALUES ('supplier_status', 'active',   'ACTIVE',   'Supplier is active.');
