@@ -24,6 +24,19 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-08 | /suppliers      | `expand=addresses` returns a DIFFERENT child count depending on query shape. A bulk fetch (`limit=500`, no `q=`) returned 30 addresses for supplier 1252; a single-supplier fetch (`q=SupplierNumber='1252'&expand=addresses`) returned 25. All 30 are ACTIVE — the extra 5 are real, not inactive/junk. The single-supplier `q=` path appears to cap or filter child rows. Use the bulk path for the complete active address set; do not treat a single-supplier expand as ground truth for address counts. |
 | 2026-07-09 | /suppliers/{id}/child/sites | Supplier sites carry `ProcurementBU` (display, e.g. `"US1 Business Unit"`), `ProcurementBUId` (numeric), `SupplierSiteId`, `SupplierSite`. Single-clause `q=ProcurementBU='...'` **works server-side** on this child (positive returns the row, non-existent value returns empty — both verified). No SupplierId in the child body; join key is the URL path. **`expand=sites` on the bulk supplier fetch is silently ignored** (HTTP 200, no `sites` key) — child data is only reachable per-supplier via the `/child/sites` path. Used for Phase 12 (`has_site_in_bu`). |
 | 2026-07-09 | /suppliers/{id}/child/businessClassifications | Classifications carry `Classification` (display, e.g. `"Small Business"`), `ClassificationCode` (`"SMALL_BUSINESS"`), `Status` (`"CURRENT"`), `CertifyingAgency` (`"SBA"`), `ClassificationId`. Single-clause `q=Classification='...'` **works server-side** (positive returns the row, non-existent value returns empty — both verified). Suppliers carry multiple classifications; no SupplierId in the child body (join key is the path). A `Status='CURRENT'` condition cannot be AND-combined with `Classification` in one `q=` (composite quirk) — apply Status client-side if needed. Used for Phase 13 (`has_classification`). |
+| 2026-07-14 | /purchaseOrderSchedules | **A FLAT top-level schedules collection exists** and accepts single-clause `q=POHeaderId=<id>` server-side — so a PO's schedules are a ONE-HOP fetch by a single id, unlike lines (a nested child). Flat field names DIFFER from the nested `/child/schedules` view: `ScheduleStatus` (not Status), `Amount` (not Ordered), `ShipToLocation` (not ShipToLocationCode). The flat row carries `LineLocationId` (schedule PK), `POHeaderId`, `LineNumber`, `ScheduleNumber`, `OrderNumber` — and `POLineId` IF requested in `fields=` (not in the default projection). |
+| 2026-07-14 | /purchaseOrderDistributions | **Does NOT exist — 404.** No flat distributions collection. Distributions are reachable ONLY via the deep nested path, which needs three ids. |
+| 2026-07-14 | /purchaseOrders/{h}/child/lines/{l}/child/schedules/{ll}/child/distributions | The four-level nested path **works**. Needs THREE ids (POHeaderId, POLineId, LineLocationId), all carried on the parent flat-schedule row — which is why distributions are fetched by iterating a PO's schedules. Fields: `PODistributionId`, `DistributionNumber`, `POChargeAccount`, `POAccrualAccount`, `POVarianceAccount`, `DeliverToLocationCode`, `Percentage`, `Quantity`, `Ordered`, `Total`, `Status`/`StatusCode`. Body carries POHeaderId, POLineId, OrderNumber, ScheduleNumber, LineNumber — but NOT LineLocationId. |
+| 2026-07-14 | /purchaseOrderSchedules/{id}/child/distributions | **404.** The flat schedules resource has no distributions child; the deep path under `/purchaseOrders` is the only route. |
+| 2026-07-14 | /suppliers/{id}/child/contacts | Supplier contacts child. Fields: `SupplierContactId`, `ContactName` (display, last-first e.g. `"Kim, John"`), `FirstName`, `LastName`, `Email`, `JobTitle` (null on this pod), `Status`, `AdministrativeContactFlag` (marks the primary contact), plus phone/fax (all null on demo data). Like sites/classifications, the body does NOT carry SupplierId — join key is the URL path. |
+| 2026-07-17 | /invoices | **`PurchaseOrderNumber` is on the invoice HEADER** and `q=PurchaseOrderNumber='<num>'` **filters server-side**. The value is the PO NUMBER (OrderNumber, e.g. `"162034"`), NOT POHeaderId — the same string-vs-numeric asymmetry as SupplierNumber vs SupplierId. Many invoices have it null (e.g. IMAGE-source invoices with no PO). Invoice numbers often follow `<PO>-inv` / `<PO>inv`. |
+| 2026-07-17 | receivingTransactions | **403 Forbidden.** The natural receipts query resource; our user lacks the receiving role. |
+| 2026-07-17 | receivingReceipts | **400**: "At least one of the following attributes ShipmentHeaderId, ReceiptNumber is required." A lookup-by-receipt resource — you CANNOT query it by PO. |
+| 2026-07-17 | receivingReceiptRequests | Exists with data, but it is an **interface/staging** resource (`HeaderInterfaceId`, `ProcessingStatusCode`, `submitForApproval` action). Its header carries **no PO reference at all**. Not a query view of receipts. |
+| 2026-07-17 | /purchaseOrderSchedules | **Received-vs-ordered lives here.** The schedule row carries `ReceivedQuantity`, `BilledQuantity`, `ShippedQuantity`, `AcceptedQuantity`, `ReceivedAmount`, `BilledAmount` alongside the ordered `Quantity`/`Amount`. Given the receipts resources above are unusable, this is the source for "how much of PO X was received". |
+| 2026-07-17 | (all children) | **Child paths 404 for an unknown parent id** — they do NOT return an empty collection. `/purchaseOrders/999999999/child/lines`, `/suppliers/999999999/child/contacts` and the nested distributions path all 404. Child-fetch tools must catch the 404 and map it to "no rows". By contrast, FLAT collections filtered by `q=` (e.g. `/purchaseOrderSchedules?q=POHeaderId=999999999`) return an empty item set, not a 404. |
+| 2026-07-17 | /purchaseOrders/{id} | **Single-record fetch 404s for an unknown id** (unlike the collection, which returns empty items). A by-id tool must map the 404 to "not found". |
+| 2026-07-17 | (pod switch) | **An empty collection on a freshly-provisioned pod may mean "still loading"** — not "no access", not "bad fields". On pod `eqjz`, `/purchaseOrders` returned `count: 0` (HTTP 200) for a period, with AND without `fields=`, while `/purchaseOrderSchedules` returned rows referencing those same POs. It later populated normally. Before escalating an empty collection as a permissions problem, re-test after a delay and cross-check a sibling resource. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -700,32 +713,15 @@ dropped) until proven otherwise.
 
 ---
 
-# Endpoints reference — P2 patch (PO detail + lines)
+## 7. PO child hierarchy and related endpoints (P2–P5)
 
-Paste-in additions for `docs/spire_fusion_endpoints_reference.md`, from the
-P2 discovery session (PO 2144, EIP Inc, on esll-dev37).
-
----
-
-## A. Add these rows to the Discovery log table
-
-| Date | Endpoint | Discovery |
-|---|---|---|
-| 2026-07-14 | /purchaseOrders/{id} | Single-PO fetch by `POHeaderId` returns ONE record (HTTP 200, ~90 header attributes) — not a collection. `POHeaderId` is a small integer on this pod (e.g. `2144`), not the long 3000000… form. Both `Ordered` (pre-tax) and `Total` (tax-incl) plus `TotalTax` are on the default header. Real header names confirmed: `Buyer`/`BuyerId`, `Supplier`/`SupplierId`, `SupplierSite`/`SupplierSiteId`, `SupplierContact`/`SupplierContactId`, `PaymentTerms`/`PaymentTermsId`, `ShipToLocationCode`/`ShipToLocationAddress`, `BillToLocation`, `FreightTerms`, `FOB`, `ShippingMethod`, `OrderDate`, `ProcurementBU`. |
-| 2026-07-14 | /purchaseOrders/{id}/child/lines | Lines child returns per-line rows. **Line body carries BOTH `POHeaderId` and `OrderNumber`** — the join key is IN the body here, opposite to the supplier children (sites/classifications) which omit the parent id. Real line names: `POLineId`, `LineNumber` (= "Line"), `LineType`, `Description`, `Category`/`CategoryCode`/`CategoryId`, `Quantity`, `UOM`, `BasePrice`, `Price`, `Ordered`, `TotalTax` (= "Tax"), `Total`, `Status`/`StatusCode`. |
-| 2026-07-14 | /purchaseOrders (+child/lines) | `?fields=` projection **works on both** the PO header collection and the lines child — verified returning exactly the requested subset. Strict-on-invalid quirk still applies (one bad name → whole response empty). |
-
----
-
-## B. New endpoint section
-
-Add after the existing `/purchaseOrders` entry.
+The PO detail hierarchy is PO -> lines -> schedules -> distributions, but
+the three levels behave very differently. Read this before adding tools.
 
 ### `/purchaseOrders/{POHeaderId}` — single PO header
 
-**Purpose:** Full detail for one PO. Returns ~90 attributes.
-
-**Curl (PO 2144):**
+Returns ONE record (HTTP 200), ~90 attributes — not a collection.
+**404s for an unknown id** (the collection returns empty items instead).
 
 ```bash
 curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
@@ -733,48 +729,108 @@ curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
   "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders/2144"
 ```
 
-**Returns one record** (HTTP 200), not a collection.
-
-**Fields Spire cares about (P2):**
-- Identity: `POHeaderId`, `OrderNumber`, `Status`, `StatusCode`
-- Supplier: `Supplier`, `SupplierId`, `SupplierSite`, `SupplierSiteId`,
-  `SupplierContact`, `SupplierContactId`
-- Buyer: `Buyer`, `BuyerId`, `BuyerDisplayName`
-- Money: `Ordered`, `Total`, `TotalTax`, `CurrencyCode`, `Currency`
-- Terms/logistics: `PaymentTerms`, `PaymentTermsId`, `ShipToLocationCode`,
-  `ShipToLocationAddress`, `BillToLocation`, `FreightTerms`, `FOB`,
-  `ShippingMethod`
-- Dates: `OrderDate`, `CreationDate`, `LastUpdateDate`
-- Context: `Description`, `ProcurementBU`, `RequisitioningBU`
-
-(Full ~90-field list captured in the P2 discovery paste; register a subset
-now, expand later without re-curl.)
+Fields Spire registers: `POHeaderId`, `OrderNumber`, `Status`/`StatusCode`,
+`Supplier`/`SupplierId`, `SupplierSite`, `SupplierContact`, `Buyer`/`BuyerId`,
+`Ordered`, `Total`, `TotalTax`, `CurrencyCode`, `PaymentTerms`,
+`ShipToLocationCode`, `BillToLocation`, `OrderDate`, `Description`.
 
 ### `/purchaseOrders/{POHeaderId}/child/lines` — PO lines
 
-**Purpose:** Line-level detail for one PO.
+Nested child. **The line body carries BOTH `POHeaderId` and `OrderNumber`** —
+the join key is IN the body, unlike the supplier children which omit it.
 
-**Curl (lines of PO 2144, projected):**
+Fields: `POLineId`, `LineNumber` (= "Line"), `LineType`, `Description`,
+`Category`/`CategoryCode`, `Quantity`, `UOM`, `BasePrice`, `Price`,
+`Ordered`, `TotalTax` (= "Tax"), `Total`, `Status`/`StatusCode`.
+
+### `/purchaseOrderSchedules` — FLAT schedules collection
+
+**Not a child** — a top-level collection, filterable server-side by a
+single clause. This makes a PO's schedules a one-hop fetch.
 
 ```bash
 curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
   --data-urlencode "onlyData=true" \
-  --data-urlencode "fields=LineNumber,Description,Category,Quantity,Price,Ordered,TotalTax,Status" \
-  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders/2144/child/lines"
+  --data-urlencode "q=POHeaderId=2144" \
+  --data-urlencode "fields=POHeaderId,POLineId,LineLocationId,ScheduleNumber,ShipToLocation,RequestedDeliveryDate,Quantity,Amount,ScheduleStatus,ReceivedQuantity,BilledQuantity,ReceivedAmount,BilledAmount" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules"
 ```
 
-**Fields Spire cares about (P2):**
-`POLineId`, `POHeaderId`, `LineNumber`, `OrderNumber`, `LineType`,
-`Description`, `Category`, `CategoryCode`, `Quantity`, `UOM`, `BasePrice`,
-`Price`, `Ordered`, `TotalTax`, `Total`, `Status`, `StatusCode`.
+**Flat names differ from the nested `/child/schedules` view:**
+`ScheduleStatus` (not Status), `Amount` (not Ordered), `ShipToLocation`
+(not ShipToLocationCode).
 
-**Join key:** present in the body (`POHeaderId` / `OrderNumber`) — no need to
-rely on the URL path, unlike supplier children.
+**`POLineId` is NOT in the default projection** — you must name it in
+`fields=`. It matters: the distributions path needs it.
+
+**Received-vs-ordered lives here**: `ReceivedQuantity`, `BilledQuantity`,
+`ShippedQuantity`, `AcceptedQuantity`, `ReceivedAmount`, `BilledAmount`,
+against ordered `Quantity`/`Amount`.
+
+### Distributions — deep nested path ONLY
+
+There is **no flat `/purchaseOrderDistributions`** (404), and the flat
+schedules resource has **no distributions child** (404). The only route:
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrders/2144/child/lines/19782/child/schedules/18954/child/distributions"
+```
+
+Needs THREE ids: POHeaderId, POLineId, LineLocationId — all carried on the
+parent flat-schedule row. Spire therefore iterates a PO's schedules and
+passes all three per row (this is what drove the executor's multi-field
+iteration).
+
+Fields: `PODistributionId`, `DistributionNumber`, `POChargeAccount`,
+`POAccrualAccount`, `POVarianceAccount`, `DeliverToLocationCode`,
+`Percentage`, `Quantity`, `Ordered`, `Total`, `Status`/`StatusCode`.
+
+### `/suppliers/{SupplierId}/child/contacts` — supplier contacts
+
+Same shape as sites/classifications: per-supplier child call, body does NOT
+carry SupplierId (join key is the URL path).
+
+Fields: `SupplierContactId`, `ContactName` (last-first, e.g. "Kim, John"),
+`FirstName`, `LastName`, `Email`, `JobTitle` (null on this pod), `Status`,
+`AdministrativeContactFlag` (marks the primary contact).
+
+### Receipts — all three routes unusable (as of 2026-07-17)
+
+Recorded so nobody re-runs these curls:
+
+| Resource | Result |
+|---|---|
+| `receivingTransactions` | **403** — needs a receiving role we don't have |
+| `receivingReceipts` | **400** — requires ShipmentHeaderId or ReceiptNumber; cannot be queried by PO |
+| `receivingReceiptRequests` | Staging/interface resource (HeaderInterfaceId, ProcessingStatusCode, submitForApproval). **No PO reference on the header.** |
+
+Use `purchaseOrderSchedules` received/billed fields instead.
+
+### `/invoices` — filtering by PO
+
+`PurchaseOrderNumber` is on the invoice **header** and filters server-side:
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "q=PurchaseOrderNumber='162034'" \
+  --data-urlencode "fields=InvoiceId,InvoiceNumber,Supplier,PurchaseOrderNumber,InvoiceAmount" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
+```
+
+The value is the PO **number** (OrderNumber), NOT POHeaderId. Many invoices
+have it null. Not every PO has invoices (PO 162352 has none).
 
 ---
 
-## C. Add to the join-key matrix
+## 8. Join-key matrix — PO hierarchy additions
 
 | To search this | Join key | Numeric or string? |
 |---|---|---|
-| `/purchaseOrders/{id}/child/lines` | `POHeaderId` (in body) | numeric (e.g. `2144`) |
+| `/purchaseOrders/{id}/child/lines` | `POHeaderId` (also in body) | numeric (e.g. `2144`) |
+| `/purchaseOrderSchedules` | `POHeaderId` via `q=` | numeric |
+| `.../child/distributions` | POHeaderId + POLineId + LineLocationId (all three, from the schedule row) | numeric |
+| `/suppliers/{id}/child/contacts` | `SupplierId` (URL path only) | numeric |
+| `/invoices` by PO | `PurchaseOrderNumber` | **string** (e.g. `"162034"`) — NOT POHeaderId |
