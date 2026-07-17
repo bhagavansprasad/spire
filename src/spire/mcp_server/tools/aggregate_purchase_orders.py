@@ -71,15 +71,14 @@ from spire.fusion.client import FusionClient
 PURCHASE_ORDERS_PATH = "/fscmRestApi/resources/11.13.18.05/purchaseOrders"
 
 # Page size per fetch. The endpoints reference documents ~200 as the
-# pod's practical max before requests get slow, and a 500-row page does
-# time out on a loaded pod. Page at 200 rather than grabbing one big
-# page. (Note: aggregate_invoices sets 500 while its comment claims 200
-# — a discrepancy worth reconciling separately.)
+# pod's practical max before requests get slow. Page at 200 rather than
+# grabbing one big page. (Note: aggregate_invoices sets 500 while its
+# comment claims 200 — a discrepancy worth reconciling separately.)
 _PAGE_SIZE = 200
 
 # Max pages before stopping. Bounds the work; hitting it flags the
 # result truncated (sums become lower bounds). At 200/page, 50 pages =
-# 10,000 POs.
+# 10,000 POs — the pod has 3,362, so a full scan fits comfortably.
 MAX_PAGES = 50
 
 OVERFETCH_LIMIT = _PAGE_SIZE * MAX_PAGES
@@ -242,4 +241,247 @@ async def aggregate_purchase_orders_by_supplier(
         "returned": len(rows),
         "truncated": truncated,
         "rows": rows,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Tool 2: purchase orders grouped by status
+# ─────────────────────────────────────────────────────────────────────
+
+# A distinct grouping (StatusCode) and a distinct measure (count + sum),
+# so per the module's rule this is a SEPARATE tool, not a flag on the
+# ranking above.
+_STATUS_SHAPE = "po_status_breakdown"
+
+
+def _aggregate_by_status(purchase_orders: list[dict]) -> tuple[list[dict], int, float]:
+    """Group POs by StatusCode; count them and sum Ordered per status.
+
+    Pure function — no I/O — so it is unit-testable without a client.
+
+    POs with no StatusCode are grouped under "(unknown)" rather than
+    dropped: they are real POs and their value belongs in the total, so
+    silently discarding them would understate it. POs with a non-numeric
+    or missing Ordered contribute 0 to the sum but still count, keeping
+    the count an honest "how many POs we saw".
+
+    Returns:
+        (rows, grand_count, grand_total) where rows is one entry per
+        status ordered by total value descending, and the grand figures
+        are across every status — so the caller can report both the
+        breakdown and the whole.
+    """
+    groups: dict[str, dict] = {}
+    grand_count = 0
+    grand_total = 0.0
+
+    for po in purchase_orders:
+        status = po.get("StatusCode") or "(unknown)"
+        bucket = groups.get(status)
+        if bucket is None:
+            bucket = {"status": status, "po_count": 0, "total_ordered": 0.0}
+            groups[status] = bucket
+
+        amount = po.get("Ordered")
+        if isinstance(amount, (int, float)):
+            bucket["total_ordered"] += amount
+            grand_total += amount
+        bucket["po_count"] += 1
+        grand_count += 1
+
+    # Order by value descending, then status ascending — deterministic.
+    rows = sorted(
+        groups.values(),
+        key=lambda r: (-r["total_ordered"], r["status"]),
+    )
+    return rows, grand_count, grand_total
+
+
+async def aggregate_purchase_orders_by_status(
+    client: FusionClient,
+    top_n: int | None = None,
+    report_progress=None,
+) -> dict:
+    """Break purchase orders down by status: count and value per status.
+
+    Answers "how many purchase orders are there and what are they worth,
+    by status".
+
+    NO SERVER CLAUSE. Grouping BY status means we need every status, so
+    there is nothing selective to push to q= — this pages the whole PO
+    collection. The pod has ~3,362 POs, which at 200/page is ~17 requests
+    (roughly a minute and a half). That is the honest cost of aggregating
+    a full collection; progress is reported per page.
+
+    Args:
+        top_n: Unused for status breakdown — statuses are few (OPEN,
+            CLOSED, CANCELED, INCOMPLETE...), so every one is returned.
+            Accepted only to keep the aggregation tools' call shape
+            uniform; passing it changes nothing.
+
+    Returns:
+        A dict with shape "po_status_breakdown":
+          {
+            shape: "po_status_breakdown",
+            total_pos: int,            # grand count across all statuses
+            total_ordered: float,      # grand sum across all statuses
+            truncated: bool,           # True iff the page cap was hit
+            rows: [
+              {status, po_count, total_ordered},
+              ...                      # value descending
+            ],
+          }
+
+        No POs -> total_pos=0, rows=[].
+    """
+    items: list[dict] = []
+    hit_page_cap = False
+    for page in range(MAX_PAGES):
+        params: dict[str, str | int] = {
+            "limit": _PAGE_SIZE,
+            "offset": page * _PAGE_SIZE,
+            "onlyData": "true",
+            "fields": ",".join(_PROJECTED_FIELDS),
+        }
+
+        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
+        page_items = response.get("items", [])
+        items.extend(page_items)
+
+        msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
+        print(
+            f"[aggregate_purchase_orders_by_status] {msg}",
+            file=sys.stderr,
+            flush=True,
+        )
+        if report_progress is not None:
+            await report_progress(page + 1, None, msg)
+
+        has_more = response.get("hasMore")
+        if has_more is False or (
+            has_more is None and len(page_items) < _PAGE_SIZE
+        ):
+            break
+    else:
+        hit_page_cap = True
+
+    rows, grand_count, grand_total = _aggregate_by_status(items)
+
+    return {
+        "shape": _STATUS_SHAPE,
+        "total_pos": grand_count,
+        "total_ordered": grand_total,
+        "truncated": hit_page_cap,
+        "rows": rows,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Tool 3: open-PO summary (committed spend + count)
+# ─────────────────────────────────────────────────────────────────────
+
+# Grouping: none. Measure: sum + count. Distinct from both tools above,
+# so per the module's rule it is its own tool rather than a flag on
+# aggregate_purchase_orders_by_status. It IS small — that is fine. The
+# rule exists to stop tools growing flags that change what they mean.
+_OPEN_SUMMARY_SHAPE = "open_po_summary"
+
+
+def _summarize(purchase_orders: list[dict]) -> tuple[int, float, int]:
+    """Count POs, sum Ordered, and count distinct suppliers.
+
+    Pure function — no I/O — so it is unit-testable without a client.
+
+    A PO with a non-numeric or missing Ordered contributes 0 to the sum
+    but still counts, keeping the count an honest "how many POs we saw".
+
+    Returns:
+        (po_count, total_ordered, supplier_count)
+    """
+    po_count = 0
+    total_ordered = 0.0
+    suppliers: set = set()
+
+    for po in purchase_orders:
+        amount = po.get("Ordered")
+        if isinstance(amount, (int, float)):
+            total_ordered += amount
+        po_count += 1
+        sid = po.get("SupplierId")
+        if sid is not None:
+            suppliers.add(sid)
+
+    return po_count, total_ordered, len(suppliers)
+
+
+async def summarize_open_purchase_orders(
+    client: FusionClient,
+    report_progress=None,
+) -> dict:
+    """Committed spend and open-PO count.
+
+    Answers "how much have we committed and across how many open POs".
+
+    Open-only by identity, not by parameter: this tool is about the open
+    commitment. A summary of some other status is a different question —
+    use aggregate_purchase_orders_by_status for the full breakdown.
+
+    StatusCode is queryable server-side on this pod, so the fetch is
+    bounded at the server (~201 open POs, 2 pages) rather than scanning
+    the whole collection.
+
+    Returns:
+        A dict with shape "open_po_summary":
+          {
+            shape: "open_po_summary",
+            po_count: int,           # open POs seen
+            total_ordered: float,    # committed value (excl. tax)
+            supplier_count: int,     # distinct suppliers with an open PO
+            truncated: bool,         # True iff the page cap was hit
+          }
+
+        No open POs -> po_count=0, total_ordered=0.0.
+    """
+    server_clause = "StatusCode='OPEN'"
+
+    items: list[dict] = []
+    hit_page_cap = False
+    for page in range(MAX_PAGES):
+        params: dict[str, str | int] = {
+            "limit": _PAGE_SIZE,
+            "offset": page * _PAGE_SIZE,
+            "onlyData": "true",
+            "fields": ",".join(_PROJECTED_FIELDS),
+            "q": server_clause,
+        }
+
+        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
+        page_items = response.get("items", [])
+        items.extend(page_items)
+
+        msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
+        print(
+            f"[summarize_open_purchase_orders] {msg}",
+            file=sys.stderr,
+            flush=True,
+        )
+        if report_progress is not None:
+            await report_progress(page + 1, None, msg)
+
+        has_more = response.get("hasMore")
+        if has_more is False or (
+            has_more is None and len(page_items) < _PAGE_SIZE
+        ):
+            break
+    else:
+        hit_page_cap = True
+
+    po_count, total_ordered, supplier_count = _summarize(items)
+
+    return {
+        "shape": _OPEN_SUMMARY_SHAPE,
+        "po_count": po_count,
+        "total_ordered": total_ordered,
+        "supplier_count": supplier_count,
+        "truncated": hit_page_cap,
     }

@@ -403,6 +403,38 @@ numbers, never from the LLM doing arithmetic.
 
 **Both commits land on one branch, one PR.**
 
+### Discovered: the PO status vocabulary is incomplete
+
+Running the status breakdown surfaced the pod's REAL StatusCode values —
+**eleven**, not the four the KG knows:
+
+| StatusCode | POs | Total ordered |
+|---|---|---|
+| CLOSED | 2731 | 487,343,212.13 |
+| OPEN | 201 | 116,643,997.40 |
+| CLOSED FOR RECEIVING | 215 | 81,348,599.88 |
+| REJECTED | 39 | 4,266,419.00 |
+| PENDING APPROVAL | 8 | 743,047.12 |
+| WITHDRAWN | 6 | 217,144.00 |
+| INCOMPLETE | 47 | 184,944.45 |
+| CLOSED FOR INVOICING | 8 | 18,291.00 |
+| PENDING SIGNATURE | 3 | 7,470.00 |
+| CANCELED | 102 | 4,000.00 |
+| ON HOLD | 2 | 2,250.00 |
+
+Note the values use **spaces, not underscores** ("PENDING APPROVAL", not
+PENDING_APPROVAL — the endpoints reference says otherwise and is wrong).
+
+`kg_vocabulary` maps only open/closed/canceled/incomplete. Consequences:
+"POs on hold", "rejected POs" and "POs pending approval" cannot be asked
+today; and **"closed POs" silently means only the plain CLOSED bucket,
+missing the 223 POs in CLOSED FOR RECEIVING / CLOSED FOR INVOICING**.
+
+P6's KG step adds the missing `po_status` rows. Whether the three closed-ish
+states should collapse under "closed" is a judgement call to make explicitly
+rather than by omission — they are genuinely different states, so the default
+is to keep them distinct and add separate terms.
+
 ### Honest constraints
 - **Bounded window.** `aggregate_invoices` pages to MAX_PAGES and flags the
   result truncated at the cap; sums are then lower bounds. The PO tools inherit
