@@ -82,3 +82,45 @@ async def test_get_purchase_order_lines_empty_for_unknown_id():
     # An unknown parent yields no lines; the child path returns an empty
     # collection rather than raising.
     assert result.items == []
+
+
+# ── identifier resolution ──
+#
+# "PO 162034" and "PO 2144" look identical in a prompt but are DIFFERENT
+# identifiers: 162034 is an OrderNumber (whose POHeaderId is 1), 2144 is a
+# POHeaderId (whose OrderNumber is 162352). The tool tries OrderNumber
+# first, then falls back to POHeaderId.
+#
+# These tests exist because the original by_id filter mapped to
+# po_header_id while the parser told the LLM to use it for "the id or
+# number" — so a user naming a PO by its printed number got the wrong PO
+# or nothing. Every test had used 2144, which happens to be a POHeaderId,
+# so the bug survived until P6.
+
+KNOWN_ORDER_NUMBER = "162034"
+KNOWN_ORDER_NUMBERS_HEADER_ID = 1
+
+
+@pytest.mark.asyncio
+async def test_resolves_by_order_number():
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        po = await get_purchase_order_by_id(client, KNOWN_ORDER_NUMBER)
+    assert po is not None
+    assert po["OrderNumber"] == KNOWN_ORDER_NUMBER
+    assert po["POHeaderId"] == KNOWN_ORDER_NUMBERS_HEADER_ID
+
+
+@pytest.mark.asyncio
+async def test_order_number_and_header_id_are_not_interchangeable():
+    """The load-bearing test. If these ever resolve to the same PO, the
+    fixture data has changed and these tests stop proving anything."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        by_number = await get_purchase_order_by_id(client, KNOWN_ORDER_NUMBER)
+        by_header = await get_purchase_order_by_id(client, KNOWN_PO_HEADER_ID)
+    assert by_number is not None
+    assert by_header is not None
+    # Same bare number, read two ways, two different POs.
+    assert by_number["POHeaderId"] != by_header["POHeaderId"]
+    assert by_number["OrderNumber"] != by_header["OrderNumber"]
