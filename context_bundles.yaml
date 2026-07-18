@@ -14,6 +14,7 @@ bundles:
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
+  
   scripts:
   - scripts/draw_graph.py
   - scripts/print_kg.py
@@ -31,7 +32,7 @@ bundles:
   - scripts/prompt_set_po.txt
   - scripts/prompt_set_supplier.txt
   - scripts/spire_v1.2_review_prompts.txt
-
+  - scripts/score_parser_prompts.py
   graph_kg:
   - scripts/sql/kg_schema.sql
   - src/spire/executor/executor.py
@@ -50,6 +51,14 @@ bundles:
   - src/spire/mcp_server/tools/supplier_sites.py
   - src/spire/mcp_server/tools/supplier_classifications.py
   - src/spire/mcp_server/tools/tool_result.py
+  - src/spire/mcp_server/tools/compare_orders_to_invoices.py  
+  - src/spire/mcp_server/tools/aggregate_purchase_orders.py
+  - src/spire/mcp_server/tools/purchase_order_by_id.py
+  - src/spire/mcp_server/tools/purchase_order_distributions.py
+  - src/spire/mcp_server/tools/purchase_order_lines.py
+  - src/spire/mcp_server/tools/purchase_order_schedules.py
+  - src/spire/mcp_server/tools/supplier_contacts.py
+
   parser_planner:
   - src/spire/nl_parser/capability.py
   - src/spire/nl_parser/draft.py
@@ -84,6 +93,11 @@ bundles:
   - tests/test_synthesizer.py
   - tests/test_synthesizer_aggregation.py
   - tests/test_tool_result.py
+  - tests/test_aggregate_purchase_orders_tool.py
+  - tests/test_purchase_order_detail_tool.py
+  - tests/test_purchase_order_distributions_tool.py
+  - tests/test_purchase_order_schedules_tool.py
+  - tests/test_supplier_contacts_tool.py
 excludes:
 - traces
 - traces/*
