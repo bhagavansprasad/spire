@@ -91,6 +91,66 @@ class DraftAggregate(BaseModel):
     )
 
 
+class DraftCompare(BaseModel):
+    """The comparison block, when the question asks how invoiced compares
+    to ordered rather than for a list, ranking, or total.
+
+    A comparison joins two sources (purchase orders and invoices) on
+    PurchaseOrderNumber and reports ordered vs invoiced and the
+    difference. It is distinct from aggregation (which groups and totals a
+    single source) — hence its own block, not an aggregate op.
+
+    The LLM sets this when it detects invoiced-vs-ordered wording ("how
+    does invoiced compare to ordered", "was PO X over-invoiced", "are our
+    biggest suppliers' orders getting invoiced"). The user never types
+    these fields — the LLM derives them from the prompt.
+
+    Three ops, each using only the fields it needs:
+      - 'po_invoiced_vs_ordered'          -> po_number
+      - 'supplier_invoiced_vs_ordered'    -> supplier_name (+ top_n)
+      - 'top_suppliers_invoiced_vs_ordered' -> top_n (+ status)
+    """
+
+    op: str = Field(
+        description=(
+            "The comparison shape. Supported: 'po_invoiced_vs_ordered' "
+            "(one PO's ordered vs invoiced — set po_number), "
+            "'supplier_invoiced_vs_ordered' (one supplier's — set "
+            "supplier_name), 'top_suppliers_invoiced_vs_ordered' (the "
+            "top-N suppliers by PO value — set top_n, optional status)."
+        )
+    )
+    po_number: str = Field(
+        default="",
+        description=(
+            "For 'po_invoiced_vs_ordered': the PO's OrderNumber exactly as "
+            "written (e.g. '162034'). Empty for the other ops."
+        ),
+    )
+    supplier_name: str = Field(
+        default="",
+        description=(
+            "For 'supplier_invoiced_vs_ordered': a substring of the "
+            "supplier's name (e.g. 'Lee Supplies'). Empty for the other ops."
+        ),
+    )
+    top_n: int = Field(
+        default=5,
+        description=(
+            "For the supplier and top-suppliers ops: how many rows to "
+            "return (suppliers for the top-N op; PO rows for one supplier)."
+        ),
+    )
+    status: str = Field(
+        default="",
+        description=(
+            "For 'top_suppliers_invoiced_vs_ordered' only: an optional PO "
+            "StatusCode (e.g. 'OPEN') to bound which POs count toward "
+            "'biggest'. Empty to rank across all POs."
+        ),
+    )
+
+
 class DraftIntent(BaseModel):
     """Pydantic mirror of ``Intent`` for structured LLM output.
 
@@ -162,6 +222,17 @@ class DraftIntent(BaseModel):
             "target_entity/filters/include are ignored."
         ),
     )
+    compare: DraftCompare | None = Field(
+        default=None,
+        description=(
+            "Set this (instead of producing a list) when the question asks "
+            "how INVOICED compares to ORDERED — e.g. 'how does invoiced "
+            "compare to ordered for PO 162034', 'was PO X over-invoiced', "
+            "'are our biggest suppliers' orders getting invoiced'. Leave it "
+            "null otherwise. When set, target_entity/filters/include are "
+            "ignored. Do NOT set both this and aggregate."
+        ),
+    )
 
     count_only: bool = Field(
         default=False,
@@ -220,8 +291,20 @@ class DraftIntent(BaseModel):
                 if self.aggregate is not None
                 else None
             ),
+            compare=(
+                {
+                    "op": self.compare.op,
+                    "po_number": self.compare.po_number or None,
+                    "supplier_name": self.compare.supplier_name or None,
+                    "top_n": self.compare.top_n,
+                    "status": self.compare.status or None,
+                }
+                if self.compare is not None
+                else None
+            ),
             count_only=self.count_only,
         )
+
 
 
 

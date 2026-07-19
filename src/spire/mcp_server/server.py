@@ -23,6 +23,9 @@ Tools currently exposed:
 - aggregate_purchase_orders_by_supplier
 - aggregate_purchase_orders_by_status
 - summarize_open_purchase_orders
+- compare_purchase_order_to_invoices
+- compare_supplier_orders_to_invoices
+- compare_top_suppliers_orders_to_invoices
 """
 
 from fastmcp import Context, FastMCP
@@ -64,6 +67,11 @@ from spire.mcp_server.tools.supplier_contacts import (
 )
 from spire.mcp_server.tools.purchase_order_distributions import (
     get_purchase_order_distributions as _get_purchase_order_distributions,
+)
+from spire.mcp_server.tools.compare_orders_to_invoices import (
+    compare_purchase_order_to_invoices as _compare_purchase_order_to_invoices,
+    compare_supplier_orders_to_invoices as _compare_supplier_orders_to_invoices,
+    compare_top_suppliers_orders_to_invoices as _compare_top_suppliers_orders_to_invoices,
 )
 
 
@@ -610,8 +618,132 @@ async def summarize_open_purchase_orders(ctx: Context) -> dict:
         )
 
 
+@mcp.tool()
+async def compare_purchase_order_to_invoices(
+    ctx: Context,
+    po_number: str,
+) -> dict:
+    """Compare what one purchase order ordered against what was invoiced against it.
+
+    Use this for "how does invoiced compare to ordered for PO 162034" or
+    "was PO US164932 over- or under-invoiced". Fetches the PO and the
+    invoices that reference it, and reports ordered, invoiced, and the
+    difference. Both sides are exact — the PO is one record, its invoices
+    are server-filtered by PurchaseOrderNumber.
+
+    An over-invoice (invoiced > ordered) is NOT flagged as an error: tax,
+    freight and price variances legitimately push an invoice above the
+    order. The numbers are reported; judging them is the reader's job.
+
+    Args:
+        po_number: The PO's OrderNumber (e.g. "162034") — the number
+            printed on the order, which is also the key invoices carry.
+            NOT the POHeaderId.
+
+    Returns:
+        A "po_invoiced_vs_ordered" dict: order_number, po_header_id,
+        supplier, status, ordered, invoiced, difference, invoice_count,
+        and the matching invoices. found=False when no such PO exists.
+    """
+    async with FusionClient(_persona) as client:
+        return await _compare_purchase_order_to_invoices(
+            client,
+            po_number,
+            report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def compare_supplier_orders_to_invoices(
+    ctx: Context,
+    supplier_name: str,
+    top_n: int = 10,
+) -> dict:
+    """Compare ordered against invoiced across one supplier's purchase orders.
+
+    Use this for "how does invoiced compare to ordered for Lee Supplies".
+    Resolves the supplier by name, then matches its POs against its
+    invoices on PurchaseOrderNumber.
+
+    NOTE ON DATA: on this pod most invoices are not PO-linked (debit
+    memos, prepayments), so a supplier's PO-matched invoiced total is
+    typically far below its total invoiced. unmatched_invoice_count
+    reports the non-PO invoices; they are context, not folded into the
+    comparison.
+
+    The name must match exactly one supplier. If several match (e.g. "Lee
+    Supplies" also matches "Lee Supplies56 2026"), the tool returns
+    ambiguous=True with the candidates rather than guessing.
+
+    Args:
+        supplier_name: Substring of the supplier's name. Must resolve to
+            exactly one supplier.
+        top_n: How many PO rows to return, biggest absolute difference
+            first. Totals always cover ALL the supplier's POs.
+
+    Returns:
+        A "supplier_invoiced_vs_ordered" dict: supplier, supplier_id,
+        supplier_number, po_count, invoice_count, total_ordered,
+        total_invoiced, total_difference, unmatched_invoice_count,
+        returned, truncated, and the top_n rows. found=False when the
+        name matches nothing; ambiguous=True when it matches several.
+    """
+    async with FusionClient(_persona) as client:
+        return await _compare_supplier_orders_to_invoices(
+            client,
+            supplier_name,
+            top_n=top_n,
+            report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def compare_top_suppliers_orders_to_invoices(
+    ctx: Context,
+    top_n: int = 5,
+    status: str | None = None,
+) -> dict:
+    """Compare ordered vs invoiced for the top-N suppliers by PO value.
+
+    Use this for "how does invoiced compare to ordered for our biggest
+    suppliers" or concentration-risk questions ("which suppliers do we
+    lean on most, and are their orders getting invoiced"). Ranks
+    suppliers by committed PO value, then compares each one's ordered
+    against invoiced.
+
+    Its identity is fixed — the top-N suppliers by PO value — so it is a
+    bounded tool, not a generic engine. It does NOT compute a
+    concentration figure; it reports each supplier's numbers and lets the
+    narration phrase the risk.
+
+    NOTE ON DATA: on this pod most invoices are not PO-linked, so
+    PO-matched invoiced totals are typically far below total invoiced.
+    Each supplier row carries unmatched_invoice_count for context.
+
+    Args:
+        top_n: How many suppliers to compare (default 5), ranked by
+            committed PO value descending.
+        status: Optional StatusCode (e.g. "OPEN") passed to the ranking
+            to bound which POs count toward "biggest". Omit to rank
+            across all POs.
+
+    Returns:
+        A "top_suppliers_invoiced_vs_ordered" dict: status (echoed),
+        total_suppliers, returned, truncated, and a suppliers list of
+        "supplier_invoiced_vs_ordered" dicts in ranking order.
+    """
+    async with FusionClient(_persona) as client:
+        return await _compare_top_suppliers_orders_to_invoices(
+            client,
+            top_n=top_n,
+            status=status,
+            report_progress=ctx.report_progress,
+        )
+
+
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+
 
 
 

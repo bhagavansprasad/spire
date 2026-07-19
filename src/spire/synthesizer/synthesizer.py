@@ -1,4 +1,3 @@
-
 """
 Response synthesizer for the KG-driven path (Architecture Option 3).
 
@@ -531,6 +530,30 @@ class CountResponse(BaseModel):
         description="Unused for counts (the count itself carries the total); "
         "present for formatter compatibility with other responses.",
     )
+
+
+class ComparisonResponse(BaseModel):
+    """Comparison response: invoiced vs ordered (P6c).
+
+    Built deterministically, without the LLM — the comparison tool has
+    already fetched both sides, joined them, and computed the totals and
+    the difference. There is nothing to synthesize and no risk of an
+    invented number, so this mirrors CountResponse rather than the
+    LLM-driven aggregation path. The 'summary' is templated from the
+    tool's own numbers; the structured fields carry those numbers through
+    unchanged."""
+
+    summary: str = Field(
+        description="Plain-language statement of the comparison."
+    )
+    shape: str = Field(
+        description="The comparison shape tag, e.g. 'po_invoiced_vs_ordered'."
+    )
+    truncation_notes: list[str] = Field(
+        default_factory=list,
+        description="Any truncation note carried from the tool.",
+    )
+
 # SynthesizedResponse. Keeping the name means supplier-path code and
 # tests that import SynthesizedResponse / SupplierSummary still work.
 SynthesizedResponse = SupplierResponse
@@ -573,6 +596,23 @@ def _aggregation_shape(outputs: dict[str, list[dict]]) -> str | None:
     The aggregation tools each stamp their result with a 'shape'; the
     executor wraps it in a one-element list under 'aggregation'."""
     bucket = outputs.get("aggregation")
+    if not bucket:
+        return None
+    first = bucket[0]
+    if not isinstance(first, dict):
+        return None
+    shape = first.get("shape")
+    return shape if isinstance(shape, str) else None
+
+
+def _comparison_shape(outputs: dict[str, list[dict]]) -> str | None:
+    """Return the shape tag of a comparison result, or None if the outputs
+    are not a comparison.
+
+    The comparison tools each stamp their result with a 'shape'; the
+    executor wraps it in a one-element list under 'comparison' (the step's
+    output_name). Mirrors _aggregation_shape."""
+    bucket = outputs.get("comparison")
     if not bucket:
         return None
     first = bucket[0]
@@ -1134,6 +1174,137 @@ def _build_count_response(
     )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Comparison responses (P6c) — deterministic, no LLM
+# ─────────────────────────────────────────────────────────────────────
+#
+# The comparison tool has already done the fetch, join, and arithmetic.
+# These builders template its numbers into prose; they never recompute a
+# figure. Mirrors _build_count_response. The over/under-invoiced phrasing
+# is neutral and factual (an over-invoice is real data — tax, freight,
+# variance — not an error), matching the tool's own stance.
+
+
+def _direction_phrase(difference: float) -> str:
+    """Neutral over/under/fully phrasing for a signed difference."""
+    if difference > 0:
+        return f"over-invoiced by {difference:,.2f}"
+    if difference < 0:
+        return f"under-invoiced by {abs(difference):,.2f}"
+    return "fully invoiced (invoiced equals ordered)"
+
+
+def _summarize_po_comparison(data: dict) -> str:
+    if not data.get("found"):
+        return (
+            f"No purchase order {data.get('order_number')!r} was found, so "
+            f"there is nothing to compare."
+        )
+    ordered = data.get("ordered", 0.0)
+    invoiced = data.get("invoiced", 0.0)
+    diff = data.get("difference", 0.0)
+    n = data.get("invoice_count", 0)
+    supplier = data.get("supplier")
+    inv_word = "invoice" if n == 1 else "invoices"
+    return (
+        f"PO {data.get('order_number')} ({supplier}): ordered {ordered:,.2f}, "
+        f"invoiced {invoiced:,.2f} across {n} {inv_word} — "
+        f"{_direction_phrase(diff)}."
+    )
+
+
+def _summarize_supplier_comparison(data: dict) -> str:
+    if not data.get("found"):
+        return (
+            f"No supplier matching {data.get('supplier_name')!r} was found, "
+            f"so there is nothing to compare."
+        )
+    if data.get("ambiguous"):
+        candidates = data.get("candidates", [])
+        shown = ", ".join(str(c) for c in candidates)
+        return (
+            f"{data.get('supplier_name')!r} matches several suppliers "
+            f"({shown}). Name one exactly to compare its orders to invoices."
+        )
+    ordered = data.get("total_ordered", 0.0)
+    invoiced = data.get("total_invoiced", 0.0)
+    diff = data.get("total_difference", 0.0)
+    po_count = data.get("po_count", 0)
+    unmatched = data.get("unmatched_invoice_count", 0)
+    parts = [
+        f"{data.get('supplier')}: across {po_count} purchase order(s), "
+        f"ordered {ordered:,.2f} and PO-matched invoiced {invoiced:,.2f} — "
+        f"{_direction_phrase(diff)}."
+    ]
+    if unmatched:
+        parts.append(
+            f"{unmatched:,} of this supplier's invoices were not linked to a "
+            f"PO and are excluded from the comparison."
+        )
+    return " ".join(parts)
+
+
+def _summarize_top_suppliers_comparison(data: dict) -> str:
+    suppliers = data.get("suppliers", [])
+    returned = data.get("returned", len(suppliers))
+    if not suppliers:
+        return "No suppliers were found to compare."
+    lines = [
+        f"Invoiced vs ordered for the top {returned} supplier(s) by PO value:"
+    ]
+    for s in suppliers:
+        ordered = s.get("total_ordered", 0.0)
+        invoiced = s.get("total_invoiced", 0.0)
+        diff = s.get("total_difference", 0.0)
+        unmatched = s.get("unmatched_invoice_count", 0)
+        line = (
+            f"- {s.get('supplier')}: ordered {ordered:,.2f}, PO-matched "
+            f"invoiced {invoiced:,.2f} — {_direction_phrase(diff)}"
+        )
+        if unmatched:
+            line += f" ({unmatched:,} non-PO invoices excluded)"
+        line += "."
+        lines.append(line)
+    return "\n".join(lines)
+
+
+# shape tag -> builder. One row per shape, like AGGREGATION_SCHEMAS: a new
+# comparison tool is a new row here, not another branch in the routing.
+_COMPARISON_BUILDERS = {
+    "po_invoiced_vs_ordered": _summarize_po_comparison,
+    "supplier_invoiced_vs_ordered": _summarize_supplier_comparison,
+    "top_suppliers_invoiced_vs_ordered": _summarize_top_suppliers_comparison,
+}
+
+
+def _build_comparison_response(
+    outputs: dict[str, list[dict]], shape: str
+) -> ComparisonResponse:
+    """Build a comparison response deterministically from the tool's data.
+
+    The comparison tool result sits under the 'comparison' bucket as a
+    single object. The builder for its shape templates the summary; no LLM
+    and no recomputation.
+    """
+    data = outputs["comparison"][0]
+    builder = _COMPARISON_BUILDERS.get(shape)
+    if builder is None:
+        raise UnsupportedEntityError(
+            f"No synthesizer builder for comparison shape {shape!r}. "
+            f"Supported: {sorted(_COMPARISON_BUILDERS)}."
+        )
+    truncation_notes = (
+        ["Some results were truncated at the page cap."]
+        if data.get("truncated")
+        else []
+    )
+    return ComparisonResponse(
+        summary=builder(data),
+        shape=shape,
+        truncation_notes=truncation_notes,
+    )
+
+
 def synthesize_response(
     outputs: dict[str, list[dict]],
     target_entity: str,
@@ -1168,6 +1339,15 @@ def synthesize_response(
     # executor output / truncation block. Build it deterministically.
     if count_only:
         return _build_count_response(outputs, target_entity, truncation_by_step)
+
+    # P6c: a comparison produces an invoiced-vs-ordered result, not an
+    # entity list. Like aggregation it has no target_entity (the Intent
+    # carried a compare block); select by the shape the tool stamped under
+    # the "comparison" bucket. Built deterministically — the tool already
+    # computed every number — so this returns before any LLM setup.
+    comparison_shape = _comparison_shape(outputs)
+    if comparison_shape is not None:
+        return _build_comparison_response(outputs, comparison_shape)
 
     # Feature 7: an aggregation produces a ranking, not an entity list.
     # It has no target_entity (the Intent carried an aggregate block
@@ -1223,6 +1403,8 @@ def synthesize_response(
 
     _validate_no_hallucinated_ids(response, outputs)
     return response
+
+
 
 
 

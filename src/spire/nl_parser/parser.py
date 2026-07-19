@@ -1,8 +1,3 @@
-
-
-
-
-
 """
 The NL parser — natural-language prompt to ``Intent`` (feature 1).
 
@@ -239,6 +234,26 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "POs', 'what is our open PO commitment', 'total value of outstanding "
     "purchase orders'. Takes no parameters.\n"
     "Do NOT set unanswerable for any of these — they ARE supported.\n\n"
+    "COMPARISON — use the compare block, do NOT refuse:\n"
+    "If the question compares what was ORDERED (purchase orders) against "
+    "what was INVOICED (bills) — 'invoiced vs ordered', 'over/under-"
+    "invoiced', 'are the orders getting billed' — set the compare block "
+    "instead of a list. Pick the op by SCOPE:\n"
+    "- op='po_invoiced_vs_ordered' — ONE purchase order. Use for 'how does "
+    "invoiced compare to ordered for PO 162034', 'was PO X over-invoiced'. "
+    "Set po_number to the PO number exactly as written.\n"
+    "- op='supplier_invoiced_vs_ordered' — ONE supplier. Use for 'how does "
+    "invoiced compare to ordered for Lee Supplies'. Set supplier_name; set "
+    "top_n from any 'top N' wording (default 5).\n"
+    "- op='top_suppliers_invoiced_vs_ordered' — the TOP-N suppliers by PO "
+    "value, each compared. Use for 'compare ordered vs invoiced for our top "
+    "3 suppliers', 'invoiced vs ordered for our biggest suppliers', "
+    "concentration risk. Set top_n from any 'top N' wording (default 5); "
+    "set status='OPEN' if the question says open POs.\n"
+    "The signal is BOTH sides: a question naming ORDERED and INVOICED "
+    "together is a comparison, not an aggregation ranking (one measure) and "
+    "not a list. Do NOT set unanswerable for these — they ARE supported. Do "
+    "NOT set both compare and aggregate.\n\n"
     "COUNT — set count_only, do NOT refuse:\n"
     "If the question asks HOW MANY or for the COUNT of a set rather than "
     "the records — e.g. 'count of suppliers', 'how many active suppliers', "
@@ -406,6 +421,13 @@ def parse(
     if intent.aggregate is not None:
         return ParseResult.ok(intent)
 
+    # P6c: a comparison intent is validated by the planner's comparison-op
+    # registry, not the entity/filter KG menu (its target_entity/filters
+    # are unused). Skip validate_intent, same as aggregate — otherwise it
+    # refuses the empty target_entity at Gate 1.
+    if intent.compare is not None:
+        return ParseResult.ok(intent)
+
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
@@ -413,18 +435,3 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
