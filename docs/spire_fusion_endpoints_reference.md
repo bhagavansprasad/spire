@@ -37,6 +37,10 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-17 | (all children) | **Child paths 404 for an unknown parent id** — they do NOT return an empty collection. `/purchaseOrders/999999999/child/lines`, `/suppliers/999999999/child/contacts` and the nested distributions path all 404. Child-fetch tools must catch the 404 and map it to "no rows". By contrast, FLAT collections filtered by `q=` (e.g. `/purchaseOrderSchedules?q=POHeaderId=999999999`) return an empty item set, not a 404. |
 | 2026-07-17 | /purchaseOrders/{id} | **Single-record fetch 404s for an unknown id** (unlike the collection, which returns empty items). A by-id tool must map the 404 to "not found". |
 | 2026-07-17 | (pod switch) | **An empty collection on a freshly-provisioned pod may mean "still loading"** — not "no access", not "bad fields". On pod `eqjz`, `/purchaseOrders` returned `count: 0` (HTTP 200) for a period, with AND without `fields=`, while `/purchaseOrderSchedules` returned rows referencing those same POs. It later populated normally. Before escalating an empty collection as a permissions problem, re-test after a delay and cross-check a sibling resource. |
+| 2026-07-19 | /purchaseOrders | **POs carry NO `SupplierNumber`.** Naming `SupplierNumber` in `?fields=` on `/purchaseOrders` returns **HTTP 400** — POs expose only `SupplierId` (numeric). This is the reason the top-N supplier comparison must resolve each supplier's number from its id (one `/suppliers?q=SupplierId=` lookup) before it can filter invoices (which use `SupplierNumber`). |
+| 2026-07-19 | (all collections) | **`totalResults=true` is required for a real total count.** Without it, the `count` field reflects only the returned page size (e.g. `limit=1` → `count: 1`, not the true total). Pass `totalResults=true` to get the authoritative `totalResults` value. Easy to misread `count` as a total during discovery. |
+| 2026-07-19 | /invoices | **Most invoices are NOT PO-linked — quantified.** `PurchaseOrderNumber` is null for the overwhelming majority of invoices on the demo pods. Sampled PO-linked fraction by supplier: Staffing Services 0%, Allied Manufacturing 0%, Advanced Corp 1%, Lee Supplies 7%; ~1% overall across a 1,000-invoice sample of 48,904 total. The non-PO invoices are debit memos, prepayments, and credits (e.g. `StafDM 01`, `PREPAYMENT001`, negative amounts). Consequence: a supplier-level "invoiced vs ordered" comparison is thin on these pods — PO-matched invoiced runs far below total invoiced. A demo-data limitation, not a product one (real customers PO-match via three-way matching). Report `unmatched_invoice_count` so the gap is visible. |
+| 2026-07-19 | (pod) | **Active pod is `fa-esll-dev37`** (this reference's pod). The `eqjz` and `dabpqy` pods seen in earlier sessions are alternates in `personas.yaml`. Anchor ids are pod-specific — a pod switch can invalidate hard-coded test anchors (e.g. distribution chain ids); re-capture from the active pod rather than assuming. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -821,7 +825,8 @@ curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
 ```
 
 The value is the PO **number** (OrderNumber), NOT POHeaderId. Many invoices
-have it null. Not every PO has invoices (PO 162352 has none).
+have it null — in fact MOST do on the demo pods (~1% PO-linked; see the
+2026-07-19 discovery-log row). Not every PO has invoices (PO 162352 has none).
 
 ---
 
