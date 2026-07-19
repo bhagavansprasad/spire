@@ -107,6 +107,30 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     "open_po_summary": (),                        # open by identity; takes nothing
 }
 
+
+# P6c: map comparison op -> tool. Same one-op-per-tool discipline as the
+# aggregation registry: a different comparison shape is a different op and
+# a different tool, never a flag. Comparison is its own block (not an
+# aggregate op) because it joins two sources and reports a difference
+# rather than grouping and totalling one.
+_COMPARISON_TOOLS: dict[str, str] = {
+    "po_invoiced_vs_ordered": "compare_purchase_order_to_invoices",
+    "supplier_invoiced_vs_ordered": "compare_supplier_orders_to_invoices",
+    "top_suppliers_invoiced_vs_ordered": "compare_top_suppliers_orders_to_invoices",
+}
+
+# Which compare-block params each op's tool accepts. Same rationale as
+# _AGGREGATION_PARAMS: the parser sets what the question implies (and
+# defaults top_n), so the planner forwards only the params THIS op's tool
+# takes — forwarding an unknown one raises in the tool call. Adding a
+# comparison tool means adding both this row and the _COMPARISON_TOOLS
+# row; forgetting one fails loudly at plan time.
+_COMPARISON_PARAMS: dict[str, tuple[str, ...]] = {
+    "po_invoiced_vs_ordered": ("po_number",),
+    "supplier_invoiced_vs_ordered": ("supplier_name", "top_n"),
+    "top_suppliers_invoiced_vs_ordered": ("top_n", "status"),
+}
+
 # Friendly output-name prefixes per entity. Pure naming convention;
 # the executor doesn't interpret these.
 _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
@@ -346,6 +370,19 @@ class Intent:
     # The planner maps a populated aggregate to a single tool step; the
     # op names the bounded aggregation tool (one op per tool, by design).
     aggregate: dict[str, Any] | None = None
+
+    # P6c: when set, the question is a comparison of invoiced vs ordered,
+    # not a list, ranking, or total. The LLM parser fills this when it
+    # detects invoiced-vs-ordered wording; None for everything else (the
+    # default), so all existing behavior is unchanged. Shape:
+    #   {"op": "po_invoiced_vs_ordered", "po_number": "162034",
+    #    "supplier_name": None, "top_n": 5, "status": None}
+    # The planner maps a populated compare to a single tool step; the op
+    # names the bounded comparison tool (one op per tool, like aggregate).
+    # Checked AFTER aggregate in generate_plan, so if a confused parse
+    # sets both, aggregate wins and compare is ignored (mirrors the
+    # aggregate/count_only precedence).
+    compare: dict[str, Any] | None = None
 
     # Phase 10: when True, the question asks "how many X" — report the
     # count, not a record list. The normal fetch still runs (its
@@ -709,6 +746,16 @@ def generate_plan(
     if intent.aggregate is not None:
         return _build_aggregation_plan(intent.aggregate)
 
+    # ── P6c: comparison short-circuit ─────────────────────────────
+    # When the intent carries a compare block, the question is an
+    # invoiced-vs-ordered comparison, not a list. Emit a single
+    # non-iterating step calling the bounded comparison tool, which owns
+    # its own two fetches + join + arithmetic. Checked AFTER aggregate so
+    # that if a confused parse sets both, aggregate wins (mirrors the
+    # aggregate/count_only precedence).
+    if intent.compare is not None:
+        return _build_comparison_plan(intent.compare)
+
     # Validate up front so unknown filter types raise loudly instead
     # of being silently dropped by _filters_needing_edge_traversal.
     _validate_intent_filters(intent.filters)
@@ -987,6 +1034,52 @@ def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
             iterate_over=None,
             client_filters=[],
             output_name="aggregation",
+            output_dedupe_by=None,
+        )
+    ]
+
+
+def _build_comparison_plan(compare: dict[str, Any]) -> Plan:
+    """
+    Build a single-step plan for a comparison intent (P6c).
+
+    The compare block names an op (which maps to a bounded comparison
+    tool) plus the tool's parameters (po_number, or supplier_name+top_n,
+    or top_n+status). The result is one non-iterating Step; the tool does
+    the two fetches, the join, and the arithmetic, and returns a
+    structured comparison the executor passes through to the synthesizer.
+
+    Mirrors _build_aggregation_plan exactly — same one-op-per-tool
+    dispatch, same "forward only accepted params" discipline. Raises
+    NotImplementedError if the op has no registered tool, so an
+    unsupported comparison fails loudly rather than silently.
+    """
+    op = compare.get("op")
+    tool = _COMPARISON_TOOLS.get(op)
+    if tool is None:
+        raise NotImplementedError(
+            f"Comparison op {op!r} is not supported in v1. "
+            f"Supported ops: {sorted(_COMPARISON_TOOLS)}."
+        )
+
+    # Forward only the params THIS op's tool accepts, dropping None so the
+    # tool's own defaults apply. Per-op because the tools genuinely differ
+    # — a PO comparison takes a po_number and no top_n; a top-suppliers
+    # comparison takes top_n and status and no po_number.
+    accepted = _COMPARISON_PARAMS.get(op, ())
+    tool_args: dict[str, Any] = {}
+    for key in accepted:
+        if compare.get(key) is not None:
+            tool_args[key] = compare[key]
+
+    return [
+        Step(
+            step_id=1,
+            tool_name=tool,
+            tool_args=tool_args,
+            iterate_over=None,
+            client_filters=[],
+            output_name="comparison",
             output_dedupe_by=None,
         )
     ]
@@ -1467,6 +1560,7 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
 
 
 

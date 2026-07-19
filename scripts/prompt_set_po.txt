@@ -33,6 +33,25 @@ How many purchase orders are there and what are they worth?
 # — committed spend (P6, prompt 18) —
 How much have we committed in open purchase orders?
 
+# — invoiced vs ordered: one PO (P6c, prompt 21) —
+# PO 162034 (Lee Supplies) HAS invoices (invoiced 830.01 vs ordered 758.00);
+# PO 162352 has none, so it cannot anchor this. An over-invoice is real
+# data (tax/freight/variance), not an error.
+How does invoiced compare to ordered for PO 162034?
+
+# — invoiced vs ordered: one supplier (P6c, prompt 22) —
+# "Lee Supplies" is AMBIGUOUS on this pod — it also matches clones like
+# "Lee Supplies56 2026", so the tool returns ambiguous rather than guess.
+# That refusal-to-guess is the correct, expected outcome.
+How does invoiced compare to ordered for Lee Supplies?
+
+# — invoiced vs ordered: top suppliers / concentration (P6c, prompts 23-24) —
+# SLOW: ranks all ~3,362 POs, then per top supplier pages POs + invoices.
+# NOTE ON DATA: most invoices on this pod are NOT PO-linked (debit memos,
+# prepayments), so PO-matched invoiced totals run far below total invoiced;
+# each row's unmatched_invoice_count carries that context.
+Compare ordered vs invoiced for our top 3 suppliers
+
 # — PO date bound (P6 commit 2, prompt 20) —
 # An absolute date satisfies the PO root requirement — no PO id needed.
 Purchase orders created before 2015
@@ -43,3 +62,4 @@ Purchase orders older than 6 months
 
 # — refusal: PO queries need an id —
 List all purchase orders
+

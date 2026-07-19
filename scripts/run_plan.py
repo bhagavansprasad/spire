@@ -65,6 +65,7 @@ from spire.agent.tracing import make_trace_logger
 from spire.executor.executor import execute_plan
 from spire.planner.planner import Intent, Plan, generate_plan
 from spire.synthesizer.synthesizer import (
+    ComparisonResponse,
     CountResponse,
     HallucinationError,
     InvoiceResponse,
@@ -461,6 +462,11 @@ def _format_synthesized(response) -> str:
         )
         return "\n".join(lines)
 
+    if isinstance(response, ComparisonResponse):
+        # The summary (and any truncation notes) were already emitted at
+        # the top; the comparison has no separate record list to render.
+        return "\n".join(lines)
+
     # Should be unreachable — every schema in SYNTHESIS_SCHEMAS and
     # AGGREGATION_SCHEMAS is handled above. It fired for all of P6's first
     # run: the schemas existed but this formatter didn't know them, so the
@@ -504,6 +510,8 @@ def _format_summary(
     elif isinstance(response, CountResponse):
         n = response.count if response.count is not None else 0
         label = f"{response.entity.lower()}(s) counted"
+    elif isinstance(response, ComparisonResponse):
+        n, label = 1, "comparison"
     else:
         n, label = 0, "record(s)"
     lines.append(f"  Synthesized answer:   {n} {label}")
@@ -699,6 +707,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
 
 
 
