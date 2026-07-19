@@ -26,10 +26,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# Known chain on the pod: PO US165380 (Lee Supplies), line 1, schedule 1.
-KNOWN_PO_HEADER_ID = 680869
-KNOWN_PO_LINE_ID = 1298179
-KNOWN_LINE_LOCATION_ID = 793142
+# Known chain on the pod: PO 162352 (POHeaderId 2144, EIP Inc), line 1,
+# schedule 1 — the same PO the other PO tests anchor on. It carries one
+# distribution (DistributionNumber 1, POChargeAccount 101.10.63120...).
+KNOWN_PO_HEADER_ID = 2144
+KNOWN_PO_LINE_ID = 19782
+KNOWN_LINE_LOCATION_ID = 18954
 
 
 @pytest.mark.asyncio
@@ -85,3 +87,5 @@ async def test_get_distributions_empty_for_unknown_chain():
     # An unknown id chain 404s on the nested path; the tool's guard maps
     # that to an empty ToolResult rather than raising.
     assert result.items == []
+
+
