@@ -41,6 +41,13 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-19 | (all collections) | **`totalResults=true` is required for a real total count.** Without it, the `count` field reflects only the returned page size (e.g. `limit=1` → `count: 1`, not the true total). Pass `totalResults=true` to get the authoritative `totalResults` value. Easy to misread `count` as a total during discovery. |
 | 2026-07-19 | /invoices | **Most invoices are NOT PO-linked — quantified.** `PurchaseOrderNumber` is null for the overwhelming majority of invoices on the demo pods. Sampled PO-linked fraction by supplier: Staffing Services 0%, Allied Manufacturing 0%, Advanced Corp 1%, Lee Supplies 7%; ~1% overall across a 1,000-invoice sample of 48,904 total. The non-PO invoices are debit memos, prepayments, and credits (e.g. `StafDM 01`, `PREPAYMENT001`, negative amounts). Consequence: a supplier-level "invoiced vs ordered" comparison is thin on these pods — PO-matched invoiced runs far below total invoiced. A demo-data limitation, not a product one (real customers PO-match via three-way matching). Report `unmatched_invoice_count` so the gap is visible. |
 | 2026-07-19 | (pod) | **Active pod is `fa-esll-dev37`** (this reference's pod). The `eqjz` and `dabpqy` pods seen in earlier sessions are alternates in `personas.yaml`. Anchor ids are pod-specific — a pod switch can invalidate hard-coded test anchors (e.g. distribution chain ids); re-capture from the active pod rather than assuming. |
+| 2026-07-19 | /receivablesInvoices | **AR invoice header.** Canonical id is `CustomerTransactionId` (NOT "InvoiceId"); human number is `TransactionNumber`. Amount is `EnteredAmount`; open balance is `InvoiceBalanceAmount` (0 = paid). Also: `BillToCustomerName`/`BillToCustomerNumber`/`BillToPartyId`, `InvoiceCurrencyCode`, `TransactionDate`/`DueDate`/`AccountingDate`, `InvoiceStatus` (display, e.g. "Complete"), `TransactionType`, `TransactionSource`, `BusinessUnit`. 173,531 rows. Children: `receivablesInvoiceLines`, `receivablesInvoiceInstallments`, `receivablesInvoiceDistributions`, `receivablesInvoiceDFF`, `receivablesInvoiceTransactionDFF` (TWO DFF children — see quirk 8), `attachments`, `notes`, `receivablesInvoiceGdf`. Actions (WRITES): `approve`, `rework`, `splitInstallments`. |
+| 2026-07-19 | /receivablesInvoices/{id}/child/receivablesInvoiceLines | AR invoice lines. Fields: `CustomerTransactionLineId` (PK), `LineNumber`, `Description`, `Quantity`, `UnitSellingPrice`, `LineAmount`, `UnitOfMeasure`, `ItemNumber`, `TaxClassificationCode`, `TaxExemptionHandling`, `LineAmountIncludesTax`, `AssessableValue`. **`TransacationBusinessCategory` is misspelled by Oracle** ("Transacation") — must match the typo exactly. Line children: `receivablesInvoiceLineTaxLines` (prompt 3 tax lines — a GRANDCHILD of the invoice, three levels deep), `receivablesInvoiceLineDFF`, `receivablesInvoiceLineTransactionDFF`. |
+| 2026-07-19 | /standardReceipts | **AR cash receipts — carries everything the three AR aggregates need.** Fields: `StandardReceiptId`, `ReceiptNumber`, `Amount`, `Currency`, `ReceiptDate`, `ReceiptMethod` (display, e.g. "Lockbox" — prompt 17 buckets by this), `State` ("Applied"), `Status` ("Cleared"), `UnappliedAmount`, `AccountedAmount`, `CustomerName`, `CustomerAccountNumber`, `CustomerSite`, `RemittanceBankName`/`Branch`/`AccountNumber`, `CreationDate` + `LastUpdateDate` (prompt 18 lag), `AccountingDate`, `MaturityDate`, `ReceiptBatchName`/`Date`. 37,335 rows. Action (WRITE): `applyReceipt`. NOTE: demo data backfilled — `ReceiptDate` (2012) can predate `CreationDate` (2014); `LastUpdatedBy` seen as "0". |
+| 2026-07-19 | /receivablesCustomerAccountActivities | **The AR customer/balance view — Spire's customer entity for AR.** Fields: `AccountId` (PK), `AccountNumber`, `CustomerName`, `CustomerId`, `TotalOpenReceivablesForAccount` (prompt 10 exposure sort key), `TotalTransactionsDueForAccount`, `CreationDate`/`LastUpdateDate`. Only 435 rows (≈ customer-account count — exposure ranking is cheap). Children (account-scoped prompts hang here by `AccountId`): `creditMemos` (prompt 7), `standardReceipts` (prompt 8), `standardReceiptApplications` (prompt 9), `creditMemoApplications`, `transactionAdjustments`, `transactionPaymentSchedules`, `transactionsPaidByOtherCustomers`. |
+| 2026-07-19 | /receivablesCreditMemos | AR credit memos. **Same object model as `/receivablesInvoices`** — `CustomerTransactionId`, `TransactionNumber`, `BillToCustomerName`/`Number`, same child set + `approve`/`rework` actions. Both are `receivablesTransactions` split by `TransactionType`. Distinct: `EnteredAmount` is NEGATIVE (e.g. -408.90), `CreditMemoStatus`, `TransactionBalanceDue`, `CreditReason`. 2,111 rows. |
+| 2026-07-19 | /receivablesCustomers | **404 — resource does not exist.** The name in the AR source catalog is wrong. For AR customer identity/balances, use `/receivablesCustomerAccountActivities`. Do not model a customer entity from a `/receivablesCustomers` endpoint. |
+| 2026-07-19 | crmRestApi /accounts | Exists (1,476 rows) but is the **CRM/Sales customer**, NOT the AR master. Keys on `PartyId`/`PartyNumber` — a DIFFERENT id space from AR's `CustomerId`/`AccountNumber`. Carries sales data (opportunities, territories, `AccountScore`, DUNS), not receivables. Ruled out as AR's customer source. The collection action `getFinancialCustomerInfo` is the documented sales→financial bridge for a future cross-pillar prompt. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -103,6 +110,8 @@ These hit you on more than one endpoint, so call them out once:
 6. **Fields parameter to project.** Use `?fields=Field1,Field2,Field3` to limit what comes back. Spire tools project to small field sets to avoid bloating LLM context.
 
 7. **`?fields=` is strict on invalid names.** If even one field in a `?fields=...` list doesn't exist on the endpoint, the entire response comes back empty with no error and no warning. Verify each field name against a live response before relying on a projection.
+
+8. **Two DFF children on AR transactions.** AR invoices, invoice lines, and credit memos each expose TWO descriptive-flexfield children: `...DFF` and `...TransactionDFF` (e.g. `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`). A prompt asking for "DFF values" is ambiguous — decide which, or fetch both. On demo data both are typically empty (`__FLEX_Context = null`).
 
 ---
 
@@ -839,3 +848,135 @@ have it null — in fact MOST do on the demo pods (~1% PO-linked; see the
 | `.../child/distributions` | POHeaderId + POLineId + LineLocationId (all three, from the schedule row) | numeric |
 | `/suppliers/{id}/child/contacts` | `SupplierId` (URL path only) | numeric |
 | `/invoices` by PO | `PurchaseOrderNumber` | **string** (e.g. `"162034"`) — NOT POHeaderId |
+
+## 9. AR endpoints (receivables) — P1 discovery (curled 2026-07-19)
+
+The AR pillar's read surface. All under `/fscmRestApi/resources/11.13.18.05/`
+except the CRM account object (ruled out — see below). Captured live against
+pod `fa-esll-dev37`; the source catalog's endpoint and column names were
+partly wrong, so these supersede it.
+
+### `/receivablesInvoices` — AR invoice header
+
+173,531 rows. Canonical id `CustomerTransactionId` (NOT "InvoiceId"), human
+number `TransactionNumber`. Key fields:
+
+- Amounts: `EnteredAmount` (invoice amount), `InvoiceBalanceAmount` (open
+  balance; 0 = paid)
+- Customer: `BillToCustomerName`, `BillToCustomerNumber`, `BillToPartyId`,
+  plus ShipTo/PayingCustomer variants
+- Currency: `InvoiceCurrencyCode`
+- Dates: `TransactionDate`, `DueDate`, `AccountingDate`, `CreationDate`,
+  `LastUpdateDate`
+- Status/type: `InvoiceStatus` (display, e.g. "Complete"), `TransactionType`,
+  `TransactionSource`, `BusinessUnit`
+
+Children: `receivablesInvoiceLines`, `receivablesInvoiceInstallments`,
+`receivablesInvoiceDistributions`, `receivablesInvoiceDFF`,
+`receivablesInvoiceTransactionDFF` (TWO DFF children — see quirk 8),
+`attachments`, `notes`, `receivablesInvoiceGdf`.
+Actions (WRITES, out of read scope): `approve`, `rework`, `splitInstallments`.
+
+Test anchor: `CustomerTransactionId=300000248096352` → TransactionNumber
+61765, BillToCustomerName "ABC Corporation Americas", Santa Clara, UK Business
+Unit, GBP 39,969, InvoiceStatus Complete.
+
+### `/receivablesInvoices/{id}/child/receivablesInvoiceLines` — invoice lines
+
+Fields: `CustomerTransactionLineId` (PK), `LineNumber`, `Description`,
+`Quantity`, `UnitSellingPrice`, `LineAmount`, `UnitOfMeasure`, `ItemNumber`,
+`TaxClassificationCode`, `TaxExemptionHandling`, `LineAmountIncludesTax`,
+`AssessableValue`.
+
+**`TransacationBusinessCategory` is misspelled by Oracle** ("Transacation",
+missing an 's') — the field name must match the typo exactly or it won't
+resolve in `?fields=`.
+
+Line children: `receivablesInvoiceLineTaxLines` (the tax lines — a GRANDCHILD
+of the invoice, reached three levels deep: invoice → line → taxLines),
+`receivablesInvoiceLineDFF`, `receivablesInvoiceLineTransactionDFF`.
+
+### `/standardReceipts` — AR cash receipts
+
+37,335 rows. Carries every column the three AR aggregates need.
+
+- Core: `StandardReceiptId` (PK), `ReceiptNumber`, `Amount`, `Currency`,
+  `ReceiptDate`, `State` ("Applied"), `Status` ("Cleared"),
+  `UnappliedAmount`, `AccountedAmount`
+- `ReceiptMethod` (display, e.g. "Lockbox") — the field prompt 17 buckets by
+- Customer: `CustomerName`, `CustomerAccountNumber`, `CustomerSite`
+- Bank: `RemittanceBankName`, `RemittanceBankBranch`,
+  `RemittanceBankAccountNumber`, `RemittanceBankDepositDate`
+- Dates: `CreationDate` + `LastUpdateDate` (prompt 18 lag), `AccountingDate`,
+  `MaturityDate`; `ReceiptBatchName`, `ReceiptBatchDate`
+
+Action (WRITE): `applyReceipt`. Children: `remittanceReferences`,
+`standardReceiptDFF`, `standardReceiptGdf`.
+
+CAUTION: demo data is backfilled — `ReceiptDate` (e.g. 2012) can predate
+`CreationDate` (e.g. 2014); `LastUpdatedBy` seen as "0". The lag calc (18)
+still works, but the timestamps look odd.
+
+### `/receivablesCustomerAccountActivities` — AR customer / balance view
+
+**This is Spire's customer entity for AR.** Only 435 rows (≈ the
+customer-account count — so the exposure ranking in prompt 10 is cheap).
+
+Fields: `AccountId` (PK), `AccountNumber`, `CustomerName`, `CustomerId`,
+`TotalOpenReceivablesForAccount` (prompt 10 exposure sort key),
+`TotalTransactionsDueForAccount`, `CreationDate`, `LastUpdateDate`.
+
+Children (the account-scoped prompts all hang here, keyed by `AccountId` in
+the URL path):
+- `creditMemos` — prompt 7 (credit memos for an account)
+- `standardReceipts` — prompt 8 (standard receipts for an account)
+- `standardReceiptApplications` — prompt 9 (receipt applications)
+- `creditMemoApplications`, `transactionAdjustments`,
+  `transactionPaymentSchedules`, `transactionsPaidByOtherCustomers`
+
+Test anchor: `AccountId=300000047368512` → AccountNumber 26360, CustomerName
+"ABC Application Software", TotalOpenReceivablesForAccount 680,271.11.
+
+NOTE: standard receipts are reachable BOTH here (per-account child) and as the
+top-level `/standardReceipts` collection. Prompt 8 walks the child; prompt 13
+(Santa Clara site) filters the top-level collection.
+
+### `/receivablesCreditMemos` — AR credit memos
+
+2,111 rows. **Same object model as `/receivablesInvoices`** — same
+`CustomerTransactionId`, `TransactionNumber`, `BillToCustomerName`/`Number`,
+same child set, same `approve`/`rework` actions. Both are
+`receivablesTransactions` split by `TransactionType`. Distinct: `EnteredAmount`
+is NEGATIVE (e.g. -408.90), `CreditMemoStatus`, `TransactionBalanceDue`,
+`CreditReason`.
+
+### `/receivablesCustomers` — DOES NOT EXIST (404)
+
+The name in the AR source catalog is wrong; there is no such resource. For AR
+customer identity and balances, use `/receivablesCustomerAccountActivities`.
+Do not attempt to model a customer entity from `/receivablesCustomers`.
+
+### `crmRestApi /accounts` — CRM/Sales customer, NOT the AR master
+
+Exists (1,476 rows) but is the sales-and-marketing account view, ruled out for
+AR. Keys on `PartyId` / `PartyNumber` — a DIFFERENT id space from AR's
+`CustomerId` / `AccountNumber` (verified: sample keyed on PartyId
+100000220363437 / PartyNumber 571206, "Astil Electronique", a French sales
+prospect — unrelated to the ABC receivables customers). Carries opportunities,
+territories, `AccountScore`, DUNS — not receivables. The collection action
+`getFinancialCustomerInfo` is the documented sales→financial bridge, if a
+future cross-pillar prompt ever needs to join sales to AR.
+
+### Join-key matrix — AR additions
+
+| To search this | Join key | Numeric or string? |
+|---|---|---|
+| `/receivablesInvoices` (by customer) | `BillToCustomerNumber` | string (e.g. "26370") |
+| `/receivablesCreditMemos` (by customer) | `BillToCustomerNumber` | string |
+| `/standardReceipts` (by customer) | `CustomerAccountNumber` | string (e.g. "25750") |
+| account children (memos/receipts/applications) | `AccountId` (URL path) | numeric |
+| customer identity across AR objects | `CustomerId` / `AccountNumber` | numeric / string |
+
+AR invoice and credit-memo detail fetch by `CustomerTransactionId` (numeric).
+Invoice lines by the parent `CustomerTransactionId` in the path; tax lines need
+invoice id + line id (deep nested, same pattern as PO distributions).
