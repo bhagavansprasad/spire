@@ -101,7 +101,7 @@ the second is a comprehension task, which LLMs do far more reliably.
 
 ## 4. The architecture: a bounded pipeline
 
-![Spire bounded pipeline architecture](pipeline_graph.png)
+![Spire bounded pipeline architecture](images/spire_pipeline_architecture.png)
 
 ```
 NL prompt → 1·Parse (LLM) → 2·Plan (code) → 3·Execute (code) → 4·Synthesize (LLM) → answer or refusal
