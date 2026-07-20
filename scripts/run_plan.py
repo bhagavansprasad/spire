@@ -73,6 +73,7 @@ from spire.synthesizer.synthesizer import (
     POStatusBreakdownResponse,
     PurchaseOrderResponse,
     ReceivablesInvoiceResponse,
+    CustomerAccountResponse,
     SupplierPOValueRankingResponse,
     SupplierResponse,
     SupplierSpendRankingResponse,
@@ -429,6 +430,30 @@ def _format_synthesized(response) -> str:
                     f" — qty {ln.quantity}, {ln.amount}"
                 )
         return "\n".join(lines)
+
+    if isinstance(response, CustomerAccountResponse):
+        if not response.customer_accounts:
+            lines.append("(No customer accounts in the structured result.)")
+            return "\n".join(lines)
+        lines.append("Customer Accounts:")
+        for acct in response.customer_accounts:
+            line = (
+                f"  - {acct.customer_name} "
+                f"(AccountId={acct.account_id}, "
+                f"AccountNumber={acct.account_number}); "
+                f"open receivables {acct.open_receivables}"
+            )
+            if acct.transactions:
+                line += f" — {len(acct.transactions)} invoice(s)"
+            lines.append(line)
+            for txn in acct.transactions:
+                lines.append(
+                    f"      {txn.transaction_number} "
+                    f"(TransactionId={txn.transaction_id}) — "
+                    f"{txn.transaction_class}; {txn.transaction_date}; "
+                    f"{txn.amount} (balance {txn.balance}); {txn.status}"
+                )
+        return "\n".join(lines)
  
     if isinstance(response, SupplierSpendRankingResponse):
         if not response.suppliers:
@@ -526,6 +551,8 @@ def _format_summary(
         n, label = len(response.purchase_orders), "purchase order(s)"
     elif isinstance(response, ReceivablesInvoiceResponse):
         n, label = len(response.receivables_invoices), "AR invoice(s)"
+    elif isinstance(response, CustomerAccountResponse):
+        n, label = len(response.customer_accounts), "customer account(s)"
     elif isinstance(response, SupplierSpendRankingResponse):
         n, label = len(response.suppliers), "ranked supplier(s)"
     elif isinstance(response, SupplierPOValueRankingResponse):

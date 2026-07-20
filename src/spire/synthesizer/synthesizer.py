@@ -417,6 +417,78 @@ class ReceivablesInvoiceResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class CustomerAccountTransactionInfo(BaseModel):
+    """One transaction nested under a customer account.
+
+    transaction_id is validated against the executor's output after
+    synthesis — it MUST appear there. This is the account's payment-schedule
+    transaction (a TransactionId, small int), NOT the AR-invoice
+    CustomerTransactionId."""
+
+    transaction_id: int = Field(
+        description="The transaction's TransactionId (numeric key). Must "
+        "appear in the data."
+    )
+    transaction_number: str = Field(
+        description="The transaction number."
+    )
+    transaction_class: str = Field(
+        default="", description="Transaction class (e.g. Invoice)."
+    )
+    transaction_date: str = Field(
+        default="", description="Transaction date."
+    )
+    amount: float | None = Field(
+        default=None, description="Original amount (TotalOriginalAmount)."
+    )
+    balance: float | None = Field(
+        default=None, description="Open balance (TotalBalanceAmount)."
+    )
+    status: str = Field(
+        default="", description="Installment status (e.g. Closed)."
+    )
+
+
+class CustomerAccountRecord(BaseModel):
+    """One customer account in a customer-account-rooted response.
+
+    account_id is validated against the executor's output."""
+
+    account_id: int = Field(
+        description="The account's AccountId (numeric PK)."
+    )
+    account_number: str = Field(
+        description="The account number."
+    )
+    customer_name: str = Field(
+        default="", description="Customer display name."
+    )
+    open_receivables: float | None = Field(
+        default=None,
+        description="Open receivables for the account "
+        "(TotalOpenReceivablesForAccount).",
+    )
+    transactions: list[CustomerAccountTransactionInfo] = Field(
+        default_factory=list,
+        description="This account's transactions, when the query asked for "
+        "them (a 'customertransaction' bucket in the data). Empty "
+        "otherwise. Each transaction_id must appear in the executor's "
+        "output.",
+    )
+
+
+class CustomerAccountResponse(BaseModel):
+    """CustomerAccount-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    customer_accounts: list[CustomerAccountRecord] = Field(
+        default_factory=list,
+        description="One entry per customer account in the final set. "
+        "Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class AddressRecord(BaseModel):
     """One supplier address in an address-rooted response.
 
@@ -634,6 +706,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "Address": AddressResponse,
     "PurchaseOrder": PurchaseOrderResponse,
     "ReceivablesInvoice": ReceivablesInvoiceResponse,
+    "CustomerAccount": CustomerAccountResponse,
 }
 
 
@@ -740,6 +813,9 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     # AR-P2: receivables invoice + its lines.
     customer_transaction_ids: set = set()
     customer_transaction_line_ids: set = set()
+    # AR-P2b: customer account + its transactions (payment schedules).
+    customer_account_ids: set = set()
+    customer_account_transaction_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -770,6 +846,13 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 customer_transaction_ids.add(ctid)
             if (ctlid := item.get("CustomerTransactionLineId")) is not None:
                 customer_transaction_line_ids.add(ctlid)
+            # AR-P2b: customer account id and its transaction id (the
+            # payment-schedule TransactionId, distinct from the AR-invoice
+            # CustomerTransactionId above).
+            if (caid := item.get("AccountId")) is not None:
+                customer_account_ids.add(caid)
+            if (catid := item.get("TransactionId")) is not None:
+                customer_account_transaction_ids.add(catid)
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -802,6 +885,8 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "contact_ids": contact_ids,
         "customer_transaction_ids": customer_transaction_ids,
         "customer_transaction_line_ids": customer_transaction_line_ids,
+        "customer_account_ids": customer_account_ids,
+        "customer_account_transaction_ids": customer_account_transaction_ids,
     }
 
 
@@ -923,6 +1008,25 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "exactly as given. Do NOT compute totals, tax, or any arithmetic.\n"
         "Every customer_transaction_line_id must appear in the data. If the "
         "bucket is absent, leave 'lines' empty and do not mention it."
+    ),
+    "CustomerAccount": (
+        "This is a CUSTOMER-ACCOUNT-rooted query (accounts receivable). The "
+        "customer was resolved to their account(s); for each account in the "
+        "final set, emit one entry under 'customer_accounts' with its "
+        "account_id, account_number, customer_name, and open_receivables "
+        "(TotalOpenReceivablesForAccount). account_id must appear in the "
+        "data.\n"
+        "CHILD DETAIL — the question asked for the customer's invoices if "
+        "the bucket is there, so the summary MUST describe them, not just "
+        "the account:\n"
+        "- 'customertransaction' bucket: emit each transaction under that "
+        "account's 'transactions' (transaction_id, transaction_number, "
+        "transaction_class, transaction_date, amount, balance, status). The "
+        "summary must say how many invoices and, where useful, their total "
+        "value — but COPY amounts exactly as given; do NOT compute sums, "
+        "tax, or any arithmetic. Every transaction_id must appear in the "
+        "data. If the bucket is absent, leave 'transactions' empty and do "
+        "not mention it."
     ),
     "SupplierSpendRanking": (
         "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
@@ -1156,6 +1260,30 @@ def _validate_receivables_invoice(
     _raise_if_bad(parts)
 
 
+def _validate_customer_account(
+    response: CustomerAccountResponse, valid: dict[str, set]
+) -> None:
+    bad_acct: list[int] = []
+    bad_txn: list[int] = []
+    for acct in response.customer_accounts:
+        if acct.account_id not in valid["customer_account_ids"]:
+            bad_acct.append(acct.account_id)
+        # The account's transactions are where invented detail would
+        # surface, so every id is cross-referenced.
+        for txn in acct.transactions:
+            if (
+                txn.transaction_id
+                not in valid["customer_account_transaction_ids"]
+            ):
+                bad_txn.append(txn.transaction_id)
+    parts = []
+    if bad_acct:
+        parts.append(f"customer_account_ids={bad_acct}")
+    if bad_txn:
+        parts.append(f"customer_account_transaction_ids={bad_txn}")
+    _raise_if_bad(parts)
+
+
 def _validate_supplier_spend_ranking(
     response: SupplierSpendRankingResponse, valid: dict[str, set]
 ) -> None:
@@ -1212,6 +1340,7 @@ _VALIDATORS = {
     AddressResponse: _validate_address,
     PurchaseOrderResponse: _validate_purchase_order,
     ReceivablesInvoiceResponse: _validate_receivables_invoice,
+    CustomerAccountResponse: _validate_customer_account,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
     SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
     POStatusBreakdownResponse: _validate_no_ids,

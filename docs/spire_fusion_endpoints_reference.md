@@ -39,6 +39,7 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-17 | (pod switch) | **An empty collection on a freshly-provisioned pod may mean "still loading"** — not "no access", not "bad fields". On pod `eqjz`, `/purchaseOrders` returned `count: 0` (HTTP 200) for a period, with AND without `fields=`, while `/purchaseOrderSchedules` returned rows referencing those same POs. It later populated normally. Before escalating an empty collection as a permissions problem, re-test after a delay and cross-check a sibling resource. |
 | 2026-07-19 | /purchaseOrders | **POs carry NO `SupplierNumber`.** Naming `SupplierNumber` in `?fields=` on `/purchaseOrders` returns **HTTP 400** — POs expose only `SupplierId` (numeric). This is the reason the top-N supplier comparison must resolve each supplier's number from its id (one `/suppliers?q=SupplierId=` lookup) before it can filter invoices (which use `SupplierNumber`). |
 | 2026-07-19 | (all collections) | **`totalResults=true` is required for a real total count.** Without it, the `count` field reflects only the returned page size (e.g. `limit=1` → `count: 1`, not the true total). Pass `totalResults=true` to get the authoritative `totalResults` value. Easy to misread `count` as a total during discovery. |
+| 2026-07-19 | AR receivables | **`TransactionClass` is not queryable.** A `q=` filter on `TransactionClass` (on the AR receivables resources) is rejected: *"The attribute(s) [TransactionClass] are not queriable."* The attribute is returned in the body but not server-filterable — filter client-side. See the "Non-queryable attributes" section for the running list. |
 | 2026-07-19 | /invoices | **Most invoices are NOT PO-linked — quantified.** `PurchaseOrderNumber` is null for the overwhelming majority of invoices on the demo pods. Sampled PO-linked fraction by supplier: Staffing Services 0%, Allied Manufacturing 0%, Advanced Corp 1%, Lee Supplies 7%; ~1% overall across a 1,000-invoice sample of 48,904 total. The non-PO invoices are debit memos, prepayments, and credits (e.g. `StafDM 01`, `PREPAYMENT001`, negative amounts). Consequence: a supplier-level "invoiced vs ordered" comparison is thin on these pods — PO-matched invoiced runs far below total invoiced. A demo-data limitation, not a product one (real customers PO-match via three-way matching). Report `unmatched_invoice_count` so the gap is visible. |
 | 2026-07-19 | (pod) | **Active pod is `fa-esll-dev37`** (this reference's pod). The `eqjz` and `dabpqy` pods seen in earlier sessions are alternates in `personas.yaml`. Anchor ids are pod-specific — a pod switch can invalidate hard-coded test anchors (e.g. distribution chain ids); re-capture from the active pod rather than assuming. |
 | 2026-07-19 | /receivablesInvoices | **AR invoice header.** Canonical id is `CustomerTransactionId` (NOT "InvoiceId"); human number is `TransactionNumber`. Amount is `EnteredAmount`; open balance is `InvoiceBalanceAmount` (0 = paid). Also: `BillToCustomerName`/`BillToCustomerNumber`/`BillToPartyId`, `InvoiceCurrencyCode`, `TransactionDate`/`DueDate`/`AccountingDate`, `InvoiceStatus` (display, e.g. "Complete"), `TransactionType`, `TransactionSource`, `BusinessUnit`. 173,531 rows. Children: `receivablesInvoiceLines`, `receivablesInvoiceInstallments`, `receivablesInvoiceDistributions`, `receivablesInvoiceDFF`, `receivablesInvoiceTransactionDFF` (TWO DFF children — see quirk 8), `attachments`, `notes`, `receivablesInvoiceGdf`. Actions (WRITES): `approve`, `rework`, `splitInstallments`. |
@@ -112,6 +113,26 @@ These hit you on more than one endpoint, so call them out once:
 7. **`?fields=` is strict on invalid names.** If even one field in a `?fields=...` list doesn't exist on the endpoint, the entire response comes back empty with no error and no warning. Verify each field name against a live response before relying on a projection.
 
 8. **Two DFF children on AR transactions.** AR invoices, invoice lines, and credit memos each expose TWO descriptive-flexfield children: `...DFF` and `...TransactionDFF` (e.g. `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`). A prompt asking for "DFF values" is ambiguous — decide which, or fetch both. On demo data both are typically empty (`__FLEX_Context = null`).
+
+---
+
+## Non-queryable attributes (growing list)
+
+Some Fusion attributes are returned in the response body but **cannot be
+used in a `q=` filter** — the server rejects the query with:
+
+> `The attribute(s) [<Name>] are not queriable.`
+
+(Note Oracle's spelling: "queriable".) This is distinct from an unknown
+field: the attribute is real and appears in results, it just isn't indexed
+for server-side filtering. When you hit this, drop the clause and filter
+client-side (the same approach used for other non-queryable fields on this
+pod). Capture each one here as it's discovered.
+
+| Attribute | Endpoint(s) | Error | Notes |
+|---|---|---|---|
+| `TransactionClass` | AR receivables resources (e.g. `/receivablesInvoices`, `/receivablesTransactions`) | `The attribute(s) [TransactionClass] are not queriable.` | Discovered during AR exploration. Returned in the body but not server-filterable. |
+| `SupplierNumber` | `/purchaseOrders` | HTTP 400 when named in `?fields=` | POs expose only `SupplierId` (numeric), not `SupplierNumber`. See the join-key matrix and the 2026-07-19 discovery-log row. |
 
 ---
 
