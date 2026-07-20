@@ -298,7 +298,21 @@ INSERT INTO kg_entity VALUES (
   'A line on an AR invoice. Modeled as a separate entity because an invoice has many lines. Not a top-level resource; only accessible as a child of ReceivablesInvoice at /receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines. Fetched as a plain expansion (no server filter needed). Note the pod misspells one field as TransacationBusinessCategory (sic) - it must be requested with the typo or ?fields= drops it silently.'
 );
 
-PROMPT Seeded kg_entity (13 rows).
+
+-- AR-P2b
+INSERT INTO kg_entity VALUES (
+  'CustomerAccount', 'AccountId', 'CustomerName',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities',
+  'A customer''s accounts-receivable account. The resolve point for customer-scoped AR queries: a customer name resolves here (q=CustomerName= is queryable on this endpoint, unlike the AR-invoice endpoint) to one or more accounts, each carrying an AccountId. Traverse HAS_CUSTOMER_TRANSACTION from an account to its transactions. Also carries the account balances (TotalOpenReceivablesForAccount, TotalTransactionsDueForAccount).'
+);
+
+-- AR-P2b
+INSERT INTO kg_entity VALUES (
+  'CustomerTransaction', 'TransactionId', 'TransactionNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules',
+  'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.'
+);
+PROMPT Seeded kg_entity (15 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -454,7 +468,25 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineAmountInclude
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'AssessableValue',             'amount',       'numeric', 'Assessable value for tax.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TransacationBusinessCategory','projection',   'string',  'Transaction business category (e.g. ''Sales Transaction''). NOTE: Oracle misspells this field as ''TransacationBusinessCategory'' (sic); must be requested with the typo exactly.');
 
-PROMPT Seeded kg_entity_field (111 rows).
+
+-- CustomerAccount (AR-P2b)
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'AccountId',                      'canonical_id', 'numeric', 'System primary key for the account. The join key traversed to CustomerTransaction (carried in the child URL path).');
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'AccountNumber',                  'display_id',   'string',  'Human-readable account number (e.g. ''26370'').');
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'CustomerName',                   'display_name', 'string',  'Customer display name. Queryable via q=CustomerName= (exact) on this endpoint; the resolve point for customer-scoped queries.');
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'CustomerId',                     'reference',    'numeric', 'Customer party id.');
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'TotalOpenReceivablesForAccount', 'amount',       'numeric', 'Open receivables balance for the account (can be negative when the customer is in credit).');
+INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'TotalTransactionsDueForAccount', 'amount',       'numeric', 'Total transactions due for the account.');
+
+-- CustomerTransaction (AR-P2b)
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TransactionId',          'canonical_id', 'numeric', 'System primary key for the transaction (small int; distinct from ReceivablesInvoice.CustomerTransactionId).');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TransactionNumber',      'display_id',   'string',  'Human-readable transaction number.');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TransactionClass',       'projection',   'string',  'Transaction class (e.g. ''Invoice''). NOT queryable server-side; filter client-side to keep invoices.');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TransactionDate',        'date',         'iso_date','Transaction date.');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'PaymentScheduleDueDate', 'date',         'iso_date','Due date of the payment schedule.');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalOriginalAmount',    'amount',       'numeric', 'Original transaction amount.');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalBalanceAmount',     'amount',       'numeric', 'Open balance on the transaction; 0 is paid. A positive balance is an open invoice (used by the open-only filter, deferred to a later phase).');
+INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'InstallmentStatus',      'status',       'string',  'Installment status (e.g. ''Closed'').');
+PROMPT Seeded kg_entity_field (125 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -550,7 +582,16 @@ INSERT INTO kg_edge VALUES (
   NULL
 );
 
-PROMPT Seeded kg_edge (11 rows).
+
+-- AR-P2b
+INSERT INTO kg_edge VALUES (
+  'HAS_CUSTOMER_TRANSACTION', 'CustomerAccount', 'CustomerTransaction', 'AccountId', 'AccountId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesCustomerAccountActivities/{account.AccountId}/child/transactionPaymentSchedules. Fetch the account''s transactions; keep TransactionClass=''Invoice'' client-side (not queryable). The parent AccountId is carried in the URL path.',
+  'Per-account child call, one HTTP call per account. Same expansion shape as HAS_AR_LINE. Client-side Invoice-class filter in the tool; the open-balance filter (prompt 1) is deferred to a later phase.',
+  NULL
+);
+PROMPT Seeded kg_edge (12 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -815,7 +856,14 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Fetches ONE AR invoice by CustomerTransactionId via q= on the collection. Single-path (no TransactionNumber fallback - no P2 prompt needs it). Returns None when the id matches nothing.'
 );
 
-PROMPT Seeded kg_entity_tool (6 rows).
+
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'CustomerAccount',
+  'by_customer_name',
+  'get_customer_account_by_name',
+  'Resolves a customer name to their account(s) via q=CustomerName= (exact) on receivablesCustomerAccountActivities. Returns all matching accounts as a list; the edge traversal iterates them.'
+);
+PROMPT Seeded kg_entity_tool (7 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -890,7 +938,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes customer_transaction_id. Plain expansion: returns the invoice''s lines as a ToolResult. No filter, no keep-parent logic.'
 );
 
-PROMPT Seeded kg_edge_tool (10 rows).
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_CUSTOMER_TRANSACTION',
+  'get_customer_transactions',
+  'Takes account_id. Fetches the account''s transactionPaymentSchedules, keeps TransactionClass=''Invoice'' client-side. Has an open_only flag (positive-balance filter) that is unused until the open-invoices phase.'
+);
+PROMPT Seeded kg_edge_tool (11 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -1009,7 +1063,12 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Fetch one AR invoice by CustomerTransactionId via q= on the collection (confirmed queryable). Dedicated fetcher get_receivables_invoice_by_id; returns None when the id matches nothing (collection returns empty items, not 404).'
 );
 
-PROMPT Seeded kg_entity_filter (20 rows).
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'CustomerAccount', 'by_customer_name', 'entity_level', 'customer_name', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerName', 'equals',
+  'Resolve a customer account by exact CustomerName via q= (queryable on this endpoint, unlike the AR-invoice customer fields). Dedicated fetcher get_customer_account_by_name; returns a list of matching accounts.'
+);
+PROMPT Seeded kg_entity_filter (21 rows).
 
 -- ============================================================
 

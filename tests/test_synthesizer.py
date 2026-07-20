@@ -200,6 +200,8 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "contact_ids": set(),
         "customer_transaction_ids": set(),
         "customer_transaction_line_ids": set(),
+        "customer_account_ids": set(),
+        "customer_account_transaction_ids": set(),
         }
 
 

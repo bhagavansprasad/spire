@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_thirteen_rows():
+async def test_kg_entity_has_fifteen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -68,6 +68,9 @@ async def test_kg_entity_has_thirteen_rows():
     iteration edge. AR-P2 added ReceivablesInvoice (the AR invoice header,
     fetched by_id on CustomerTransactionId) and ReceivablesInvoiceLine
     (its lines child, reached via the HAS_AR_LINE expansion edge).
+    AR-P2b added CustomerAccount (the AR customer account, resolved by
+    CustomerName) and CustomerTransaction (the account's payment-schedule
+    transactions, reached via the HAS_CUSTOMER_TRANSACTION expansion edge).
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -76,7 +79,8 @@ async def test_kg_entity_has_thirteen_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "Address", "Buyer", "Classification", "Contact", "Invoice",
+        "Address", "Buyer", "Classification", "Contact", "CustomerAccount",
+        "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
         "Site", "Supplier"
@@ -124,18 +128,24 @@ async def test_kg_table_row_counts_match_v1_1():
     (HAS_AR_LINE, 9->10), +1 entity tool (ReceivablesInvoice by_id, 5->6),
     +1 filter row (ReceivablesInvoice by_id, kg_entity_filter 19->20), and
     +4 vocab rows (AR-invoice entity synonyms, 81->85).
+    AR-P2b (customer invoices via account) added the customer-account
+    resolve + transaction traversal: +2 entities (CustomerAccount,
+    CustomerTransaction, 13->15), +14 fields (6 account + 8 transaction,
+    111->125), +1 edge (HAS_CUSTOMER_TRANSACTION, 11->12), +1 edge tool
+    (11), +1 entity tool (CustomerAccount by_customer_name, 6->7), +1 filter
+    row (by_customer_name, 20->21). No new vocab.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 13,
-        "kg_entity_field": 111,
-        "kg_edge": 11,
+        "kg_entity": 15,
+        "kg_entity_field": 125,
+        "kg_edge": 12,
         "kg_pattern": 3,
         "kg_vocabulary": 85,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 6,
-        "kg_entity_filter": 20,
-        "kg_edge_tool": 10,
+        "kg_entity_tool": 7,
+        "kg_entity_filter": 21,
+        "kg_edge_tool": 11,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

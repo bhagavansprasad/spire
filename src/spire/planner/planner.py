@@ -74,6 +74,11 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # CustomerTransactionId.
     "get_receivables_invoice_by_id": "customer_transaction_id",
     "get_receivables_invoice_lines": "customer_transaction_id",
+    # AR-P2b: customer's transactions via the account traversal. The edge
+    # tool iterates on the account's AccountId. (The resolver
+    # get_customer_account_by_name is the entity fetcher, not an iterated
+    # tool, so it takes its arg from the by_customer_name filter, not here.)
+    "get_customer_transactions": "account_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -145,6 +150,8 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "Address": "addresses",
     "ReceivablesInvoice": "receivables_invoices",
     "ReceivablesInvoiceLine": "receivables_invoice_lines",
+    "CustomerAccount": "customer_accounts",
+    "CustomerTransaction": "customer_transactions",
 }
 
 # Filter-type -> short suffix used when the step's output is the

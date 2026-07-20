@@ -65,6 +65,12 @@ from spire.mcp_server.tools.receivables_invoice_by_id import (
 from spire.mcp_server.tools.receivables_invoice_lines import (
     get_receivables_invoice_lines as _get_receivables_invoice_lines,
 )
+from spire.mcp_server.tools.customer_account_by_name import (
+    get_customer_account_by_name as _get_customer_account_by_name,
+)
+from spire.mcp_server.tools.customer_transactions import (
+    get_customer_transactions as _get_customer_transactions,
+)
 from spire.mcp_server.tools.purchase_order_schedules import (
     get_purchase_order_schedules as _get_purchase_order_schedules,
 )
@@ -495,6 +501,61 @@ async def get_receivables_invoice_lines(
     async with FusionClient(_persona) as client:
         result = await _get_receivables_invoice_lines(
             client, customer_transaction_id=customer_transaction_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_customer_account_by_name(
+    customer_name: str, limit: int = 25
+) -> list[dict]:
+    """Resolve a customer name to their receivables account(s).
+
+    Use this as the first half of a customer-scoped AR-invoice query, e.g.
+    "AR invoices for ABC Corporation Americas" or "invoices for customer
+    X": resolve the customer to their account(s) here, then call
+    get_customer_transactions with each AccountId to list the invoices.
+
+    Args:
+        customer_name: The customer's display name, matched exactly.
+
+    Returns:
+        A list of account dicts (AccountId, AccountNumber, CustomerName,
+        CustomerId, and the account balances), one per matching account.
+        Empty if the name matches nothing.
+    """
+    async with FusionClient(_persona) as client:
+        return await _get_customer_account_by_name(
+            client, customer_name=customer_name, limit=limit
+        )
+
+
+@mcp.tool()
+async def get_customer_transactions(
+    account_id: int,
+    open_only: bool = False,
+    limit: int = 25,
+) -> dict:
+    """List a customer account's invoice transactions.
+
+    Use this as the second half of a customer-scoped AR-invoice query:
+    after get_customer_account_by_name resolves the customer to an
+    AccountId, this returns that account's invoices.
+
+    Args:
+        account_id: The AccountId of the customer account.
+        open_only: When True, keep only invoices with a positive open
+            balance. (Reserved for the open-invoices flow; defaults False.)
+        limit: Max transactions to return after filtering.
+
+    Returns:
+        A dict with the account's invoice transactions: TransactionNumber,
+        TransactionClass, TransactionDate, TotalOriginalAmount,
+        TotalBalanceAmount, and InstallmentStatus per row.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_customer_transactions(
+            client, account_id=account_id, open_only=open_only, limit=limit
         )
         return result.to_dict()
 
