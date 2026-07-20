@@ -14,7 +14,8 @@ bundles:
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
-  
+  - docs/spire_pipeline_playbook.md
+
   scripts:
   - scripts/draw_graph.py
   - scripts/print_kg.py
@@ -33,12 +34,14 @@ bundles:
   - scripts/prompt_set_supplier.txt
   - scripts/spire_v1.2_review_prompts.txt
   - scripts/score_parser_prompts.py
+
   graph_kg:
   - scripts/sql/kg_schema.sql
   - src/spire/executor/executor.py
   - src/spire/fusion/client.py
   - src/spire/graph/pipeline.py
   - src/spire/kg/loader.py
+
   mcp_server_tools:
   - src/spire/mcp_server/server.py
   - src/spire/mcp_server/tools/addresses.py
@@ -58,6 +61,10 @@ bundles:
   - src/spire/mcp_server/tools/purchase_order_lines.py
   - src/spire/mcp_server/tools/purchase_order_schedules.py
   - src/spire/mcp_server/tools/supplier_contacts.py
+  - src/spire/mcp_server/tools/receivables_invoice_by_id.py
+  - src/spire/mcp_server/tools/receivables_invoice_lines.py
+  - src/spire/mcp_server/tools/receivables_invoice_by_id.py
+  - src/spire/mcp_server/tools/receivables_invoice_lines.py
 
   parser_planner:
   - src/spire/nl_parser/capability.py
@@ -69,6 +76,7 @@ bundles:
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
   - src/spire/synthesizer/synthesizer.py
+  
   tests:
   - tests/spire_sme_validation_checklist.md
   - tests/test_aggregate_invoices_tool.py
@@ -98,6 +106,8 @@ bundles:
   - tests/test_purchase_order_distributions_tool.py
   - tests/test_purchase_order_schedules_tool.py
   - tests/test_supplier_contacts_tool.py
+  - tests/test_receivables_invoice_detail_tool.py
+
 excludes:
 - traces
 - traces/*

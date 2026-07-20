@@ -70,6 +70,10 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # this table. Registered anyway for any single-arg reader; the primary
     # id is the schedule's LineLocationId.
     "get_purchase_order_distributions": "line_location_id",
+    # AR-P2: single AR-invoice fetch and its lines child. Both key off
+    # CustomerTransactionId.
+    "get_receivables_invoice_by_id": "customer_transaction_id",
+    "get_receivables_invoice_lines": "customer_transaction_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -139,6 +143,8 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "PurchaseOrder": "pos",
     "Buyer": "buyers",
     "Address": "addresses",
+    "ReceivablesInvoice": "receivables_invoices",
+    "ReceivablesInvoiceLine": "receivables_invoice_lines",
 }
 
 # Filter-type -> short suffix used when the step's output is the
@@ -807,6 +813,26 @@ def generate_plan(
                 "For example 'show PO 2144 and its lines', or 'POs created "
                 "before 2015'. To list a supplier's POs, ask about the "
                 "supplier (e.g. 'open POs for supplier EIP Inc')."
+            )
+
+    # ReceivablesInvoice is a valid root only for a single-invoice fetch
+    # (by_id on CustomerTransactionId). Like PurchaseOrder it has no
+    # unfiltered default fetcher (no (ReceivablesInvoice,'none') row), and
+    # the collection holds 173k invoices — a root without an id would scan
+    # the whole pod. AR's only root ref is by_id: unlike PO there is no
+    # date-bound list filter on this endpoint (BillToCustomerName/Number
+    # are not queryable, so customer listing goes via the account path, not
+    # here). Refuse cleanly and point at the account path for listing.
+    if intent.target_entity == "ReceivablesInvoice":
+        has_root_ref = any(
+            f.get("type") == "by_id" for f in intent.filters
+        )
+        if not has_root_ref:
+            raise ValueError(
+                "AR-invoice queries require a CustomerTransactionId. For "
+                "example 'show the AR invoice with CustomerTransactionId "
+                "300000248096352 and its lines'. To list a customer's "
+                "invoices, ask about the customer account."
             )
 
     ref_date = reference_date if reference_date is not None else date.today()

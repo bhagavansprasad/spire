@@ -350,6 +350,73 @@ class PurchaseOrderResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class ReceivablesInvoiceLineInfo(BaseModel):
+    """One AR invoice line nested under a receivables invoice.
+
+    customer_transaction_line_id is validated against the executor's output
+    after synthesis — it MUST appear there."""
+
+    customer_transaction_line_id: int = Field(
+        description="The line's CustomerTransactionLineId (numeric key). "
+        "Must appear in the data."
+    )
+    line_number: int = Field(description="The line number within the invoice.")
+    description: str = Field(default="", description="Line description.")
+    quantity: float | None = Field(default=None, description="Line quantity.")
+    unit_selling_price: float | None = Field(
+        default=None, description="Unit selling price for the line."
+    )
+    amount: float | None = Field(
+        default=None, description="Line amount (the LineAmount field)."
+    )
+
+
+class ReceivablesInvoiceRecord(BaseModel):
+    """One AR invoice in a receivables-invoice-rooted response.
+
+    customer_transaction_id is validated against the executor's output."""
+
+    customer_transaction_id: int = Field(
+        description="The invoice's CustomerTransactionId (numeric PK)."
+    )
+    transaction_number: str = Field(
+        description="The invoice's TransactionNumber."
+    )
+    bill_to_customer_name: str = Field(
+        default="", description="Bill-to customer display name."
+    )
+    status: str = Field(
+        default="", description="The invoice status (e.g. Complete)."
+    )
+    currency: str = Field(
+        default="", description="Invoice currency (InvoiceCurrencyCode)."
+    )
+    amount: float | None = Field(
+        default=None, description="Invoice amount (EnteredAmount)."
+    )
+    balance: float | None = Field(
+        default=None, description="Open balance (InvoiceBalanceAmount)."
+    )
+    lines: list[ReceivablesInvoiceLineInfo] = Field(
+        default_factory=list,
+        description="This invoice's lines, when the query asked for them (a "
+        "'receivablesinvoiceline' bucket in the data). Empty otherwise. Each "
+        "customer_transaction_line_id must appear in the executor's output.",
+    )
+
+
+class ReceivablesInvoiceResponse(BaseModel):
+    """ReceivablesInvoice-rooted synthesized response."""
+
+    summary: str = _SUMMARY_FIELD
+    receivables_invoices: list[ReceivablesInvoiceRecord] = Field(
+        default_factory=list,
+        description="One entry per AR invoice in the final set. "
+        "Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class AddressRecord(BaseModel):
     """One supplier address in an address-rooted response.
 
@@ -566,6 +633,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "Invoice": InvoiceResponse,
     "Address": AddressResponse,
     "PurchaseOrder": PurchaseOrderResponse,
+    "ReceivablesInvoice": ReceivablesInvoiceResponse,
 }
 
 
@@ -669,6 +737,9 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     line_location_ids: set = set()
     po_distribution_ids: set = set()
     contact_ids: set = set()
+    # AR-P2: receivables invoice + its lines.
+    customer_transaction_ids: set = set()
+    customer_transaction_line_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -694,6 +765,11 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 po_distribution_ids.add(pdid)
             if (scid := item.get("SupplierContactId")) is not None:
                 contact_ids.add(scid)
+            # AR-P2: receivables invoice header id and line id.
+            if (ctid := item.get("CustomerTransactionId")) is not None:
+                customer_transaction_ids.add(ctid)
+            if (ctlid := item.get("CustomerTransactionLineId")) is not None:
+                customer_transaction_line_ids.add(ctlid)
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -724,6 +800,8 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "line_location_ids": line_location_ids,
         "po_distribution_ids": po_distribution_ids,
         "contact_ids": contact_ids,
+        "customer_transaction_ids": customer_transaction_ids,
+        "customer_transaction_line_ids": customer_transaction_line_ids,
     }
 
 
@@ -828,6 +906,23 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "Every po_line_id, line_location_id and po_distribution_id must "
         "appear in the data. If a bucket is absent, leave that list empty "
         "and do not mention it."
+    ),
+    "ReceivablesInvoice": (
+        "This is an AR-INVOICE-rooted query (accounts receivable, "
+        "sell-side). For each invoice in the final set, emit one entry under "
+        "'receivables_invoices' with its customer_transaction_id, "
+        "transaction_number, bill_to_customer_name, status, currency, "
+        "amount (EnteredAmount), and balance (InvoiceBalanceAmount). "
+        "customer_transaction_id must appear in the data.\n"
+        "CHILD DETAIL — the question asked for it if the bucket is there, so "
+        "the summary MUST describe it, not just the invoice header:\n"
+        "- 'receivablesinvoiceline' bucket: emit each line under that "
+        "invoice's 'lines' (customer_transaction_line_id, line_number, "
+        "description, quantity, unit_selling_price, amount). The summary "
+        "must say how many lines and what they are for. COPY the amounts "
+        "exactly as given. Do NOT compute totals, tax, or any arithmetic.\n"
+        "Every customer_transaction_line_id must appear in the data. If the "
+        "bucket is absent, leave 'lines' empty and do not mention it."
     ),
     "SupplierSpendRanking": (
         "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
@@ -1036,6 +1131,31 @@ def _validate_purchase_order(
     _raise_if_bad(parts)
 
 
+def _validate_receivables_invoice(
+    response: ReceivablesInvoiceResponse, valid: dict[str, set]
+) -> None:
+    bad_inv: list[int] = []
+    bad_line: list[int] = []
+    for inv in response.receivables_invoices:
+        if inv.customer_transaction_id not in valid["customer_transaction_ids"]:
+            bad_inv.append(inv.customer_transaction_id)
+        # AR lines are exactly where invented detail would surface, so every
+        # id is cross-referenced (mirrors the PO line/schedule/distribution
+        # guard above).
+        for ln in inv.lines:
+            if (
+                ln.customer_transaction_line_id
+                not in valid["customer_transaction_line_ids"]
+            ):
+                bad_line.append(ln.customer_transaction_line_id)
+    parts = []
+    if bad_inv:
+        parts.append(f"customer_transaction_ids={bad_inv}")
+    if bad_line:
+        parts.append(f"customer_transaction_line_ids={bad_line}")
+    _raise_if_bad(parts)
+
+
 def _validate_supplier_spend_ranking(
     response: SupplierSpendRankingResponse, valid: dict[str, set]
 ) -> None:
@@ -1091,6 +1211,7 @@ _VALIDATORS = {
     InvoiceResponse: _validate_invoice,
     AddressResponse: _validate_address,
     PurchaseOrderResponse: _validate_purchase_order,
+    ReceivablesInvoiceResponse: _validate_receivables_invoice,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
     SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
     POStatusBreakdownResponse: _validate_no_ids,

@@ -350,41 +350,111 @@ output columns — before the plan can register `kg_entity_field` rows. This is
 the "record all columns during discovery" discipline; AR just starts further
 back than PO did.
 
-## AR P1 — Dedupe + column capture + plan (not started)
+## AR P1 — Dedupe + column capture + plan ✓ complete (2026-07-19)
 
-**Goal:** map AR's 15 read prompts + 3 aggregate prompts against Spire's
-existing coverage; capture the missing columns via live curl; produce the AR
-phased plan (P2+) in this file. No feature code.
+**Done:** all 18 AR prompts mapped to endpoints; missing columns (#7–18)
+captured via live curl against pod `fa-esll-dev37`; entities/edges sketched;
+phases confirmed. No feature code (correct for P1). Full column detail and pod
+quirks are in `spire_fusion_endpoints_reference.md` §9.
 
-Steps:
-1. **Dedupe.** Which AR prompts does Spire already cover, if any? (Likely few —
-   AR is a new pillar — but customer/invoice list+filter patterns may map onto
-   existing tool shapes.)
-2. **Column capture.** Curl `/receivablesInvoices`, `/receivablesCreditMemos`,
-   `/receivablesCustomerAccountActivities`, `/standardReceipts`,
-   `/receivablesCustomers`, and the child paths; record every column for the
-   "— to fill" prompts (7–18).
-3. **Entity/edge sketch.** Propose the KG entities (Customer, ARInvoice,
-   CreditMemo, StandardReceipt, AccountActivity, …) and their edges/children.
-4. **Phase breakdown.** Group prompts into buildable phases in dependency
-   order (detail before children before aggregates), mirroring PO's P2→P6.
-5. **Write the AR plan** into this file.
+**Dedupe result.** AR is a genuinely new pillar — no existing Spire tool
+covers an AR prompt. The supplier/invoice *machinery* transfers (list+filter
+shape, per-parent child fetch, the number-vs-id join asymmetry, op-registry
+aggregates) but every AR endpoint and object is new. The AP `/invoices`
+(payables) Spire already wraps is a DIFFERENT object from AR
+`/receivablesInvoices` — do not conflate.
 
-**Candidate phase shape (to confirm at P1):**
-- AR-P2: AR invoices — list + detail + lines (prompts 1, 2, 11, 12, 15).
-- AR-P3: invoice children — tax lines, DFF (prompts 3, 4).
-- AR-P4: credit memos — list + lines (prompts 5, 14).
-- AR-P5: account activities + receipts — balances, standard/misc receipts,
-  applications (prompts 6, 7, 8, 9, 13).
-- AR-P6: aggregates — exposure ranking, cash-collection trends / DSO, receipt-
-  method distribution, creation-to-update lag (prompts 10, 16, 17, 18).
+**Column capture.** 6 endpoints curled, all columns recorded (§9):
+`/receivablesInvoices` (173,531 rows), its `receivablesInvoiceLines` child,
+`/standardReceipts` (37,335), `/receivablesCustomerAccountActivities` (435),
+`/receivablesCreditMemos` (2,111), and CRM `/accounts` (1,476, ruled out).
+Two catalog names were wrong: `/receivablesCustomers` 404s, and the customer
+master is not CRM `/accounts` either.
 
-**Open questions for P1:**
-- Do customers map cleanly onto a Customer entity, or reuse anything from the
-  supplier machinery? (Different master, but similar list/filter/child shape.)
-- The aggregates (16 DSO/trends, 17 method distribution, 18 lag) are
-  computed-over-data — each is its own bounded tool + op-registry entry +
-  deterministic synthesizer shape, same as PO's aggregations.
+### AR entities (6)
+
+| Entity | Endpoint | Canonical id | Display |
+|---|---|---|---|
+| ARInvoice | `/receivablesInvoices` | `CustomerTransactionId` | `TransactionNumber` |
+| ARInvoiceLine | invoice `/child/receivablesInvoiceLines` | `CustomerTransactionLineId` | `LineNumber` |
+| CreditMemo | `/receivablesCreditMemos` | `CustomerTransactionId` | `TransactionNumber` |
+| StandardReceipt | `/standardReceipts` | `StandardReceiptId` | `ReceiptNumber` |
+| CustomerAccount | `/receivablesCustomerAccountActivities` | `AccountId` | `CustomerName` |
+| ARTaxLine | invoice-line `/child/receivablesInvoiceLineTaxLines` | (line PK + tax seq) | — |
+
+**CustomerAccount is AR's customer entity.** No standalone customer master:
+`/receivablesCustomers` does not exist, and CRM `/accounts` is a sales object
+in a different id space. CustomerAccount carries `CustomerId`, `AccountNumber`,
+`CustomerName`, and the two balance fields — everything the 18 prompts need
+from "a customer".
+
+CreditMemo and ARInvoice share one underlying object (`receivablesTransactions`,
+split by `TransactionType`); model CreditMemo as its own entity but expect the
+field catalog to mirror ARInvoice (negative `EnteredAmount`, `CreditMemoStatus`).
+
+### AR edges
+
+| Edge | From → To | Join | Mechanism |
+|---|---|---|---|
+| HAS_LINE | ARInvoice → ARInvoiceLine | `CustomerTransactionId` (path) | per-invoice child |
+| HAS_TAX_LINE | ARInvoiceLine → ARTaxLine | invoice id + line id (path) | deep nested, 3 ids |
+| HAS_ACCOUNT_CREDIT_MEMO | CustomerAccount → CreditMemo | `AccountId` (path) | per-account child |
+| HAS_ACCOUNT_RECEIPT | CustomerAccount → StandardReceipt | `AccountId` (path) | per-account child |
+| HAS_RECEIPT_APPLICATION | CustomerAccount → (application) | `AccountId` (path) | per-account child |
+
+Customer identity links ARInvoice / CreditMemo / StandardReceipt to
+CustomerAccount via `CustomerId` (numeric) / `AccountNumber` (string) — a
+projection join, same shape as the supplier number/id asymmetry, encode
+per-edge.
+
+### Phase breakdown (confirmed)
+
+- **AR-P2** — ARInvoice: list + detail + lines (prompts 1, 2, 11, 12, 15).
+  Prompts 11 and 12 collapse to one fetch-by-id tool. Detail/lines mirror PO
+  header+lines. Note the 173k row count — list prompts MUST filter (customer,
+  status, date), never bulk-scan.
+- **AR-P3** — invoice children: tax lines (prompt 3 — deep-nested grandchild,
+  reuse the PO-distribution 3-id iteration pattern), DFF (prompt 4 — must pick
+  between `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`; see
+  quirk 8).
+- **AR-P4** — credit memos: list + total value (prompts 5, 14).
+- **AR-P5** — CustomerAccount + account children: activity/balance summary
+  (prompt 6), account credit memos (7), account receipts (8), receipt
+  applications (9), site-filtered receipts (13). All keyed by `AccountId`.
+- **AR-P6** — aggregates (op-registry, exactly like PO's): exposure ranking
+  (10, sort on `TotalOpenReceivablesForAccount` over 435 rows), cash-collection
+  / DSO trends (16), receipt-method distribution (17, bucket `ReceiptMethod`),
+  creation-to-update lag (18, `LastUpdateDate` − `CreationDate` per receipt).
+
+### Open questions
+
+**Resolved at P1:**
+- *Customer entity?* → CustomerAccount (`/receivablesCustomerAccountActivities`).
+  No separate master. CRM `/accounts` and `/receivablesCustomers` both ruled
+  out with evidence (§9).
+- *Aggregate shape?* → each is a bounded tool + op-registry entry +
+  deterministic synthesizer shape, same as PO. All three have their source
+  columns verified present on `/standardReceipts` (and account activities for
+  10).
+
+**Newly surfaced — carry into P6:**
+- Prompt 16 (DSO) needs cash-in (`/standardReceipts`) AND AR balance (invoice
+  `InvoiceBalanceAmount` or account `TotalOpenReceivablesForAccount`). Decide:
+  one aggregate tool spanning two sources, or two composed tools. DSO =
+  (AR balance / credit sales) × days — the balance and the receipts are
+  different endpoints.
+- Prompt 13 (Santa Clara receipts): confirm a Santa Clara receipt exists before
+  locking a test anchor. The demo has an ABC-entity family — "ABC Corporation
+  Americas" (invoice), "ABC Corporation Worldwide" (receipt), "ABC Application
+  Software" (account) — across different sites; don't assume one resolves the
+  prompt.
+
+### Build order for AR-P2 (when P1 signed off)
+
+Per the proven sequence: live curl (done) → standalone ARInvoice tool → KG
+rows (ARInvoice entity + fields + fetch-by-id filter, rebuilt) → planner →
+parser → server wrapper → tripwire bump (`print_kg.py`, `test_kg_metadata.py`)
+→ tests → verify → branch `ar-phase-2-invoices` → PR → merge.
 
 ---
 

@@ -49,7 +49,7 @@ TABLES: list[dict] = [
                "endpoint_path, description FROM kg_entity "
                "ORDER BY entity_name",
         "clob_cols": {"description"},
-        "expected_rows": 11,
+        "expected_rows": 13,
     },
     {
         "name": "kg_entity_field",
@@ -62,7 +62,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 84,
+        "expected_rows": 111,
     },
     {
         "name": "kg_edge",
@@ -76,7 +76,7 @@ TABLES: list[dict] = [
                "to_join_field, cardinality, traversal_hint, notes "
                "FROM kg_edge ORDER BY edge_name",
         "clob_cols": {"traversal_hint", "notes"},
-        "expected_rows": 10,
+        "expected_rows": 11,
     },
     {
         "name": "kg_pattern",
@@ -99,7 +99,7 @@ TABLES: list[dict] = [
         "sql": "SELECT vocab_kind, term, canonical_value, notes "
                "FROM kg_vocabulary ORDER BY vocab_kind, term",
         "clob_cols": set(),
-        "expected_rows": 81,
+        "expected_rows": 85,
     },
     {
         "name": "kg_pattern_binding",
@@ -122,7 +122,7 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 5,
+        "expected_rows": 6,
     },
     {
         "name": "kg_entity_filter",
@@ -139,7 +139,7 @@ TABLES: list[dict] = [
                "filter_field, filter_op, notes "
                "FROM kg_entity_filter ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 19,
+        "expected_rows": 20,
     },
     {
         "name": "kg_edge_tool",
@@ -149,7 +149,7 @@ TABLES: list[dict] = [
         "sql": "SELECT edge_name, mcp_tool_name, notes FROM kg_edge_tool "
                "ORDER BY edge_name",
         "clob_cols": set(),
-        "expected_rows": 9,
+        "expected_rows": 10,
     },
 ]
 
