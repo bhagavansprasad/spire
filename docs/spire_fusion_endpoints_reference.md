@@ -114,6 +114,8 @@ These hit you on more than one endpoint, so call them out once:
 
 8. **Two DFF children on AR transactions.** AR invoices, invoice lines, and credit memos each expose TWO descriptive-flexfield children: `...DFF` and `...TransactionDFF` (e.g. `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`). A prompt asking for "DFF values" is ambiguous — decide which, or fetch both. On demo data both are typically empty (`__FLEX_Context = null`).
 
+9. **Responses may be gzip-compressed.** Some requests (seen on `/receivablesInvoices` with a `q=` clause) return a gzip-compressed body. A plain `curl ... > t.txt` then writes binary garble. Use `curl --compressed` so curl advertises gzip and decompresses the body. For `q=` values with spaces/quotes, encode with `+` for spaces and `%27` for single-quotes (the existing supplier-LIKE pattern), and redirect to a file — do NOT pipe to `python -m json.tool`, which errors on a gzip/empty body and hides the real output.
+
 ---
 
 ## Non-queryable attributes (growing list)
@@ -131,8 +133,17 @@ pod). Capture each one here as it's discovered.
 
 | Attribute | Endpoint(s) | Error | Notes |
 |---|---|---|---|
-| `TransactionClass` | AR receivables resources (e.g. `/receivablesInvoices`, `/receivablesTransactions`) | `The attribute(s) [TransactionClass] are not queriable.` | Discovered during AR exploration. Returned in the body but not server-filterable. |
+| `TransactionClass` | AR receivables resources (e.g. `/receivablesInvoices`, `/receivablesTransactions`) and the `transactionPaymentSchedules` child | `The attribute(s) [TransactionClass] are not queriable.` | Discovered during AR exploration. Returned in the body but not server-filterable. Prompt 15 keeps Invoice-class rows client-side. |
+| `BillToCustomerName` | `/receivablesInvoices` | `The attribute(s) [BillToCustomerName] are not queriable.` | Confirmed live (AR-P2b). Cannot filter AR invoices by customer NAME on this endpoint. |
+| `BillToCustomerNumber` | `/receivablesInvoices` | `The attribute(s) [BillToCustomerNumber] are not queriable.` | Confirmed live (AR-P2b). Cannot filter AR invoices by customer NUMBER either. A customer's invoices are reached via the account path (`/receivablesCustomerAccountActivities` → `transactionPaymentSchedules`), NOT by filtering this collection. |
 | `SupplierNumber` | `/purchaseOrders` | HTTP 400 when named in `?fields=` | POs expose only `SupplierId` (numeric), not `SupplierNumber`. See the join-key matrix and the 2026-07-19 discovery-log row. |
+
+> Contrast — a field that IS queryable: `CustomerName` on
+> `/receivablesCustomerAccountActivities` accepts `q=CustomerName='...'`
+> (exact match), confirmed live (AR-P2b). This is the resolve point for
+> customer-scoped AR queries: customer name → account(s) → traverse to the
+> account's transactions. So the account endpoint filters by customer name
+> even though the invoice endpoint does not.
 
 ---
 
@@ -988,12 +999,34 @@ territories, `AccountScore`, DUNS — not receivables. The collection action
 `getFinancialCustomerInfo` is the documented sales→financial bridge, if a
 future cross-pillar prompt ever needs to join sales to AR.
 
+### `/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules` — a customer's transactions (AR-P2b)
+
+The child that lists an account's transactions (payment schedules /
+installments). This is the customer-invoice-listing path (prompt 15): after
+resolving a customer to their `AccountId` via `q=CustomerName=`, traverse
+here. Fields: `TransactionId` (PK — a SMALL int, distinct id-space from the
+invoice endpoint's `CustomerTransactionId`), `TransactionNumber`,
+`TransactionClass` (e.g. "Invoice" — NOT queryable, filter client-side),
+`TransactionDate`, `PaymentScheduleDueDate`, `TotalOriginalAmount`,
+`TotalBalanceAmount` (0 = paid; > 0 = open — the basis for the deferred
+open-invoices filter), `InstallmentStatus` (e.g. "Closed"). One account can
+carry thousands of rows (the ABC Corporation Americas account has 7,404), so
+client-side filtering must over-fetch. The collection holds multiple
+transaction classes; keep `TransactionClass == 'Invoice'` for invoice
+listings.
+
+Test anchor: `CustomerName='ABC Corporation Americas'` → one account,
+`AccountId=300000047368527`, `AccountNumber=26370`, with 25 Invoice-class
+transactions.
+
 ### Join-key matrix — AR additions
 
 | To search this | Join key | Numeric or string? |
 |---|---|---|
-| `/receivablesInvoices` (by customer) | `BillToCustomerNumber` | string (e.g. "26370") |
-| `/receivablesCreditMemos` (by customer) | `BillToCustomerNumber` | string |
+| `/receivablesInvoices` (by customer) | — NOT queryable — | Customer name/number are not server-filterable here (AR-P2b). Use the account path below. |
+| `/receivablesCustomerAccountActivities` (resolve customer) | `CustomerName` | string, exact — the customer-scoped resolve point (AR-P2b) |
+| `transactionPaymentSchedules` (a customer's invoices) | `AccountId` (URL path) | numeric — traverse from the resolved account |
+| `/receivablesCreditMemos` (by customer) | `BillToCustomerNumber` | string (NOTE: not yet verified queryable — assume client-side like the invoice endpoint until confirmed) |
 | `/standardReceipts` (by customer) | `CustomerAccountNumber` | string (e.g. "25750") |
 | account children (memos/receipts/applications) | `AccountId` (URL path) | numeric |
 | customer identity across AR objects | `CustomerId` / `AccountNumber` | numeric / string |

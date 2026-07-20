@@ -141,8 +141,11 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | PO | P6 | PO aggregates (by-supplier / by-status / open) | `po-phase-6-aggregates` | merged |
 | PO | P6b | PO date filter (stale POs) | `po-phase-6b-po-dates` | merged |
 | PO | P6c | Invoiced-vs-ordered comparison | `po-phase-6c2-invoiced-vs-ordered` | merged |
-| **AR** | **P1** | **Dedupe + column capture + plan** | `ar-phase-1-dedupe` | **not started** |
-| AR | P2+ | (defined at P1) | — | not started |
+| **AR** | **P1** | **Dedupe + column capture + plan** | `ar-phase-1-dedupe` | **merged (docs-only)** |
+| **AR** | **P2a** | **AR invoice by-id + lines (prompts 11, 12, 2)** | `ar-phase-2-invoices` | **merged** |
+| **AR** | **P2b** | **Customer invoices via account (prompt 15)** | `ar-phase-2b-customer-invoices` | **merged** |
+| AR | P2c | Open invoices top-5 (prompt 1) | `ar-phase-2c-open-invoices` | not started |
+| AR | P3+ | Tax lines, DFF, credit memos, aggregates | — | not started |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
@@ -352,6 +355,17 @@ back than PO did.
 
 ## AR P1 — Dedupe + column capture + plan ✓ complete (2026-07-19)
 
+> **AR shipped state (as of P2b merge).** AR-P2a and AR-P2b are merged; 4 of
+> the 6 P2 prompts (11, 12, 2, 15) are live. KG now holds 15 entities, 125
+> fields, 12 edges, 21 filters, 85 vocab, 7 entity-tools, 11 edge-tools;
+> full suite 388 passing. NAMING NOTE: the entity/edge tables below were
+> sketched at P1 with provisional names; the build used concrete names —
+> `ARInvoice`→`ReceivablesInvoice`, `ARInvoiceLine`→`ReceivablesInvoiceLine`,
+> `HAS_LINE`→`HAS_AR_LINE`. The account path (P2b) added CustomerAccount +
+> CustomerTransaction + HAS_CUSTOMER_TRANSACTION, which the P1 sketch folded
+> into "CustomerAccount". The forward tables (P3–P6) are kept as design
+> intent and may still be renamed when built.
+
 **Done:** all 18 AR prompts mapped to endpoints; missing columns (#7–18)
 captured via live curl against pod `fa-esll-dev37`; entities/edges sketched;
 phases confirmed. No feature code (correct for P1). Full column detail and pod
@@ -409,10 +423,25 @@ per-edge.
 
 ### Phase breakdown (confirmed)
 
-- **AR-P2** — ARInvoice: list + detail + lines (prompts 1, 2, 11, 12, 15).
-  Prompts 11 and 12 collapse to one fetch-by-id tool. Detail/lines mirror PO
-  header+lines. Note the 173k row count — list prompts MUST filter (customer,
-  status, date), never bulk-scan.
+- **AR-P2a** ✓ merged — ReceivablesInvoice by-id + lines (prompts 11, 12,
+  2). Entities ReceivablesInvoice, ReceivablesInvoiceLine; edge HAS_AR_LINE.
+  Single-path by-id (CustomerTransactionId); the invoice endpoint's customer
+  name/number fields are NOT queryable (a customer's invoices go via the
+  account path instead — see P2b). Prompts 11 and 12 collapse to one
+  fetch-by-id tool.
+- **AR-P2b** ✓ merged — a customer's invoices via account (prompt 15).
+  Entities CustomerAccount, CustomerTransaction; edge
+  HAS_CUSTOMER_TRANSACTION. Mechanism: resolve customer by name
+  (CustomerName IS queryable on the account endpoint) → traverse the
+  account's transactionPaymentSchedules, keep Invoice-class rows client-side
+  (TransactionClass not queryable). Note these transaction rows are a
+  distinct entity/id-space from ReceivablesInvoice (TransactionId vs
+  CustomerTransactionId).
+- **AR-P2c** (deferred, not started) — open invoices top-5 (prompt 1). Same
+  account path as P2b plus an open-balance filter (TotalBalanceAmount > 0).
+  Needs `open_only` wired as a filter-driven arg on the edge traversal — a
+  mechanism the planner does not yet have. The P2b tools already carry the
+  `open_only` flag (unused).
 - **AR-P3** — invoice children: tax lines (prompt 3 — deep-nested grandchild,
   reuse the PO-distribution 3-id iteration pattern), DFF (prompt 4 — must pick
   between `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`; see
