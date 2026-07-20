@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_eleven_rows():
+async def test_kg_entity_has_thirteen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -65,7 +65,9 @@ async def test_kg_entity_has_eleven_rows():
     lines child), used by the HAS_LINE expansion edge. P4 added Contact (supplier contacts child), used by
     the HAS_CONTACT expansion edge. P3b added PODistribution (the
     deepest PO child), used by the HAS_DISTRIBUTION multi-field
-    iteration edge.
+    iteration edge. AR-P2 added ReceivablesInvoice (the AR invoice header,
+    fetched by_id on CustomerTransactionId) and ReceivablesInvoiceLine
+    (its lines child, reached via the HAS_AR_LINE expansion edge).
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -76,7 +78,8 @@ async def test_kg_entity_has_eleven_rows():
     assert names == [
         "Address", "Buyer", "Classification", "Contact", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
-        "PurchaseOrderLine", "Site", "Supplier"
+        "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
+        "Site", "Supplier"
     ]
 
 
@@ -114,18 +117,25 @@ async def test_kg_table_row_counts_match_v1_1():
     (HAS_LINE, 5->6), +1 entity tool (PurchaseOrder by_id, 3->4), and
     +1 filter row (PurchaseOrder by_id, kg_entity_filter 15->16). No
     new vocab.
+    AR-P2 (AR invoice detail + lines) added a by-id AR-invoice fetch and
+    its line children: +2 entities (ReceivablesInvoice,
+    ReceivablesInvoiceLine, 11->13), +27 fields (14 header + 13 line,
+    kg_entity_field 84->111), +1 edge (HAS_AR_LINE, 10->11), +1 edge tool
+    (HAS_AR_LINE, 9->10), +1 entity tool (ReceivablesInvoice by_id, 5->6),
+    +1 filter row (ReceivablesInvoice by_id, kg_entity_filter 19->20), and
+    +4 vocab rows (AR-invoice entity synonyms, 81->85).
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 11,
-        "kg_entity_field": 84,
-        "kg_edge": 10,
+        "kg_entity": 13,
+        "kg_entity_field": 111,
+        "kg_edge": 11,
         "kg_pattern": 3,
-        "kg_vocabulary": 81,
+        "kg_vocabulary": 85,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 5,
-        "kg_entity_filter": 19,
-        "kg_edge_tool": 9,
+        "kg_entity_tool": 6,
+        "kg_entity_filter": 20,
+        "kg_edge_tool": 10,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

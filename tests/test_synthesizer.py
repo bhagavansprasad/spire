@@ -198,7 +198,9 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "line_location_ids": set(),
         "po_distribution_ids": set(),
         "contact_ids": set(),
-    }
+        "customer_transaction_ids": set(),
+        "customer_transaction_line_ids": set(),
+        }
 
 
 def test_collect_valid_ids_skips_none_values() -> None:

@@ -59,6 +59,12 @@ from spire.mcp_server.tools.purchase_order_by_id import (
 from spire.mcp_server.tools.purchase_order_lines import (
     get_purchase_order_lines as _get_purchase_order_lines,
 )
+from spire.mcp_server.tools.receivables_invoice_by_id import (
+    get_receivables_invoice_by_id as _get_receivables_invoice_by_id,
+)
+from spire.mcp_server.tools.receivables_invoice_lines import (
+    get_receivables_invoice_lines as _get_receivables_invoice_lines,
+)
 from spire.mcp_server.tools.purchase_order_schedules import (
     get_purchase_order_schedules as _get_purchase_order_schedules,
 )
@@ -435,6 +441,60 @@ async def get_purchase_order_lines(
     async with FusionClient(_persona) as client:
         result = await _get_purchase_order_lines(
             client, po_header_id=po_header_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_receivables_invoice_by_id(
+    customer_transaction_id: int,
+) -> dict | None:
+    """Fetch one AR (accounts-receivable) invoice by its CustomerTransactionId.
+
+    Use this for a specific AR invoice, e.g. "the AR invoice with
+    CustomerTransactionId 300000248096352" or "show receivables invoice X".
+    To also see its lines, call get_receivables_invoice_lines with the same
+    id. This is the sell-side (receivables) invoice, distinct from the AP
+    invoice tools.
+
+    Args:
+        customer_transaction_id: The numeric CustomerTransactionId of the
+            AR invoice.
+
+    Returns:
+        A dict of the AR invoice header (TransactionNumber, BillToCustomerName,
+        BillToCustomerNumber, EnteredAmount, InvoiceBalanceAmount,
+        InvoiceCurrencyCode, TransactionDate, DueDate, InvoiceStatus, and
+        more), or null if no invoice with that id exists.
+    """
+    async with FusionClient(_persona) as client:
+        return await _get_receivables_invoice_by_id(
+            client, customer_transaction_id=customer_transaction_id
+        )
+
+
+@mcp.tool()
+async def get_receivables_invoice_lines(
+    customer_transaction_id: int, limit: int = 25
+) -> dict:
+    """Fetch the line items of one AR invoice.
+
+    Use this for "show the lines of AR invoice X" or as the second half of
+    "the AR invoice with CustomerTransactionId X and its lines" (call
+    get_receivables_invoice_by_id for the header, then this for the lines).
+
+    Args:
+        customer_transaction_id: The numeric CustomerTransactionId of the
+            parent AR invoice.
+        limit: Max line records to return (default 25).
+
+    Returns:
+        A dict with the invoice's lines: LineNumber, Description, Quantity,
+        UnitSellingPrice, LineAmount, and tax fields per line.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_receivables_invoice_lines(
+            client, customer_transaction_id=customer_transaction_id, limit=limit
         )
         return result.to_dict()
 

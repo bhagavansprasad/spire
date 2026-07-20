@@ -72,6 +72,7 @@ from spire.synthesizer.synthesizer import (
     OpenPOSummaryResponse,
     POStatusBreakdownResponse,
     PurchaseOrderResponse,
+    ReceivablesInvoiceResponse,
     SupplierPOValueRankingResponse,
     SupplierResponse,
     SupplierSpendRankingResponse,
@@ -404,6 +405,30 @@ def _format_synthesized(response) -> str:
                 f"buyer: {buyer_str}"
             )
         return "\n".join(lines)
+
+    if isinstance(response, ReceivablesInvoiceResponse):
+        if not response.receivables_invoices:
+            lines.append("(No AR invoices in the structured result.)")
+            return "\n".join(lines)
+        lines.append("AR Invoices:")
+        for inv in response.receivables_invoices:
+            cur = f" {inv.currency}" if inv.currency else ""
+            line = (
+                f"  - {inv.transaction_number} "
+                f"(CustomerTransactionId={inv.customer_transaction_id}) — "
+                f"{inv.bill_to_customer_name}; {inv.status}; "
+                f"{inv.amount}{cur} (balance {inv.balance})"
+            )
+            if inv.lines:
+                line += f" — {len(inv.lines)} line(s)"
+            lines.append(line)
+            for ln in inv.lines:
+                lines.append(
+                    f"      line {ln.line_number}: {ln.description} "
+                    f"(CustomerTransactionLineId={ln.customer_transaction_line_id})"
+                    f" — qty {ln.quantity}, {ln.amount}"
+                )
+        return "\n".join(lines)
  
     if isinstance(response, SupplierSpendRankingResponse):
         if not response.suppliers:
@@ -499,6 +524,8 @@ def _format_summary(
         n, label = len(response.invoices), "invoice(s)"
     elif isinstance(response, PurchaseOrderResponse):
         n, label = len(response.purchase_orders), "purchase order(s)"
+    elif isinstance(response, ReceivablesInvoiceResponse):
+        n, label = len(response.receivables_invoices), "AR invoice(s)"
     elif isinstance(response, SupplierSpendRankingResponse):
         n, label = len(response.suppliers), "ranked supplier(s)"
     elif isinstance(response, SupplierPOValueRankingResponse):
@@ -624,7 +651,6 @@ async def _run(intent: Intent, intent_name: str) -> int:
         return 3
     logger.info(
         "synthesis_completed",
-        supplier_count=len(response.suppliers),
         summary_length=len(response.summary),
         response=response.model_dump(),
     )

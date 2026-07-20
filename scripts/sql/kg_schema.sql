@@ -283,7 +283,22 @@ INSERT INTO kg_entity VALUES (
   'A distribution on a PO schedule: the charge/accrual/variance accounts the schedule amount is booked to. The deepest PO child. No flat endpoint; reachable only on the deep nested path needing three ids (POHeaderId, POLineId, LineLocationId), all carried on the parent POSchedule row. Include-only; reached via HAS_DISTRIBUTION from POSchedule.'
 );
 
-PROMPT Seeded kg_entity (11 rows).
+
+-- AR-P2
+INSERT INTO kg_entity VALUES (
+  'ReceivablesInvoice', 'CustomerTransactionId', 'TransactionNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesInvoices',
+  'An accounts-receivable (sell-side) invoice raised against a customer. Distinct from Invoice, which is the accounts-payable (buy-side) invoice on /invoices. Canonical id is CustomerTransactionId (numeric, queryable via q=); TransactionNumber is the human number (e.g. ''61765''). BillToCustomerName and BillToCustomerNumber are NOT queryable on this endpoint (confirmed live) - a customer''s invoices are reached via the customer account-activity path, not by filtering this collection. 173,531 rows on the pod, so list access must go through the account path, never a bulk scan.'
+);
+
+-- AR-P2
+INSERT INTO kg_entity VALUES (
+  'ReceivablesInvoiceLine', 'CustomerTransactionLineId', 'LineNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines',
+  'A line on an AR invoice. Modeled as a separate entity because an invoice has many lines. Not a top-level resource; only accessible as a child of ReceivablesInvoice at /receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines. Fetched as a plain expansion (no server filter needed). Note the pod misspells one field as TransacationBusinessCategory (sic) - it must be requested with the typo or ?fields= drops it silently.'
+);
+
+PROMPT Seeded kg_entity (13 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -407,7 +422,39 @@ INSERT INTO kg_entity_field VALUES ('POSchedule', 'AcceptedQuantity', 'projectio
 INSERT INTO kg_entity_field VALUES ('POSchedule', 'ReceivedAmount',   'amount',     'numeric', 'Amount received against the schedule. Compare with Amount (ordered).');
 INSERT INTO kg_entity_field VALUES ('POSchedule', 'BilledAmount',     'amount',     'numeric', 'Amount invoiced against the schedule.');
 
-PROMPT Seeded kg_entity_field (84 rows).
+
+-- ReceivablesInvoice (AR-P2)
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'CustomerTransactionId', 'canonical_id', 'numeric', 'System primary key. Queryable via q=CustomerTransactionId=<id> (unquoted, numeric). The by_id fetcher relies on this.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionNumber',    'display_id',   'string',  'Human-readable invoice number (e.g. ''61765'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'BillToCustomerName',   'projection',   'string',  'Bill-to customer display name. NOT queryable via q= on this endpoint (confirmed live). Display only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'BillToCustomerNumber', 'reference',    'string',  'Bill-to customer number. NOT queryable via q= here. Join key to CustomerAccount.AccountNumber for the account-activity path.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'InvoiceCurrencyCode',  'projection',   'string',  'Invoice currency (e.g. ''GBP'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'EnteredAmount',        'amount',       'numeric', 'Invoice amount in entered currency.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'InvoiceBalanceAmount', 'amount',       'numeric', 'Open balance remaining on the invoice; 0 means paid.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionDate',      'date',         'iso_date','Invoice/transaction date.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'DueDate',              'date',         'iso_date','Payment due date.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'AccountingDate',       'date',         'iso_date','Accounting (GL) date.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'InvoiceStatus',        'status',       'string',  'Display status (e.g. ''Complete''). Display only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionType',      'projection',   'string',  'Transaction type (e.g. ''Invoice''). Distinguishes invoice vs credit memo within receivablesTransactions.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionSource',    'projection',   'string',  'Transaction source (e.g. ''Manual'', ''Receivables Import'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'BusinessUnit',         'projection',   'string',  'Owning business unit (e.g. ''UK Business Unit'').');
+
+-- ReceivablesInvoiceLine (AR-P2)
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'CustomerTransactionLineId',   'canonical_id', 'numeric', 'System primary key for the line.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineNumber',                  'display_id',   'numeric', 'Human-readable line number within the invoice.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'Description',                 'projection',   'string',  'Line description (e.g. ''Consultation'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'Quantity',                    'projection',   'numeric', 'Line quantity.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'UnitSellingPrice',            'projection',   'numeric', 'Unit selling price for the line.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineAmount',                  'amount',       'numeric', 'Line extended amount.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'UnitOfMeasure',               'projection',   'string',  'Unit of measure (often null on this pod).');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'ItemNumber',                  'projection',   'string',  'Item number (often null on this pod).');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TaxClassificationCode',       'projection',   'string',  'Tax classification code (often null).');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TaxExemptionHandling',        'projection',   'string',  'Tax exemption handling (e.g. ''Standard'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineAmountIncludesTax',       'projection',   'string',  'Whether the line amount includes tax (e.g. ''Use Tax Rate Code'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'AssessableValue',             'amount',       'numeric', 'Assessable value for tax.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TransacationBusinessCategory','projection',   'string',  'Transaction business category (e.g. ''Sales Transaction''). NOTE: Oracle misspells this field as ''TransacationBusinessCategory'' (sic); must be requested with the typo exactly.');
+
+PROMPT Seeded kg_entity_field (111 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -493,7 +540,17 @@ INSERT INTO kg_edge VALUES (
   '{"po_header_id": "POHeaderId", "po_line_id": "POLineId", "line_location_id": "LineLocationId"}'
 );
 
-PROMPT Seeded kg_edge (10 rows).
+
+-- AR-P2
+INSERT INTO kg_edge VALUES (
+  'HAS_AR_LINE', 'ReceivablesInvoice', 'ReceivablesInvoiceLine', 'CustomerTransactionId', 'CustomerTransactionId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesInvoices/{invoice.CustomerTransactionId}/child/receivablesInvoiceLines. A plain expansion: fetch all lines for the invoice. No server filter needed; ?fields= projection works on the child (mind the TransacationBusinessCategory misspelling).',
+  'Per-invoice child call, one HTTP call per invoice. Same shape as the PO HAS_LINE edge (join_only expansion). The parent id is carried in the URL path, not required from the line body.',
+  NULL
+);
+
+PROMPT Seeded kg_edge (11 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -641,6 +698,12 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'supplier',         'Supplie
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'vendor',           'Supplier',      'Synonym.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice',          'Invoice',       NULL);
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'bill',             'Invoice',       'Synonym.');
+-- AR-P2: AR-invoice synonyms. Explicit two-word phrases so they never shadow the
+-- AP 'invoice'/'bill' mappings above. Bare 'AR' and bare 'invoice' deliberately omitted.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AR invoice',           'ReceivablesInvoice', 'Accounts-receivable (sell-side) invoice. Distinct from ''invoice''/''bill'' which map to the AP Invoice.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receivables invoice',  'ReceivablesInvoice', 'AR invoice.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AR invoices',          'ReceivablesInvoice', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receivables invoices', 'ReceivablesInvoice', 'Plural form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'purchase order',   'PurchaseOrder', NULL);
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'PO',               'PurchaseOrder', 'Acronym.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'order',            'PurchaseOrder', 'Ambiguous; resolved to PO in this domain.');
@@ -744,7 +807,15 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Default fetcher for PurchaseOrder — the collection search. Handles the entity-level filters that are not by_id (created_before, created_since, and any future PO list filter), stacking their args like the Supplier default fetcher does. P2 made PurchaseOrder rootable via its by_id fetcher alone and deferred this row; P6''s date filters made it necessary, because Block 1 falls back to (entity, ''none'') for any filter without its own dedicated tool and that fallback had nothing to find.'
 );
 
-PROMPT Seeded kg_entity_tool (5 rows).
+
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'ReceivablesInvoice',
+  'by_id',
+  'get_receivables_invoice_by_id',
+  'Fetches ONE AR invoice by CustomerTransactionId via q= on the collection. Single-path (no TransactionNumber fallback - no P2 prompt needs it). Returns None when the id matches nothing.'
+);
+
+PROMPT Seeded kg_entity_tool (6 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -812,7 +883,14 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes po_header_id, po_line_id, line_location_id (multi-field iteration). Returns the schedule''s distributions as a ToolResult.'
 );
 
-PROMPT Seeded kg_edge_tool (9 rows).
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_AR_LINE',
+  'get_receivables_invoice_lines',
+  'Takes customer_transaction_id. Plain expansion: returns the invoice''s lines as a ToolResult. No filter, no keep-parent logic.'
+);
+
+PROMPT Seeded kg_edge_tool (10 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -925,7 +1003,13 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'POs created ON OR AFTER a date. Filters server-side. Both bounds work standalone on this pod but cannot be composited (single-clause rule), so one goes to the server and the other is filtered client-side.'
 );
 
-PROMPT Seeded kg_entity_filter (19 rows).
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'ReceivablesInvoice', 'by_id', 'entity_level', 'customer_transaction_id', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerTransactionId', 'equals',
+  'Fetch one AR invoice by CustomerTransactionId via q= on the collection (confirmed queryable). Dedicated fetcher get_receivables_invoice_by_id; returns None when the id matches nothing (collection returns empty items, not 404).'
+);
+
+PROMPT Seeded kg_entity_filter (20 rows).
 
 -- ============================================================
 
