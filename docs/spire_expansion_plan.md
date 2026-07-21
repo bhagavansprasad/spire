@@ -174,7 +174,7 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | **AR** | **P1** | **Dedupe + column capture + plan** | `ar-phase-1-dedupe` | **merged (docs-only)** |
 | **AR** | **P2a** | **AR invoice by-id + lines (prompts 11, 12, 2)** | `ar-phase-2-invoices` | **merged** |
 | **AR** | **P2b** | **Customer invoices via account (prompt 15)** | `ar-phase-2b-customer-invoices` | **merged** |
-| AR | P2c | Open invoices top-5 (prompt 1) | `ar-phase-2c-open-invoices` | not started |
+| AR | P2c | Open invoices for a customer (prompt 1) | `ar-phase-2c-open-invoices` | merged |
 | AR | P3+ | Tax lines, DFF, credit memos, aggregates | — | not started |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
@@ -467,11 +467,23 @@ per-edge.
   (TransactionClass not queryable). Note these transaction rows are a
   distinct entity/id-space from ReceivablesInvoice (TransactionId vs
   CustomerTransactionId).
-- **AR-P2c** (deferred, not started) — open invoices top-5 (prompt 1). Same
-  account path as P2b plus an open-balance filter (TotalBalanceAmount > 0).
-  Needs `open_only` wired as a filter-driven arg on the edge traversal — a
-  mechanism the planner does not yet have. The P2b tools already carry the
-  `open_only` flag (unused).
+- **AR-P2c** ✓ merged (2026-07-21) — open invoices for a customer (prompt
+  1). Same account path as P2b plus an open-balance filter. Mechanism:
+  `open_only` is a PARSED ARG on the existing HAS_CUSTOMER_TRANSACTION
+  traversal — NOT a KG filter and NOT a schema change (the plan's original
+  guess of a "filter-driven arg the planner lacks" resolved to something
+  lighter). Parser detects open/outstanding/unpaid → sets `open_only`;
+  planner Block 3 injects `open_only=True` into the CustomerTransaction
+  include step's tool_args (scoped by entity name, cf. the Supplier/Address
+  special-case); the tool sorts `TotalBalanceAmount:desc` (sortable but NOT
+  queryable — the open-invoice window strategy) and keeps positive-balance
+  Invoice rows client-side. KG unchanged (no rows). The P2b tools already
+  carried the `open_only` flag; this session added the `orderBy` sort to
+  make it find open rows past the default-order page (accounts carry
+  thousands of rows). Shipped WITH a `build_llm` output-token cap (a burial
+  of the parser instruction in the customer-invoices bullets caused a
+  max-token runaway; see Reliability backlog + spire_design_decisions.md).
+  Deferred: the "top 5" limit (returns ALL open invoices for now).
 - **AR-P3** — invoice children: tax lines (prompt 3 — deep-nested grandchild,
   reuse the PO-distribution 3-id iteration pattern), DFF (prompt 4 — must pick
   between `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`; see
