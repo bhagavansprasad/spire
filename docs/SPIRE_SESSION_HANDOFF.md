@@ -17,7 +17,7 @@ agent architecture.
 ## Canonical docs (in `docs/`)
 
 - `spire_expansion_plan.md` — master build plan (start here; now current
-  through AR-P3 tax lines)
+  through AR-P3 DFF — AR-P3 complete)
 - `spire_architecture.md` — current-state reference
 - `spire_design_decisions.md` — frozen design records
 - `spire_fusion_endpoints_reference.md` — pod quirks + curl reference (the
@@ -26,7 +26,7 @@ agent architecture.
 
 ## Current state
 
-PO module complete. AR module in progress: **6 of 18 AR prompts done**.
+PO module complete. AR module in progress: **7 of 18 AR prompts done**.
 
 Done and merged (AR):
 - **AR-P2a** — AR invoice by-id + lines (prompts 11, 12, 2).
@@ -37,64 +37,68 @@ Done and merged (AR):
   planner Block 3 passes it as the fetcher's `limit`. Parser + planner
   only, no KG rows.
 - **AR-P3 tax lines** (`ar-p3-tax-lines`, merged 2026-07-21) — prompt 3.
-  See below.
+- **AR-P3 DFF** (`ar-p3-dff`, merged 2026-07-21) — prompt 4. Finishes
+  AR-P3. See below.
 
-KG now: **16 entities, 137 fields, 13 edges, 12 edge-tools**, 21 filters,
-7 entity-tools, 85 vocab, 3 patterns. Full suite: **399 passing**.
+KG now: **17 entities, 140 fields, 14 edges, 13 edge-tools**, 21 filters,
+7 entity-tools, 85 vocab, 3 patterns. Full suite: **402 passing**.
 
-## AR-P3 tax lines — what shipped this session (the important detail)
+## AR-P3 DFF — what shipped this session (the important detail)
 
-"AR invoice X and its tax lines" fetches each line's tax lines
-(jurisdiction/rate/amount) and nests them under the parent line.
+"AR invoice X and its DFF values" fetches the invoice's
+receivablesInvoiceTransactionDFF child and nests it under the invoice.
 
-**Shape: TWO ids, not three.** The plan first assumed the PO-distribution
-3-id pattern; verify proved it wrong. Tax lines need only invoice id +
-line id, so HAS_TAX_LINE is a **two-field `iter_fields`** edge off
-ReceivablesInvoiceLine → ReceivablesTaxLine.
+**Which DFF child.** AR invoices expose two DFF children (quirk 8). Curl on
+invoice 1002: `receivablesInvoiceDFF` returns `__FLEX_Context=null`;
+`receivablesInvoiceTransactionDFF` returns `__FLEX_Context="DOO"`. So the
+tool targets the **TransactionDFF** child — the populated one. On this pod
+the context is set but carries NO segment columns; the row exposes only
+`CustomerTrxId`, `__FLEX_Context`, `__FLEX_Context_DisplayValue` (null).
 
-**Two mechanisms added (both general, both caught by end-to-end verify):**
+**Shape: a plain single-parent child.** One id in the URL path (like
+HAS_AR_LINE), no iteration, no grandchild. This made it the LIGHTEST AR
+phase so far:
+- **Executor**: no change (the handoff predicted this).
+- **Planner**: ONE `_TOOL_PRIMARY_ARG` entry
+  (`get_receivables_invoice_transaction_dff` → `customer_transaction_id`).
+  Block 3's plain-include branch (iter_fields is NULL) handled the rest.
+- **Synthesizer**: 2-place change (schema + prompt), NOT five. The DFF
+  extends ReceivablesInvoice and has NO id of its own to validate
+  (`CustomerTrxId` echoes the parent), so no harvest and no validator
+  change. `ReceivablesInvoiceTransactionDFFInfo` model + a `dff` field on
+  the record + the DFF bucket in the ReceivablesInvoice prompt.
 
-1. **Executor `_parent_stamp`, GATED by `Step.stamp_parent_key`.** AR
-   invoice lines do NOT echo `CustomerTransactionId` in the row body, so a
-   grandchild step that must iterate on the invoice id has no source for
-   it. The executor now stamps the parent iteration key onto child rows —
-   but ONLY when the planner sets `stamp_parent_key` on a child step that
-   feeds a further include. Off by default, so every other iterating
-   step's output is byte-for-byte unchanged (this gating fixed 4
-   regressions the ungated version caused).
+**Also fixed: a pre-existing short-id parser bug.** A short
+CustomerTransactionId (e.g. 1002) was being silently DROPPED — the parser
+produced `target_entity=ReceivablesInvoice` with EMPTY filters/include
+because the by_id examples were all the 18-digit form and the LLM did not
+treat "1002" as a CustomerTransactionId. The by_id rule now states the id
+may be short and must still get a by_id filter regardless of length. This
+also unblocked the **tax-lines prompt (prompt 3)**, which uses 1002 and was
+NOT actually passing end-to-end until this fix (it shared the same bug).
 
-2. **The tax-lines tool stamps its own parent line id** as
-   `ParentCustomerTransactionLineId`. The tax row's own
-   `CustomerTransactionLineId` is the TAX-line PK (e.g. 112), a DIFFERENT
-   value from the parent line id (74) — so the synthesizer nests by
-   `ParentCustomerTransactionLineId == line.CustomerTransactionLineId`.
+Files touched (all merged): new tool
+`receivables_invoice_transaction_dff.py`, server wrapper, `kg_schema.sql`
+(entity + 3 fields + edge + edge-tool), `print_kg.py` +
+`test_kg_metadata.py` tripwires (17/140/14/13), parser (DFF include rule +
+short-id fix), planner (`_TOOL_PRIMARY_ARG` entry), synthesizer (DFF model
++ field + prompt), `run_plan.py` (DFF display), `prompt_set_ar.txt` (DFF
+prompt), `test_synthesizer.py` (3 DFF tests). Endpoints-reference quirk 8
+updated (committed separately, docs-only).
 
-Files touched (all merged): new tool `receivables_invoice_tax_lines.py`,
-server wrapper, `kg_schema.sql` (entity+12 fields+edge+binding),
-`print_kg.py` + `test_kg_metadata.py` tripwires (16/137/13/12), parser
-(tax-lines include rule), planner (Step flag + Block 3 + `_TOOL_PRIMARY_ARG`),
-synthesizer (ReceivablesTaxLineInfo nested + validator + prompt),
-executor (`_parent_stamp` gated), `run_plan.py` (nested display),
-`prompt_set_ar.txt` (tax anchor + prompt), `test_executor.py` +
-`test_synthesizer.py`.
-
-Taxed anchor: invoice **1002** (TransactionNumber 5), line **74** →
-2 tax lines (STATE 6.5%, COUNTY 2.25%); lines 84/93/107 also carry 2 each.
-The 61765 anchor from earlier phases is UNtaxed (count:0, not 404).
+DFF anchor: invoice **1002** (TransactionNumber 5) → TransactionDFF
+`__FLEX_Context="DOO"` (no segment values). Verified end-to-end: 6/6 AR
+prompts pass, "DOO" surfaces in the answer.
 
 ## Next activities (AR module, in order)
 
-**12 AR prompts left.** Next is prompt 4 to finish AR-P3.
+**11 AR prompts left.** AR-P3 is complete; next is AR-P4.
 
-1. **AR-P3 DFF (prompt 4)** — finishes AR-P3. Must pick between
-   `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF` (two DFF
-   children exist — see endpoints-reference quirk 8). Decide which the
-   prompt wants before wiring.
-2. **AR-P4** — credit memos: list + total value (prompts 5, 14).
-3. **AR-P5** — account children, all keyed by `AccountId`: activity/balance
+1. **AR-P4** — credit memos: list + total value (prompts 5, 14).
+2. **AR-P5** — account children, all keyed by `AccountId`: activity/balance
    summary (6), account credit memos (7), account receipts (8), receipt
    applications (9), site-filtered receipts (13).
-4. **AR-P6** — aggregates (op-registry, like PO's): exposure ranking (10),
+3. **AR-P6** — aggregates (op-registry, like PO's): exposure ranking (10),
    DSO / cash-collection (16), receipt-method distribution (17),
    creation-to-update lag (18).
 
@@ -142,6 +146,14 @@ Reason from the actual shape, not the worst case.
 - **A child endpoint often does not echo its parent id.** Confirmed for AR
   invoice lines (no `CustomerTransactionId` in the body). Any future
   grandchild iteration must account for this.
+- **A prompt in the set is not "passing" until it runs end-to-end.** The
+  tax-lines prompt (prompt 3) used the short id 1002 and silently failed —
+  the parser dropped the by_id filter for short ids, so it never fetched
+  anything, but nothing flagged it until AR-P3 DFF ran the same id through
+  the pipeline. Lesson: a short numeric id is still a valid
+  CustomerTransactionId; run every prompt in the set end-to-end, don't
+  assume a merged prompt works. The parser now handles short ids
+  explicitly.
 
 ## Key conventions
 
@@ -170,6 +182,14 @@ Reason from the actual shape, not the worst case.
 - AR invoice line rows do NOT expose `CustomerTransactionId` — the parent
   invoice id is absent from the child body and cannot be projected via
   `?fields=` (400s if you try).
+- AR invoice TransactionDFF: the two DFF children differ on this pod.
+  `/receivablesInvoices/{id}/child/receivablesInvoiceDFF` returns
+  `__FLEX_Context=null`;
+  `/receivablesInvoices/{id}/child/receivablesInvoiceTransactionDFF` returns
+  `__FLEX_Context="DOO"` on invoice 1002. The context is SET but has NO
+  segment columns — the row is just `CustomerTrxId`, `__FLEX_Context`,
+  `__FLEX_Context_DisplayValue` (null). Note the child echoes the parent id
+  as `CustomerTrxId` (short spelling), not `CustomerTransactionId`.
 
 ## Files to share in the new window
 
@@ -195,7 +215,11 @@ drift):
 - `scripts/print_kg.py`, `tests/test_kg_metadata.py`,
   `tests/test_synthesizer.py`, `tests/test_executor.py`
 
-For AR-P3 DFF (prompt 4) specifically: it's an invoice child like tax
-lines but likely a plain single-parent child (not a grandchild), so it may
-be lighter — probably no executor change. The DFF-child pick (which of the
-two) is the real question; resolve it with curl first.
+For AR-P4 (credit memos, prompts 5 + 14) specifically: `receivablesCreditMemos`
+is a top-level resource (not a child), so prompt 5 ("list recent credit
+memos, top 5") is likely a rooted entity with its own fetcher — closer to
+the AR-invoice by-id/list shape than to the DFF/tax-line child shape. It may
+be a full new-entity phase (new entity-tool, entity-filter, and possibly the
+five-place synthesizer change), unlike the two child phases just shipped.
+Prompt 14 ("total value") may add an aggregate. Curl `receivablesCreditMemos`
+first to confirm the endpoint shape and a demo anchor before wiring.
