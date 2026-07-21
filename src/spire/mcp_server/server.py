@@ -68,6 +68,9 @@ from spire.mcp_server.tools.receivables_invoice_lines import (
 from spire.mcp_server.tools.receivables_invoice_tax_lines import (
     get_receivables_invoice_tax_lines as _get_receivables_invoice_tax_lines,
 )
+from spire.mcp_server.tools.receivables_invoice_transaction_dff import (
+    get_receivables_invoice_transaction_dff as _get_receivables_invoice_transaction_dff,
+)
 from spire.mcp_server.tools.customer_account_by_name import (
     get_customer_account_by_name as _get_customer_account_by_name,
 )
@@ -537,6 +540,33 @@ async def get_receivables_invoice_tax_lines(
             customer_transaction_id=customer_transaction_id,
             line_id=line_id,
             limit=limit,
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_receivables_invoice_transaction_dff(
+    customer_transaction_id: int, limit: int = 25
+) -> dict:
+    """Fetch the transaction DFF (descriptive flexfield) of one AR invoice.
+
+    Use this for "fetch the DFF values for AR invoice X". AR invoices expose
+    two DFF children; this is the transaction DFF, the populated one on this
+    pod. Call get_receivables_invoice_by_id for the header, then this for the
+    DFF.
+
+    Args:
+        customer_transaction_id: The numeric CustomerTransactionId of the
+            parent AR invoice.
+        limit: Max DFF records to return (default 25; an invoice has one).
+
+    Returns:
+        A dict with the invoice's DFF row: CustomerTrxId, __FLEX_Context, and
+        __FLEX_Context_DisplayValue.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_receivables_invoice_transaction_dff(
+            client, customer_transaction_id=customer_transaction_id, limit=limit
         )
         return result.to_dict()
 

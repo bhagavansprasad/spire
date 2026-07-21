@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_sixteen_rows():
+async def test_kg_entity_has_seventeen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -71,6 +71,9 @@ async def test_kg_entity_has_sixteen_rows():
     AR-P2b added CustomerAccount (the AR customer account, resolved by
     CustomerName) and CustomerTransaction (the account's payment-schedule
     transactions, reached via the HAS_CUSTOMER_TRANSACTION expansion edge).
+    AR-P3 added ReceivablesTaxLine (the invoice-line tax grandchild,
+    reached via HAS_TAX_LINE) and ReceivablesInvoiceTransactionDFF (the
+    invoice TransactionDFF child, reached via HAS_TRANSACTION_DFF).
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -83,7 +86,8 @@ async def test_kg_entity_has_sixteen_rows():
         "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
-        "ReceivablesTaxLine", "Site", "Supplier"
+        "ReceivablesInvoiceTransactionDFF", "ReceivablesTaxLine", "Site",
+        "Supplier"
     ]
 
 
@@ -134,18 +138,28 @@ async def test_kg_table_row_counts_match_v1_1():
     111->125), +1 edge (HAS_CUSTOMER_TRANSACTION, 11->12), +1 edge tool
     (11), +1 entity tool (CustomerAccount by_customer_name, 6->7), +1 filter
     row (by_customer_name, 20->21). No new vocab.
+    AR-P3 tax lines added the invoice-line tax grandchild: +1 entity
+    (ReceivablesTaxLine, 15->16), +12 fields (125->137), +1 edge
+    (HAS_TAX_LINE, 12->13), +1 edge tool (12). No new entity tool, filter,
+    or vocab (extends an existing traversal, not a rooted entity).
+    AR-P3 DFF (prompt 4) added the invoice TransactionDFF child: +1 entity
+    (ReceivablesInvoiceTransactionDFF, 16->17), +3 fields (137->140), +1
+    edge (HAS_TRANSACTION_DFF, 13->14), +1 edge tool (12->13). A plain
+    single-parent expansion (like HAS_AR_LINE); no entity tool, filter, or
+    vocab. The DFF child echoes the parent id as CustomerTrxId (short
+    spelling), not CustomerTransactionId.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 16,
-        "kg_entity_field": 137,
-        "kg_edge": 13,
+        "kg_entity": 17,
+        "kg_entity_field": 140,
+        "kg_edge": 14,
         "kg_pattern": 3,
         "kg_vocabulary": 85,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 7,
         "kg_entity_filter": 21,
-        "kg_edge_tool": 12,
+        "kg_edge_tool": 13,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

@@ -85,6 +85,10 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # get_customer_account_by_name is the entity fetcher, not an iterated
     # tool, so it takes its arg from the by_customer_name filter, not here.)
     "get_customer_transactions": "account_id",
+    # AR-P3 DFF: invoice TransactionDFF child. Plain single-parent
+    # expansion (iter_fields is NULL), so Block 3 reads the primary arg
+    # from this table. The tool takes customer_transaction_id.
+    "get_receivables_invoice_transaction_dff": "customer_transaction_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
