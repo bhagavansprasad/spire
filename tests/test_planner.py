@@ -1101,3 +1101,55 @@ def test_generate_plan_open_only_false_omits_tool_arg() -> None:
     ]
     assert len(ct_steps) == 1
     assert "open_only" not in ct_steps[0].tool_args
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Top-N open invoices: invoice_limit on the open-invoices traversal
+# (prompt 1 complete — caps the open set to the N highest-balance rows)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def top_open_invoices_intent() -> Intent:
+    """
+    The structured intent for prompt 1's capped form: 'top 5 open invoices
+    for customer ABC Corporation Americas'. Same open-invoices shape as
+    open_invoices_intent, plus invoice_limit=5. The fetcher returns the
+    open set balance-desc, so the limit keeps the top 5.
+    """
+    return Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Corporation Americas"},
+        ],
+        include=["CustomerTransaction"],
+        open_only=True,
+        invoice_limit=5,
+    )
+
+
+def test_generate_plan_invoice_limit_sets_limit_on_transaction_step(
+    top_open_invoices_intent: Intent,
+) -> None:
+    """invoice_limit=5 (with open_only) puts limit=5 in the
+    CustomerTransaction include step's tool_args, alongside open_only."""
+    produced = generate_plan(top_open_invoices_intent)
+    ct_steps = [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+    assert len(ct_steps) == 1
+    assert ct_steps[0].tool_args.get("open_only") is True
+    assert ct_steps[0].tool_args.get("limit") == 5
+
+
+def test_generate_plan_invoice_limit_none_omits_limit(
+    open_invoices_intent: Intent,
+) -> None:
+    """With invoice_limit unset (default None), the open-invoices step
+    carries no limit arg — the uncapped open listing is unchanged."""
+    produced = generate_plan(open_invoices_intent)
+    ct_steps = [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+    assert len(ct_steps) == 1
+    assert "limit" not in ct_steps[0].tool_args
