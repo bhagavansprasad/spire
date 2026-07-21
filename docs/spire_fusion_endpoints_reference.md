@@ -1014,6 +1014,23 @@ same child set, same `approve`/`rework` actions. Both are
 is NEGATIVE (e.g. -408.90), `CreditMemoStatus`, `TransactionBalanceDue`,
 `CreditReason`.
 
+**AR-P4 (curled 2026-07-21, merged as `ar-p4-credit-memos`).** Confirmed
+server-side: `orderBy=TransactionDate:desc` WORKS (newest-first), `limit=N`
+gives a clean top-N, and `fields=` projection works — so "list recent credit
+memos" is a pure server-side top-N, no client sort. Projected the 8 fields
+Spire uses: `CustomerTransactionId`, `TransactionNumber`, `TransactionDate`,
+`EnteredAmount`, `CreditMemoCurrency`, `CreditMemoStatus`,
+`BillToCustomerName`, `BillToCustomerNumber`. Modeled as a rooted, LIST-ONLY
+entity `CreditMemo` (top-level, no parent id, no by-id, no edge).
+
+**Sign is NOT guaranteed.** EnteredAmount is *normally* negative, but the pod
+has at least one POSITIVE, Incomplete memo (TransactionNumber 1001, +10000,
+"Digital Customer 1"). So `total_credit` (Spire's raw sum of EnteredAmount) is
+a ledger NET figure — the +10000 offsets the negatives (recent-25 total
+= -17232.52). Never assume EnteredAmount < 0, and note the raw sum mixes
+currencies (USD/CAD/GBP/EUR) — fine for the demo, not a real multi-currency
+total. Newest anchor: TransactionNumber 11001 (DMART, -150, 2026-07-09).
+
 ### `/receivablesCustomers` — DOES NOT EXIST (404)
 
 The name in the AR source catalog is wrong; there is no such resource. For AR

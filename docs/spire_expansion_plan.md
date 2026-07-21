@@ -237,7 +237,9 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | AR | P2c | Open invoices for a customer (prompt 1, open_only) | `ar-phase-2c-open-invoices` | merged |
 | AR | — | Top-5 open-invoices limit (finishes prompt 1) | `ar-invoice-limit-top-n` | merged |
 | AR | P3 | Tax lines (prompt 3) | `ar-p3-tax-lines` | merged |
-| AR | P3+ | DFF (4), credit memos (5,14), account children (6–9,13), aggregates (10,16–18) | — | not started |
+| AR | P3 | DFF (prompt 4) | `ar-p3-dff` | merged |
+| AR | P4 | Credit memos (prompts 5, 14) | `ar-p4-credit-memos` | merged |
+| AR | P5+ | Account children (6–9,13), aggregates (10,16–18) | — | not started |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
@@ -563,9 +565,35 @@ per-edge.
     synthesizer nests each tax line under the right line (the tax row's own
     CustomerTransactionLineId is the TAX PK, a different value). KG now 16
     entities / 137 fields / 13 edges / 12 edge-tools. Full suite 399 passing.
-  - **DFF (prompt 4)** — not started. Must pick between `receivablesInvoiceDFF`
-    and `receivablesInvoiceTransactionDFF` (see quirk 8). This finishes AR-P3.
-- **AR-P4** — credit memos: list + total value (prompts 5, 14).
+  - **DFF (prompt 4)** ✓ merged (2026-07-21, `ar-p3-dff`). Finishes AR-P3.
+    Curl settled the two-child question: `receivablesInvoiceDFF` returns
+    `__FLEX_Context=null`, `receivablesInvoiceTransactionDFF` returns
+    `__FLEX_Context="DOO"` on invoice 1002 — so the tool targets the
+    TransactionDFF child (context set, but NO segment columns on this pod).
+    A plain single-parent child (one id in the path), so the LIGHTEST AR
+    phase: executor unchanged, planner ONE `_TOOL_PRIMARY_ARG` entry,
+    synthesizer a 2-place change (schema + prompt — the DFF has no id of its
+    own to validate). Also fixed a pre-existing short-id parser bug: a short
+    CustomerTransactionId (1002) was silently dropped, which had also been
+    hiding a real failure of the tax-lines prompt (prompt 3, same id).
+    KG 17 entities / 140 fields / 14 edges / 13 edge-tools. Suite 402.
+- **AR-P4** — credit memos: list + total value (prompts 5, 14). ✓ merged
+  (2026-07-21, `ar-p4-credit-memos`). A rooted, LIST-ONLY entity over the
+  top-level `receivablesCreditMemos` resource — no by-id, no edge, no
+  filter; the default fetcher orders newest-first and limits server-side.
+  Both prompts route to the one fetcher. First new rooted AR entity since
+  AR-P2, so the synthesizer WAS a five-place change — but id-harvest needed
+  NO change, since credit memos share the `CustomerTransactionId` id space
+  with AR invoices. `total_credit` is the raw sum of EnteredAmount (a ledger
+  net: the pod has a positive Incomplete memo, 1001/+10000, that offsets the
+  negatives → -17232.52 for the recent-25 set; sign is NOT guaranteed).
+  Key lesson (a failing test caught it): the executor unwraps a ToolResult
+  to its `items` list and DISCARDS other top-level keys, so a top-level
+  `total_credit` never reached the synthesizer (the LLM was silently summing
+  it) — the wrapper now STAMPS the total onto each memo row. Also a parser
+  carve-out so "total value of credit memos" isn't refused as an unsupported
+  aggregation. KG 18 entities / 148 fields / 14 edges / 13 edge-tools, 8
+  entity-tools, 87 vocab. Suite 406.
 - **AR-P5** — CustomerAccount + account children: activity/balance summary
   (prompt 6), account credit memos (7), account receipts (8), receipt
   applications (9), site-filtered receipts (13). All keyed by `AccountId`.
@@ -732,7 +760,7 @@ The raw endpoint and prompt tables for all four modules, preserved from
 | › credit memos | `get_account_credit_memos` | `…/{accountId}/child/creditMemos` | Credit memos for one account |
 | › standard receipts | `get_account_standard_receipts` | `…/{accountId}/child/standardReceipts` | Cash receipts for one account |
 | › receipt applications | `get_account_standard_receipt_applications` | `…/{accountId}/child/standardReceiptApplications` | Applied vs unapplied |
-| Credit Memos | `list_credit_memos` | `/receivablesCreditMemos` | Credit memos; supports q filter |
+| Credit Memos | `list_receivables_credit_memos` ✓ | `/receivablesCreditMemos` | Recent credit memos + total value (AR-P4, merged). orderBy+limit server-side; total_credit stamped per row |
 | › credit memo lines | `get_credit_memo_lines` | `/receivablesCreditMemos/{id}/child/receivablesCreditMemoLines` | Lines of one credit memo |
 | Invoices | `get_invoice_lines` | `/receivablesInvoices` | AR invoices and billing lines |
 | › invoice tax lines | `get_invoice_line_tax_lines` | `/receivablesInvoices/{id}/child/receivablesInvoiceLines/{lineId}/child/taxLines` | Tax per invoice line |
@@ -751,8 +779,8 @@ The raw endpoint and prompt tables for all four modules, preserved from
 | 1 | List all open invoices for the customer, top 5 | Read | `list_receivables_invoices` | Invoice #, Customer, Amount, Currency, Due Date, Status |
 | 2 | Show invoice lines for invoice 300000248096352 | Read | `get_invoice_lines` | Line, Description, Quantity, Unit Price, Line Amount, Tax Handling |
 | 3 | Get tax lines for that invoice line | Read | `get_invoice_line_tax_lines` | (0 tax lines found — none shown) |
-| 4 | Fetch DFF values for this invoice | Read | `get_invoice_transaction_dff` | __FLEX_Context (=null here) |
-| 5 | List recent credit memos, top 5 | Read | `list_credit_memos` | Memo #, Customer, Amount, Date, Status |
+| 4 | Fetch DFF values for this invoice | Read | `get_receivables_invoice_transaction_dff` ✓ merged | __FLEX_Context="DOO" on 1002 (TransactionDFF child; DFF child is null) |
+| 5 | List recent credit memos, top 5 | Read | `list_receivables_credit_memos` ✓ merged | Memo #, Customer, Amount, Date, Status + total_credit |
 | 6 | Show account activity summary for top accounts | Read | `list_customer_account_activities` | Account, Customer, Open Receivables, Total Due |
 | 7 | Get all credit memos for account 300000047368512 | Read | `get_account_credit_memos` | — to fill |
 | 8 | Get all standard receipts for this account | Read | `get_account_standard_receipts` | — to fill |
@@ -761,7 +789,7 @@ The raw endpoint and prompt tables for all four modules, preserved from
 | 11 | Get the AR invoice with CustomerTransactionId 300000248096352 | Read | `get_invoice` | — to fill |
 | 12 | Retrieve invoice details for CustomerTransactionId 300000248096352 | Read | `get_invoice` | — to fill |
 | 13 | Get recent standard receipts for Santa Clara site | Read | `get_account_standard_receipts` | — to fill |
-| 14 | Show the 5 most recent credit memos and their total value | Read | `list_credit_memos` | — to fill |
+| 14 | Show the 5 most recent credit memos and their total value | Read | `list_receivables_credit_memos` ✓ merged | 25 memos + total_credit (raw sum, -17232.52; routes to CreditMemo, not an aggregate) |
 | 15 | Find invoices for ABC Corporation Americas | Read | `list_receivables_invoices` | — to fill |
 | 16 | Identify cash collection trends, MoM, DSO, risks, improvements | Aggregate | `get_account_standard_receipts` | — to fill |
 | 17 | Receipt method distribution — % of cash by method (Lockbox/ACH/Wire/Manual) | Aggregate | `get_account_standard_receipts` | — to fill |
