@@ -13,5 +13,8 @@ Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
 # — a customer's invoices (AR-P2 Shape B, prompt 15) —
 Show me AR invoices for customer ABC Corporation Americas
 
-# — open invoices for a customer (AR-P2c, prompt 1) —
+# — open invoices for a customer, no cap (AR-P2c) —
 Show me open invoices for customer ABC Corporation Americas
+
+# — top-N open invoices (prompt 1 complete — invoice_limit) —
+Show me the top 5 open invoices for customer ABC Corporation Americas

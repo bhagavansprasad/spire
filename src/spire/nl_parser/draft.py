@@ -261,6 +261,19 @@ class DraftIntent(BaseModel):
         ),
     )
 
+    invoice_limit: int | None = Field(
+        default=None,
+        description=(
+            "Set ONLY on an open-invoices question (the CustomerAccount + "
+            "by_customer_name + CustomerTransaction shape with open_only=true) "
+            "that also names a row cap — e.g. 'top 5 open invoices for "
+            "[customer]', '[customer]'s 10 largest outstanding invoices'. Set "
+            "it to that number N (5, 10, ...); the open invoices are returned "
+            "highest-balance first, so this keeps the top N. Leave null when "
+            "there is no count, or when open_only is not set."
+        ),
+    )
+
     def to_intent(self) -> Intent:
         """Convert to the planner's ``Intent`` dataclass.
 
@@ -318,6 +331,7 @@ class DraftIntent(BaseModel):
             ),
             count_only=self.count_only,
             open_only=self.open_only,
+            invoice_limit=self.invoice_limit,
         )
 
 

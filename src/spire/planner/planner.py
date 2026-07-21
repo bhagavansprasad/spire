@@ -413,6 +413,14 @@ class Intent:
     # ordinary customer-invoice listings (prompt 15) are unchanged.
     open_only: bool = False
 
+    # Top-N open invoices: when set alongside open_only on a customer-
+    # invoices query, cap the listed transactions to the N highest-balance
+    # open rows. Rides as a literal `limit` tool_arg on the same
+    # CustomerTransaction include step (the fetcher returns balance-desc,
+    # so limit keeps the top N). Consumed entirely in Block 3. Defaults
+    # None (no cap) so plain open-invoice listings are unchanged.
+    invoice_limit: int | None = None
+
 
 @dataclass
 class Step:
@@ -1019,6 +1027,12 @@ def generate_plan(
         # above).
         if include_entity == "CustomerTransaction" and intent.open_only:
             step_tool_args["open_only"] = True
+            # Top-N: cap to the N highest-balance open rows. Gated on
+            # open_only too (invoice_limit is only meaningful for the open
+            # set, which the fetcher returns balance-desc). Rides as the
+            # fetcher's native `limit` arg on this same step.
+            if intent.invoice_limit is not None:
+                step_tool_args["limit"] = intent.invoice_limit
         plan.append(
             Step(
                 step_id=step_id,
