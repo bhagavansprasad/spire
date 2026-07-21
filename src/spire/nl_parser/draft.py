@@ -247,6 +247,20 @@ class DraftIntent(BaseModel):
         ),
     )
 
+    open_only: bool = Field(
+        default=False,
+        description=(
+            "Set true when a customer-invoices question asks for only the "
+            "OPEN / OUTSTANDING / UNPAID invoices — e.g. 'open invoices for "
+            "[customer]', '[customer]'s outstanding invoices'. Used only "
+            "with the customer-invoices shape (target_entity 'CustomerAccount' "
+            "with a 'by_customer_name' filter and 'CustomerTransaction' in "
+            "include); it restricts the listed transactions to those with a "
+            "positive open balance. Leave false when the question asks for a "
+            "customer's invoices with no open/outstanding qualifier."
+        ),
+    )
+
     def to_intent(self) -> Intent:
         """Convert to the planner's ``Intent`` dataclass.
 
@@ -303,6 +317,7 @@ class DraftIntent(BaseModel):
                 else None
             ),
             count_only=self.count_only,
+            open_only=self.open_only,
         )
 
 

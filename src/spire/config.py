@@ -38,6 +38,14 @@ PERSONAS_FILE = Path(__file__).resolve().parents[2] / "personas.yaml"
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_TEMPERATURE = 0.0
 
+# Cap output tokens on every provider. Structured-output parses and
+# synthesizer responses are small (a DraftIntent is ~300 tokens); without
+# a cap, a model that fails to converge can generate to its default
+# ceiling (65520 on gemini-flash), turning a bad parse into a ~4-minute
+# hang. Capping converts that into a ~2s fast failure the parser handles
+# as a refusal. Raise only if a legitimate response is ever truncated.
+LLM_MAX_OUTPUT_TOKENS = 8000
+
 # Provider seam. Today only "gemini" is wired; the factory is structured
 # so Claude/OpenAI become two more branches plus their deps, without
 # touching the parser, synthesizer, or graph. Override via env:
@@ -70,21 +78,33 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
 
         model = LLM_MODEL or GEMINI_MODEL
         print(f"[llm] provider=gemini model={model}", file=_sys.stderr)
-        return ChatGoogleGenerativeAI(model=model, temperature=temperature)
+        return ChatGoogleGenerativeAI(
+            model=model,
+            temperature=temperature,
+            max_output_tokens=LLM_MAX_OUTPUT_TOKENS,
+        )
 
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
         model = LLM_MODEL or ANTHROPIC_MODEL
         print(f"[llm] provider=anthropic model={model}", file=_sys.stderr)
-        return ChatAnthropic(model=model, temperature=temperature)
+        return ChatAnthropic(
+            model=model,
+            temperature=temperature,
+            max_tokens=LLM_MAX_OUTPUT_TOKENS,
+        )
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI
 
         model = LLM_MODEL or OPENAI_MODEL
         print(f"[llm] provider=openai model={model}", file=_sys.stderr)
-        return ChatOpenAI(model=model, temperature=temperature)
+        return ChatOpenAI(
+            model=model,
+            temperature=temperature,
+            max_tokens=LLM_MAX_OUTPUT_TOKENS,
+        )
 
     raise ValueError( 
         f"Unknown SPIRE_LLM_PROVIDER={LLM_PROVIDER!r}. "

@@ -98,3 +98,26 @@ async def test_get_customer_transactions_open_only_keeps_positive_balance():
         and item["TotalBalanceAmount"] > 0
         for item in result.items
     )
+
+
+@pytest.mark.asyncio
+async def test_get_customer_transactions_open_only_is_balance_descending():
+    # AR-P2c: open_only relies on orderBy=TotalBalanceAmount:desc to surface
+    # open rows within the fetch window (the account has thousands of rows;
+    # open ones do not appear on the default-order page). This asserts the
+    # sort is actually applied: the open set is non-empty AND balance-
+    # descending, with the top balances matching the known values. Would
+    # fail (empty or unordered) if the orderBy were removed.
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await get_customer_transactions(
+            client, account_id=KNOWN_ACCOUNT_ID, open_only=True, limit=5
+        )
+    balances = [item["TotalBalanceAmount"] for item in result.items]
+    # Non-empty: this account has open invoices; an empty result here means
+    # the sort is NOT surfacing them (the default-order page is all paid).
+    assert balances, "expected open invoices; orderBy likely not applied"
+    # Descending: the fetcher returns rows sorted by balance desc.
+    assert balances == sorted(balances, reverse=True)
+    # Top open balances on this anchor account (from live discovery).
+    assert balances[:5] == [216378, 206008, 198286, 56412, 39969]
