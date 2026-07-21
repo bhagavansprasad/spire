@@ -307,6 +307,14 @@ INSERT INTO kg_entity VALUES (
 );
 
 
+-- AR-P3 DFF
+INSERT INTO kg_entity VALUES (
+  'ReceivablesInvoiceTransactionDFF', 'CustomerTrxId', 'CustomerTrxId',
+  '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceTransactionDFF',
+  'The transaction descriptive flexfield (DFF) of an AR invoice - the __FLEX_Context and (when configured) its segment values. A single-parent child of ReceivablesInvoice, keyed by the parent invoice id carried in the URL path. NOTE: the child echoes the parent id as CustomerTrxId (short spelling), NOT the CustomerTransactionId used on the header and lines - match the pod exactly. AR invoices expose TWO DFF children (receivablesInvoiceDFF and receivablesInvoiceTransactionDFF); this is the TransactionDFF one, which is the populated child on this pod (invoice 1002 returns __FLEX_Context=''DOO''; the plain receivablesInvoiceDFF returns null). On this demo pod the context is set but carries no populated segment columns - only CustomerTrxId, __FLEX_Context, __FLEX_Context_DisplayValue.'
+);
+
+
 -- AR-P2b
 INSERT INTO kg_entity VALUES (
   'CustomerAccount', 'AccountId', 'CustomerName',
@@ -320,7 +328,7 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules',
   'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.'
 );
-PROMPT Seeded kg_entity (16 rows).
+PROMPT Seeded kg_entity (17 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -476,6 +484,11 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineAmountInclude
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'AssessableValue',             'amount',       'numeric', 'Assessable value for tax.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TransacationBusinessCategory','projection',   'string',  'Transaction business category (e.g. ''Sales Transaction''). NOTE: Oracle misspells this field as ''TransacationBusinessCategory'' (sic); must be requested with the typo exactly.');
 
+-- AR-P3 DFF
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', 'CustomerTrxId',                'canonical_id', 'numeric', 'Parent invoice id echoed on the DFF child. Pod spells it CustomerTrxId (short form), not CustomerTransactionId.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context',              'projection',   'string',  'The descriptive-flexfield context name (e.g. ''DOO''). Set on this pod but with no populated segment columns behind it.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context_DisplayValue', 'projection',   'string',  'Display value of the DFF context (null on this pod).');
+
 
 -- ReceivablesTaxLine (AR-P3)
 INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'CustomerTransactionLineId', 'canonical_id', 'numeric', 'System primary key for the TAX line (e.g. 112) - distinct from the parent invoice-line id.');
@@ -509,7 +522,7 @@ INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'PaymentScheduleDueDa
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalOriginalAmount',    'amount',       'numeric', 'Original transaction amount.');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalBalanceAmount',     'amount',       'numeric', 'Open balance on the transaction; 0 is paid. A positive balance is an open invoice (used by the open-only filter, deferred to a later phase).');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'InstallmentStatus',      'status',       'string',  'Installment status (e.g. ''Closed'').');
-PROMPT Seeded kg_entity_field (137 rows).
+PROMPT Seeded kg_entity_field (140 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -616,6 +629,16 @@ INSERT INTO kg_edge VALUES (
 );
 
 
+-- AR-P3 DFF
+INSERT INTO kg_edge VALUES (
+  'HAS_TRANSACTION_DFF', 'ReceivablesInvoice', 'ReceivablesInvoiceTransactionDFF', 'CustomerTransactionId', 'CustomerTrxId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesInvoices/{invoice.CustomerTransactionId}/child/receivablesInvoiceTransactionDFF. A plain expansion: fetch the invoice''s TransactionDFF row. No server filter needed. The parent id is carried in the URL path, not required from the child body. Note the child echoes the parent id as CustomerTrxId (short spelling); the to_join_field records that reality, but the fetch is path-based so it is declarative only (same as HAS_AR_LINE).',
+  'Per-invoice child call, one HTTP call per invoice. Same shape as HAS_AR_LINE (join_only expansion). Normally returns a single DFF row.',
+  NULL
+);
+
+
 -- AR-P2b
 INSERT INTO kg_edge VALUES (
   'HAS_CUSTOMER_TRANSACTION', 'CustomerAccount', 'CustomerTransaction', 'AccountId', 'AccountId', 'one_to_many',
@@ -624,7 +647,7 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_AR_LINE. Client-side Invoice-class filter in the tool; the open-balance filter (prompt 1) is deferred to a later phase.',
   NULL
 );
-PROMPT Seeded kg_edge (13 rows).
+PROMPT Seeded kg_edge (14 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -979,12 +1002,20 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
 );
 
 
+-- AR-P3 DFF
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_TRANSACTION_DFF',
+  'get_receivables_invoice_transaction_dff',
+  'Takes customer_transaction_id. Plain single-parent expansion: returns the invoice''s TransactionDFF row as a ToolResult. No filter, no keep-parent logic.'
+);
+
+
 INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'HAS_CUSTOMER_TRANSACTION',
   'get_customer_transactions',
   'Takes account_id. Fetches the account''s transactionPaymentSchedules, keeps TransactionClass=''Invoice'' client-side. Has an open_only flag (positive-balance filter) that is unused until the open-invoices phase.'
 );
-PROMPT Seeded kg_edge_tool (12 rows).
+PROMPT Seeded kg_edge_tool (13 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter

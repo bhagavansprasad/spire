@@ -409,6 +409,26 @@ class ReceivablesInvoiceLineInfo(BaseModel):
     )
 
 
+class ReceivablesInvoiceTransactionDFFInfo(BaseModel):
+    """The transaction descriptive flexfield (DFF) nested under an AR invoice.
+
+    Carries only the DFF context name and its display value. No id of its own
+    to validate — CustomerTrxId echoes the parent invoice — so this model is
+    not hallucination-checked.
+    """
+
+    context: str = Field(
+        default="",
+        description="The DFF context name, __FLEX_Context (e.g. 'DOO'). "
+        "Empty when no context is set.",
+    )
+    context_display_value: str = Field(
+        default="",
+        description="The DFF context display value, __FLEX_Context_DisplayValue "
+        "(often null on this pod).",
+    )
+
+
 class ReceivablesInvoiceRecord(BaseModel):
     """One AR invoice in a receivables-invoice-rooted response.
 
@@ -440,6 +460,12 @@ class ReceivablesInvoiceRecord(BaseModel):
         description="This invoice's lines, when the query asked for them (a "
         "'receivablesinvoiceline' bucket in the data). Empty otherwise. Each "
         "customer_transaction_line_id must appear in the executor's output.",
+    )
+    dff: ReceivablesInvoiceTransactionDFFInfo | None = Field(
+        default=None,
+        description="This invoice's transaction DFF, when the query asked for "
+        "it (a 'receivablesinvoicetransactiondff' bucket in the data). None "
+        "otherwise.",
     )
 
 
@@ -1056,6 +1082,12 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "types and rates). COPY every amount and rate exactly; do NOT sum or "
         "compute anything. Every customer_transaction_line_id must appear in "
         "the data. If the bucket is absent, leave 'tax_lines' empty and do "
+        "not mention it.\n"
+        "- 'receivablesinvoicetransactiondff' bucket: emit the invoice's DFF "
+        "under 'dff' (context from __FLEX_Context, context_display_value from "
+        "__FLEX_Context_DisplayValue). The summary must state the DFF context "
+        "(e.g. 'DOO'), or note it is empty if no context is set. COPY the "
+        "values exactly. If the bucket is absent, leave 'dff' as null and do "
         "not mention it."
     ),
     "CustomerAccount": (

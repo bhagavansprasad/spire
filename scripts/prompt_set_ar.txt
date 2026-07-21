@@ -23,3 +23,6 @@ Show me the top 5 open invoices for customer ABC Corporation Americas
 
 # — AR invoice by id + tax lines (AR-P3 tax lines) —
 Show the AR invoice with CustomerTransactionId 1002 and its tax lines
+
+# — AR invoice by id + DFF (AR-P3 DFF, prompt 4) —
+Show the AR invoice with CustomerTransactionId 1002 and its DFF values

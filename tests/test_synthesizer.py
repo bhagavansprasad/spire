@@ -33,6 +33,7 @@ from spire.synthesizer.synthesizer import (
     ReceivablesInvoiceLineInfo,
     ReceivablesInvoiceRecord,
     ReceivablesInvoiceResponse,
+    ReceivablesInvoiceTransactionDFFInfo,
     ReceivablesTaxLineInfo,
     SupplierRecord,
     SupplierResponse,
@@ -569,3 +570,70 @@ def test_collect_valid_ids_harvests_tax_line_pks() -> None:
     (112, 113) into the line-id bucket, alongside the parent line id (74)."""
     ids = _collect_valid_ids(_tax_outputs())
     assert {74, 112, 113} <= ids["customer_transaction_line_ids"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P3 DFF — invoice TransactionDFF nested under the invoice
+# The DFF hangs directly off the invoice (not under a line). It carries
+# only a context string and no id of its own (CustomerTrxId echoes the
+# parent), so there is nothing to hallucination-check: the test confirms
+# the schema accepts a 'dff' object and it passes validation cleanly.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _dff_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'AR invoice 1002 and its DFF values': the
+    invoice plus its TransactionDFF row (context 'DOO')."""
+    return {
+        "receivables_invoices": [
+            {"CustomerTransactionId": 1002, "TransactionNumber": "5"},
+        ],
+        "receivablesinvoicetransactiondff": [
+            {
+                "CustomerTrxId": 1002,
+                "__FLEX_Context": "DOO",
+                "__FLEX_Context_DisplayValue": None,
+            },
+        ],
+    }
+
+
+def _dff_response(context: str) -> ReceivablesInvoiceResponse:
+    """Build an AR-invoice response with a DFF nested under the invoice,
+    using the given context value."""
+    return ReceivablesInvoiceResponse(
+        summary="One invoice with a DFF context.",
+        receivables_invoices=[
+            ReceivablesInvoiceRecord(
+                customer_transaction_id=1002,
+                transaction_number="5",
+                dff=ReceivablesInvoiceTransactionDFFInfo(
+                    context=context,
+                    context_display_value="",
+                ),
+            )
+        ],
+    )
+
+
+def test_validate_passes_for_nested_dff() -> None:
+    """A DFF nested under the invoice passes validation — it has no id to
+    check, so any context value is accepted as long as the invoice id is
+    valid."""
+    _validate_no_hallucinated_ids(_dff_response("DOO"), _dff_outputs())
+
+
+def test_validate_passes_for_empty_dff_context() -> None:
+    """An empty DFF context still validates — the DFF carries no id, so an
+    absent context is not a hallucination."""
+    _validate_no_hallucinated_ids(_dff_response(""), _dff_outputs())
+
+
+def test_dff_response_still_guards_the_invoice_id() -> None:
+    """The invoice id is still validated even on a DFF-bearing response: a
+    bad invoice id (999) is caught, DFF notwithstanding."""
+    bad = _dff_response("DOO")
+    bad.receivables_invoices[0].customer_transaction_id = 999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _dff_outputs())
+    assert "999" in str(exc_info.value)

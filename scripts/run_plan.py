@@ -436,6 +436,14 @@ def _format_synthesized(response) -> str:
                         f" — {tx.tax_rate}% on {tx.taxable_amount}, "
                         f"tax {tx.tax_amount}"
                     )
+            if inv.dff is not None:
+                ctx = inv.dff.context or "(no context)"
+                disp = (
+                    f" / {inv.dff.context_display_value}"
+                    if inv.dff.context_display_value
+                    else ""
+                )
+                lines.append(f"      DFF context: {ctx}{disp}")
         return "\n".join(lines)
 
     if isinstance(response, CustomerAccountResponse):
