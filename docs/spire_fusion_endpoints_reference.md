@@ -50,6 +50,7 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-19 | /receivablesCustomers | **404 — resource does not exist.** The name in the AR source catalog is wrong. For AR customer identity/balances, use `/receivablesCustomerAccountActivities`. Do not model a customer entity from a `/receivablesCustomers` endpoint. |
 | 2026-07-19 | crmRestApi /accounts | Exists (1,476 rows) but is the **CRM/Sales customer**, NOT the AR master. Keys on `PartyId`/`PartyNumber` — a DIFFERENT id space from AR's `CustomerId`/`AccountNumber`. Carries sales data (opportunities, territories, `AccountScore`, DUNS), not receivables. Ruled out as AR's customer source. The collection action `getFinancialCustomerInfo` is the documented sales→financial bridge for a future cross-pillar prompt. |
 | 2026-07-21 | /receivablesCustomerAccountActivities/{id}/child/transactionPaymentSchedules | **`TotalBalanceAmount` is sortable but NOT queryable — the open-invoice window strategy (AR-P2c).** `q=TotalBalanceAmount>0` is rejected (*"The attribute(s) [TotalBalanceAmount] are not queriable."*), BUT `orderBy=TotalBalanceAmount:desc` **works server-side**. Since an account can carry thousands of rows (this anchor has `totalResults: 7404`), the open filter is applied via SORT, not paging: `orderBy=TotalBalanceAmount:desc`, over-fetch a bounded window, then keep `TransactionClass=='Invoice'` AND `TotalBalanceAmount>0` client-side, slice top N. Open rows carry `InstallmentStatus: "Open"` (paid rows: `"Closed"`, balance 0). Anchor `AccountId=300000047368527` (ABC Corporation Americas): top open invoices 216378, 206008, 198286, 56412, 39969. NOTE: `orderBy` sorts across transaction classes, so the client-side Invoice-class keep still matters on mixed accounts. |
+| 2026-07-21 | /receivablesInvoices/{txnId}/child/receivablesInvoiceLines/{lineId}/child/receivablesInvoiceLineTaxLines | **AR tax lines (prompt 3) — a grandchild reached with TWO ids (invoice + line), NOT three.** Unlike PO distributions (three sibling ids from one schedule row), the tax child needs only the parent line id, which the line row carries — so it's a plain nested grandchild fetched by chaining single-parent iterations (invoice→lines→taxLines), reusing the existing executor path, NOT the HAS_DISTRIBUTION `iter_fields` branch. The nested path resolves for an untaxed line but returns `count:0` (original anchor invoice 61765 is untaxed). Fields: `TaxLineNumber`, `TaxJurisdictionCode`, `TaxRate` (e.g. 2.25), `TaxRateCode` ("STD"), `TaxRegimeCode` ("US SALES AND USE TAX"), `TaxStatusCode` ("STANDARD"), `Tax` (the tax type, e.g. "COUNTY"), `TaxAmount`, `TaxableAmount`, `TaxInclusiveIndicator` ("No"/"Yes"), `TaxPointDate`, plus audit fields. NOTE: the tax-line row's own `CustomerTransactionLineId` is the TAX line PK (e.g. 112), distinct from the parent invoice-line id (74). Taxed anchor: invoice `1002` (TransactionNumber 5), line `74` → 2 tax lines (STD/COUNTY 2.25%, and a second); lines 84/93/107 each carry 2 as well. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -929,6 +930,35 @@ resolve in `?fields=`.
 Line children: `receivablesInvoiceLineTaxLines` (the tax lines — a GRANDCHILD
 of the invoice, reached three levels deep: invoice → line → taxLines),
 `receivablesInvoiceLineDFF`, `receivablesInvoiceLineTransactionDFF`.
+
+### `/receivablesInvoices/{txnId}/child/receivablesInvoiceLines/{lineId}/child/receivablesInvoiceLineTaxLines` — AR tax lines (prompt 3)
+
+The tax lines for an invoice line — a grandchild of the invoice, reached
+three levels deep but keyed by only TWO ids: the invoice
+`CustomerTransactionId` and the parent line `CustomerTransactionLineId`, both
+in the URL path.
+
+**Contrast with PO distributions.** Distributions need THREE ids (POHeaderId,
+POLineId, LineLocationId) taken from one flat schedule row, which is why they
+use the HAS_DISTRIBUTION `iter_fields` multi-field iteration. Tax lines do NOT:
+the only id needed beyond the invoice is the line id, and the parent line row
+already carries it. So tax lines are a PLAIN nested grandchild — fetched by
+chaining two ordinary single-parent iterations (invoice → lines, then each
+line → its tax lines), reusing the existing executor iteration. No new
+multi-field branch.
+
+Fields: `TaxLineNumber`, `TaxJurisdictionCode`, `TaxRate`, `TaxRateCode`,
+`TaxRegimeCode`, `TaxStatusCode`, `Tax` (the tax type — e.g. "COUNTY"),
+`TaxAmount`, `TaxableAmount`, `TaxInclusiveIndicator`, `TaxPointDate`, plus
+`Created`/`LastUpdate` audit columns.
+
+CAUTION: the tax-line row's own `CustomerTransactionLineId` is the TAX line's
+PK (e.g. 112), a DIFFERENT value from the parent invoice-line id (74). Don't
+confuse the two when joining or displaying.
+
+Untaxed lines return `count:0`, not a 404 — the original anchor invoice 61765
+("Consultation") is untaxed. Taxed anchor: invoice `1002` (TransactionNumber
+5), line `74` → 2 tax lines; lines 84/93/107 also carry 2 each.
 
 ### `/standardReceipts` — AR cash receipts
 

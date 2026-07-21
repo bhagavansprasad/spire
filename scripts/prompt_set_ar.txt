@@ -6,6 +6,8 @@
 # 61765). Customer "ABC Corporation Americas" resolves to one account
 # (AccountId 300000047368527) with open invoices — top balances 216378,
 # 206008, 198286, 56412, 39969.
+# Tax anchor: invoice 1002 (TransactionNumber 5) is taxed — line 74 carries 2
+# tax lines (STATE 6.5%, COUNTY 2.25%); the 61765 anchor above is untaxed.
 
 # — AR invoice by id + lines (AR-P2 Shape A, prompts 11, 12, 2) —
 Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
@@ -18,3 +20,6 @@ Show me open invoices for customer ABC Corporation Americas
 
 # — top-N open invoices (prompt 1 complete — invoice_limit) —
 Show me the top 5 open invoices for customer ABC Corporation Americas
+
+# — AR invoice by id + tax lines (AR-P3 tax lines) —
+Show the AR invoice with CustomerTransactionId 1002 and its tax lines

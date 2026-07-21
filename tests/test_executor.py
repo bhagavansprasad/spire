@@ -31,6 +31,7 @@ from spire.executor.executor import (
     _collect_iteration_values,
     _execute_filter_source_step,
     _find_substitution_key,
+    _parent_stamp,
     _parse_tool_result,
     execute_plan,
 )
@@ -1418,3 +1419,44 @@ def test_extract_truncation_meta_extracts_from_envelope() -> None:
         "limit_applied": 25,
         "truncated": True,
     }
+
+# ─────────────────────────────────────────────────────────────────────
+# _parent_stamp — carry the parent iteration key onto child rows
+# (AR-P3: a child endpoint often doesn't echo its parent id in the body,
+# so a grandchild step that must iterate on a parent id needs it stamped)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_parent_stamp_single_field() -> None:
+    """Single-field iteration stamps the value back under its field name.
+    AR-P3: Step 2 iterates on CustomerTransactionId, so each line row gets
+    that invoice id (the line body does NOT carry it)."""
+    stamp = _parent_stamp(
+        {"from_step": "receivables_invoices", "field": "CustomerTransactionId"},
+        1002,
+    )
+    assert stamp == {"CustomerTransactionId": 1002}
+
+
+def test_parent_stamp_multi_field_uses_parent_field_names() -> None:
+    """Multi-field iteration stamps each value under its PARENT field name
+    (what a downstream iterate_over reads), not the tool-arg name."""
+    stamp = _parent_stamp(
+        {
+            "from_step": "receivables_invoice_lines",
+            "fields": {
+                "customer_transaction_id": "CustomerTransactionId",
+                "line_id": "CustomerTransactionLineId",
+            },
+        },
+        {"customer_transaction_id": 1002, "line_id": 74},
+    )
+    assert stamp == {
+        "CustomerTransactionId": 1002,
+        "CustomerTransactionLineId": 74,
+    }
+
+
+def test_parent_stamp_no_field_or_fields_returns_empty() -> None:
+    """A degenerate iterate_over with neither key stamps nothing."""
+    assert _parent_stamp({"from_step": "x"}, 5) == {}

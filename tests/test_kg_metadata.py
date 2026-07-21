@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_fifteen_rows():
+async def test_kg_entity_has_sixteen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -83,7 +83,7 @@ async def test_kg_entity_has_fifteen_rows():
         "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
-        "Site", "Supplier"
+        "ReceivablesTaxLine", "Site", "Supplier"
     ]
 
 
@@ -137,15 +137,15 @@ async def test_kg_table_row_counts_match_v1_1():
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 15,
-        "kg_entity_field": 125,
-        "kg_edge": 12,
+        "kg_entity": 16,
+        "kg_entity_field": 137,
+        "kg_edge": 13,
         "kg_pattern": 3,
         "kg_vocabulary": 85,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 7,
         "kg_entity_filter": 21,
-        "kg_edge_tool": 11,
+        "kg_edge_tool": 12,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

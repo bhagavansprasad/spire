@@ -74,6 +74,12 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # CustomerTransactionId.
     "get_receivables_invoice_by_id": "customer_transaction_id",
     "get_receivables_invoice_lines": "customer_transaction_id",
+    # AR-P3: tax lines. Multi-field iteration (needs two ids: invoice +
+    # line), so Block 3 builds its args from the edge's iter_fields map,
+    # not this table. Registered anyway for any single-arg reader; the
+    # primary id is the parent line's CustomerTransactionLineId, which
+    # the tool receives as line_id.
+    "get_receivables_invoice_tax_lines": "line_id",
     # AR-P2b: customer's transactions via the account traversal. The edge
     # tool iterates on the account's AccountId. (The resolver
     # get_customer_account_by_name is the entity fetcher, not an iterated
@@ -456,6 +462,14 @@ class Step:
     output_dedupe_by: str | None
     filter_source_when_empty: bool = False
     filter_source_when_nonempty: bool = False
+    # AR-P3: when True, the executor stamps this iterating step's parent
+    # field(s) onto each child row it returns, so a FOLLOWING grandchild
+    # step can iterate on a parent id the child body doesn't natively
+    # carry (AR invoice lines don't echo CustomerTransactionId). Off by
+    # default so every other iterating step's output is byte-for-byte
+    # unchanged. The planner sets it only on a child step that feeds a
+    # further include.
+    stamp_parent_key: bool = False
 
 
 Plan = list[Step]
@@ -983,7 +997,7 @@ def generate_plan(
         step_id += 1
 
     # ── Block 3: includes ─────────────────────────────────────────
-    for include_entity in intent.include:
+    for include_pos, include_entity in enumerate(intent.include):
         # Address on a supplier query is already handled by expand in
         # Block 1 (include_addresses on the supplier fetch); don't also
         # fetch it as an edge step. There is no HAS_ADDRESS edge tool
@@ -1033,6 +1047,13 @@ def generate_plan(
             # fetcher's native `limit` arg on this same step.
             if intent.invoice_limit is not None:
                 step_tool_args["limit"] = intent.invoice_limit
+        # AR-P3: if a FURTHER include follows this one, it will iterate on
+        # this step's output — and may need a parent id the child body
+        # doesn't carry (tax lines need the invoice's CustomerTransactionId,
+        # absent from the line row). Flag this step so the executor stamps
+        # its parent field(s) onto each child row. Only when a next include
+        # exists, so leaf includes (the common case) are unaffected.
+        has_following_include = include_pos < len(intent.include) - 1
         plan.append(
             Step(
                 step_id=step_id,
@@ -1042,6 +1063,7 @@ def generate_plan(
                 client_filters=[],
                 output_name=_make_output_name(include_entity, None, []),
                 output_dedupe_by=edge["from_join_field"],
+                stamp_parent_key=has_following_include,
             )
         )
         previous_entity = include_entity

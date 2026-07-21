@@ -299,6 +299,14 @@ INSERT INTO kg_entity VALUES (
 );
 
 
+-- AR-P3
+INSERT INTO kg_entity VALUES (
+  'ReceivablesTaxLine', 'CustomerTransactionLineId', 'TaxLineNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines/{LineId}/child/receivablesInvoiceLineTaxLines',
+  'A tax line on an AR invoice line - the jurisdiction/rate/amount breakdown for one line (e.g. a STATE row and a COUNTY row). A grandchild of ReceivablesInvoice, reached three levels deep but keyed by only two ids (invoice CustomerTransactionId + parent line CustomerTransactionLineId, both in the URL path). Not a top-level resource. A single-parent expansion off ReceivablesInvoiceLine, unlike PO distributions (which need three sibling ids). NOTE: the tax-line row carries its OWN CustomerTransactionLineId (the tax line PK, e.g. 112) - a different value from the parent invoice-line id (e.g. 74).'
+);
+
+
 -- AR-P2b
 INSERT INTO kg_entity VALUES (
   'CustomerAccount', 'AccountId', 'CustomerName',
@@ -312,7 +320,7 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules',
   'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.'
 );
-PROMPT Seeded kg_entity (15 rows).
+PROMPT Seeded kg_entity (16 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -469,6 +477,21 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'AssessableValue',
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TransacationBusinessCategory','projection',   'string',  'Transaction business category (e.g. ''Sales Transaction''). NOTE: Oracle misspells this field as ''TransacationBusinessCategory'' (sic); must be requested with the typo exactly.');
 
 
+-- ReceivablesTaxLine (AR-P3)
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'CustomerTransactionLineId', 'canonical_id', 'numeric', 'System primary key for the TAX line (e.g. 112) - distinct from the parent invoice-line id.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxLineNumber',             'display_id',   'numeric', 'Human-readable tax-line number within the invoice line (e.g. 1, 2).');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'Tax',                       'projection',   'string',  'The tax type (e.g. ''STATE'', ''COUNTY'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxRate',                   'projection',   'numeric', 'The tax rate percentage (e.g. 6.5).');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxRateCode',               'projection',   'string',  'The tax rate code (e.g. ''STD'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxRegimeCode',             'projection',   'string',  'The tax regime (e.g. ''US SALES AND USE TAX'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxStatusCode',             'projection',   'string',  'The tax status (e.g. ''STANDARD'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxJurisdictionCode',       'projection',   'string',  'The tax jurisdiction code (e.g. ''CO-050850000'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxAmount',                 'amount',       'numeric', 'The tax amount charged for this tax line.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxableAmount',             'amount',       'numeric', 'The amount the tax was computed on.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxInclusiveIndicator',     'projection',   'string',  'Whether the line amount already includes this tax (''Yes''/''No'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesTaxLine', 'TaxPointDate',              'projection',   'string',  'The tax point date (ISO date).');
+
+
 -- CustomerAccount (AR-P2b)
 INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'AccountId',                      'canonical_id', 'numeric', 'System primary key for the account. The join key traversed to CustomerTransaction (carried in the child URL path).');
 INSERT INTO kg_entity_field VALUES ('CustomerAccount', 'AccountNumber',                  'display_id',   'string',  'Human-readable account number (e.g. ''26370'').');
@@ -486,7 +509,7 @@ INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'PaymentScheduleDueDa
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalOriginalAmount',    'amount',       'numeric', 'Original transaction amount.');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalBalanceAmount',     'amount',       'numeric', 'Open balance on the transaction; 0 is paid. A positive balance is an open invoice (used by the open-only filter, deferred to a later phase).');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'InstallmentStatus',      'status',       'string',  'Installment status (e.g. ''Closed'').');
-PROMPT Seeded kg_entity_field (125 rows).
+PROMPT Seeded kg_entity_field (137 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -583,6 +606,16 @@ INSERT INTO kg_edge VALUES (
 );
 
 
+-- AR-P3
+INSERT INTO kg_edge VALUES (
+  'HAS_TAX_LINE', 'ReceivablesInvoiceLine', 'ReceivablesTaxLine', 'CustomerTransactionLineId', 'CustomerTransactionLineId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesInvoices/{invoice.CustomerTransactionId}/child/receivablesInvoiceLines/{line.CustomerTransactionLineId}/child/receivablesInvoiceLineTaxLines. The tax child needs TWO ids per call - the parent invoice id AND the parent line id - both carried on the line row (the line projection includes CustomerTransactionId for this reason). Same multi-field pattern as HAS_DISTRIBUTION, but two ids rather than three.',
+  'Multi-field iteration edge: the tax-lines path needs CustomerTransactionId (invoice) and CustomerTransactionLineId (line), both on each line row. iter_fields_json maps the tool args to those parent fields. from_join_field stays CustomerTransactionLineId (the primary id) so single-field readers still work; dedupe is on that id.',
+  '{"customer_transaction_id": "CustomerTransactionId", "line_id": "CustomerTransactionLineId"}'
+);
+
+
 -- AR-P2b
 INSERT INTO kg_edge VALUES (
   'HAS_CUSTOMER_TRANSACTION', 'CustomerAccount', 'CustomerTransaction', 'AccountId', 'AccountId', 'one_to_many',
@@ -591,7 +624,7 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_AR_LINE. Client-side Invoice-class filter in the tool; the open-balance filter (prompt 1) is deferred to a later phase.',
   NULL
 );
-PROMPT Seeded kg_edge (12 rows).
+PROMPT Seeded kg_edge (13 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -940,11 +973,18 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
 
 
 INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_TAX_LINE',
+  'get_receivables_invoice_tax_lines',
+  'Takes customer_transaction_id and line_id. Plain single-parent expansion: returns the invoice line''s tax lines as a ToolResult. No filter, no keep-parent logic.'
+);
+
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'HAS_CUSTOMER_TRANSACTION',
   'get_customer_transactions',
   'Takes account_id. Fetches the account''s transactionPaymentSchedules, keeps TransactionClass=''Invoice'' client-side. Has an open_only flag (positive-balance filter) that is unused until the open-invoices phase.'
 );
-PROMPT Seeded kg_edge_tool (11 rows).
+PROMPT Seeded kg_edge_tool (12 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter

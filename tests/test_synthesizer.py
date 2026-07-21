@@ -30,6 +30,10 @@ from spire.synthesizer.synthesizer import (
     InvoiceResponse,
     PurchaseOrderRecord,
     PurchaseOrderResponse,
+    ReceivablesInvoiceLineInfo,
+    ReceivablesInvoiceRecord,
+    ReceivablesInvoiceResponse,
+    ReceivablesTaxLineInfo,
     SupplierRecord,
     SupplierResponse,
     SupplierSummary,
@@ -480,3 +484,88 @@ def test_synthesize_response_against_live_gemini(sample_outputs) -> None:
     returned_ids = {s.supplier_id for s in response.suppliers}
     assert returned_ids <= {100, 300}
 
+
+
+# ─────────────────────────────────────────────────────────────────────
+# _validate_no_hallucinated_ids — AR-P3 nested tax lines
+# Tax lines nest under invoice lines. Their id (the TAX line PK) validates
+# against the same customer_transaction_line_ids bucket the harvest fills
+# from every output row (parent line ids AND tax-line PKs both land there).
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _tax_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'AR invoice 1002 and its tax lines': the invoice,
+    one line (id 74), and two tax lines whose OWN ids are 112/113."""
+    return {
+        "receivables_invoices": [
+            {"CustomerTransactionId": 1002, "TransactionNumber": "5"},
+        ],
+        "receivables_invoice_lines": [
+            {"CustomerTransactionLineId": 74, "CustomerTransactionId": 1002},
+        ],
+        "receivablestaxline": [
+            {
+                "CustomerTransactionLineId": 112,
+                "ParentCustomerTransactionLineId": 74,
+                "TaxLineNumber": 1,
+            },
+            {
+                "CustomerTransactionLineId": 113,
+                "ParentCustomerTransactionLineId": 74,
+                "TaxLineNumber": 2,
+            },
+        ],
+    }
+
+
+def _tax_response(tax_id_1: int, tax_id_2: int) -> ReceivablesInvoiceResponse:
+    """Build an AR-invoice response with two tax lines nested under line 74,
+    using the given tax-line ids (so a test can inject a bad one)."""
+    return ReceivablesInvoiceResponse(
+        summary="One invoice with tax.",
+        receivables_invoices=[
+            ReceivablesInvoiceRecord(
+                customer_transaction_id=1002,
+                transaction_number="5",
+                lines=[
+                    ReceivablesInvoiceLineInfo(
+                        customer_transaction_line_id=74,
+                        line_number=1,
+                        tax_lines=[
+                            ReceivablesTaxLineInfo(
+                                customer_transaction_line_id=tax_id_1,
+                                tax_line_number=1,
+                                tax="STATE",
+                            ),
+                            ReceivablesTaxLineInfo(
+                                customer_transaction_line_id=tax_id_2,
+                                tax_line_number=2,
+                                tax="COUNTY",
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+
+
+def test_validate_passes_for_nested_tax_lines() -> None:
+    """Valid tax-line ids (112, 113 — both in the output) pass validation."""
+    _validate_no_hallucinated_ids(_tax_response(112, 113), _tax_outputs())
+
+
+def test_validate_raises_on_hallucinated_tax_line_id() -> None:
+    """A tax-line id not in the output (999) is caught, even though its
+    parent line and invoice ids are valid."""
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(_tax_response(112, 999), _tax_outputs())
+    assert "999" in str(exc_info.value)
+
+
+def test_collect_valid_ids_harvests_tax_line_pks() -> None:
+    """The harvest collects the tax rows' OWN CustomerTransactionLineId
+    (112, 113) into the line-id bucket, alongside the parent line id (74)."""
+    ids = _collect_valid_ids(_tax_outputs())
+    assert {74, 112, 113} <= ids["customer_transaction_line_ids"]

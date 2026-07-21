@@ -65,6 +65,9 @@ from spire.mcp_server.tools.receivables_invoice_by_id import (
 from spire.mcp_server.tools.receivables_invoice_lines import (
     get_receivables_invoice_lines as _get_receivables_invoice_lines,
 )
+from spire.mcp_server.tools.receivables_invoice_tax_lines import (
+    get_receivables_invoice_tax_lines as _get_receivables_invoice_tax_lines,
+)
 from spire.mcp_server.tools.customer_account_by_name import (
     get_customer_account_by_name as _get_customer_account_by_name,
 )
@@ -501,6 +504,39 @@ async def get_receivables_invoice_lines(
     async with FusionClient(_persona) as client:
         result = await _get_receivables_invoice_lines(
             client, customer_transaction_id=customer_transaction_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_receivables_invoice_tax_lines(
+    customer_transaction_id: int, line_id: int, limit: int = 25
+) -> dict:
+    """Fetch the tax lines of one AR invoice line.
+
+    Use this as the third hop of "the AR invoice with CustomerTransactionId X
+    and its tax lines": call get_receivables_invoice_by_id for the header,
+    get_receivables_invoice_lines for the lines, then this for each line's tax
+    lines. Tax lines are the jurisdiction/rate/amount breakdown for a line
+    (e.g. a STATE row and a COUNTY row).
+
+    Args:
+        customer_transaction_id: The numeric CustomerTransactionId of the
+            parent AR invoice.
+        line_id: The numeric CustomerTransactionLineId of the parent invoice
+            line (the parent line's PK, not the tax line's).
+        limit: Max tax-line records to return (default 25).
+
+    Returns:
+        A dict with the line's tax lines: TaxLineNumber, Tax, TaxRate,
+        TaxAmount, TaxableAmount, TaxJurisdictionCode, and related tax fields.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_receivables_invoice_tax_lines(
+            client,
+            customer_transaction_id=customer_transaction_id,
+            line_id=line_id,
+            limit=limit,
         )
         return result.to_dict()
 

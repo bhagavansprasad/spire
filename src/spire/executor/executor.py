@@ -405,9 +405,50 @@ async def _execute_iterating_step(
         call_result = await session.call_tool(step.tool_name, per_iter_args)
         items = _parse_tool_result(call_result)
         items = _apply_client_filters(items, step.client_filters)
+        # Stamp the parent field(s) this iteration was keyed by onto each
+        # child row — but ONLY when the planner flagged this step (a child
+        # that feeds a further grandchild iteration). A child endpoint often
+        # does NOT echo its parent id in the row body (e.g. AR invoice lines
+        # carry no CustomerTransactionId), so the grandchild step would have
+        # no source for it. Gated by stamp_parent_key so every other
+        # iterating step's output is byte-for-byte unchanged. setdefault
+        # never overwrites a real body field.
+        if step.stamp_parent_key:
+            stamp = _parent_stamp(step.iterate_over, value)
+            if stamp:
+                for item in items:
+                    for k, v in stamp.items():
+                        item.setdefault(k, v)
         aggregated.extend(items)
 
     return aggregated
+
+
+def _parent_stamp(
+    iterate_over: dict[str, Any], value: Any
+) -> dict[str, Any]:
+    """Build the {parent_field: value} map to stamp onto child rows.
+
+    Single-field iteration: the value came from iterate_over['field'];
+    stamp it back under that field name.
+    Multi-field iteration: value is already a {tool_arg: value} dict, and
+    iterate_over['fields'] maps tool_arg -> parent_field; stamp each value
+    under its PARENT field name (what a downstream iteration reads), not
+    the tool-arg name.
+    Returns an empty dict if nothing can be stamped.
+    """
+    fields_map = iterate_over.get("fields")
+    if fields_map:
+        # value: {tool_arg: v}; fields_map: {tool_arg: parent_field}.
+        return {
+            parent_field: value[tool_arg]
+            for tool_arg, parent_field in fields_map.items()
+            if tool_arg in value
+        }
+    field = iterate_over.get("field")
+    if field is not None:
+        return {field: value}
+    return {}
 
 
 async def _execute_filter_source_step(
