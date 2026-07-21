@@ -59,9 +59,8 @@ bundles:
   - src/spire/mcp_server/tools/supplier_contacts.py
   - src/spire/mcp_server/tools/receivables_invoice_by_id.py
   - src/spire/mcp_server/tools/receivables_invoice_lines.py
-  - src/spire/mcp_server/tools/receivables_invoice_by_id.py
-  - src/spire/mcp_server/tools/receivables_invoice_lines.py
-
+  - src/spire/mcp_server/tools/customer_transactions.py
+  
   parser_planner:
   - src/spire/nl_parser/capability.py
   - src/spire/nl_parser/draft.py

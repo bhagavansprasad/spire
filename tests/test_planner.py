@@ -1047,3 +1047,57 @@ def test_generate_plan_original_track_a_step_ids_sequential(
         original_track_a_intent, reference_date=fixed_reference_date
     )
     assert [s.step_id for s in produced] == [1, 2, 3, 4]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P2c: open_only on the customer-invoices traversal (prompt 1)
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def open_invoices_intent() -> Intent:
+    """
+    The structured intent for prompt 1: 'open invoices for customer
+    ABC Corporation Americas'. CustomerAccount-rooted, resolved by name,
+    with the customer's transactions included and open_only set (AR-P2c).
+    """
+    return Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Corporation Americas"},
+        ],
+        include=["CustomerTransaction"],
+        open_only=True,
+    )
+
+
+def test_generate_plan_open_only_sets_tool_arg_on_transaction_step(
+    open_invoices_intent: Intent,
+) -> None:
+    """AR-P2c: open_only=True puts open_only in the CustomerTransaction
+    include step's tool_args, so the fetcher restricts to open invoices."""
+    produced = generate_plan(open_invoices_intent)
+    ct_steps = [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+    assert len(ct_steps) == 1
+    assert ct_steps[0].tool_args.get("open_only") is True
+
+
+def test_generate_plan_open_only_false_omits_tool_arg() -> None:
+    """Without open_only, the CustomerTransaction step carries no open_only
+    arg — prompt 15's plain listing is unchanged."""
+    plain = Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Corporation Americas"},
+        ],
+        include=["CustomerTransaction"],
+        open_only=False,
+    )
+    produced = generate_plan(plain)
+    ct_steps = [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+    assert len(ct_steps) == 1
+    assert "open_only" not in ct_steps[0].tool_args

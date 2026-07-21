@@ -1,0 +1,17 @@
+# Spire prompt set — ACCOUNTS RECEIVABLE module. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+# Ordered fast-first.
+#
+# Anchors: AR invoice CustomerTransactionId 300000248096352 (TransactionNumber
+# 61765). Customer "ABC Corporation Americas" resolves to one account
+# (AccountId 300000047368527) with open invoices — top balances 216378,
+# 206008, 198286, 56412, 39969.
+
+# — AR invoice by id + lines (AR-P2 Shape A, prompts 11, 12, 2) —
+Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
+
+# — a customer's invoices (AR-P2 Shape B, prompt 15) —
+Show me AR invoices for customer ABC Corporation Americas
+
+# — open invoices for a customer (AR-P2c, prompt 1) —
+Show me open invoices for customer ABC Corporation Americas

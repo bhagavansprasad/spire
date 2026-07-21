@@ -102,6 +102,36 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
 - **Bounded windows:** page to `MAX_PAGES` and flag `truncated` at the cap;
   sums past the cap are lower bounds, and the synthesizer must say so.
 
+### Reliability backlog (cross-cutting, not tied to a module)
+- **Parser runaway defence** (post-AR-P2c, not started). A structured-output
+  parse can hang for minutes if the LLM fails to converge and generates to
+  its output-token ceiling. Observed in AR-P2c: a single cross-referencing
+  sentence in the parser prompt (naming `has_open_PO` inside the
+  customer-invoices instruction) sent Gemini flash to `out=65520` tokens,
+  ~267s, on every run — deterministic, not flaky. Removing the sentence:
+  `out=293`, ~8s. Detection signal already in logs: `[llm] out=` near the
+  model's max (with `finish_reason=length`, not `stop`) means a runaway,
+  not a real parse. Work: (a) cap `max_output_tokens` in `build_llm` so a
+  runaway fails in ~2s not ~4min — highest-value, do first; (b) detect
+  ceiling-hit / `finish_reason=length` and log a warning, optionally retry
+  once; (c) wall-clock timeout on the parse call; (d) capture the failure
+  mode (symptom + cause: cross-referencing an unrelated concept in a
+  structured-output instruction can block convergence) in
+  `spire_design_decisions.md`. Needs `config.py`.
+- **Open-invoices top-N limit** (finishes AR-P2c prompt 1, not started).
+  Prompt 1 is "top 5 open invoices" but the phase shipped open_only only;
+  it returns ALL open invoices, not the top 5. The tool already takes
+  `limit` and returns rows balance-desc, so the wiring is small: parser
+  extracts "top N" → a limit on the Intent → planner passes it to the
+  CustomerTransaction step. Its own small phase.
+- **Synthesizer does arithmetic (pre-existing, broader than AR-P2c).**
+  The CustomerAccount narration sums invoice amounts and reports totals in
+  prose (observed on prompt 1: a wrong "combined original amount", and the
+  account's negative credit-balance field reported as the open-invoice
+  total). Violates the no-arithmetic rule — tools must compute, the
+  synthesizer only templates. Affects Shape B narration generally, not
+  just open invoices. Fix belongs in the synthesizer, not this phase.
+
 ### Routing mechanisms — three kinds of query
 The planner routes a parsed Intent one of three ways. Knowing which a new
 prompt needs decides what you wire.

@@ -404,6 +404,15 @@ class Intent:
     # aggregation tools) — count reuses the entity's default fetcher.
     count_only: bool = False
 
+    # AR-P2c: when True on a customer-invoices query (CustomerAccount +
+    # by_customer_name + CustomerTransaction in include), the
+    # CustomerTransaction include step passes open_only=True to its tool,
+    # restricting the listed transactions to those with a positive open
+    # balance. Consumed entirely in Block 3; the fetcher applies the
+    # balance filter (and returns rows balance-desc). Defaults False so
+    # ordinary customer-invoice listings (prompt 15) are unchanged.
+    open_only: bool = False
+
 
 @dataclass
 class Step:
@@ -1000,6 +1009,16 @@ def generate_plan(
                 "from_step": previous_output_name,
                 "field": edge["from_join_field"],
             }
+        # AR-P2c: the CustomerTransaction include supports an open_only
+        # modifier — restrict the listed transactions to those with a
+        # positive open balance. It rides as a literal tool_arg (the
+        # fetcher's native open_only), not a client_filter: the balance
+        # test is `> 0`, which the executor's equals-only client filters
+        # can't express. Scoped to this entity because open_only is not a
+        # universal include arg (cf. the Supplier/Address special-case
+        # above).
+        if include_entity == "CustomerTransaction" and intent.open_only:
+            step_tool_args["open_only"] = True
         plan.append(
             Step(
                 step_id=step_id,

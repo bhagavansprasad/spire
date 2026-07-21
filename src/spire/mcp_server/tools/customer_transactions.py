@@ -88,6 +88,15 @@ async def get_customer_transactions(
         "limit": fetch_limit,
         "fields": ",".join(_PROJECTED_FIELDS),
     }
+    # TotalBalanceAmount is NOT queryable, but IS sortable (see endpoints
+    # reference, 2026-07-21). For open_only, sort balance-desc so the open
+    # rows surface in the first fetch_limit rows — the account may carry
+    # thousands of rows (7,404 on the anchor), and the open ones sit past
+    # the default-order page. Sorting also makes the post-filter `[:limit]`
+    # a true "top N by balance". Scoped to open_only to leave the
+    # all-invoices path (prompt 15) ordering untouched.
+    if open_only:
+        params["orderBy"] = "TotalBalanceAmount:desc"
     response = await client.get(path, params=params)
     items = response.get("items", [])
 
