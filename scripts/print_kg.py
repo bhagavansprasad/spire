@@ -49,7 +49,7 @@ TABLES: list[dict] = [
                "endpoint_path, description FROM kg_entity "
                "ORDER BY entity_name",
         "clob_cols": {"description"},
-        "expected_rows": 17,
+        "expected_rows": 18,
     },
     {
         "name": "kg_entity_field",
@@ -62,7 +62,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 140,
+        "expected_rows": 148,
     },
     {
         "name": "kg_edge",
@@ -99,7 +99,7 @@ TABLES: list[dict] = [
         "sql": "SELECT vocab_kind, term, canonical_value, notes "
                "FROM kg_vocabulary ORDER BY vocab_kind, term",
         "clob_cols": set(),
-        "expected_rows": 85,
+        "expected_rows": 87,
     },
     {
         "name": "kg_pattern_binding",
@@ -122,7 +122,7 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 7,
+        "expected_rows": 8,
     },
     {
         "name": "kg_entity_filter",

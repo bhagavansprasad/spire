@@ -71,6 +71,9 @@ from spire.mcp_server.tools.receivables_invoice_tax_lines import (
 from spire.mcp_server.tools.receivables_invoice_transaction_dff import (
     get_receivables_invoice_transaction_dff as _get_receivables_invoice_transaction_dff,
 )
+from spire.mcp_server.tools.receivables_credit_memos import (
+    list_receivables_credit_memos as _list_receivables_credit_memos,
+)
 from spire.mcp_server.tools.customer_account_by_name import (
     get_customer_account_by_name as _get_customer_account_by_name,
 )
@@ -569,6 +572,41 @@ async def get_receivables_invoice_transaction_dff(
             client, customer_transaction_id=customer_transaction_id, limit=limit
         )
         return result.to_dict()
+
+
+@mcp.tool()
+async def list_receivables_credit_memos(limit: int = 25) -> dict:
+    """List recent AR credit memos with their total credit value.
+
+    Use this for "list credit memos", "recent credit memos", "top N credit
+    memos", or "total value of credit memos". Returns the most recent credit
+    memos (ordered by TransactionDate descending, server-side) up to `limit`,
+    plus `total_credit` — the raw sum of EnteredAmount across the returned
+    memos (the ledger figure; a positive memo offsets the negatives).
+
+    Args:
+        limit: Max credit-memo records to return (default 25).
+
+    Returns:
+        A dict with `items` (the credit memos, newest first) and
+        `total_credit` (raw sum of EnteredAmount over those items).
+    """
+    async with FusionClient(_persona) as client:
+        result = await _list_receivables_credit_memos(client, limit=limit)
+        payload = result.to_dict()
+        # Compute the total credit value over the returned memos: the raw sum
+        # of EnteredAmount (negative credits net against any positive memo).
+        total_credit = sum(
+            (m.get("EnteredAmount") or 0) for m in payload.get("items", [])
+        )
+        payload["total_credit"] = total_credit
+        # The executor unwraps a ToolResult to its `items` list and discards
+        # every other top-level key, so a top-level total_credit would never
+        # reach the synthesizer. Stamp it onto EACH item so it survives the
+        # unwrap and the synthesizer can read it off any row.
+        for m in payload.get("items", []):
+            m["total_credit"] = total_credit
+        return payload
 
 
 @mcp.tool()
