@@ -132,6 +132,65 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   synthesizer only templates. Affects Shape B narration generally, not
   just open invoices. Fix belongs in the synthesizer, not this phase.
 
+### Known issues — full prompt-set run (2026-07-21)
+
+A full `run_prompt_set.py` run (38 prompts, all modules) after AR-P2c
+surfaced these. The harness reported "38/38 ran cleanly" but that counts
+refusals as ok — several of those refusals/parses are WRONG. Grouped by
+root cause. None are AR-P2c regressions (all 3 AR prompts parsed and ran
+correctly); these are pre-existing issues the run exposed, plus the
+parser-runaway class the token cap made visible.
+
+**Issue 1 — Parser runaway hits the 8000 cap → truncated → wrong parse.**
+The `open_only` runaway (fixed by moving the instruction to its own
+section) is NOT unique — several prompts drive Gemini structured-output to
+the ceiling. The cap (config.py) makes them fail in ~13-40s instead of
+hanging ~260s, but the truncated draft is degenerate: filters/includes
+dropped, or a wrong refusal. All show `out=7983/7984` (or 6072) at parse.
+This is the systemic core of the "parser runaway defence" backlog item,
+now with evidence it spans PO and Supplier prompts. Affected:
+- "Show PO 2144 and its lines" — out=7984 → wrongly refused
+- "Show PO 2144 and its schedules" — out=7984 → wrongly refused
+- "Show PO 2144 and its distributions" — out=7984 → wrongly refused
+- "How much of PO 2144 was received?" — out=7984 → wrongly refused
+- "Which invoices were raised against PO 162034?" — out=6072 → wrongly refused
+- "active US suppliers" — out=7983 → parsed as bare Supplier, BOTH filters dropped
+- "Show supplier EIP Inc and its contacts" — out=7984 → bare Supplier, Contact include dropped
+- "Invoices for supplier 1252 over 100000" — out=7984 → wrongly refused
+NOTE: these same prompts have KNOWN-GOOD phrasings elsewhere in the suite
+that parse fine (e.g. "Show PO 2144 and its lines" is the canonical P2
+prompt). The instability is phrasing-sensitive and intermittent-looking
+but reproducible per-phrasing. Likely needs the same treatment as
+open_only (structural prompt cleanup) and/or the fail-fast detection +
+retry from the backlog item.
+
+**Issue 2 — Filter silently dropped (parses to bare entity).** Distinct
+from Issue 1 — LOW out counts, so NOT the runaway; the parser simply fails
+to emit the filter. Returns the unfiltered entity (wrong result, no error):
+- "Prospective suppliers" — out=103 → returns all 420; business_relationship filter not applied
+- "Suppliers with invoice amount greater than 10000" — out=104 → returns all; filter dropped
+  (note: this filter may not be a supported Supplier filter at all — if so
+  the correct behavior is a refusal, not a bare-entity list; needs a
+  decision, not just a parser fix)
+
+**Issue 3 — Missing synthesizer shape for Address.** "Addresses for
+supplier 1252" fetches 25 rows but the synthesizer prints "(Unrecognized
+response shape.)" and shows 0 records. Address has no narration branch /
+is not in the five synthesizer places. A synthesizer gap, pre-existing.
+
+**Issue 4 — Synthesizer does arithmetic, wrongly (same as backlog item
+above).** Confirmed live on "Show me open invoices for customer ABC
+Corporation Americas": "combined original amount 981738.13" is wrong, and
+"open receivables -206448.85" is the account's credit-balance field
+mislabeled as the open-invoice total. The plain "AR invoices for..."
+answer summed correctly by luck but uses the same fragile pattern. Cross-
+reference the "Synthesizer does arithmetic" backlog entry.
+
+**Issue 5 — Truncation wording misleading (minor).** "Invoices for Lee
+Supplies in 2023" returned 11 rows but the truncation line reads "unknown
+total in source; 25 examined for filtering" — the "25 examined" wording is
+confusing when fewer are returned. Low priority; cosmetic.
+
 ### Routing mechanisms — three kinds of query
 The planner routes a parsed Intent one of three ways. Knowing which a new
 prompt needs decides what you wire.

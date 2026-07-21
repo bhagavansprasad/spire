@@ -429,6 +429,13 @@ def _format_synthesized(response) -> str:
                     f"(CustomerTransactionLineId={ln.customer_transaction_line_id})"
                     f" — qty {ln.quantity}, {ln.amount}"
                 )
+                for tx in ln.tax_lines:
+                    lines.append(
+                        f"        tax {tx.tax_line_number}: {tx.tax} "
+                        f"(CustomerTransactionLineId={tx.customer_transaction_line_id})"
+                        f" — {tx.tax_rate}% on {tx.taxable_amount}, "
+                        f"tax {tx.tax_amount}"
+                    )
         return "\n".join(lines)
 
     if isinstance(response, CustomerAccountResponse):

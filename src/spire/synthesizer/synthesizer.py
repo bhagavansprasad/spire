@@ -350,6 +350,38 @@ class PurchaseOrderResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class ReceivablesTaxLineInfo(BaseModel):
+    """One tax line nested under an AR invoice line.
+
+    customer_transaction_line_id here is the TAX line's own PK (e.g. 112) —
+    a different value from the parent invoice line's id. It is validated
+    against the executor's output after synthesis; it MUST appear there."""
+
+    customer_transaction_line_id: int = Field(
+        description="The tax line's own CustomerTransactionLineId (numeric "
+        "key — the TAX line PK, not the parent line's). Must appear in the "
+        "data."
+    )
+    tax_line_number: int = Field(
+        description="The tax line number within the invoice line."
+    )
+    tax: str = Field(
+        default="", description="The tax type (e.g. 'STATE', 'COUNTY')."
+    )
+    tax_rate: float | None = Field(
+        default=None, description="The tax rate percentage (e.g. 6.5)."
+    )
+    tax_amount: float | None = Field(
+        default=None, description="The tax amount charged for this tax line."
+    )
+    taxable_amount: float | None = Field(
+        default=None, description="The amount the tax was computed on."
+    )
+    jurisdiction: str = Field(
+        default="", description="The tax jurisdiction code."
+    )
+
+
 class ReceivablesInvoiceLineInfo(BaseModel):
     """One AR invoice line nested under a receivables invoice.
 
@@ -368,6 +400,12 @@ class ReceivablesInvoiceLineInfo(BaseModel):
     )
     amount: float | None = Field(
         default=None, description="Line amount (the LineAmount field)."
+    )
+    tax_lines: list[ReceivablesTaxLineInfo] = Field(
+        default_factory=list,
+        description="This line's tax lines, when the query asked for them (a "
+        "'receivablestaxline' bucket in the data). Empty otherwise. Each "
+        "customer_transaction_line_id must appear in the executor's output.",
     )
 
 
@@ -1007,7 +1045,18 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "must say how many lines and what they are for. COPY the amounts "
         "exactly as given. Do NOT compute totals, tax, or any arithmetic.\n"
         "Every customer_transaction_line_id must appear in the data. If the "
-        "bucket is absent, leave 'lines' empty and do not mention it."
+        "bucket is absent, leave 'lines' empty and do not mention it.\n"
+        "- 'receivablestaxline' bucket: emit each tax line under its parent "
+        "line's 'tax_lines' (customer_transaction_line_id — the TAX line's "
+        "own key, tax_line_number, tax, tax_rate, tax_amount, taxable_amount, "
+        "jurisdiction). MATCH each tax line to its parent line by its "
+        "'ParentCustomerTransactionLineId', which equals that line's "
+        "'CustomerTransactionLineId' — nest it under THAT line, not any other. "
+        "The summary must describe the tax charged (the tax "
+        "types and rates). COPY every amount and rate exactly; do NOT sum or "
+        "compute anything. Every customer_transaction_line_id must appear in "
+        "the data. If the bucket is absent, leave 'tax_lines' empty and do "
+        "not mention it."
     ),
     "CustomerAccount": (
         "This is a CUSTOMER-ACCOUNT-rooted query (accounts receivable). The "
@@ -1252,6 +1301,15 @@ def _validate_receivables_invoice(
                 not in valid["customer_transaction_line_ids"]
             ):
                 bad_line.append(ln.customer_transaction_line_id)
+            # AR-P3: tax lines nest one level deeper. The tax-line PK is
+            # also a CustomerTransactionLineId, so it validates against the
+            # same bucket (the harvest collects both from the output).
+            for tx in ln.tax_lines:
+                if (
+                    tx.customer_transaction_line_id
+                    not in valid["customer_transaction_line_ids"]
+                ):
+                    bad_line.append(tx.customer_transaction_line_id)
     parts = []
     if bad_inv:
         parts.append(f"customer_transaction_ids={bad_inv}")
