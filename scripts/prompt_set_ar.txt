@@ -8,6 +8,10 @@
 # 206008, 198286, 56412, 39969.
 # Tax anchor: invoice 1002 (TransactionNumber 5) is taxed — line 74 carries 2
 # tax lines (STATE 6.5%, COUNTY 2.25%); the 61765 anchor above is untaxed.
+# Credit-memo anchors: receivablesCreditMemos lists ~25 recent memos, newest
+# first (top: TransactionNumber 11001, DMART, -150, 2026-07-09). EnteredAmount
+# is normally negative; one positive outlier (1001, +10000, Incomplete) means
+# the raw-sum total is a net figure (currently -17232.52, mixed currencies).
 
 # — AR invoice by id + lines (AR-P2 Shape A, prompts 11, 12, 2) —
 Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
@@ -26,3 +30,9 @@ Show the AR invoice with CustomerTransactionId 1002 and its tax lines
 
 # — AR invoice by id + DFF (AR-P3 DFF, prompt 4) —
 Show the AR invoice with CustomerTransactionId 1002 and its DFF values
+
+# — recent credit memos, list + total (AR-P4, prompt 5) —
+List recent credit memos
+
+# — total value of credit memos (AR-P4, prompt 14) —
+What is the total value of credit memos?

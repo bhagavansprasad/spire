@@ -587,6 +587,57 @@ class AddressResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class CreditMemoRecord(BaseModel):
+    """One credit memo in a credit-memo-rooted response."""
+
+    customer_transaction_id: int = Field(
+        description="The credit memo's CustomerTransactionId (system id)."
+    )
+    transaction_number: str = Field(
+        description="The credit memo's TransactionNumber (human-readable)."
+    )
+    transaction_date: str = Field(
+        default="", description="Credit memo date (TransactionDate)."
+    )
+    entered_amount: float = Field(
+        description="Credit memo amount (EnteredAmount; normally negative)."
+    )
+    currency: str = Field(
+        default="", description="Credit memo currency (CreditMemoCurrency)."
+    )
+    status: str = Field(
+        default="", description="Credit memo status (CreditMemoStatus)."
+    )
+    customer_name: str = Field(
+        default="", description="Bill-to customer name (BillToCustomerName)."
+    )
+    customer_number: str = Field(
+        default="", description="Bill-to customer number (BillToCustomerNumber)."
+    )
+
+
+class CreditMemoListResponse(BaseModel):
+    """Credit-memo-rooted synthesized response: a list plus the total.
+
+    The executor returns credit memos under the 'credit_memos' bucket, each
+    carrying a top-level 'total_credit' the wrapper computed. This response
+    surfaces both.
+    """
+
+    summary: str = _SUMMARY_FIELD
+    credit_memos: list[CreditMemoRecord] = Field(
+        default_factory=list,
+        description="Credit memos in date-descending (recent-first) order. "
+        "Empty if none exist.",
+    )
+    total_credit: float = Field(
+        description="Total credit value: the raw sum of EnteredAmount across "
+        "the listed memos, copied from the executor's total_credit. Do NOT "
+        "recompute it.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class SupplierSpendRow(BaseModel):
     """One supplier in a spend ranking (feature 7 aggregation).
 
@@ -771,6 +822,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "PurchaseOrder": PurchaseOrderResponse,
     "ReceivablesInvoice": ReceivablesInvoiceResponse,
     "CustomerAccount": CustomerAccountResponse,
+    "CreditMemo": CreditMemoListResponse,
 }
 
 
@@ -1109,6 +1161,21 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "data. If the bucket is absent, leave 'transactions' empty and do "
         "not mention it."
     ),
+    "CreditMemo": (
+        "This is a CREDIT-MEMO-rooted query. The data has a 'credit_memos' "
+        "bucket (a list of memo rows, newest first). EACH row carries a "
+        "'total_credit' field with the SAME value — the pre-computed total "
+        "credit across all memos. Emit one entry under 'credit_memos' for "
+        "each row, copying its customer_transaction_id, transaction_number, "
+        "transaction_date, entered_amount (normally negative), currency, "
+        "status, customer_name, and customer_number. Set the response's "
+        "'total_credit' to the 'total_credit' value from any row EXACTLY — "
+        "do NOT recompute or sum entered_amount yourself; the total is "
+        "provided. The summary MUST state how many credit memos were listed "
+        "and the total credit value. If the list is empty, say there are no "
+        "credit memos and set total_credit to 0. Every "
+        "customer_transaction_id must appear in the data."
+    ),
     "SupplierSpendRanking": (
         "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
         "single 'aggregation' bucket containing one ranking object with a "
@@ -1374,6 +1441,24 @@ def _validate_customer_account(
     _raise_if_bad(parts)
 
 
+def _validate_credit_memo(
+    response: CreditMemoListResponse, valid: dict[str, set]
+) -> None:
+    """Cross-reference each listed credit memo's CustomerTransactionId
+    against the executor's data. Credit memos share the id space of AR
+    invoices (CustomerTransactionId), harvested into customer_transaction_ids,
+    so no separate id set is needed. total_credit is a copied scalar, not an
+    id, so there is nothing to cross-check there."""
+    bad_cm: list[int] = []
+    for cm in response.credit_memos:
+        if cm.customer_transaction_id not in valid["customer_transaction_ids"]:
+            bad_cm.append(cm.customer_transaction_id)
+    parts = []
+    if bad_cm:
+        parts.append(f"customer_transaction_ids={bad_cm}")
+    _raise_if_bad(parts)
+
+
 def _validate_supplier_spend_ranking(
     response: SupplierSpendRankingResponse, valid: dict[str, set]
 ) -> None:
@@ -1431,6 +1516,7 @@ _VALIDATORS = {
     PurchaseOrderResponse: _validate_purchase_order,
     ReceivablesInvoiceResponse: _validate_receivables_invoice,
     CustomerAccountResponse: _validate_customer_account,
+    CreditMemoListResponse: _validate_credit_memo,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
     SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
     POStatusBreakdownResponse: _validate_no_ids,

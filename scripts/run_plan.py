@@ -74,6 +74,7 @@ from spire.synthesizer.synthesizer import (
     PurchaseOrderResponse,
     ReceivablesInvoiceResponse,
     CustomerAccountResponse,
+    CreditMemoListResponse,
     SupplierPOValueRankingResponse,
     SupplierResponse,
     SupplierSpendRankingResponse,
@@ -469,7 +470,24 @@ def _format_synthesized(response) -> str:
                     f"{txn.amount} (balance {txn.balance}); {txn.status}"
                 )
         return "\n".join(lines)
- 
+
+    if isinstance(response, CreditMemoListResponse):
+        if not response.credit_memos:
+            lines.append("(No credit memos in the structured result.)")
+            lines.append(f"Total credit value: {response.total_credit}")
+            return "\n".join(lines)
+        lines.append(
+            f"Credit Memos (total credit value: {response.total_credit}):"
+        )
+        for cm in response.credit_memos:
+            lines.append(
+                f"  - {cm.transaction_number} "
+                f"(CustomerTransactionId={cm.customer_transaction_id}) — "
+                f"{cm.customer_name}; {cm.transaction_date}; "
+                f"{cm.entered_amount} {cm.currency}; {cm.status}"
+            )
+        return "\n".join(lines)
+
     if isinstance(response, SupplierSpendRankingResponse):
         if not response.suppliers:
             lines.append("(No suppliers in the ranking.)")
@@ -568,6 +586,8 @@ def _format_summary(
         n, label = len(response.receivables_invoices), "AR invoice(s)"
     elif isinstance(response, CustomerAccountResponse):
         n, label = len(response.customer_accounts), "customer account(s)"
+    elif isinstance(response, CreditMemoListResponse):
+        n, label = len(response.credit_memos), "credit memo(s)"
     elif isinstance(response, SupplierSpendRankingResponse):
         n, label = len(response.suppliers), "ranked supplier(s)"
     elif isinstance(response, SupplierPOValueRankingResponse):

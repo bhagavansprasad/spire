@@ -162,6 +162,7 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "ReceivablesInvoiceLine": "receivables_invoice_lines",
     "CustomerAccount": "customer_accounts",
     "CustomerTransaction": "customer_transactions",
+    "CreditMemo": "credit_memos",
 }
 
 # Filter-type -> short suffix used when the step's output is the

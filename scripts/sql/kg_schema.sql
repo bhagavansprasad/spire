@@ -328,7 +328,13 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules',
   'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.'
 );
-PROMPT Seeded kg_entity (17 rows).
+-- AR-P4 Credit Memo
+INSERT INTO kg_entity VALUES (
+  'CreditMemo', 'CustomerTransactionId', 'TransactionNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCreditMemos',
+  'An accounts-receivable (sell-side) credit memo raised against a customer. Same object model as ReceivablesInvoice but EnteredAmount is normally NEGATIVE (a credit) and the status field is CreditMemoStatus. Top-level resource: listable without a parent id. Recent-first ordering (orderBy=TransactionDate:desc) and limit are done server-side. NOTE: sign is not guaranteed - the demo pod has at least one POSITIVE, Incomplete memo, so never assume EnteredAmount < 0.'
+);
+PROMPT Seeded kg_entity (18 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -522,7 +528,16 @@ INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'PaymentScheduleDueDa
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalOriginalAmount',    'amount',       'numeric', 'Original transaction amount.');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'TotalBalanceAmount',     'amount',       'numeric', 'Open balance on the transaction; 0 is paid. A positive balance is an open invoice (used by the open-only filter, deferred to a later phase).');
 INSERT INTO kg_entity_field VALUES ('CustomerTransaction', 'InstallmentStatus',      'status',       'string',  'Installment status (e.g. ''Closed'').');
-PROMPT Seeded kg_entity_field (140 rows).
+-- AR-P4 Credit Memo
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'CustomerTransactionId', 'canonical_id', 'numeric', 'System primary key for the credit memo.');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'TransactionNumber',     'display_id',   'string',  'Human-readable credit memo number (e.g. ''11001'').');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'TransactionDate',       'date',         'iso_date','Credit memo date. Server-side orderBy sorts on this for recent-first.');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'EnteredAmount',         'amount',       'numeric', 'Credit memo amount in entered currency. Normally NEGATIVE (a credit); sign is not guaranteed on this pod.');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'CreditMemoCurrency',    'projection',   'string',  'Credit memo currency (e.g. ''USD'').');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'CreditMemoStatus',      'status',       'string',  'Credit memo status (e.g. ''Complete'', ''Incomplete'').');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'BillToCustomerName',    'projection',   'string',  'Bill-to customer display name.');
+INSERT INTO kg_entity_field VALUES ('CreditMemo', 'BillToCustomerNumber',  'reference',    'string',  'Bill-to customer number.');
+PROMPT Seeded kg_entity_field (148 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -829,6 +844,10 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contacts', 'Contact', 'Supp
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distribution', 'PODistribution', 'PO distribution account line.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distributions', 'PODistribution', 'PO distribution account lines.');
 
+-- AR-P4 Credit Memo
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memo',  'CreditMemo', 'AR credit memo (sell-side).');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memos', 'CreditMemo', 'Plural form.');
+
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -919,7 +938,14 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'get_customer_account_by_name',
   'Resolves a customer name to their account(s) via q=CustomerName= (exact) on receivablesCustomerAccountActivities. Returns all matching accounts as a list; the edge traversal iterates them.'
 );
-PROMPT Seeded kg_entity_tool (7 rows).
+-- AR-P4 Credit Memo
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'CreditMemo',
+  'none',
+  'list_receivables_credit_memos',
+  'Default fetcher for CreditMemo. Lists recent credit memos (orderBy=TransactionDate:desc, server-side) up to limit. No filters. The total credit value (raw sum of EnteredAmount) is layered on by the server wrapper.'
+);
+PROMPT Seeded kg_entity_tool (8 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool

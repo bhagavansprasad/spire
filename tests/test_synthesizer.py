@@ -25,6 +25,8 @@ from pydantic import ValidationError
 
 from spire.synthesizer.synthesizer import (
     BuyerInfo,
+    CreditMemoListResponse,
+    CreditMemoRecord,
     HallucinationError,
     InvoiceRecord,
     InvoiceResponse,
@@ -637,3 +639,115 @@ def test_dff_response_still_guards_the_invoice_id() -> None:
     with pytest.raises(HallucinationError) as exc_info:
         _validate_no_hallucinated_ids(bad, _dff_outputs())
     assert "999" in str(exc_info.value)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P4 credit memos — rooted list with a total.
+# CreditMemo shares the CustomerTransactionId id space with AR invoices,
+# so its ids are harvested into customer_transaction_ids (no separate set).
+# The validator cross-checks each listed memo's id; total_credit is a
+# copied scalar, not an id, so it is not cross-checked.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _credit_memo_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'list recent credit memos': the credit_memos
+    bucket. The wrapper stamps total_credit onto EACH row (so it survives
+    the executor's items-only unwrap), so every memo carries the same
+    total_credit — the raw sum of EnteredAmount (a positive memo nets
+    against the negatives). The bucket is a list of dicts; there is NO
+    top-level total_credit key (the executor discards non-items keys)."""
+    total = 9850  # -150 + 10000
+    return {
+        "credit_memos": [
+            {
+                "CustomerTransactionId": 300000313072555,
+                "TransactionNumber": "11001",
+                "TransactionDate": "2026-07-09",
+                "EnteredAmount": -150,
+                "CreditMemoCurrency": "USD",
+                "CreditMemoStatus": "Complete",
+                "BillToCustomerName": "DMART",
+                "BillToCustomerNumber": "26360",
+                "total_credit": total,
+            },
+            {
+                "CustomerTransactionId": 300000308625094,
+                "TransactionNumber": "1001",
+                "TransactionDate": "2026-04-26",
+                "EnteredAmount": 10000,
+                "CreditMemoCurrency": "USD",
+                "CreditMemoStatus": "Incomplete",
+                "BillToCustomerName": "Digital Customer 1",
+                "BillToCustomerNumber": "10001",
+                "total_credit": total,
+            },
+        ],
+    }
+
+
+def _credit_memo_response(total: float) -> CreditMemoListResponse:
+    """Build a credit-memo response listing the two memos above, with the
+    given total_credit."""
+    return CreditMemoListResponse(
+        summary="Two credit memos, netting to the given total.",
+        credit_memos=[
+            CreditMemoRecord(
+                customer_transaction_id=300000313072555,
+                transaction_number="11001",
+                transaction_date="2026-07-09",
+                entered_amount=-150,
+                currency="USD",
+                status="Complete",
+                customer_name="DMART",
+                customer_number="26360",
+            ),
+            CreditMemoRecord(
+                customer_transaction_id=300000308625094,
+                transaction_number="1001",
+                transaction_date="2026-04-26",
+                entered_amount=10000,
+                currency="USD",
+                status="Incomplete",
+                customer_name="Digital Customer 1",
+                customer_number="10001",
+            ),
+        ],
+        total_credit=total,
+    )
+
+
+def test_validate_passes_for_well_formed_credit_memos():
+    """A credit-memo list whose ids all appear in the executor output
+    passes validation."""
+    _validate_no_hallucinated_ids(
+        _credit_memo_response(9850), _credit_memo_outputs()
+    )
+
+
+def test_validate_passes_for_empty_credit_memo_list():
+    """An empty credit-memo list is valid — no ids to check. total_credit
+    of 0 is still carried."""
+    empty = CreditMemoListResponse(
+        summary="No credit memos.", credit_memos=[], total_credit=0
+    )
+    _validate_no_hallucinated_ids(empty, _credit_memo_outputs())
+
+
+def test_validate_catches_hallucinated_credit_memo_id():
+    """A credit memo whose CustomerTransactionId is not in the executor
+    output is caught."""
+    bad = _credit_memo_response(9850)
+    bad.credit_memos[0].customer_transaction_id = 999999999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _credit_memo_outputs())
+    assert "999999999" in str(exc_info.value)
+
+
+def test_credit_memo_ids_harvested_into_customer_transaction_ids():
+    """Credit memos share the AR-invoice id space: their
+    CustomerTransactionId values land in customer_transaction_ids, so the
+    validator has a set to check against."""
+    valid = _collect_valid_ids(_credit_memo_outputs())
+    assert 300000313072555 in valid["customer_transaction_ids"]
+    assert 300000308625094 in valid["customer_transaction_ids"]

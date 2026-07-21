@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_seventeen_rows():
+async def test_kg_entity_has_eighteen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -74,6 +74,8 @@ async def test_kg_entity_has_seventeen_rows():
     AR-P3 added ReceivablesTaxLine (the invoice-line tax grandchild,
     reached via HAS_TAX_LINE) and ReceivablesInvoiceTransactionDFF (the
     invoice TransactionDFF child, reached via HAS_TRANSACTION_DFF).
+    AR-P4 added CreditMemo (the top-level receivablesCreditMemos resource,
+    listed by its own fetcher — a rooted entity, no edge).
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -82,8 +84,8 @@ async def test_kg_entity_has_seventeen_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "Address", "Buyer", "Classification", "Contact", "CustomerAccount",
-        "CustomerTransaction", "Invoice",
+        "Address", "Buyer", "Classification", "Contact", "CreditMemo",
+        "CustomerAccount", "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
         "ReceivablesInvoiceTransactionDFF", "ReceivablesTaxLine", "Site",
@@ -148,16 +150,23 @@ async def test_kg_table_row_counts_match_v1_1():
     single-parent expansion (like HAS_AR_LINE); no entity tool, filter, or
     vocab. The DFF child echoes the parent id as CustomerTrxId (short
     spelling), not CustomerTransactionId.
+    AR-P4 credit memos (prompts 5, 14) added the top-level
+    receivablesCreditMemos resource as a ROOTED entity: +1 entity
+    (CreditMemo, 17->18), +8 fields (140->148), +1 entity tool (CreditMemo
+    none/list_receivables_credit_memos, 7->8), +2 vocab rows (credit-memo
+    entity synonyms, 85->87). No edge (top-level, no traversal) and no
+    entity filter (list-only; the default fetcher orders recent-first and
+    limits server-side).
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 17,
-        "kg_entity_field": 140,
+        "kg_entity": 18,
+        "kg_entity_field": 148,
         "kg_edge": 14,
         "kg_pattern": 3,
-        "kg_vocabulary": 85,
+        "kg_vocabulary": 87,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 7,
+        "kg_entity_tool": 8,
         "kg_entity_filter": 21,
         "kg_edge_tool": 13,
     }
