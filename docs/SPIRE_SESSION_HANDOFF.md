@@ -17,7 +17,7 @@ agent architecture.
 ## Canonical docs (in `docs/`)
 
 - `spire_expansion_plan.md` — master build plan (start here; now current
-  through AR-P3 DFF — AR-P3 complete)
+  through AR-P4 credit memos — AR-P4 complete)
 - `spire_architecture.md` — current-state reference
 - `spire_design_decisions.md` — frozen design records
 - `spire_fusion_endpoints_reference.md` — pod quirks + curl reference (the
@@ -26,7 +26,7 @@ agent architecture.
 
 ## Current state
 
-PO module complete. AR module in progress: **7 of 18 AR prompts done**.
+PO module complete. AR module in progress: **9 of 18 AR prompts done**.
 
 Done and merged (AR):
 - **AR-P2a** — AR invoice by-id + lines (prompts 11, 12, 2).
@@ -38,67 +38,71 @@ Done and merged (AR):
   only, no KG rows.
 - **AR-P3 tax lines** (`ar-p3-tax-lines`, merged 2026-07-21) — prompt 3.
 - **AR-P3 DFF** (`ar-p3-dff`, merged 2026-07-21) — prompt 4. Finishes
-  AR-P3. See below.
+  AR-P3.
+- **AR-P4 credit memos** (`ar-p4-credit-memos`, merged 2026-07-21) —
+  prompts 5, 14. See below.
 
-KG now: **17 entities, 140 fields, 14 edges, 13 edge-tools**, 21 filters,
-7 entity-tools, 85 vocab, 3 patterns. Full suite: **402 passing**.
+KG now: **18 entities, 148 fields, 14 edges, 13 edge-tools**, 21 filters,
+8 entity-tools, 87 vocab, 3 patterns. Full suite: **406 passing**.
 
-## AR-P3 DFF — what shipped this session (the important detail)
+## AR-P4 credit memos — what shipped this session (the important detail)
 
-"AR invoice X and its DFF values" fetches the invoice's
-receivablesInvoiceTransactionDFF child and nests it under the invoice.
+"List recent credit memos" (prompt 5) and "total value of credit memos"
+(prompt 14) both route to ONE fetcher over the top-level
+`receivablesCreditMemos` resource: the newest memos
+(orderBy=TransactionDate:desc, server-side) with a total credit value.
 
-**Which DFF child.** AR invoices expose two DFF children (quirk 8). Curl on
-invoice 1002: `receivablesInvoiceDFF` returns `__FLEX_Context=null`;
-`receivablesInvoiceTransactionDFF` returns `__FLEX_Context="DOO"`. So the
-tool targets the **TransactionDFF** child — the populated one. On this pod
-the context is set but carries NO segment columns; the row exposes only
-`CustomerTrxId`, `__FLEX_Context`, `__FLEX_Context_DisplayValue` (null).
+**Shape: a rooted, list-only entity.** No by-id, no edge, no filter — the
+simplest fetch shape. `find_entity_tool('CreditMemo','none')` in Block 1
+handles it; the fetcher orders and limits server-side. First NEW rooted AR
+entity since AR-P2, so the synthesizer WAS a five-place change (schema,
+registry, prompt, validator, dispatch). BUT id-harvest needed NO change:
+credit memos share the `CustomerTransactionId` id space with AR invoices,
+so their ids land in the existing `customer_transaction_ids` set and the
+validator reuses it. Planner was ONE line (`_OUTPUT_NAME_BY_ENTITY`).
 
-**Shape: a plain single-parent child.** One id in the URL path (like
-HAS_AR_LINE), no iteration, no grandchild. This made it the LIGHTEST AR
-phase so far:
-- **Executor**: no change (the handoff predicted this).
-- **Planner**: ONE `_TOOL_PRIMARY_ARG` entry
-  (`get_receivables_invoice_transaction_dff` → `customer_transaction_id`).
-  Block 3's plain-include branch (iter_fields is NULL) handled the rest.
-- **Synthesizer**: 2-place change (schema + prompt), NOT five. The DFF
-  extends ReceivablesInvoice and has NO id of its own to validate
-  (`CustomerTrxId` echoes the parent), so no harvest and no validator
-  change. `ReceivablesInvoiceTransactionDFFInfo` model + a `dff` field on
-  the record + the DFF bucket in the ReceivablesInvoice prompt.
+**total_credit = raw sum of EnteredAmount.** A ledger net figure: the demo
+pod has a POSITIVE, Incomplete memo (TransactionNumber 1001, +10000) that
+offsets the negatives, so the total for the recent-25 set is -17232.52.
+Sign is NOT guaranteed — never assume EnteredAmount < 0. Caveat: the sum
+mixes currencies (USD/CAD/GBP/EUR) into one number; acceptable for the demo
+but not a real multi-currency total.
 
-**Also fixed: a pre-existing short-id parser bug.** A short
-CustomerTransactionId (e.g. 1002) was being silently DROPPED — the parser
-produced `target_entity=ReceivablesInvoice` with EMPTY filters/include
-because the by_id examples were all the 18-digit form and the LLM did not
-treat "1002" as a CustomerTransactionId. The by_id rule now states the id
-may be short and must still get a by_id filter regardless of length. This
-also unblocked the **tax-lines prompt (prompt 3)**, which uses 1002 and was
-NOT actually passing end-to-end until this fix (it shared the same bug).
+**The bug that a failing test caught (the important lesson).** The wrapper
+first put `total_credit` as a TOP-LEVEL key on the tool payload. But the
+executor unwraps a ToolResult to its `items` list and DISCARDS every other
+top-level key (`_parse_tool_result` → `return payload["items"]`), so
+top-level total_credit NEVER reached the synthesizer — the LLM was silently
+summing the amounts itself (it got the right number, but by forbidden
+arithmetic, not the computed value). Fix: the wrapper STAMPS total_credit
+onto EACH memo row so it survives the unwrap; the prompt reads it off any
+row and copies it exactly. This surfaced only because a synthesizer test
+fixture put total_credit top-level and `_collect_valid_ids` crashed
+iterating the int — inspection had missed it.
 
-Files touched (all merged): new tool
-`receivables_invoice_transaction_dff.py`, server wrapper, `kg_schema.sql`
-(entity + 3 fields + edge + edge-tool), `print_kg.py` +
-`test_kg_metadata.py` tripwires (17/140/14/13), parser (DFF include rule +
-short-id fix), planner (`_TOOL_PRIMARY_ARG` entry), synthesizer (DFF model
-+ field + prompt), `run_plan.py` (DFF display), `prompt_set_ar.txt` (DFF
-prompt), `test_synthesizer.py` (3 DFF tests). Endpoints-reference quirk 8
-updated (committed separately, docs-only).
+Files touched (all merged): new tool `receivables_credit_memos.py`, server
+wrapper (stamps total onto each item), `kg_schema.sql` (entity + 8 fields +
+entity-tool + 2 vocab), `print_kg.py` + `test_kg_metadata.py` tripwires
+(18/148/8, vocab 87), parser (credit-memo rule + an explicit "total is NOT
+an unsupported aggregation, do not refuse" carve-out in TWO places),
+planner (`_OUTPUT_NAME_BY_ENTITY` entry), synthesizer (five places:
+`CreditMemoRecord`/`CreditMemoListResponse` + registry + prompt + validator
++ dispatch), `run_plan.py` (credit-memo display), `prompt_set_ar.txt` (both
+prompts + anchor note), `test_synthesizer.py` (4 credit-memo tests).
 
-DFF anchor: invoice **1002** (TransactionNumber 5) → TransactionDFF
-`__FLEX_Context="DOO"` (no segment values). Verified end-to-end: 6/6 AR
-prompts pass, "DOO" surfaces in the answer.
+Credit-memo anchors: ~25 recent memos, newest first (top:
+TransactionNumber 11001, DMART, -150, 2026-07-09). Positive outlier: 1001,
++10000, Incomplete. Verified end-to-end: both prompts pass; total -17232.52
+sourced from the stamped value, not LLM math.
 
 ## Next activities (AR module, in order)
 
-**11 AR prompts left.** AR-P3 is complete; next is AR-P4.
+**9 AR prompts left.** AR-P4 is complete; next is AR-P5.
 
-1. **AR-P4** — credit memos: list + total value (prompts 5, 14).
-2. **AR-P5** — account children, all keyed by `AccountId`: activity/balance
+1. **AR-P5** — account children, all keyed by `AccountId`: activity/balance
    summary (6), account credit memos (7), account receipts (8), receipt
    applications (9), site-filtered receipts (13).
-3. **AR-P6** — aggregates (op-registry, like PO's): exposure ranking (10),
+2. **AR-P6** — aggregates (op-registry, like PO's): exposure ranking (10),
    DSO / cash-collection (16), receipt-method distribution (17),
    creation-to-update lag (18).
 
@@ -154,6 +158,24 @@ Reason from the actual shape, not the worst case.
   CustomerTransactionId; run every prompt in the set end-to-end, don't
   assume a merged prompt works. The parser now handles short ids
   explicitly.
+- **The executor unwraps a ToolResult to its `items` list and DISCARDS
+  every other top-level key.** (`_parse_tool_result` → `return
+  payload["items"]`.) So a scalar the wrapper adds alongside `items` (e.g.
+  AR-P4's `total_credit`) never reaches the synthesizer — put it INSIDE
+  each item instead (stamp it onto every row). AR-P4 first placed the total
+  top-level; the LLM silently summed the amounts itself (right number,
+  forbidden arithmetic) and the miss only surfaced because a test fixture
+  crashed `_collect_valid_ids` iterating the int. Any future
+  per-fetch scalar (a total, a computed flag) must ride on the items, not
+  beside them.
+- **A supported operation can be swallowed by the aggregation-refusal
+  path.** "Total value of credit memos" LOOKS like an aggregation the
+  parser refuses (totals/rankings it can't compute), so the LLM refused it
+  even though the fetcher returns the total. Fix was an explicit carve-out
+  in the parser rule AND at the aggregation block ("this is NOT an
+  unsupported aggregation, route to CreditMemo, do not refuse"). When a new
+  supported feature overlaps a refusal category, carve it out where the
+  refusal instinct lives, not only where the feature is defined.
 
 ## Key conventions
 
@@ -190,6 +212,11 @@ Reason from the actual shape, not the worst case.
   segment columns — the row is just `CustomerTrxId`, `__FLEX_Context`,
   `__FLEX_Context_DisplayValue` (null). Note the child echoes the parent id
   as `CustomerTrxId` (short spelling), not `CustomerTransactionId`.
+- AR credit memos: `receivablesCreditMemos` is a TOP-LEVEL resource (no
+  parent id), accepts `orderBy=TransactionDate:desc` and `limit`
+  server-side, and the id field is `CustomerTransactionId` (same as AR
+  invoices — shared id space). EnteredAmount is normally negative but NOT
+  guaranteed: the demo has a positive Incomplete memo (1001, +10000).
 
 ## Files to share in the new window
 
@@ -215,11 +242,16 @@ drift):
 - `scripts/print_kg.py`, `tests/test_kg_metadata.py`,
   `tests/test_synthesizer.py`, `tests/test_executor.py`
 
-For AR-P4 (credit memos, prompts 5 + 14) specifically: `receivablesCreditMemos`
-is a top-level resource (not a child), so prompt 5 ("list recent credit
-memos, top 5") is likely a rooted entity with its own fetcher — closer to
-the AR-invoice by-id/list shape than to the DFF/tax-line child shape. It may
-be a full new-entity phase (new entity-tool, entity-filter, and possibly the
-five-place synthesizer change), unlike the two child phases just shipped.
-Prompt 14 ("total value") may add an aggregate. Curl `receivablesCreditMemos`
-first to confirm the endpoint shape and a demo anchor before wiring.
+For AR-P5 (account children, prompts 6-9, 13) specifically: all five are
+keyed by `AccountId` and hang off the customer account (resolved by
+CustomerName, as in AR-P2b). Likely a family of per-account child
+traversals (edges off CustomerAccount), similar in shape to AR-P2b's
+HAS_CUSTOMER_TRANSACTION but to different children (activity/balance,
+account credit memos, receipts, receipt applications). Prompt 13
+(site-filtered receipts) has a flagged trap: confirm a Santa Clara receipt
+anchor exists first, and beware the ABC-entity family (ABC Corporation
+Americas / Worldwide / ABC Application Software are DIFFERENT customers).
+Curl each child endpoint first to confirm shape, the AccountId join, and a
+demo anchor before wiring. Note the credit-memo endpoint already exists
+(AR-P4) — prompt 7 "account credit memos" may reuse it filtered by account,
+or be a distinct account-child endpoint; curl to decide.
