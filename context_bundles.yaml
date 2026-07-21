@@ -14,6 +14,8 @@ bundles:
 
   scripts:
   - scripts/draw_graph.py
+  - scripts/ask.py
+  - scripts/inspect_trace.py
   - scripts/print_kg.py
   - scripts/rebuild_kg.py
   - scripts/run_graph.py
@@ -28,6 +30,7 @@ bundles:
   - scripts/03_test_prompts_failed.txt
   - scripts/prompt_set_po.txt
   - scripts/prompt_set_supplier.txt
+  - scripts/prompt_set_ar.txt
   - scripts/spire_v1.2_review_prompts.txt
   - scripts/score_parser_prompts.py
 
@@ -59,6 +62,8 @@ bundles:
   - src/spire/mcp_server/tools/supplier_contacts.py
   - src/spire/mcp_server/tools/receivables_invoice_by_id.py
   - src/spire/mcp_server/tools/receivables_invoice_lines.py
+  - src/spire/mcp_server/tools/receivables_invoice_tax_lines.py
+  - src/spire/mcp_server/tools/customer_account_by_name.py
   - src/spire/mcp_server/tools/customer_transactions.py
   
   parser_planner:
@@ -74,13 +79,17 @@ bundles:
   
   tests:
   - tests/spire_sme_validation_checklist.md
+  - tests/test_agent_runner.py
   - tests/test_aggregate_invoices_tool.py
   - tests/test_aggregation_routing.py
   - tests/test_buyer_tool.py
+  - tests/test_compare_orders_to_invoices.py
   - tests/test_config.py
+  - tests/test_customer_invoices_tool.py
   - tests/test_executor.py
   - tests/test_fusion_client.py
   - tests/test_graph_pipeline.py
+  - tests/test_inspect_trace.py
   - tests/test_invoices_tool.py
   - tests/test_kg_loader.py
   - tests/test_kg_metadata.py
