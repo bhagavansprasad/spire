@@ -118,12 +118,13 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   mode (symptom + cause: cross-referencing an unrelated concept in a
   structured-output instruction can block convergence) in
   `spire_design_decisions.md`. Needs `config.py`.
-- **Open-invoices top-N limit** (finishes AR-P2c prompt 1, not started).
-  Prompt 1 is "top 5 open invoices" but the phase shipped open_only only;
-  it returns ALL open invoices, not the top 5. The tool already takes
-  `limit` and returns rows balance-desc, so the wiring is small: parser
-  extracts "top N" → a limit on the Intent → planner passes it to the
-  CustomerTransaction step. Its own small phase.
+- **Open-invoices top-N limit** ✓ merged (`ar-invoice-limit-top-n`) — finishes
+  AR-P2c prompt 1. Prompt 1 is "top 5 open invoices"; AR-P2c shipped open_only
+  only (returned ALL open invoices). Resolved exactly as scoped: parser
+  extracts "top N" → `invoice_limit` on the Intent (gated to the open-invoices
+  shape) → planner Block 3 passes it as the fetcher's `limit` on the
+  CustomerTransaction step, alongside open_only. Parser + planner only, no KG
+  rows. Verified: pod returns the 5 highest-balance open rows.
 - **Synthesizer does arithmetic (pre-existing, broader than AR-P2c).**
   The CustomerAccount narration sums invoice amounts and reports totals in
   prose (observed on prompt 1: a wrong "combined original amount", and the
@@ -233,8 +234,10 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | **AR** | **P1** | **Dedupe + column capture + plan** | `ar-phase-1-dedupe` | **merged (docs-only)** |
 | **AR** | **P2a** | **AR invoice by-id + lines (prompts 11, 12, 2)** | `ar-phase-2-invoices` | **merged** |
 | **AR** | **P2b** | **Customer invoices via account (prompt 15)** | `ar-phase-2b-customer-invoices` | **merged** |
-| AR | P2c | Open invoices for a customer (prompt 1) | `ar-phase-2c-open-invoices` | merged |
-| AR | P3+ | Tax lines, DFF, credit memos, aggregates | — | not started |
+| AR | P2c | Open invoices for a customer (prompt 1, open_only) | `ar-phase-2c-open-invoices` | merged |
+| AR | — | Top-5 open-invoices limit (finishes prompt 1) | `ar-invoice-limit-top-n` | merged |
+| AR | P3 | Tax lines (prompt 3) | `ar-p3-tax-lines` | merged |
+| AR | P3+ | DFF (4), credit memos (5,14), account children (6–9,13), aggregates (10,16–18) | — | not started |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
@@ -542,11 +545,26 @@ per-edge.
   thousands of rows). Shipped WITH a `build_llm` output-token cap (a burial
   of the parser instruction in the customer-invoices bullets caused a
   max-token runaway; see Reliability backlog + spire_design_decisions.md).
-  Deferred: the "top 5" limit (returns ALL open invoices for now).
-- **AR-P3** — invoice children: tax lines (prompt 3 — deep-nested grandchild,
-  reuse the PO-distribution 3-id iteration pattern), DFF (prompt 4 — must pick
-  between `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`; see
-  quirk 8).
+  The deferred "top 5" limit is now DONE — see the top-N limit entry in the
+  Reliability/backlog section (merged `ar-invoice-limit-top-n`).
+- **AR-P3** — invoice children.
+  - **Tax lines (prompt 3)** ✓ merged (2026-07-21, `ar-p3-tax-lines`). A
+    grandchild reached with TWO ids (invoice + line), NOT the three the plan
+    first assumed — the tax child needs only the parent line id (plus the
+    invoice id), so it's a two-field iter_fields edge, not the PO-distribution
+    3-id pattern. Entities ReceivablesTaxLine (12 fields); edge HAS_TAX_LINE
+    off ReceivablesInvoiceLine. Two mechanisms added and generalised: (1) the
+    executor stamps a parent iteration key onto child rows, GATED by a new
+    `Step.stamp_parent_key` flag the planner sets only on a child step that
+    feeds a further include (AR invoice lines don't echo CustomerTransactionId,
+    which the grandchild step must iterate on) — off elsewhere, so all other
+    iteration output is byte-for-byte unchanged; (2) the tax-lines tool stamps
+    its own parent line id as `ParentCustomerTransactionLineId` so the
+    synthesizer nests each tax line under the right line (the tax row's own
+    CustomerTransactionLineId is the TAX PK, a different value). KG now 16
+    entities / 137 fields / 13 edges / 12 edge-tools. Full suite 399 passing.
+  - **DFF (prompt 4)** — not started. Must pick between `receivablesInvoiceDFF`
+    and `receivablesInvoiceTransactionDFF` (see quirk 8). This finishes AR-P3.
 - **AR-P4** — credit memos: list + total value (prompts 5, 14).
 - **AR-P5** — CustomerAccount + account children: activity/balance summary
   (prompt 6), account credit memos (7), account receipts (8), receipt
