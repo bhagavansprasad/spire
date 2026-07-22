@@ -89,6 +89,10 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # expansion (iter_fields is NULL), so Block 3 reads the primary arg
     # from this table. The tool takes customer_transaction_id.
     "get_receivables_invoice_transaction_dff": "customer_transaction_id",
+    # AR-P5 prompt 7: the account's credit memos. Plain single-parent
+    # expansion iterating on the account's AccountId, same shape as
+    # get_customer_transactions above.
+    "get_account_credit_memos": "account_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -163,6 +167,12 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "CustomerAccount": "customer_accounts",
     "CustomerTransaction": "customer_transactions",
     "CreditMemo": "credit_memos",
+    # AR-P5 prompt 7. Deliberately NOT "credit_memos" — that name belongs
+    # to AR-P4's top-level CreditMemo, and the two are different entities
+    # over different id spaces. Sharing a bucket name would let one
+    # overwrite the other and would make the synthesizer's id-harvest
+    # ambiguous about which set a row belongs to.
+    "AccountCreditMemo": "account_credit_memos",
 }
 
 # Filter-type -> short suffix used when the step's output is the

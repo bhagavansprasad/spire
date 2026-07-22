@@ -51,3 +51,12 @@ What is the total value of credit memos?
 # empty parse (balance_only False, filter dropped), vs out=192 and a clean
 # parse here. See the runaway note in spire_expansion_plan.md.
 Show me the account balance for customer ABC Application Software
+
+# — a customer's credit memos (AR-P5, prompt 7 — AccountCreditMemo) —
+# NOTE the phrasing is load-bearing and was found by trial: FOUR other
+# forms run the parser away (out=7983, degenerate empty parse) — "Show me
+# recent credit memos for customer X", "Show me credit memos for customer
+# X", "List credit memos for customer X", "Show me account credit memos
+# for customer X". This one parses at out=289. Do not reword it without
+# re-testing. See the runaway class in spire_expansion_plan.md.
+Show credit memos for ABC Application Software

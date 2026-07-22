@@ -466,6 +466,11 @@ def _format_synthesized(response) -> str:
                 line += f", transactions due {acct.transactions_due}"
             if acct.transactions:
                 line += f" — {len(acct.transactions)} invoice(s)"
+            # AR-P5 prompt 7: an account can carry memos instead of (or
+            # alongside) transactions. Counted separately so a memo query
+            # does not read as an invoice query.
+            if acct.credit_memos:
+                line += f" — {len(acct.credit_memos)} credit memo(s)"
             lines.append(line)
             for txn in acct.transactions:
                 lines.append(
@@ -473,6 +478,14 @@ def _format_synthesized(response) -> str:
                     f"(TransactionId={txn.transaction_id}) — "
                     f"{txn.transaction_class}; {txn.transaction_date}; "
                     f"{txn.amount} (balance {txn.balance}); {txn.status}"
+                )
+            for memo in acct.credit_memos:
+                lines.append(
+                    f"      {memo.credit_memo_number} "
+                    f"(CreditMemoId={memo.credit_memo_id}) — "
+                    f"{memo.credit_memo_date}; "
+                    f"{memo.amount} {memo.currency} "
+                    f"(balance {memo.balance}); {memo.status}"
                 )
         return "\n".join(lines)
 

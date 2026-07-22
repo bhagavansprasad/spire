@@ -80,6 +80,9 @@ from spire.mcp_server.tools.customer_account_by_name import (
 from spire.mcp_server.tools.customer_transactions import (
     get_customer_transactions as _get_customer_transactions,
 )
+from spire.mcp_server.tools.account_credit_memos import (
+    get_account_credit_memos as _get_account_credit_memos,
+)
 from spire.mcp_server.tools.purchase_order_schedules import (
     get_purchase_order_schedules as _get_purchase_order_schedules,
 )
@@ -660,6 +663,45 @@ async def get_customer_transactions(
     async with FusionClient(_persona) as client:
         result = await _get_customer_transactions(
             client, account_id=account_id, open_only=open_only, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_account_credit_memos(
+    account_id: int,
+    limit: int = 25,
+) -> dict:
+    """List a customer account's credit memos, newest first.
+
+    Use this as the second half of a customer-scoped credit-memo query:
+    after get_customer_account_by_name resolves the customer to an
+    AccountId, this returns that account's credit memos.
+
+    NOT interchangeable with list_receivables_credit_memos. That tool
+    reads the TOP-LEVEL receivablesCreditMemos collection (everyone's
+    memos, keyed by CustomerTransactionId) and reports a total; this one
+    reads a SINGLE account's creditMemos child (keyed by CreditMemoId, a
+    different id space, with a different field projection). A question
+    naming a customer belongs here; a bare "recent credit memos" belongs
+    there.
+
+    Args:
+        account_id: The AccountId of the customer account.
+        limit: Max credit memos to return. Applied server-side alongside
+            a newest-first sort, so this is a true "N most recent" — the
+            child holds credit memos only, so nothing is filtered out
+            afterwards.
+
+    Returns:
+        A dict with the account's credit memos: CreditMemoId,
+        CreditMemoNumber, CreditMemoDate, TransactionClass,
+        TotalOriginalAmount, TotalBalanceAmount, AvailableAmount,
+        CreditMemoStatus, CreditMemoCurrency and BillToSiteNumber per row.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_account_credit_memos(
+            client, account_id=account_id, limit=limit
         )
         return result.to_dict()
 

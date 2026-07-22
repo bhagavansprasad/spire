@@ -334,7 +334,13 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCreditMemos',
   'An accounts-receivable (sell-side) credit memo raised against a customer. Same object model as ReceivablesInvoice but EnteredAmount is normally NEGATIVE (a credit) and the status field is CreditMemoStatus. Top-level resource: listable without a parent id. Recent-first ordering (orderBy=TransactionDate:desc) and limit are done server-side. NOTE: sign is not guaranteed - the demo pod has at least one POSITIVE, Incomplete memo, so never assume EnteredAmount < 0.'
 );
-PROMPT Seeded kg_entity (18 rows).
+-- AR-P5 Account Credit Memo (prompt 7)
+INSERT INTO kg_entity VALUES (
+  'AccountCreditMemo', 'CreditMemoId', 'CreditMemoNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/creditMemos',
+  'A credit memo on a customer account, reached as a child of CustomerAccount. NOT the same as CreditMemo: different id space (CreditMemoId, small ints, vs CustomerTransactionId) and different fields (CreditMemoNumber/CreditMemoDate/TotalOriginalAmount/TotalBalanceAmount/AvailableAmount/InstallmentId vs TransactionNumber/TransactionDate/EnteredAmount). This is the installment/payment-schedule projection - a sibling of CustomerTransaction - whereas CreditMemo is the top-level transaction projection. The collection holds credit memos ONLY, so no class filtering is needed. Recent-first ordering (orderBy=CreditMemoDate:desc) and limit are done server-side; ?fields= projection also works here. Amounts are normally negative but sign is not guaranteed. The row does NOT echo AccountId - the join key is the URL path.'
+);
+PROMPT Seeded kg_entity (19 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -537,7 +543,20 @@ INSERT INTO kg_entity_field VALUES ('CreditMemo', 'CreditMemoCurrency',    'proj
 INSERT INTO kg_entity_field VALUES ('CreditMemo', 'CreditMemoStatus',      'status',       'string',  'Credit memo status (e.g. ''Complete'', ''Incomplete'').');
 INSERT INTO kg_entity_field VALUES ('CreditMemo', 'BillToCustomerName',    'projection',   'string',  'Bill-to customer display name.');
 INSERT INTO kg_entity_field VALUES ('CreditMemo', 'BillToCustomerNumber',  'reference',    'string',  'Bill-to customer number.');
-PROMPT Seeded kg_entity_field (148 rows).
+
+-- AR-P5 AccountCreditMemo (prompt 7) — the per-account child projection.
+-- Field names differ from CreditMemo throughout; see the entity note.
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoId',        'canonical_id', 'numeric', 'System primary key for the account credit memo. A SMALL int, and a DIFFERENT id space from CreditMemo.CustomerTransactionId - do not conflate.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoNumber',    'display_id',   'string',  'Human-readable credit memo number (e.g. ''1358582'').');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoDate',      'date',         'iso_date','Credit memo date. Server-side orderBy sorts on this for recent-first.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'TransactionClass',    'projection',   'string',  'Memo class (e.g. ''On Account Credit Memo''). Informational only - the collection holds credit memos only, so no class filtering is needed.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'TotalOriginalAmount', 'amount',       'numeric', 'Original memo amount. Normally NEGATIVE (a credit); sign is not guaranteed.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'TotalBalanceAmount',  'amount',       'numeric', 'Remaining balance. Non-zero on Open memos, 0 on Closed ones.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'AvailableAmount',     'amount',       'numeric', 'Amount still available to apply.');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoStatus',    'status',       'string',  'Memo status (''Open'' or ''Closed'').');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoCurrency',  'projection',   'string',  'Memo currency (e.g. ''USD'').');
+INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'BillToSiteNumber',    'reference',    'string',  'Bill-to site. NOTE this carries a site NAME (e.g. ''Santa Clara''), not a number, despite the field name.');
+PROMPT Seeded kg_entity_field (158 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -662,7 +681,16 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_AR_LINE. Client-side Invoice-class filter in the tool; the open-balance filter (prompt 1) is deferred to a later phase.',
   NULL
 );
-PROMPT Seeded kg_edge (14 rows).
+
+-- AR-P5 (prompt 7)
+INSERT INTO kg_edge VALUES (
+  'HAS_ACCOUNT_CREDIT_MEMO', 'CustomerAccount', 'AccountCreditMemo', 'AccountId', 'AccountId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesCustomerAccountActivities/{account.AccountId}/child/creditMemos. Fetch the account''s credit memos, newest first (orderBy=CreditMemoDate:desc, server-side). The parent AccountId is carried in the URL path and is NOT echoed in the row body.',
+  'Per-account child call, one HTTP call per account. Same expansion shape as HAS_CUSTOMER_TRANSACTION, but simpler: the collection holds credit memos only, so there is no client-side class filter and limit applies server-side as a true top-N.',
+  NULL
+);
+PROMPT Seeded kg_edge (15 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -848,6 +876,15 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distributions', 'PODistribu
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memo',  'CreditMemo', 'AR credit memo (sell-side).');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memos', 'CreditMemo', 'Plural form.');
 
+
+-- AR-P5 (prompt 7). NOTE the bare terms 'credit memo'/'credit memos' are
+-- already bound to CreditMemo (AR-P4, the top-level recent-memos list).
+-- These entries add only the ACCOUNT-SCOPED forms, so a prompt naming a
+-- customer routes here while a bare 'list recent credit memos' still
+-- routes to CreditMemo. The parser rule carries the actual disambiguation;
+-- these are the vocabulary hooks for it.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account credit memo',  'AccountCreditMemo', 'A credit memo on a specific customer account (AR-P5), NOT the top-level CreditMemo list.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account credit memos', 'AccountCreditMemo', 'Plural form.');
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -1041,7 +1078,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'get_customer_transactions',
   'Takes account_id. Fetches the account''s transactionPaymentSchedules, keeps TransactionClass=''Invoice'' client-side. Has an open_only flag (positive-balance filter) that is unused until the open-invoices phase.'
 );
-PROMPT Seeded kg_edge_tool (13 rows).
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_ACCOUNT_CREDIT_MEMO',
+  'get_account_credit_memos',
+  'Takes account_id. Fetches the account''s creditMemos child, newest first. No client-side filter (the collection is credit memos only) and no over-fetch: orderBy and limit are both server-side, so limit is a true "N most recent".'
+);
+PROMPT Seeded kg_edge_tool (14 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
