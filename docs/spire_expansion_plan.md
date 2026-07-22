@@ -153,31 +153,59 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   behind prompts that break silently when reworded.
 
 - **Parser observability + degenerate-parse defence** (new 2026-07-22, not
-  started). The runaway above cost roughly fifteen probe runs to
-  characterise and still is not root-caused, because there is essentially
-  nothing to observe. Three concrete gaps, in priority order:
+  started).
+
+  **SCOPE WIDENED 2026-07-22 (AR-P5 prompt 8): this is not parser-only.**
+  The synthesizer fails the same way. On prompt 8 the synthesize call
+  returned `out=7985` and a response containing `"receipts": []` — an
+  EMPTY array — while its prose summary correctly described all 25 rows
+  ("There are 25 receipts... Two are unapplied... The remaining 23 are
+  applied"). The JSON was VALID and COMPLETE (`truncation_notes: []`), so
+  unlike the parser case nothing was cut off: the model read the data,
+  described it accurately, and declined to populate the array. The SAME
+  25-row fetch SUCCEEDED on a different account at `out=3657` with every
+  row present — that account's receipts were near-identical to one another
+  (same date, same amount, same method), while the failing account's were
+  varied. **Payload ENTROPY predicts this, not row count.** Mitigated by
+  capping `get_account_receipts` at 10 rows (`out=1596`, all rows
+  present), which is a workaround, not a fix. So Spire has TWO LLM
+  boundaries and BOTH produce structurally-valid, silently-wrong output
+  under load. Any guard built here must cover the synthesize call as well
+  as the parse call.
+
+  The runaway above cost roughly fifteen probe runs to characterise and
+  still is not root-caused, because there is essentially nothing to
+  observe. Three concrete gaps, in priority order:
 
   1. **Silent failure — no detection.** A runaway returns a structurally
-     VALID `ParseResult`. Nothing notices that `out=7983` against a cap of
-     8000 is pathological, or that an Intent carries a `target_entity`
-     with no filters and no include for a prompt that plainly named a
-     customer. The failure surfaces downstream as a planner error
+     VALID `ParseResult`; a degenerate synthesis returns a structurally
+     VALID response. Nothing notices that `out=7983` against a cap of
+     8000 is pathological, that an Intent carries a `target_entity` with
+     no filters for a prompt that plainly named a customer, or that a
+     child array came back empty when the executor bucket was NOT empty.
+     The parse failure surfaces downstream as a planner error
      ("No entity tool for ('CustomerAccount', 'none')") that names the
-     WRONG problem — it reads as a missing KG row, not a failed parse.
-     In production the worse case is a runaway that happens to produce a
-     routable Intent: Spire would then answer confidently from a wrong
-     parse, with no error anywhere. Probable fix: a guard after parse
-     that flags (i) output tokens within ~95% of the cap, and/or (ii)
-     `finish_reason != 'stop'`, and raises a typed ParserRunawayError
-     rather than returning the draft. Cheap, mechanical, and converts a
-     silent wrong answer into an honest failure.
+     WRONG problem — it reads as a missing KG row. The synthesis failure
+     surfaces as a plausible answer with no rows. In production the worse
+     case is a runaway that happens to produce a routable Intent: Spire
+     would then answer confidently from a wrong parse, with no error
+     anywhere. Probable fix: a guard after each LLM call that flags (i)
+     output tokens within ~95% of the cap, (ii) `finish_reason != 'stop'`,
+     and (iii) an empty structured collection where the source bucket was
+     non-empty — raising a typed error rather than returning the result.
+     Cheap, mechanical, and converts a silent wrong answer into an honest
+     failure.
   2. **No raw-output capture.** Nothing records what the model actually
      emitted during a runaway. Fifteen probes produced only token counts;
      the 32,000 generated tokens were never seen, which is exactly why the
-     cause is still unknown. Probable fix: when the guard in (1) fires,
-     write the raw response text to the existing trace file. This is the
-     single highest-value diagnostic change — one occurrence with captured
-     output would likely explain more than every A/B test run so far.
+     cause is still unknown. NOTE the trace ALREADY records
+     `synthesis_completed` with the full PARSED response — that is how the
+     empty-array finding was confirmed — so what is missing is the raw
+     pre-parse text, and the parser-side equivalent entirely. Probable
+     fix: when the guard in (1) fires, write the raw response text to the
+     existing trace file. This is the single highest-value diagnostic
+     change — one occurrence with captured output would likely explain
+     more than every A/B test run so far.
   3. **No in-flight visibility.** `with_structured_output` buffers, so a
      30s+ generation prints nothing until it completes. There is no
      progress signal, no partial output, no way to tell a slow call from a
@@ -189,6 +217,17 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   today's debugging a single run instead of an afternoon. Do them before
   attempting a root-cause fix on the runaway itself — without (2) there is
   nothing to root-cause FROM.
+
+  **BUILDING IS PAUSED PENDING THIS WORK** (decided 2026-07-22, after
+  prompt 8). 12 of 18 AR prompts are merged; the remaining six wait until
+  the boundaries are understood. The trigger was a fair question — *is the
+  KG framework itself flawed?* — and the answer appears to be no: every
+  observed failure sits outside the KG-driven path, every KG lookup that
+  ran worked, and when the parser produced a degenerate Intent the planner
+  REFUSED rather than guessing, which is Design 3 behaving as intended.
+  But that rests on the KG never having failed, which is evidence rather
+  than proof. The observability work is what would let it be tested rather
+  than argued.
 - **Open-invoices top-N limit** ✓ merged (`ar-invoice-limit-top-n`) — finishes
   AR-P2c prompt 1. Prompt 1 is "top 5 open invoices"; AR-P2c shipped open_only
   only (returned ALL open invoices). Resolved exactly as scoped: parser
@@ -370,23 +409,26 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | AR | P4 | Credit memos (prompts 5, 14) | `ar-p4-credit-memos` | merged |
 | AR | P5 | Account balance (prompt 6, `balance_only`) | `ar-phase-5-account-children` | merged |
 | AR | P5 | A customer's credit memos (prompt 7, `AccountCreditMemo`) | `ar-phase-5-account-children` | merged |
-| AR | P5 | Account receipts (8), applications (9), site receipts (13) | `ar-phase-5-account-children` | in progress |
-| AR | P6 | Aggregates (10, 16, 17, 18) | — | not started |
+| AR | P5 | A customer's receipts (prompt 8, `AccountReceipt`) | `ar-phase-5-account-receipts` | merged |
+| AR | P5 | Receipt applications (9), site receipts (13) | — | **paused** |
+| AR | P6 | Aggregates (10, 16, 17, 18) | — | **paused** |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
 | AP | P2+ | (defined at P1) | — | not started |
 
-**Next up:** AR-P5 remainder — prompts 8, 9 and 13. Curl discovery for all
-three is DONE (see the AR-P5 section and the endpoints reference); go
-straight to the standalone tool. Prompt 8 is nearly identical in shape to
-prompt 7; prompt 9 needs the over-fetch-and-filter-client-side pattern
-(`ApplicationStatus == 'Applied'`); prompt 13 works against the TOP-LEVEL
-`/standardReceipts` with an account-then-site two-step. Expect a phrasing
-hunt on each — prompts 6 and 7 both needed one.
+**Next up: NOT a build.** Building is PAUSED after prompt 8 (decided
+2026-07-22). The next session is the LLM-boundary investigation — see the
+"Parser observability + degenerate-parse defence" backlog item above, and
+the investigation section at the top of `SPIRE_SESSION_HANDOFF.md`. Do the
+detection guard and raw-output capture first; root-cause after.
 
-**Current totals:** 11 of 18 AR prompts done. KG at 19 entities / 158
-fields / 15 edges / 14 edge-tools / 89 vocab. Full suite 420 passing.
+When building resumes: prompts 9 and 13 finish AR-P5 (curl discovery for
+both is DONE — go straight to the tool), then AR-P6's four aggregates,
+which need an op-registry like PO's and share none of AR-P5's patterns.
+
+**Current totals:** 12 of 18 AR prompts done. KG at 20 entities / 169
+fields / 16 edges / 15 edge-tools / 93 vocab. Full suite 435 passing.
 
 ### Known test notes (not bugs)
 - **Three supplier `truncated is False` assertions** fail on pods with more
@@ -765,8 +807,26 @@ per-edge.
     rows are unapplied cash with a null transaction side. Prompt 13 runs
     against the TOP-LEVEL `/standardReceipts` with account-server-side then
     site-client-side, because composite `q=` returns a silent zero there.
-  - KG after prompt 7: 19 entities / 158 fields / 15 edges / 14 edge-tools,
-    8 entity-tools, 89 vocab. Suite 420.
+  - **Prompt 8 ✓ merged 2026-07-22** — `AccountReceipt`, the per-account
+    `standardReceipts` child. Same traversal shape as prompt 7, so again a
+    FOUR-place synthesizer change. `StandardReceiptId` is a fifth AR id
+    space and the only one that MIXES WIDTHS within one collection —
+    backfilled rows carry small ints, recent ones large — so nothing may
+    infer anything from magnitude. Forced prompt 6's BALANCE-ONLY rule to
+    be widened a SECOND time (it now requires no child bucket at all,
+    rather than enumerating them).
+    **THE LIMIT IS 10, NOT 25**, and the reason matters beyond this
+    prompt: 25 varied receipt rows overran the SYNTHESIZER's output budget
+    and produced valid JSON with an EMPTY receipts array while narrating
+    the rows correctly in prose. The same 25-row fetch succeeded on an
+    account whose receipts were near-identical to each other. See the
+    observability backlog item — this is the synthesizer half of the same
+    failure class as the parser runaway.
+  - **Prompts 9 and 13 — PAUSED**, pending the LLM-boundary
+    investigation. Discovery for both is complete; nothing blocks the
+    build except the decision to understand the boundaries first.
+  - KG after prompt 8: 20 entities / 169 fields / 16 edges / 15 edge-tools,
+    8 entity-tools, 93 vocab. Suite 435.
 - **AR-P6** — aggregates (op-registry, exactly like PO's): exposure ranking
   (10, sort on `TotalOpenReceivablesForAccount` over 435 rows), cash-collection
   / DSO trends (16), receipt-method distribution (17, bucket `ReceiptMethod`),
