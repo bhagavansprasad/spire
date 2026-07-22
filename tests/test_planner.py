@@ -1153,3 +1153,110 @@ def test_generate_plan_invoice_limit_none_omits_limit(
     ]
     assert len(ct_steps) == 1
     assert "limit" not in ct_steps[0].tool_args
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompt 6: balance_only suppresses the include traversal
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def balance_only_intent() -> Intent:
+    """
+    The structured intent for prompt 6: 'show me the account balance for
+    customer ABC Application Software'. Same root as the customer-invoices
+    shape, but balance_only is set and no child is traversed — the balance
+    figures ride on the account record Block 1 already fetches.
+    """
+    return Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"},
+        ],
+        include=[],
+        balance_only=True,
+    )
+
+
+def test_generate_plan_balance_only_produces_single_step(
+    balance_only_intent: Intent,
+) -> None:
+    """balance_only yields exactly the account fetch and nothing else."""
+    produced = generate_plan(balance_only_intent)
+    assert len(produced) == 1
+    assert produced[0].tool_name == "get_customer_account_by_name"
+    # Assert the customer reaches the tool, not the exact arg dict — the
+    # arg name is KG metadata and may legitimately gain fields.
+    assert (
+        produced[0].tool_args.get("customer_name")
+        == "ABC Application Software"
+    )
+
+
+def test_generate_plan_balance_only_ignores_a_populated_include() -> None:
+    """The FLAG decides the shape, not the include list.
+
+    This is the guard's whole point. The parser normally emits an empty
+    include for a balance question, but it is an LLM and need not — an
+    earlier build of this rule had it dropping the by_customer_name filter
+    instead. So balance_only must suppress the traversal even when
+    CustomerTransaction IS present, rather than trusting the list to be
+    empty.
+    """
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"},
+        ],
+        include=["CustomerTransaction"],
+        balance_only=True,
+    )
+    produced = generate_plan(intent)
+    assert len(produced) == 1
+    assert not [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+
+
+def test_generate_plan_balance_only_false_keeps_the_traversal() -> None:
+    """Without the flag, the same include still traverses.
+
+    Pins that the guard is gated on balance_only alone — AR-P2b/P2c and
+    prompt 15 must be byte-for-byte unaffected.
+    """
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Corporation Americas"},
+        ],
+        include=["CustomerTransaction"],
+        balance_only=False,
+    )
+    produced = generate_plan(intent)
+    ct_steps = [
+        s for s in produced if s.tool_name == "get_customer_transactions"
+    ]
+    assert len(ct_steps) == 1
+
+
+def test_generate_plan_balance_only_suppresses_open_only_and_limit() -> None:
+    """No transaction step means the AR-P2c/top-N args have nowhere to go.
+
+    open_only and invoice_limit are injected onto the CustomerTransaction
+    step inside the include loop. With the loop skipped, they must not
+    leak onto the account step or raise.
+    """
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"},
+        ],
+        include=["CustomerTransaction"],
+        balance_only=True,
+        open_only=True,
+        invoice_limit=5,
+    )
+    produced = generate_plan(intent)
+    assert len(produced) == 1
+    assert "open_only" not in produced[0].tool_args
+    assert "limit" not in produced[0].tool_args

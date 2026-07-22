@@ -459,6 +459,11 @@ def _format_synthesized(response) -> str:
                 f"AccountNumber={acct.account_number}); "
                 f"open receivables {acct.open_receivables}"
             )
+            # AR-P5 prompt 6: the account record carries a second balance
+            # figure. Shown only when present so the pre-AR-P5 shape (and
+            # any account row lacking it) prints exactly as before.
+            if acct.transactions_due is not None:
+                line += f", transactions due {acct.transactions_due}"
             if acct.transactions:
                 line += f" — {len(acct.transactions)} invoice(s)"
             lines.append(line)

@@ -532,6 +532,13 @@ class CustomerAccountRecord(BaseModel):
         description="Open receivables for the account "
         "(TotalOpenReceivablesForAccount).",
     )
+    transactions_due: float | None = Field(
+        default=None,
+        description="Total transactions due for the account "
+        "(TotalTransactionsDueForAccount). Copy it exactly as given; do "
+        "NOT compute or reconcile it against open_receivables — the two "
+        "are separate figures on the account record and need not agree.",
+    )
     transactions: list[CustomerAccountTransactionInfo] = Field(
         default_factory=list,
         description="This account's transactions, when the query asked for "
@@ -1146,9 +1153,12 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "This is a CUSTOMER-ACCOUNT-rooted query (accounts receivable). The "
         "customer was resolved to their account(s); for each account in the "
         "final set, emit one entry under 'customer_accounts' with its "
-        "account_id, account_number, customer_name, and open_receivables "
-        "(TotalOpenReceivablesForAccount). account_id must appear in the "
-        "data.\n"
+        "account_id, account_number, customer_name, open_receivables "
+        "(TotalOpenReceivablesForAccount) and transactions_due "
+        "(TotalTransactionsDueForAccount). account_id must appear in the "
+        "data. COPY both figures exactly as given — do NOT sum, subtract, "
+        "reconcile or otherwise compute with them; they are separate fields "
+        "on the account record and need not agree with each other.\n"
         "CHILD DETAIL — the question asked for the customer's invoices if "
         "the bucket is there, so the summary MUST describe them, not just "
         "the account:\n"
@@ -1159,7 +1169,18 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "value — but COPY amounts exactly as given; do NOT compute sums, "
         "tax, or any arithmetic. Every transaction_id must appear in the "
         "data. If the bucket is absent, leave 'transactions' empty and do "
-        "not mention it."
+        "not mention it.\n"
+        "BALANCE-ONLY SHAPE — when there is NO 'customertransaction' "
+        "bucket, the question asked for the account's BALANCE or ACTIVITY "
+        "SUMMARY, not for a list of invoices. Write the summary as EXACTLY "
+        "TWO SENTENCES and then STOP: (1) name the customer and account "
+        "number and give the open receivables; (2) give the transactions "
+        "due. Say nothing else. In particular, transactions and invoices "
+        "are not part of this answer at all — do not describe them, count "
+        "them, comment on their absence, or note whether any were requested "
+        "or found. None were fetched, so there is nothing true to say about "
+        "them either way; a sentence such as 'no transaction details were "
+        "requested or found' is WRONG and must not appear."
     ),
     "CreditMemo": (
         "This is a CREDIT-MEMO-rooted query. The data has a 'credit_memos' "

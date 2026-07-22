@@ -18,6 +18,12 @@ Usage:
     # Ad-hoc: bundle a custom list of files into one output
     python build_context.py --files src/spire/planner/planner.py docs/spire_poc_log.md --name adhoc
 
+    # Report code-line counts for the .py files in every bundle
+    python build_context.py --lines
+
+    # Same, restricted to named bundles
+    python build_context.py --lines parser_planner mcp_server_tools
+
 Outputs go to ./context_out/ as Markdown files. Each file in a bundle is
 rendered as:
 
@@ -332,6 +338,105 @@ def build_bundle(
 
 
 # ---------------------------------------------------------------------------
+# Line counting (--lines)
+# ---------------------------------------------------------------------------
+
+
+def count_code_lines(abs_path: Path) -> int | None:
+    """
+    Count code lines in a Python file: every line that is neither blank nor
+    a full-line `#` comment.
+
+    Trailing comments are NOT stripped, and docstrings ARE counted as code
+    (stripping them would need real parsing). Returns None if the file
+    cannot be read.
+    """
+    try:
+        content = abs_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    total = 0
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            continue
+        total += 1
+    return total
+
+
+def print_line_report(
+    repo_root: Path,
+    bundles: dict[str, list[str]],
+    targets: list[str],
+    excludes: list[str],
+) -> None:
+    """
+    Print code-line counts for the .py files listed across `targets`,
+    descending. A file appearing in several bundles is counted once and
+    shows every bundle that claims it. Files listed in the config but
+    absent from disk are reported as [missing].
+    """
+    # rel path -> list of bundle names that include it.
+    owners: dict[Path, list[str]] = {}
+    for name in targets:
+        for rel in collect_files(repo_root, bundles[name], excludes):
+            if rel.suffix.lower() != ".py":
+                continue
+            owners.setdefault(rel, []).append(name)
+
+    # An explicit .py path in the config that doesn't exist never reaches
+    # collect_files, so pick those up separately.
+    missing: dict[Path, list[str]] = {}
+    for name in targets:
+        for pattern in bundles[name]:
+            if not pattern.lower().endswith(".py"):
+                continue
+            if any(c in pattern for c in "*?["):
+                continue
+            rel = Path(pattern)
+            if not (repo_root / rel).is_file():
+                missing.setdefault(rel, []).append(name)
+
+    rows: list[tuple[int | None, Path, list[str]]] = []
+    for rel, names in owners.items():
+        rows.append((count_code_lines(repo_root / rel), rel, names))
+    for rel, names in missing.items():
+        rows.append((None, rel, names))
+
+    # Descending by count; unreadable and missing files sort last.
+    rows.sort(key=lambda r: (r[0] is None, -(r[0] or 0), str(r[1])))
+
+    if not rows:
+        print("\nNo .py files found in the selected bundle(s).\n")
+        return
+
+    scope = "all bundles" if set(targets) == set(bundles) else ", ".join(targets)
+    print()
+    print(f"Code lines (.py only, blanks and # comments excluded) — {scope}")
+    print()
+    print(f"{'Lines':>9}  {'File':<58} Bundles")
+    print("-" * 100)
+
+    counted = 0
+    for count, rel, names in rows:
+        shown = "[missing]" if count is None else f"{count:,}"
+        if count is not None:
+            counted += count
+        print(f"{shown:>9}  {str(rel):<58} {', '.join(sorted(set(names)))}")
+
+    print("-" * 100)
+    n_files = sum(1 for c, _, _ in rows if c is not None)
+    print(f"{counted:>9,}  across {n_files} file(s)")
+    n_missing = sum(1 for c, _, _ in rows if c is None)
+    if n_missing:
+        print(f"{'':>9}  {n_missing} listed file(s) missing from disk")
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 
@@ -407,6 +512,14 @@ def main() -> int:
         "--all", action="store_true", help="Build all defined bundles."
     )
     parser.add_argument(
+        "--lines",
+        action="store_true",
+        help=(
+            "Report code-line counts for the .py files in the named bundles "
+            "(all bundles if none named), descending. Builds nothing."
+        ),
+    )
+    parser.add_argument(
         "--files",
         nargs="+",
         metavar="PATH",
@@ -443,6 +556,19 @@ def main() -> int:
             for p in patterns:
                 print(f"      {p}")
             print()
+        return 0
+
+    if args.lines:
+        targets = list(args.bundles) or list(bundles.keys())
+        unknown = [t for t in targets if t not in bundles]
+        if unknown:
+            print(
+                f"ERROR: unknown bundle(s): {', '.join(unknown)}",
+                file=sys.stderr,
+            )
+            print(f"Available: {', '.join(bundles.keys())}", file=sys.stderr)
+            return 1
+        print_line_report(repo_root, bundles, targets, excludes)
         return 0
 
     results: list[BundleResult] = []

@@ -27,6 +27,8 @@ from spire.synthesizer.synthesizer import (
     BuyerInfo,
     CreditMemoListResponse,
     CreditMemoRecord,
+    CustomerAccountRecord,
+    CustomerAccountResponse,
     HallucinationError,
     InvoiceRecord,
     InvoiceResponse,
@@ -751,3 +753,123 @@ def test_credit_memo_ids_harvested_into_customer_transaction_ids():
     valid = _collect_valid_ids(_credit_memo_outputs())
     assert 300000313072555 in valid["customer_transaction_ids"]
     assert 300000308625094 in valid["customer_transaction_ids"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompt 6 — the BALANCE-ONLY CustomerAccount shape.
+# A balance question resolves the customer to their account and reports
+# the two figures that ride on the account record itself; NO transaction
+# fetch runs, so there is no 'customertransaction' bucket and the
+# record's `transactions` list stays empty. CustomerAccount is NOT a new
+# entity (AR-P2b rooted on it), so this was a two-place synthesizer
+# change: the transactions_due field and the prompt. These tests pin the
+# part that AR-P4 proved is easy to get wrong — that a response with an
+# empty child list still passes id-harvest and validation rather than
+# blowing up on the absent bucket.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _balance_only_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'show me the account balance for customer X'.
+
+    ONE bucket only. The plan is a single step (the planner skips Block 3
+    when balance_only is set), so there is deliberately no
+    'customer_transactions' bucket here — that absence is the whole point
+    of the shape. Figures are the live pod values for AccountId
+    300000047368512; note the two do NOT reconcile, which is correct — they
+    are independent fields, not a balance and its breakdown.
+    """
+    return {
+        "customer_accounts": [
+            {
+                "AccountId": 300000047368512,
+                "AccountNumber": "26360",
+                "CustomerName": "ABC Application Software",
+                "CustomerId": 100000000395795,
+                "TotalOpenReceivablesForAccount": 678923.69,
+                "TotalTransactionsDueForAccount": 699039.33,
+            }
+        ]
+    }
+
+
+def _balance_only_response() -> CustomerAccountResponse:
+    """The two-sentence balance answer, with `transactions` left empty."""
+    return CustomerAccountResponse(
+        summary=(
+            "The customer ABC Application Software (account 26360) has open "
+            "receivables totaling 678923.69. The total amount of "
+            "transactions due for this account is 699039.33."
+        ),
+        customer_accounts=[
+            CustomerAccountRecord(
+                account_id=300000047368512,
+                account_number="26360",
+                customer_name="ABC Application Software",
+                open_receivables=678923.69,
+                transactions_due=699039.33,
+            )
+        ],
+    )
+
+
+def test_balance_only_response_leaves_transactions_empty():
+    """The record defaults `transactions` to [] when none were fetched.
+
+    Guards the shape itself: a balance answer must be constructible
+    WITHOUT supplying transactions, since no transaction step ran.
+    """
+    response = _balance_only_response()
+    assert response.customer_accounts[0].transactions == []
+    assert response.customer_accounts[0].transactions_due == 699039.33
+
+
+def test_validate_passes_for_balance_only_shape():
+    """An empty child list must not trip the validator.
+
+    AR-P4's bug surfaced when a fixture crashed _collect_valid_ids, not by
+    inspection — so this asserts the balance-only shape survives the real
+    validator against real executor output.
+    """
+    _validate_no_hallucinated_ids(
+        _balance_only_response(), _balance_only_outputs()
+    )
+
+
+def test_validate_catches_hallucinated_account_id_in_balance_shape():
+    """The account id is still cross-checked when transactions are absent.
+
+    Dropping the child bucket must not weaken validation of the parent.
+    """
+    bad = _balance_only_response()
+    bad.customer_accounts[0].account_id = 999999999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _balance_only_outputs())
+    assert "999999999" in str(exc_info.value)
+
+
+def test_balance_only_outputs_harvest_account_id_and_no_transaction_ids():
+    """Id-harvest over a single-bucket output.
+
+    account_id lands in customer_account_ids; the transaction set stays
+    empty because no transaction bucket exists. The empty set matters —
+    it is what the validator checks the (absent) transactions against.
+    """
+    valid = _collect_valid_ids(_balance_only_outputs())
+    assert 300000047368512 in valid["customer_account_ids"]
+    assert valid["customer_account_transaction_ids"] == set()
+
+
+def test_transactions_due_is_optional_for_pre_ar_p5_records():
+    """Back-compat: the AR-P2b shape omitted transactions_due entirely.
+
+    The field is defaulted, so an older-style record still constructs —
+    this is what keeps the existing customer-invoices path unchanged.
+    """
+    record = CustomerAccountRecord(
+        account_id=300000047368512,
+        account_number="26360",
+        customer_name="ABC Application Software",
+        open_receivables=678923.69,
+    )
+    assert record.transactions_due is None
