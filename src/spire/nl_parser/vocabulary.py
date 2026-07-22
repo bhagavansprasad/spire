@@ -112,9 +112,12 @@ def load_kg_menu() -> KGMenu:
     """
     # Filter set comes from the planner's KG-backed filter definitions
     # (kg_entity_filter). A fresh set so callers can't mutate anything.
-    filter_types: set[str] = (
-        _entity_level_filter_types() | set(_edge_traversal_filters())
-    )
+    entity_level = _entity_level_filter_types()
+    all_filters = set()
+    for ftypes in entity_level.values():
+        all_filters.update(ftypes)
+    all_filters.update(set(_edge_traversal_filters()))
+    filter_types = all_filters
 
     entity_descriptions: dict[str, str] = {}
     target_entities: set[str] = set()

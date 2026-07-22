@@ -11,6 +11,12 @@ bundles:
   - context_bundles.yaml
   - src/spire/config.py
   - docs/spire_pipeline_playbook.md
+  - docs/SPIRE_SESSION_HANDOFF.md
+  - docs/spire_architecture.md
+  - docs/spire_design_decisions.md
+  - docs/spire_expansion_plan.md
+  - docs/spire_fusion_endpoints_reference.md
+  - docs/spire_pipeline_playbook.md
 
   scripts:
   - scripts/draw_graph.py
@@ -40,6 +46,10 @@ bundles:
   - src/spire/fusion/client.py
   - src/spire/graph/pipeline.py
   - src/spire/kg/loader.py
+  - src/spire/agent/lg_utility.py
+  - src/spire/agent/prompts.py
+  - src/spire/agent/runner.py
+  - src/spire/agent/tracing.py
 
   mcp_server_tools:
   - src/spire/mcp_server/server.py
@@ -53,7 +63,7 @@ bundles:
   - src/spire/mcp_server/tools/supplier_sites.py
   - src/spire/mcp_server/tools/supplier_classifications.py
   - src/spire/mcp_server/tools/tool_result.py
-  - src/spire/mcp_server/tools/compare_orders_to_invoices.py  
+  - src/spire/mcp_server/tools/compare_orders_to_invoices.py
   - src/spire/mcp_server/tools/aggregate_purchase_orders.py
   - src/spire/mcp_server/tools/purchase_order_by_id.py
   - src/spire/mcp_server/tools/purchase_order_distributions.py
@@ -63,9 +73,13 @@ bundles:
   - src/spire/mcp_server/tools/receivables_invoice_by_id.py
   - src/spire/mcp_server/tools/receivables_invoice_lines.py
   - src/spire/mcp_server/tools/receivables_invoice_tax_lines.py
+  - src/spire/mcp_server/tools/receivables_invoice_transaction_dff.py
+  - src/spire/mcp_server/tools/receivables_credit_memos.py
   - src/spire/mcp_server/tools/customer_account_by_name.py
   - src/spire/mcp_server/tools/customer_transactions.py
-  
+  - src/spire/mcp_server/tools/account_credit_memos.py
+  - src/spire/mcp_server/tools/account_receipts.py
+
   parser_planner:
   - src/spire/nl_parser/capability.py
   - src/spire/nl_parser/draft.py
@@ -76,7 +90,7 @@ bundles:
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
   - src/spire/synthesizer/synthesizer.py
-  
+
   tests:
   - tests/spire_sme_validation_checklist.md
   - tests/test_agent_runner.py
