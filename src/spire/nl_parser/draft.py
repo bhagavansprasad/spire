@@ -274,6 +274,23 @@ class DraftIntent(BaseModel):
         ),
     )
 
+    balance_only: bool = Field(
+        default=False,
+        description=(
+            "Set true when the question asks for a customer's ACCOUNT "
+            "BALANCE or activity summary rather than their invoices — e.g. "
+            "'what is the account balance for customer [name]', 'account "
+            "activity summary for [name]'. Use target_entity "
+            "'CustomerAccount' together with a 'by_customer_name' filter "
+            "naming the customer; that filter is REQUIRED and must always "
+            "be present. The balance figures ride on the account record "
+            "itself. This is NOT an unsupported aggregation — do not set "
+            "unanswerable and do not use the aggregate block. Leave false "
+            "for a question asking for the customer's invoices, which is "
+            "the CustomerTransaction include shape instead."
+        ),
+    )
+
     def to_intent(self) -> Intent:
         """Convert to the planner's ``Intent`` dataclass.
 
@@ -332,6 +349,7 @@ class DraftIntent(BaseModel):
             count_only=self.count_only,
             open_only=self.open_only,
             invoice_limit=self.invoice_limit,
+            balance_only=self.balance_only,
         )
 
 

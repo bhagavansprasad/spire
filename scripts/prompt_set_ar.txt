@@ -12,6 +12,13 @@
 # first (top: TransactionNumber 11001, DMART, -150, 2026-07-09). EnteredAmount
 # is normally negative; one positive outlier (1001, +10000, Incomplete) means
 # the raw-sum total is a net figure (currently -17232.52, mixed currencies).
+# AR-P5 anchor: customer "ABC Application Software" -> AccountId
+# 300000047368512, AccountNumber 26360. NOTE this is a DIFFERENT customer from
+# the "ABC Corporation Americas" (26370) used above — the demo pod carries
+# three ABC entities (Application Software 26360 / Corporation Americas 26370 /
+# Corporation Worldwide 25750) and they are NOT interchangeable. The balance
+# figures DRIFT (open receivables read 680,271.11 on 2026-07-19 and 678,923.69
+# on 2026-07-22), so never assert an exact value for prompt 6.
 
 # — AR invoice by id + lines (AR-P2 Shape A, prompts 11, 12, 2) —
 Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
@@ -36,3 +43,20 @@ List recent credit memos
 
 # — total value of credit memos (AR-P4, prompt 14) —
 What is the total value of credit memos?
+
+# — account balance for a customer (AR-P5, prompt 6 — balance_only) —
+# NOTE the "Show me" phrasing is deliberate. The interrogative form
+# ("What is the account balance for customer X?") triggers the parser
+# runaway: identical intent and rules, but out=7983 tokens and a degenerate
+# empty parse (balance_only False, filter dropped), vs out=192 and a clean
+# parse here. See the runaway note in spire_expansion_plan.md.
+Show me the account balance for customer ABC Application Software
+
+# — a customer's credit memos (AR-P5, prompt 7 — AccountCreditMemo) —
+# NOTE the phrasing is load-bearing and was found by trial: FOUR other
+# forms run the parser away (out=7983, degenerate empty parse) — "Show me
+# recent credit memos for customer X", "Show me credit memos for customer
+# X", "List credit memos for customer X", "Show me account credit memos
+# for customer X". This one parses at out=289. Do not reword it without
+# re-testing. See the runaway class in spire_expansion_plan.md.
+Show credit memos for ABC Application Software

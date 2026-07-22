@@ -24,9 +24,12 @@ import pytest
 from pydantic import ValidationError
 
 from spire.synthesizer.synthesizer import (
+    AccountCreditMemoInfo,
     BuyerInfo,
     CreditMemoListResponse,
     CreditMemoRecord,
+    CustomerAccountRecord,
+    CustomerAccountResponse,
     HallucinationError,
     InvoiceRecord,
     InvoiceResponse,
@@ -193,7 +196,9 @@ def test_collect_valid_ids_finds_all_ids_in_sample(sample_outputs) -> None:
 
 def test_collect_valid_ids_handles_empty_outputs() -> None:
     """No buckets → empty sets. Feature 5 adds invoice_ids; Phase 6 adds
-    address_ids; P5b adds the PO child ids and contact_ids."""
+    address_ids; P5b adds the PO child ids and contact_ids; AR-P5 adds
+    account_credit_memo_ids (the account's credit memos, a separate id
+    space from the AR-invoice CustomerTransactionId)."""
     ids = _collect_valid_ids({})
     assert ids == {
         "supplier_ids": set(),
@@ -209,6 +214,7 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "customer_transaction_line_ids": set(),
         "customer_account_ids": set(),
         "customer_account_transaction_ids": set(),
+        "account_credit_memo_ids": set(),
         }
 
 
@@ -751,3 +757,288 @@ def test_credit_memo_ids_harvested_into_customer_transaction_ids():
     valid = _collect_valid_ids(_credit_memo_outputs())
     assert 300000313072555 in valid["customer_transaction_ids"]
     assert 300000308625094 in valid["customer_transaction_ids"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompt 6 — the BALANCE-ONLY CustomerAccount shape.
+# A balance question resolves the customer to their account and reports
+# the two figures that ride on the account record itself; NO transaction
+# fetch runs, so there is no 'customertransaction' bucket and the
+# record's `transactions` list stays empty. CustomerAccount is NOT a new
+# entity (AR-P2b rooted on it), so this was a two-place synthesizer
+# change: the transactions_due field and the prompt. These tests pin the
+# part that AR-P4 proved is easy to get wrong — that a response with an
+# empty child list still passes id-harvest and validation rather than
+# blowing up on the absent bucket.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _balance_only_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'show me the account balance for customer X'.
+
+    ONE bucket only. The plan is a single step (the planner skips Block 3
+    when balance_only is set), so there is deliberately no
+    'customer_transactions' bucket here — that absence is the whole point
+    of the shape. Figures are the live pod values for AccountId
+    300000047368512; note the two do NOT reconcile, which is correct — they
+    are independent fields, not a balance and its breakdown.
+    """
+    return {
+        "customer_accounts": [
+            {
+                "AccountId": 300000047368512,
+                "AccountNumber": "26360",
+                "CustomerName": "ABC Application Software",
+                "CustomerId": 100000000395795,
+                "TotalOpenReceivablesForAccount": 678923.69,
+                "TotalTransactionsDueForAccount": 699039.33,
+            }
+        ]
+    }
+
+
+def _balance_only_response() -> CustomerAccountResponse:
+    """The two-sentence balance answer, with `transactions` left empty."""
+    return CustomerAccountResponse(
+        summary=(
+            "The customer ABC Application Software (account 26360) has open "
+            "receivables totaling 678923.69. The total amount of "
+            "transactions due for this account is 699039.33."
+        ),
+        customer_accounts=[
+            CustomerAccountRecord(
+                account_id=300000047368512,
+                account_number="26360",
+                customer_name="ABC Application Software",
+                open_receivables=678923.69,
+                transactions_due=699039.33,
+            )
+        ],
+    )
+
+
+def test_balance_only_response_leaves_transactions_empty():
+    """The record defaults `transactions` to [] when none were fetched.
+
+    Guards the shape itself: a balance answer must be constructible
+    WITHOUT supplying transactions, since no transaction step ran.
+    """
+    response = _balance_only_response()
+    assert response.customer_accounts[0].transactions == []
+    assert response.customer_accounts[0].transactions_due == 699039.33
+
+
+def test_validate_passes_for_balance_only_shape():
+    """An empty child list must not trip the validator.
+
+    AR-P4's bug surfaced when a fixture crashed _collect_valid_ids, not by
+    inspection — so this asserts the balance-only shape survives the real
+    validator against real executor output.
+    """
+    _validate_no_hallucinated_ids(
+        _balance_only_response(), _balance_only_outputs()
+    )
+
+
+def test_validate_catches_hallucinated_account_id_in_balance_shape():
+    """The account id is still cross-checked when transactions are absent.
+
+    Dropping the child bucket must not weaken validation of the parent.
+    """
+    bad = _balance_only_response()
+    bad.customer_accounts[0].account_id = 999999999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _balance_only_outputs())
+    assert "999999999" in str(exc_info.value)
+
+
+def test_balance_only_outputs_harvest_account_id_and_no_transaction_ids():
+    """Id-harvest over a single-bucket output.
+
+    account_id lands in customer_account_ids; the transaction set stays
+    empty because no transaction bucket exists. The empty set matters —
+    it is what the validator checks the (absent) transactions against.
+    """
+    valid = _collect_valid_ids(_balance_only_outputs())
+    assert 300000047368512 in valid["customer_account_ids"]
+    assert valid["customer_account_transaction_ids"] == set()
+
+
+def test_transactions_due_is_optional_for_pre_ar_p5_records():
+    """Back-compat: the AR-P2b shape omitted transactions_due entirely.
+
+    The field is defaulted, so an older-style record still constructs —
+    this is what keeps the existing customer-invoices path unchanged.
+    """
+    record = CustomerAccountRecord(
+        account_id=300000047368512,
+        account_number="26360",
+        customer_name="ABC Application Software",
+        open_receivables=678923.69,
+    )
+    assert record.transactions_due is None
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompt 7 — the account's CREDIT MEMOS, nested under the account.
+# A customer-scoped memo question resolves the customer to their account
+# and traverses to that account's creditMemos child. This is a FOUR-place
+# synthesizer change, not five: AccountCreditMemo is reached by traversal
+# and nests under CustomerAccountRecord, so the registry and validator
+# dispatch already cover the response type.
+# The id space is the thing to get right — CreditMemoId is NOT the
+# CustomerTransactionId that AR-P4's top-level CreditMemo uses, so it
+# gets its own harvest set and the validator checks against that set
+# specifically. These tests pin exactly that.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _account_memos_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'show credit memos for ABC Application Software'.
+
+    Two buckets: the resolved account, then its memos. Values are live pod
+    rows for AccountId 300000047368512 (newest first, as the tool returns
+    them). Amounts are negative, which is normal for a credit memo.
+    """
+    return {
+        "customer_accounts": [
+            {
+                "AccountId": 300000047368512,
+                "AccountNumber": "26360",
+                "CustomerName": "ABC Application Software",
+                "CustomerId": 100000000395795,
+                "TotalOpenReceivablesForAccount": 678923.69,
+                "TotalTransactionsDueForAccount": 699039.33,
+            }
+        ],
+        "account_credit_memos": [
+            {
+                "CreditMemoId": 1284799,
+                "CreditMemoNumber": "1358582",
+                "CreditMemoDate": "2023-07-15",
+                "TotalOriginalAmount": -215.33,
+                "TotalBalanceAmount": -215.33,
+                "CreditMemoStatus": "Open",
+                "CreditMemoCurrency": "USD",
+            },
+            {
+                "CreditMemoId": 1284797,
+                "CreditMemoNumber": "1358552",
+                "CreditMemoDate": "2023-07-13",
+                "TotalOriginalAmount": -441.53,
+                "TotalBalanceAmount": -441.53,
+                "CreditMemoStatus": "Open",
+                "CreditMemoCurrency": "USD",
+            },
+        ],
+    }
+
+
+def _account_memos_response() -> CustomerAccountResponse:
+    """The account with its two memos nested underneath."""
+    return CustomerAccountResponse(
+        summary=(
+            "ABC Application Software (account 26360) has 2 recent credit "
+            "memos: 1358582 for -215.33 and 1358552 for -441.53, both open."
+        ),
+        customer_accounts=[
+            CustomerAccountRecord(
+                account_id=300000047368512,
+                account_number="26360",
+                customer_name="ABC Application Software",
+                open_receivables=678923.69,
+                transactions_due=699039.33,
+                credit_memos=[
+                    AccountCreditMemoInfo(
+                        credit_memo_id=1284799,
+                        credit_memo_number="1358582",
+                        credit_memo_date="2023-07-15",
+                        amount=-215.33,
+                        balance=-215.33,
+                        status="Open",
+                        currency="USD",
+                    ),
+                    AccountCreditMemoInfo(
+                        credit_memo_id=1284797,
+                        credit_memo_number="1358552",
+                        credit_memo_date="2023-07-13",
+                        amount=-441.53,
+                        balance=-441.53,
+                        status="Open",
+                        currency="USD",
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def test_collect_valid_ids_harvests_credit_memo_ids_separately():
+    """CreditMemoId lands in its OWN set, not the transaction one.
+
+    The whole point of the separate set: AR-P4's CreditMemo keys on
+    CustomerTransactionId, this keys on CreditMemoId, and a memo id must
+    never validate against the wrong entity's ids.
+    """
+    valid = _collect_valid_ids(_account_memos_outputs())
+    assert valid["account_credit_memo_ids"] == {1284799, 1284797}
+    assert 300000047368512 in valid["customer_account_ids"]
+    # The memo ids must NOT leak into the AR-invoice id space.
+    assert valid["customer_transaction_ids"] == set()
+
+
+def test_validate_passes_for_account_with_credit_memos():
+    """The nested-memo shape survives the real validator."""
+    _validate_no_hallucinated_ids(
+        _account_memos_response(), _account_memos_outputs()
+    )
+
+
+def test_validate_catches_hallucinated_account_credit_memo_id():
+    """An invented memo id is caught, and named in the error.
+
+    NOTE the name is deliberately distinct from AR-P4's
+    test_validate_catches_hallucinated_credit_memo_id, which covers the
+    TOP-LEVEL CreditMemo entity. Two module-level functions with the same
+    name silently shadow each other — the second definition wins and the
+    first never runs — so the entity has to be in the name.
+    """
+    bad = _account_memos_response()
+    bad.customer_accounts[0].credit_memos[0].credit_memo_id = 999999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _account_memos_outputs())
+    message = str(exc_info.value)
+    assert "999999" in message
+    assert "account_credit_memo_ids" in message
+
+
+def test_credit_memo_id_is_not_validated_against_transaction_ids():
+    """A real AR-invoice id must NOT satisfy the memo check.
+
+    Guards the id-space confusion directly: 300000248096352 is a genuine
+    CustomerTransactionId from the AR anchors, but it is not a
+    CreditMemoId, so using it as one must still fail.
+    """
+    outputs = _account_memos_outputs()
+    outputs["receivables_invoices"] = [
+        {"CustomerTransactionId": 300000248096352}
+    ]
+    bad = _account_memos_response()
+    bad.customer_accounts[0].credit_memos[0].credit_memo_id = 300000248096352
+    with pytest.raises(HallucinationError):
+        _validate_no_hallucinated_ids(bad, outputs)
+
+
+def test_credit_memos_default_empty_for_non_memo_queries():
+    """An account fetched without the memo bucket has no memos.
+
+    Keeps AR-P2b/P2c and prompt 6 unchanged: the field is defaulted, so
+    every existing CustomerAccount shape still constructs.
+    """
+    record = CustomerAccountRecord(
+        account_id=300000047368512,
+        account_number="26360",
+        customer_name="ABC Application Software",
+        open_receivables=678923.69,
+    )
+    assert record.credit_memos == []

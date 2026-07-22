@@ -51,6 +51,14 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-19 | crmRestApi /accounts | Exists (1,476 rows) but is the **CRM/Sales customer**, NOT the AR master. Keys on `PartyId`/`PartyNumber` — a DIFFERENT id space from AR's `CustomerId`/`AccountNumber`. Carries sales data (opportunities, territories, `AccountScore`, DUNS), not receivables. Ruled out as AR's customer source. The collection action `getFinancialCustomerInfo` is the documented sales→financial bridge for a future cross-pillar prompt. |
 | 2026-07-21 | /receivablesCustomerAccountActivities/{id}/child/transactionPaymentSchedules | **`TotalBalanceAmount` is sortable but NOT queryable — the open-invoice window strategy (AR-P2c).** `q=TotalBalanceAmount>0` is rejected (*"The attribute(s) [TotalBalanceAmount] are not queriable."*), BUT `orderBy=TotalBalanceAmount:desc` **works server-side**. Since an account can carry thousands of rows (this anchor has `totalResults: 7404`), the open filter is applied via SORT, not paging: `orderBy=TotalBalanceAmount:desc`, over-fetch a bounded window, then keep `TransactionClass=='Invoice'` AND `TotalBalanceAmount>0` client-side, slice top N. Open rows carry `InstallmentStatus: "Open"` (paid rows: `"Closed"`, balance 0). Anchor `AccountId=300000047368527` (ABC Corporation Americas): top open invoices 216378, 206008, 198286, 56412, 39969. NOTE: `orderBy` sorts across transaction classes, so the client-side Invoice-class keep still matters on mixed accounts. |
 | 2026-07-21 | /receivablesInvoices/{txnId}/child/receivablesInvoiceLines/{lineId}/child/receivablesInvoiceLineTaxLines | **AR tax lines (prompt 3) — a grandchild reached with TWO ids (invoice + line), NOT three.** Unlike PO distributions (three sibling ids from one schedule row), the tax child needs only the parent line id, which the line row carries — so it's a plain nested grandchild fetched by chaining single-parent iterations (invoice→lines→taxLines), reusing the existing executor path, NOT the HAS_DISTRIBUTION `iter_fields` branch. The nested path resolves for an untaxed line but returns `count:0` (original anchor invoice 61765 is untaxed). Fields: `TaxLineNumber`, `TaxJurisdictionCode`, `TaxRate` (e.g. 2.25), `TaxRateCode` ("STD"), `TaxRegimeCode` ("US SALES AND USE TAX"), `TaxStatusCode` ("STANDARD"), `Tax` (the tax type, e.g. "COUNTY"), `TaxAmount`, `TaxableAmount`, `TaxInclusiveIndicator` ("No"/"Yes"), `TaxPointDate`, plus audit fields. NOTE: the tax-line row's own `CustomerTransactionLineId` is the TAX line PK (e.g. 112), distinct from the parent invoice-line id (74). Taxed anchor: invoice `1002` (TransactionNumber 5), line `74` → 2 tax lines (STD/COUNTY 2.25%, and a second); lines 84/93/107 each carry 2 as well. |
+| 2026-07-22 | /receivablesCustomerAccountActivities/{id}/child/creditMemos | **A DISTINCT child, NOT a filtered view of `/receivablesCreditMemos` (settles the AR-P5 prompt-7 open question).** Different id space: PK is `CreditMemoId` (small int, e.g. 12222 / 1284799) — NOT the top-level resource's `CustomerTransactionId`. Different projection too: `CreditMemoNumber`, `CreditMemoDate`, `TotalOriginalAmount`, `TotalBalanceAmount`, `AvailableAmount`, `InstallmentId`, `TransactionClass` (\"On Account Credit Memo\"), `CreditMemoStatus`, `CreditMemoCurrency`, `BillToSiteNumber` — this is the installment/payment-schedule view, a sibling of `transactionPaymentSchedules`, not the transaction view. So prompt 7 needs its OWN entity, tool and synthesizer id set; it cannot reuse AR-P4. `orderBy=CreditMemoDate:desc` and `fields=` both work server-side. Anchor `AccountId=300000047368512`: `totalResults: 280`, newest 2023-07-15 (CreditMemoId 1284799, -215.33, Open). Open memos carry a non-zero `TotalBalanceAmount`; closed ones sit at 0. Row does NOT echo `AccountId` — join key is the URL path. |
+| 2026-07-22 | /receivablesCustomerAccountActivities/{id}/child/standardReceipts | **Prompt 8 — account receipts.** `orderBy=ReceiptDate:desc` and `fields=` work server-side. Thinner and DIFFERENTLY named than the top-level `/standardReceipts`: has `ProcessStatus` where the top-level has `Status`, and omits `CustomerName`, `CustomerAccountNumber` and all bank fields. **`StandardReceiptId` mixes id widths in one collection** — backfilled rows are small ints (130, 131), recent ones are large (300000313660599). Never assume id width. `CustomerSite` is present but NULLABLE (null on the newest row). Anchor `AccountId=300000047368512`: `totalResults: 1559`, newest 2026-06-30. Row does NOT echo `AccountId`. |
+| 2026-07-22 | /receivablesCustomerAccountActivities/{id}/child/standardReceiptApplications | **Prompt 9 — receipt applications, a PRE-JOINED bridge row (no join needed).** Carries the receipt side (`StandardReceiptId`, `ReceiptNumber`, `ReceiptMethod`) AND the transaction side (`ReferenceTransactionId`, `ReferenceTransactionNumber`, `ReferenceTransactionStatus`, `ReferenceInstallmentId`) on ONE record, plus `ApplicationAmount`, `ApplicationDate`, `ApplicationStatus`, `EnteredCurrency`, `CustomerSite`. PK is `ApplicationId` — a FOURTH distinct AR id space. `ReferenceTransactionId` is a SMALL int (8869) matching the `transactionPaymentSchedules` space, NOT `/receivablesInvoices`' `CustomerTransactionId`. `orderBy=ApplicationDate:desc` and `fields=` work. **TRAP: the newest rows are unapplied cash, not applications** — `ApplicationStatus: \"Unapplied\"` with ALL THREE `ReferenceTransaction*` fields null, so a naive recent-N top slice returns rows whose entire transaction side is empty. Filter `ApplicationStatus == 'Applied'` client-side. **`IsLatestApplication` does NOT mean what its name suggests** — \"N\" on the newest rows, \"Y\" on 2012 rows; do not filter on it. Anchor: `totalResults: 15636` (largest AR-P5 child). Has its own `standardReceiptApplicationDFF` child. |
+| 2026-07-22 | /standardReceipts | **A `?fields=` projection 500s here.** First observed by naming `ProcessStatus` (a child-only field, absent from the top-level resource); initially read as a dead endpoint, costing four misdiagnosed calls. **SUPERSEDED by the row below — the failure is not limited to invalid names; all-valid projections 500 too.** Separately confirmed on the same day: `q=` and `totalResults=true` are BOTH fine on this collection — `q=CustomerAccountNumber=26360` returns `totalResults: 1386` server-side, a bare `totalResults=true` returns 37,337. Also: the collection has **no default ordering** — two identical unordered calls returned different first rows (117, then 11350), so unordered fetches are not reproducible. |
+| 2026-07-22 | (AR account children) | **The account-child receipt count (1559) EXCEEDS the account-number-filtered top-level count (1386).** Same anchor account (`AccountId=300000047368512` / `CustomerAccountNumber=26360`), same nominal concept, 173-row gap. Unexplained — the child collection appears more broadly scoped than the `CustomerAccountNumber` filter. **OPEN QUESTION:** do not treat the two as interchangeable sources for a receipt count, and settle this before any prompt reports a receipt total. |
+| 2026-07-22 | /standardReceipts | **`?fields=` is UNUSABLE on this endpoint — it 500s even when every named field is valid.** Confirmed twice: a projection of `StandardReceiptId,ReceiptDate,Amount,CustomerName,CustomerAccountNumber,CustomerSite` — every one of which appears in a live unprojected response from this same resource — returned HTTP 500 when combined with `q=`. Dropping `fields=` and changing nothing else returned 200. This is STRONGER than quirk 7 (which is about invalid names): here even valid names fail. Do not project on `/standardReceipts`; fetch the full row and discard fields client-side. Cost six misdiagnosed calls across this session, twice read as a dead endpoint. |
+| 2026-07-22 | /standardReceipts | **`CustomerSite` IS queryable here** (unlike on the `standardReceipts` child, where it 400s): `q=CustomerSite='Santa Clara'` returns HTTP 200, `totalResults: 1735`. `orderBy=CustomerAccountNumber` also works. **BUT the site spans multiple customer accounts** — ascending sort returns account 26360 (ABC Application Software), descending returns 26370 (ABC Corporation Americas), both at site "Santa Clara". So a site-only filter is NOT customer-scoped: 1,735 site-wide vs 1,386 for account 26360 alone. A prompt asking for "receipts at Santa Clara" for a named customer MUST constrain both. |
+| 2026-07-22 | /standardReceipts | **Composite `q=` fails SILENTLY here — HTTP 200 with `totalResults: 0`.** `q=CustomerSite='Santa Clara' AND CustomerAccountNumber=26360` returns zero rows, although each clause alone returns thousands (1,735 and 1,386 respectively) and their true intersection is non-empty. Confirms quirk 1 applies to this endpoint. **This is the dangerous failure mode**: a tool built on composite `q=` would report "no receipts at that site for this customer" — a plausible-looking, wholly wrong answer, with no error to catch. Prompt 13's design follows from this: filter `q=CustomerAccountNumber` server-side (the more selective clause), then match `CustomerSite` client-side, handling nulls. |
 ---
 
 ## Environment setup (run once in your shell)
@@ -100,7 +108,7 @@ This is the **SupplierNumber-vs-SupplierId asymmetry** that crashed Track A:
 
 These hit you on more than one endpoint, so call them out once:
 
-1. **Composite q= filters fail**. Multi-clause q= strings (q=Field1=X AND Field2=Y) return HTTP 500 or silently empty results on every endpoint tested so far (/suppliers, /invoices, /purchaseOrders). Assume this quirk applies to all Fusion REST endpoints on this pod until proven otherwise. Workaround used in Spire: send the most selective single clause via q=, over-fetch (limit=200), filter the rest client-side.
+1. **Composite q= filters fail**. Multi-clause q= strings (q=Field1=X AND Field2=Y) return HTTP 500 or silently empty results on every endpoint tested so far (/suppliers, /invoices, /purchaseOrders, and — confirmed 2026-07-22 — /standardReceipts, where two individually-valid clauses returning 1,735 and 1,386 rows combined to HTTP 200 / `totalResults: 0`). Assume this quirk applies to all Fusion REST endpoints on this pod until proven otherwise. Workaround used in Spire: send the most selective single clause via q=, over-fetch (limit=200), filter the rest client-side. NOTE the silent-zero variant is the dangerous one — a tool built on composite q= returns a plausible "no matching rows" with no error to catch.
 
 2. **Country isn't on supplier directly.** Suppliers have addresses as a child resource. Country lookup needs `?expand=addresses`, then filter client-side for any address with matching `Country` code.
 
@@ -112,7 +120,7 @@ These hit you on more than one endpoint, so call them out once:
 
 6. **Fields parameter to project.** Use `?fields=Field1,Field2,Field3` to limit what comes back. Spire tools project to small field sets to avoid bloating LLM context.
 
-7. **`?fields=` is strict on invalid names.** If even one field in a `?fields=...` list doesn't exist on the endpoint, the entire response comes back empty with no error and no warning. Verify each field name against a live response before relying on a projection.
+7. **`?fields=` is strict on invalid names — and the failure mode VARIES by endpoint.** If even one field in a `?fields=...` list doesn't exist on the endpoint, the request fails. On most endpoints the response comes back empty with no error and no warning. **On `/standardReceipts` it returns HTTP 500 — and worse, that endpoint 500s on projections where every named field IS valid** (confirmed 2026-07-22, twice). Treat `fields=` as unusable on `/standardReceipts`: fetch full rows and discard fields client-side. Elsewhere, verify each field name against a live unprojected response before relying on a projection. When any 500 appears, drop `fields=` first to isolate it — an unexplained 500 is a projection suspect, not just a dead endpoint (this cost six misdiagnosed calls during AR-P5 discovery, twice read as a dead resource). A corollary of the child-vs-parent field drift below: field names do NOT carry across from a child resource to its top-level namesake.
 
 8. **Two DFF children on AR transactions.** AR invoices, invoice lines, and credit memos each expose TWO descriptive-flexfield children: `...DFF` and `...TransactionDFF` (e.g. `receivablesInvoiceDFF` and `receivablesInvoiceTransactionDFF`). A prompt asking for "DFF values" is ambiguous — decide which, or fetch both. Curled 2026-07-21 on invoice 1002: `receivablesInvoiceDFF` returns `__FLEX_Context = null`; `receivablesInvoiceTransactionDFF` returns `__FLEX_Context = "DOO"` — the context is SET but carries NO populated segment columns (only `CustomerTrxId`, `__FLEX_Context`, `__FLEX_Context_DisplayValue=null`). So `TransactionDFF` is the populated child on this pod, but "populated" means a context label only, not segment values. Prompt 4 uses `receivablesInvoiceTransactionDFF`.
 
@@ -140,6 +148,8 @@ pod). Capture each one here as it's discovered.
 | `BillToCustomerNumber` | `/receivablesInvoices` | `The attribute(s) [BillToCustomerNumber] are not queriable.` | Confirmed live (AR-P2b). Cannot filter AR invoices by customer NUMBER either. A customer's invoices are reached via the account path (`/receivablesCustomerAccountActivities` → `transactionPaymentSchedules`), NOT by filtering this collection. |
 | `SupplierNumber` | `/purchaseOrders` | HTTP 400 when named in `?fields=` | POs expose only `SupplierId` (numeric), not `SupplierNumber`. See the join-key matrix and the 2026-07-19 discovery-log row. |
 | `TotalBalanceAmount` | `transactionPaymentSchedules` child (of `/receivablesCustomerAccountActivities`) | `The attribute(s) [TotalBalanceAmount] are not queriable.` | Confirmed live (AR-P2c). **But it IS sortable** — `orderBy=TotalBalanceAmount:desc` works server-side, unlike the other rows here. This is the open-invoice window strategy: sort desc, over-fetch, keep `>0` client-side, slice top N (avoids paging the account's thousands of rows). See the 2026-07-21 discovery-log row. |
+| `CustomerSite` | `standardReceipts` child (of `/receivablesCustomerAccountActivities`) | `The attribute(s) [CustomerSite] are not queriable.` | Confirmed live (AR-P5 discovery, 2026-07-22). Also **NULLABLE and sparsely populated** — null on the newest receipt of the anchor account — so a client-side site filter must handle nulls, not just non-matches. Appears on three of the four AR account children (`creditMemos` carries it as `BillToSiteNumber` instead). **NOT yet tested for sortability** — if `orderBy=CustomerSite` works, the `TotalBalanceAmount` window strategy above would apply to prompt 13 too. |
+| `CustomerSite` (top-level) | `/standardReceipts` | — **IS QUERYABLE** — | Resolved 2026-07-22. `q=CustomerSite='Santa Clara'` returns HTTP 200 / `totalResults: 1735`. (The earlier 500 was the `fields=` projection, not this clause.) **But it is not customer-scoped** — the same site name spans accounts 26360 and 26370 — and it CANNOT be AND-combined with `CustomerAccountNumber` (composite `q=` returns a silent 0 here). So a customer-scoped site query filters by account server-side and matches site client-side. Contrast the `standardReceipts` CHILD, where the same attribute is NOT queryable. |
 
 > Contrast — a field that IS queryable: `CustomerName` on
 > `/receivablesCustomerAccountActivities` accepts `q=CustomerName='...'`
@@ -981,6 +991,52 @@ CAUTION: demo data is backfilled — `ReceiptDate` (e.g. 2012) can predate
 `CreationDate` (e.g. 2014); `LastUpdatedBy` seen as "0". The lag calc (18)
 still works, but the timestamps look odd.
 
+**Confirmed working (2026-07-22, AR-P5 discovery).** This collection is HEALTHY
+— an earlier read of it as "dead" was a misdiagnosis of quirk-7 projection 500s.
+- `q=CustomerAccountNumber=26360` filters server-side → `totalResults: 1386`.
+- `totalResults=true` alone works → 37,337 rows (up from the 37,335 recorded
+  2026-07-19; the pod's data moves).
+- **`fields=` is UNUSABLE here — it 500s even with all-valid field names.**
+  Not just quirk 7's invalid-name case: a projection naming only fields
+  confirmed present in a live response still 500s when combined with `q=`.
+  Drop `fields=` first when diagnosing any 500 on this endpoint, and fetch
+  full rows in tools, discarding fields client-side.
+- **Composite `q=` fails SILENTLY** — HTTP 200, `totalResults: 0`, no error.
+  See the discovery-log row; this drives prompt 13's design.
+- **No default ordering** — two identical unordered calls returned different
+  first rows (StandardReceiptId 117, then 11350). Always pass `orderBy` if the
+  result must be reproducible.
+
+**Prompt 13 (site-filtered receipts) — the CONFIRMED path.** `CustomerSite` IS
+populated, IS queryable on this top-level collection, and DOES discriminate
+(unlike within a single account): sampled values include "Santa Clara",
+"San Francisco" (ABC Corporation Worldwide, acct 25750) and null (Department of
+Education, acct 60800). The Santa Clara anchor the plan asked us to confirm
+EXISTS — 1,735 receipts carry it.
+
+**But site alone is NOT customer-scoped, and the two clauses cannot be
+combined.** "Santa Clara" spans at least accounts 26360 (ABC Application
+Software) and 26370 (ABC Corporation Americas) — verified by sorting
+`orderBy=CustomerAccountNumber` ascending then descending against the same
+site filter. And composite `q=` returns a SILENT ZERO here (see the
+discovery-log row), so `CustomerSite AND CustomerAccountNumber` cannot be
+asked of the server.
+
+Design: `q=CustomerAccountNumber=<n>` server-side (1,386 rows for our anchor —
+the more selective clause), then match `CustomerSite` client-side, handling
+nulls. Do NOT project with `fields=` — it 500s on this endpoint even with
+valid names.
+
+**The ABC-entity trap is real and confirmed, with numbers.** THREE different
+customers match a naive "ABC" search, two of them at the SAME site:
+- "ABC Application Software" — acct 26360, Santa Clara (AR-P5 anchor)
+- "ABC Corporation Americas" — acct 26370, Santa Clara (AR-P2b anchor)
+- "ABC Corporation Worldwide" — acct 25750, San Francisco
+
+So neither the customer name fragment NOR the site is sufficient alone.
+Resolve to an `AccountNumber`/`AccountId` before trusting any customer-scoped
+receipt result.
+
 ### `/receivablesCustomerAccountActivities` — AR customer / balance view
 
 **This is Spire's customer entity for AR.** Only 435 rows (≈ the
@@ -999,11 +1055,37 @@ the URL path):
   `transactionPaymentSchedules`, `transactionsPaidByOtherCustomers`
 
 Test anchor: `AccountId=300000047368512` → AccountNumber 26360, CustomerName
-"ABC Application Software", TotalOpenReceivablesForAccount 680,271.11.
+"ABC Application Software", TaxpayerIdentificationNumber "88-5694712".
+
+**The balance fields DRIFT — never hard-code them in a test.**
+`TotalOpenReceivablesForAccount` read 680,271.11 on 2026-07-19 and 678,923.69
+on 2026-07-22 for the same account; `TotalTransactionsDueForAccount` was
+699,039.33 on 2026-07-22. Assert on presence and type, not value.
+
+**Prompt 6 (activity/balance summary) needs NO child fetch** — the balance
+fields sit on the account record itself, so prompt 6 is the simplest of the
+AR-P5 five: resolve the account by `CustomerName` (as in AR-P2b) and read the
+record.
 
 NOTE: standard receipts are reachable BOTH here (per-account child) and as the
-top-level `/standardReceipts` collection. Prompt 8 walks the child; prompt 13
-(Santa Clara site) filters the top-level collection.
+top-level `/standardReceipts` collection. **The two do NOT agree** — the child
+reports 1,559 rows for this account while the top-level filtered by
+`q=CustomerAccountNumber=26360` reports 1,386. See the 2026-07-22 discovery-log
+row; treat this as an open question.
+
+**Per-account child row counts on this anchor (2026-07-22):** `creditMemos`
+280, `standardReceipts` 1,559, `standardReceiptApplications` 15,636. All three
+need `orderBy` + a hard `limit`; none can be fetched whole. Every one of these
+children is fetched by `AccountId` in the URL PATH and **none echoes `AccountId`
+in the row body** — the established AR child pattern.
+
+**AR-P5 introduces FOUR distinct id spaces.** Do not conflate them, and give
+each its own fully-qualified named set in the synthesizer:
+`CreditMemoId` (account creditMemos child, small int) ·
+`StandardReceiptId` (receipts, MIXED width — small for backfilled rows, large
+for recent) · `ApplicationId` (receipt applications) ·
+`ReferenceTransactionId` (small int, the `transactionPaymentSchedules` space —
+NOT `/receivablesInvoices`' `CustomerTransactionId`).
 
 ### `/receivablesCreditMemos` — AR credit memos
 
@@ -1077,7 +1159,12 @@ transactions.
 | `transactionPaymentSchedules` (a customer's invoices) | `AccountId` (URL path) | numeric — traverse from the resolved account |
 | `/receivablesCreditMemos` (by customer) | `BillToCustomerNumber` | string (NOTE: not yet verified queryable — assume client-side like the invoice endpoint until confirmed) |
 | `/standardReceipts` (by customer) | `CustomerAccountNumber` | string (e.g. "25750") |
-| account children (memos/receipts/applications) | `AccountId` (URL path) | numeric |
+| account children (memos/receipts/applications) | `AccountId` (URL path) | numeric — confirmed AR-P5; NONE of these children echo `AccountId` in the row body |
+| `creditMemos` child (an account's memos) | `AccountId` (URL path) | numeric — row PK is `CreditMemoId` (small int), a DIFFERENT id space from `/receivablesCreditMemos`' `CustomerTransactionId` |
+| `standardReceipts` child (an account's receipts) | `AccountId` (URL path) | numeric — row PK is `StandardReceiptId`, MIXED width (small for backfilled, large for recent) |
+| `standardReceiptApplications` child (receipt ↔ transaction) | `AccountId` (URL path) | numeric — PRE-JOINED: carries `StandardReceiptId` AND `ReferenceTransactionId` on one row, so no second fetch is needed |
+| `standardReceiptApplications` → a transaction | `ReferenceTransactionId` | numeric, SMALL — the `transactionPaymentSchedules` id space, NOT `/receivablesInvoices`' `CustomerTransactionId` |
+| `/standardReceipts` (by site, prompt 13) | `CustomerAccountNumber` server-side, then `CustomerSite` client-side | string — `CustomerSite` is non-queryable on the child and unconfirmed on the top-level; also nullable |
 | customer identity across AR objects | `CustomerId` / `AccountNumber` | numeric / string |
 
 AR invoice and credit-memo detail fetch by `CustomerTransactionId` (numeric).

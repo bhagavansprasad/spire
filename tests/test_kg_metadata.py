@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_eighteen_rows():
+async def test_kg_entity_has_nineteen_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -76,6 +76,11 @@ async def test_kg_entity_has_eighteen_rows():
     invoice TransactionDFF child, reached via HAS_TRANSACTION_DFF).
     AR-P4 added CreditMemo (the top-level receivablesCreditMemos resource,
     listed by its own fetcher — a rooted entity, no edge).
+    AR-P5 prompt 7 added AccountCreditMemo (the per-account creditMemos
+    child, reached via HAS_ACCOUNT_CREDIT_MEMO). It is a DIFFERENT entity
+    from CreditMemo: different id space (CreditMemoId vs
+    CustomerTransactionId) and a different field projection — the
+    installment view rather than the transaction view.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -84,7 +89,8 @@ async def test_kg_entity_has_eighteen_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "Address", "Buyer", "Classification", "Contact", "CreditMemo",
+        "AccountCreditMemo", "Address", "Buyer", "Classification",
+        "Contact", "CreditMemo",
         "CustomerAccount", "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
@@ -157,18 +163,28 @@ async def test_kg_table_row_counts_match_v1_1():
     entity synonyms, 85->87). No edge (top-level, no traversal) and no
     entity filter (list-only; the default fetcher orders recent-first and
     limits server-side).
+    AR-P5 prompt 7 (account credit memos) added the per-account
+    creditMemos child as a TRAVERSED entity: +1 entity (AccountCreditMemo,
+    18->19), +10 fields (148->158), +1 edge (HAS_ACCOUNT_CREDIT_MEMO,
+    14->15), +1 edge tool (13->14), +2 vocab rows (account-scoped memo
+    synonyms, 87->89). No entity tool (reached by traversal, not rooted)
+    and no entity filter (the edge carries the account id; there is
+    nothing to filter on). NOTE the vocab rows deliberately cover only
+    the ACCOUNT-SCOPED terms — bare 'credit memo'/'credit memos' stay
+    bound to AR-P4's CreditMemo, so a prompt naming no customer still
+    routes to the top-level list.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 18,
-        "kg_entity_field": 148,
-        "kg_edge": 14,
+        "kg_entity": 19,
+        "kg_entity_field": 158,
+        "kg_edge": 15,
         "kg_pattern": 3,
-        "kg_vocabulary": 87,
+        "kg_vocabulary": 89,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 8,
         "kg_entity_filter": 21,
-        "kg_edge_tool": 13,
+        "kg_edge_tool": 14,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():

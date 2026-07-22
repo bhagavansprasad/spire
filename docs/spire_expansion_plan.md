@@ -118,6 +118,77 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   mode (symptom + cause: cross-referencing an unrelated concept in a
   structured-output instruction can block convergence) in
   `spire_design_decisions.md`. Needs `config.py`.
+
+  **UPDATE 2026-07-22 (AR-P5) — the mechanism is NOT truncation.** This
+  item previously assumed the cap truncates an otherwise-converging parse.
+  Tested directly and that is wrong. With `LLM_MAX_OUTPUT_TOKENS` patched
+  to 32000 at runtime, the same prompt produced `out=31983` and STILL
+  returned an empty Intent. So the model is not being cut off mid-answer —
+  it generates without converging, and the ceiling only bounds how long
+  the failure takes. Raising the cap costs tokens and buys nothing.
+  Consequences for the planned work: (a) is still worth having as damage
+  control but is NOT a fix; (b) becomes the priority, since detection is
+  the only thing that turns this from a silent wrong answer into an
+  honest failure.
+
+  **What a runaway looks like, precisely** (three prompts, 2026-07-22):
+  `target_entity` comes back CORRECT and every field after it is empty —
+  filters `[]`, include `[]`, all flags at default. That ordering is the
+  tell: the model emits the schema's early fields, then fails to
+  terminate. A runaway is therefore NOT distinguishable from a legitimate
+  bare-entity parse by looking at the Intent alone; only the token count
+  separates them.
+
+  **Rewriting the parser prompt does not fix it; rewording the question
+  sometimes does.** AR-P5 prompt 6 took four separate prompt rewrites
+  (removing an "empty include" instruction, making a filter REQUIRED,
+  deleting an aggregation carve-out, then restoring it) with NO effect on
+  the runaway — `out=7983` every time, to the token, across all versions.
+  What changes the outcome is the QUESTION, not the rules: "What is the
+  account balance for customer X?" runs away at 7983; "Show me the account
+  balance for customer X" parses cleanly at `out=192`. Same intent, same
+  rules, same input size. AR-P5 prompt 7 needed five phrasings before one
+  parsed (`out=289`). So phrasing-hunting is the working workaround, but
+  it is a workaround: it usually succeeds within a few tries and leaves
+  behind prompts that break silently when reworded.
+
+- **Parser observability + degenerate-parse defence** (new 2026-07-22, not
+  started). The runaway above cost roughly fifteen probe runs to
+  characterise and still is not root-caused, because there is essentially
+  nothing to observe. Three concrete gaps, in priority order:
+
+  1. **Silent failure — no detection.** A runaway returns a structurally
+     VALID `ParseResult`. Nothing notices that `out=7983` against a cap of
+     8000 is pathological, or that an Intent carries a `target_entity`
+     with no filters and no include for a prompt that plainly named a
+     customer. The failure surfaces downstream as a planner error
+     ("No entity tool for ('CustomerAccount', 'none')") that names the
+     WRONG problem — it reads as a missing KG row, not a failed parse.
+     In production the worse case is a runaway that happens to produce a
+     routable Intent: Spire would then answer confidently from a wrong
+     parse, with no error anywhere. Probable fix: a guard after parse
+     that flags (i) output tokens within ~95% of the cap, and/or (ii)
+     `finish_reason != 'stop'`, and raises a typed ParserRunawayError
+     rather than returning the draft. Cheap, mechanical, and converts a
+     silent wrong answer into an honest failure.
+  2. **No raw-output capture.** Nothing records what the model actually
+     emitted during a runaway. Fifteen probes produced only token counts;
+     the 32,000 generated tokens were never seen, which is exactly why the
+     cause is still unknown. Probable fix: when the guard in (1) fires,
+     write the raw response text to the existing trace file. This is the
+     single highest-value diagnostic change — one occurrence with captured
+     output would likely explain more than every A/B test run so far.
+  3. **No in-flight visibility.** `with_structured_output` buffers, so a
+     30s+ generation prints nothing until it completes. There is no
+     progress signal, no partial output, no way to tell a slow call from a
+     hung one. Probable fix: a token-count callback or streaming wrapper so
+     a long generation is visible while it happens; harder than (1) and
+     (2) and worth deferring until those land.
+
+  Sequencing note: (1) and (2) together are small and would have made
+  today's debugging a single run instead of an afternoon. Do them before
+  attempting a root-cause fix on the runaway itself — without (2) there is
+  nothing to root-cause FROM.
 - **Open-invoices top-N limit** ✓ merged (`ar-invoice-limit-top-n`) — finishes
   AR-P2c prompt 1. Prompt 1 is "top 5 open invoices"; AR-P2c shipped open_only
   only (returned ALL open invoices). Resolved exactly as scoped: parser
@@ -142,14 +213,14 @@ root cause. None are AR-P2c regressions (all 3 AR prompts parsed and ran
 correctly); these are pre-existing issues the run exposed, plus the
 parser-runaway class the token cap made visible.
 
-**Issue 1 — Parser runaway hits the 8000 cap → truncated → wrong parse.**
+**Issue 1 — Parser runaway: the model generates without converging.**
 The `open_only` runaway (fixed by moving the instruction to its own
 section) is NOT unique — several prompts drive Gemini structured-output to
 the ceiling. The cap (config.py) makes them fail in ~13-40s instead of
-hanging ~260s, but the truncated draft is degenerate: filters/includes
+hanging ~260s, and the resulting draft is degenerate: filters/includes
 dropped, or a wrong refusal. All show `out=7983/7984` (or 6072) at parse.
 This is the systemic core of the "parser runaway defence" backlog item,
-now with evidence it spans PO and Supplier prompts. Affected:
+now with evidence it spans PO, Supplier and AR prompts. Affected:
 - "Show PO 2144 and its lines" — out=7984 → wrongly refused
 - "Show PO 2144 and its schedules" — out=7984 → wrongly refused
 - "Show PO 2144 and its distributions" — out=7984 → wrongly refused
@@ -158,12 +229,48 @@ now with evidence it spans PO and Supplier prompts. Affected:
 - "active US suppliers" — out=7983 → parsed as bare Supplier, BOTH filters dropped
 - "Show supplier EIP Inc and its contacts" — out=7984 → bare Supplier, Contact include dropped
 - "Invoices for supplier 1252 over 100000" — out=7984 → wrongly refused
+- (AR-P5, 2026-07-22) "What is the account balance for customer ABC
+  Application Software?" — out=7983 → CustomerAccount, filter AND
+  balance_only both dropped. Worked around by rewording to "Show me the
+  account balance for customer ABC Application Software" (out=192).
+- (AR-P5, 2026-07-22) "Show me recent credit memos for customer ABC
+  Application Software" — out=7983 → CustomerAccount, filter and include
+  dropped. Took FOUR phrasings to find a working one; three failed
+  identically at out=7983 ("Show me recent credit memos for customer X",
+  "Show me credit memos for customer X", "List credit memos for customer
+  X", "Show me the credit memos on customer X's account", "Show me
+  account credit memos for customer X"). The one that works: "Show
+  credit memos for ABC Application Software" (out=289, full correct
+  parse). UNCONFIRMED OBSERVATION: the working phrasing is the only one
+  tried that omits the word "customer" before the name — but prompt 6's
+  working phrasing DOES contain "customer", so this is not a rule, just
+  something to try first when hunting a phrasing.
+
+**CORRECTION 2026-07-22: this is NOT truncation.** This section previously
+implied the 8000 cap truncates an otherwise-good parse. Tested: patching
+`LLM_MAX_OUTPUT_TOKENS` to 32000 at runtime gave `out=31983` and the SAME
+empty Intent. The model does not converge at any ceiling; the cap only
+bounds how long the failure takes. See the corrected backlog item above.
+
+**Prompt rewrites do not move it; rewording the QUESTION sometimes does.**
+AR-P5 prompt 6 absorbed four separate parser-prompt rewrites with zero
+effect (`out=7983` to the token, every version). Editing the RULES did
+nothing in either case. What works is rewording the question itself, but
+it can take several attempts: prompt 6 needed two phrasings, prompt 7
+needed five (four runaways, then a clean `out=289` parse). Treat
+phrasing-hunting as the current workaround — cheap, usually succeeds
+within a few tries, but it produces prompts that are fragile by
+construction: the same question asked slightly differently silently
+returns a degenerate parse. That fragility is the argument for the
+observability work below, which phrasing-hunting does not address.
+
 NOTE: these same prompts have KNOWN-GOOD phrasings elsewhere in the suite
 that parse fine (e.g. "Show PO 2144 and its lines" is the canonical P2
 prompt). The instability is phrasing-sensitive and intermittent-looking
-but reproducible per-phrasing. Likely needs the same treatment as
-open_only (structural prompt cleanup) and/or the fail-fast detection +
-retry from the backlog item.
+but reproducible per-phrasing. Needs the detection + raw-output capture
+from the observability backlog item BEFORE another root-cause attempt —
+every investigation so far has been blind, with only token counts to go
+on.
 
 **Issue 2 — Filter silently dropped (parses to bare entity).** Distinct
 from Issue 1 — LOW out counts, so NOT the runaway; the parser simply fails

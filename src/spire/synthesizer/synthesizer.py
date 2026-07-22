@@ -513,6 +513,46 @@ class CustomerAccountTransactionInfo(BaseModel):
     )
 
 
+class AccountCreditMemoInfo(BaseModel):
+    """One credit memo on a customer account (AR-P5 prompt 7).
+
+    NOT the same shape as CreditMemoRecord (AR-P4). That one describes the
+    TOP-LEVEL receivablesCreditMemos resource and is keyed by
+    CustomerTransactionId; this describes a single account's creditMemos
+    child, keyed by CreditMemoId — a different id space entirely, with the
+    installment projection (balance/available) rather than the transaction
+    projection. credit_memo_id is validated against the executor's output.
+    """
+
+    credit_memo_id: int = Field(
+        description="The memo's CreditMemoId (numeric PK). NOT a "
+        "CustomerTransactionId — a different id space."
+    )
+    credit_memo_number: str = Field(
+        default="", description="The credit memo number."
+    )
+    credit_memo_date: str = Field(
+        default="", description="Credit memo date."
+    )
+    amount: float | None = Field(
+        default=None,
+        description="Original memo amount (TotalOriginalAmount). Normally "
+        "negative. Copy it exactly as given; do NOT sum, negate or "
+        "otherwise compute with it.",
+    )
+    balance: float | None = Field(
+        default=None,
+        description="Remaining balance (TotalBalanceAmount). Non-zero on "
+        "Open memos, 0 on Closed ones.",
+    )
+    status: str = Field(
+        default="", description="Memo status (Open or Closed)."
+    )
+    currency: str = Field(
+        default="", description="Memo currency (e.g. USD)."
+    )
+
+
 class CustomerAccountRecord(BaseModel):
     """One customer account in a customer-account-rooted response.
 
@@ -532,11 +572,25 @@ class CustomerAccountRecord(BaseModel):
         description="Open receivables for the account "
         "(TotalOpenReceivablesForAccount).",
     )
+    transactions_due: float | None = Field(
+        default=None,
+        description="Total transactions due for the account "
+        "(TotalTransactionsDueForAccount). Copy it exactly as given; do "
+        "NOT compute or reconcile it against open_receivables — the two "
+        "are separate figures on the account record and need not agree.",
+    )
     transactions: list[CustomerAccountTransactionInfo] = Field(
         default_factory=list,
         description="This account's transactions, when the query asked for "
         "them (a 'customertransaction' bucket in the data). Empty "
         "otherwise. Each transaction_id must appear in the executor's "
+        "output.",
+    )
+    credit_memos: list[AccountCreditMemoInfo] = Field(
+        default_factory=list,
+        description="This account's credit memos, when the query asked for "
+        "them (an 'accountcreditmemo' bucket in the data). Empty "
+        "otherwise. Each credit_memo_id must appear in the executor's "
         "output.",
     )
 
@@ -932,6 +986,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     # AR-P2b: customer account + its transactions (payment schedules).
     customer_account_ids: set = set()
     customer_account_transaction_ids: set = set()
+    account_credit_memo_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -969,6 +1024,13 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 customer_account_ids.add(caid)
             if (catid := item.get("TransactionId")) is not None:
                 customer_account_transaction_ids.add(catid)
+            # AR-P5 prompt 7: the account's credit memos. CreditMemoId is
+            # its OWN id space — small ints, unrelated to the AR-invoice
+            # CustomerTransactionId that AR-P4's top-level CreditMemo uses.
+            # Kept in a separate set so a memo id can never validate
+            # against the wrong entity's ids.
+            if (acmid := item.get("CreditMemoId")) is not None:
+                account_credit_memo_ids.add(acmid)
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -1003,6 +1065,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "customer_transaction_line_ids": customer_transaction_line_ids,
         "customer_account_ids": customer_account_ids,
         "customer_account_transaction_ids": customer_account_transaction_ids,
+        "account_credit_memo_ids": account_credit_memo_ids,
     }
 
 
@@ -1146,9 +1209,12 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "This is a CUSTOMER-ACCOUNT-rooted query (accounts receivable). The "
         "customer was resolved to their account(s); for each account in the "
         "final set, emit one entry under 'customer_accounts' with its "
-        "account_id, account_number, customer_name, and open_receivables "
-        "(TotalOpenReceivablesForAccount). account_id must appear in the "
-        "data.\n"
+        "account_id, account_number, customer_name, open_receivables "
+        "(TotalOpenReceivablesForAccount) and transactions_due "
+        "(TotalTransactionsDueForAccount). account_id must appear in the "
+        "data. COPY both figures exactly as given — do NOT sum, subtract, "
+        "reconcile or otherwise compute with them; they are separate fields "
+        "on the account record and need not agree with each other.\n"
         "CHILD DETAIL — the question asked for the customer's invoices if "
         "the bucket is there, so the summary MUST describe them, not just "
         "the account:\n"
@@ -1159,7 +1225,32 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "value — but COPY amounts exactly as given; do NOT compute sums, "
         "tax, or any arithmetic. Every transaction_id must appear in the "
         "data. If the bucket is absent, leave 'transactions' empty and do "
-        "not mention it."
+        "not mention it.\n"
+        "- 'accountcreditmemo' bucket: emit each memo under that account's "
+        "'credit_memos' (credit_memo_id, credit_memo_number, "
+        "credit_memo_date, amount, balance, status, currency), newest "
+        "first as given. The summary must say how many memos and name the "
+        "customer — but COPY every amount exactly; do NOT total them, do "
+        "NOT negate them, do NOT compute a net. Memo amounts are normally "
+        "negative, which is correct and needs no explanation or "
+        "sign-flipping. Every credit_memo_id must appear in the data; "
+        "credit_memo_id is the memo's OWN id (CreditMemoId), not a "
+        "transaction id. If the bucket is absent, leave 'credit_memos' "
+        "empty and do not mention it.\n"
+        "BALANCE-ONLY SHAPE — when there is NO child bucket at all "
+        "(neither 'customertransaction' NOR 'accountcreditmemo'), the "
+        "question asked for the account's BALANCE or ACTIVITY SUMMARY, not "
+        "for a list of anything. ONLY in that case, write the summary as "
+        "EXACTLY TWO SENTENCES and then STOP: (1) name the customer and "
+        "account number and give the open receivables; (2) give the "
+        "transactions due. Say nothing else. In particular, transactions, "
+        "invoices and credit memos are not part of this answer at all — do "
+        "not describe them, count them, comment on their absence, or note "
+        "whether any were requested or found. None were fetched, so there "
+        "is nothing true to say about them either way; a sentence such as "
+        "'no transaction details were requested or found' is WRONG and "
+        "must not appear. If ANY child bucket IS present, this shape does "
+        "not apply — describe that child instead, per the rules above."
     ),
     "CreditMemo": (
         "This is a CREDIT-MEMO-rooted query. The data has a 'credit_memos' "
@@ -1422,6 +1513,7 @@ def _validate_customer_account(
 ) -> None:
     bad_acct: list[int] = []
     bad_txn: list[int] = []
+    bad_memo: list[int] = []
     for acct in response.customer_accounts:
         if acct.account_id not in valid["customer_account_ids"]:
             bad_acct.append(acct.account_id)
@@ -1433,11 +1525,21 @@ def _validate_customer_account(
                 not in valid["customer_account_transaction_ids"]
             ):
                 bad_txn.append(txn.transaction_id)
+        # AR-P5 prompt 7: same reasoning for the account's credit memos.
+        # Checked against account_credit_memo_ids specifically — NOT the
+        # customer_transaction_ids that AR-P4's top-level CreditMemo uses,
+        # since CreditMemoId is a separate id space and cross-checking
+        # against the wrong set would let invented ids pass.
+        for memo in acct.credit_memos:
+            if memo.credit_memo_id not in valid["account_credit_memo_ids"]:
+                bad_memo.append(memo.credit_memo_id)
     parts = []
     if bad_acct:
         parts.append(f"customer_account_ids={bad_acct}")
     if bad_txn:
         parts.append(f"customer_account_transaction_ids={bad_txn}")
+    if bad_memo:
+        parts.append(f"account_credit_memo_ids={bad_memo}")
     _raise_if_bad(parts)
 
 

@@ -89,6 +89,10 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # expansion (iter_fields is NULL), so Block 3 reads the primary arg
     # from this table. The tool takes customer_transaction_id.
     "get_receivables_invoice_transaction_dff": "customer_transaction_id",
+    # AR-P5 prompt 7: the account's credit memos. Plain single-parent
+    # expansion iterating on the account's AccountId, same shape as
+    # get_customer_transactions above.
+    "get_account_credit_memos": "account_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -163,6 +167,12 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     "CustomerAccount": "customer_accounts",
     "CustomerTransaction": "customer_transactions",
     "CreditMemo": "credit_memos",
+    # AR-P5 prompt 7. Deliberately NOT "credit_memos" — that name belongs
+    # to AR-P4's top-level CreditMemo, and the two are different entities
+    # over different id spaces. Sharing a bucket name would let one
+    # overwrite the other and would make the synthesizer's id-harvest
+    # ambiguous about which set a row belongs to.
+    "AccountCreditMemo": "account_credit_memos",
 }
 
 # Filter-type -> short suffix used when the step's output is the
@@ -431,6 +441,24 @@ class Intent:
     # so limit keeps the top N). Consumed entirely in Block 3. Defaults
     # None (no cap) so plain open-invoice listings are unchanged.
     invoice_limit: int | None = None
+
+    # AR-P5 (prompt 6): when True, the question asks for a customer's
+    # ACCOUNT BALANCE / activity summary rather than their transactions —
+    # "what is the account balance for customer X". Same root as the
+    # customer-invoices shape (CustomerAccount + by_customer_name), but
+    # the parser emits an EMPTY include, so Block 3 never runs and no
+    # transaction fetch happens: the balance fields
+    # (TotalOpenReceivablesForAccount, TotalTransactionsDueForAccount)
+    # already ride on the account record Block 1 fetches.
+    #
+    # WHY A FLAG AND NOT JUST THE EMPTY INCLUDE: the empty include is what
+    # makes the plan correct, but it is not a reliable SIGNAL — a future
+    # prompt could legitimately root on CustomerAccount with no include and
+    # mean something else. The synthesizer and run_plan.py dispatch on this
+    # flag rather than inferring shape from an absence. Consumed
+    # downstream of the planner only; generate_plan needs no branch for it
+    # (an empty include already produces the right plan).
+    balance_only: bool = False
 
 
 @dataclass
@@ -1002,7 +1030,15 @@ def generate_plan(
         step_id += 1
 
     # ── Block 3: includes ─────────────────────────────────────────
-    for include_pos, include_entity in enumerate(intent.include):
+    # AR-P5 (prompt 6): a balance-only question wants the account record's
+    # own figures, so no child traversal runs — the balance fields ride on
+    # the row Block 1 already fetched. The FLAG decides this, not an empty
+    # include list: asking the parser to emit an empty include proved
+    # unreliable (the LLM dropped the by_customer_name filter along with
+    # the include, producing an unroutable filterless intent). Skipping
+    # here makes the shape robust to whatever the parser puts in include.
+    includes = [] if intent.balance_only else intent.include
+    for include_pos, include_entity in enumerate(includes):
         # Address on a supplier query is already handled by expand in
         # Block 1 (include_addresses on the supplier fetch); don't also
         # fetch it as an edge step. There is no HAS_ADDRESS edge tool
@@ -1058,7 +1094,7 @@ def generate_plan(
         # absent from the line row). Flag this step so the executor stamps
         # its parent field(s) onto each child row. Only when a next include
         # exists, so leaf includes (the common case) are unaffected.
-        has_following_include = include_pos < len(intent.include) - 1
+        has_following_include = include_pos < len(includes) - 1
         plan.append(
             Step(
                 step_id=step_id,
