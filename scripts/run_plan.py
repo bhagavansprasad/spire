@@ -471,6 +471,11 @@ def _format_synthesized(response) -> str:
             # does not read as an invoice query.
             if acct.credit_memos:
                 line += f" — {len(acct.credit_memos)} credit memo(s)"
+            # AR-P5 prompt 8: receipts are a third possible child. Counted
+            # separately so a receipts query never reads as invoices or
+            # memos — the three are different documents.
+            if acct.receipts:
+                line += f" — {len(acct.receipts)} receipt(s)"
             lines.append(line)
             for txn in acct.transactions:
                 lines.append(
@@ -486,6 +491,17 @@ def _format_synthesized(response) -> str:
                     f"{memo.credit_memo_date}; "
                     f"{memo.amount} {memo.currency} "
                     f"(balance {memo.balance}); {memo.status}"
+                )
+            for rcpt in acct.receipts:
+                # StandardReceiptId is printed in full: the collection
+                # mixes id widths, and a short id beside a long one looks
+                # like a display bug unless both are shown verbatim.
+                lines.append(
+                    f"      {rcpt.receipt_number} "
+                    f"(StandardReceiptId={rcpt.receipt_id}) — "
+                    f"{rcpt.receipt_date}; "
+                    f"{rcpt.amount} {rcpt.currency} "
+                    f"via {rcpt.receipt_method}; {rcpt.state}"
                 )
         return "\n".join(lines)
 

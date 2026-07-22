@@ -93,6 +93,9 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # expansion iterating on the account's AccountId, same shape as
     # get_customer_transactions above.
     "get_account_credit_memos": "account_id",
+    # AR-P5 prompt 8: the account's receipts. Same shape again — a plain
+    # single-parent expansion on AccountId.
+    "get_account_receipts": "account_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -173,6 +176,9 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     # overwrite the other and would make the synthesizer's id-harvest
     # ambiguous about which set a row belongs to.
     "AccountCreditMemo": "account_credit_memos",
+    # AR-P5 prompt 8. Its own bucket, like the memos above — the
+    # synthesizer nests receipts and memos separately under the account.
+    "AccountReceipt": "account_receipts",
 }
 
 # Filter-type -> short suffix used when the step's output is the

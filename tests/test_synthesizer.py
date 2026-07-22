@@ -25,6 +25,7 @@ from pydantic import ValidationError
 
 from spire.synthesizer.synthesizer import (
     AccountCreditMemoInfo,
+    AccountReceiptInfo,
     BuyerInfo,
     CreditMemoListResponse,
     CreditMemoRecord,
@@ -197,8 +198,9 @@ def test_collect_valid_ids_finds_all_ids_in_sample(sample_outputs) -> None:
 def test_collect_valid_ids_handles_empty_outputs() -> None:
     """No buckets → empty sets. Feature 5 adds invoice_ids; Phase 6 adds
     address_ids; P5b adds the PO child ids and contact_ids; AR-P5 adds
-    account_credit_memo_ids (the account's credit memos, a separate id
-    space from the AR-invoice CustomerTransactionId)."""
+    account_credit_memo_ids (the account's credit memos) and
+    account_receipt_ids (its receipts) — each a separate id space from
+    the AR-invoice CustomerTransactionId and from each other."""
     ids = _collect_valid_ids({})
     assert ids == {
         "supplier_ids": set(),
@@ -215,6 +217,7 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "customer_account_ids": set(),
         "customer_account_transaction_ids": set(),
         "account_credit_memo_ids": set(),
+        "account_receipt_ids": set(),
         }
 
 
@@ -1042,3 +1045,195 @@ def test_credit_memos_default_empty_for_non_memo_queries():
         open_receivables=678923.69,
     )
     assert record.credit_memos == []
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompt 8 — the account's RECEIPTS, nested under the account.
+# Same traversal shape as prompt 7's credit memos, so again a four-place
+# change rather than five. The distinguishing risk here is the id space:
+# StandardReceiptId is a FIFTH AR id space and, uniquely, it MIXES
+# WIDTHS within one collection — backfilled rows carry small ints, recent
+# rows large ones. Nothing may infer anything from an id's magnitude, and
+# a receipt id must never validate against another entity's ids.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _account_receipts_outputs() -> dict[str, list[dict]]:
+    """Executor output for 'show receipts for ABC Application Software'.
+
+    Live pod rows for AccountId 300000047368512, newest first. The two
+    newest are Unapplied cash (received, not yet matched to an invoice),
+    which is normal; the third is an older Applied row carrying a SMALL
+    id — the width mix is deliberate and load-bearing for these tests.
+    """
+    return {
+        "customer_accounts": [
+            {
+                "AccountId": 300000047368512,
+                "AccountNumber": "26360",
+                "CustomerName": "ABC Application Software",
+                "CustomerId": 100000000395795,
+                "TotalOpenReceivablesForAccount": 678923.69,
+                "TotalTransactionsDueForAccount": 699039.33,
+            }
+        ],
+        "account_receipts": [
+            {
+                "StandardReceiptId": 300000313660599,
+                "ReceiptNumber": "PA-2026-000145",
+                "ReceiptDate": "2026-06-30",
+                "Amount": 1347.42,
+                "Currency": "USD",
+                "ReceiptMethod": "Lockbox",
+                "State": "Unapplied",
+                "ProcessStatus": "Open",
+                "UnappliedAmount": 1347.42,
+                "CustomerSite": None,
+            },
+            {
+                "StandardReceiptId": 534534,
+                "ReceiptNumber": "498949",
+                "ReceiptDate": "2024-07-03",
+                "Amount": 1515.98,
+                "Currency": "USD",
+                "ReceiptMethod": "Check (Directly/No Remit)",
+                "State": "Applied",
+                "ProcessStatus": "Closed",
+                "UnappliedAmount": 0,
+                "CustomerSite": None,
+            },
+        ],
+    }
+
+
+def _account_receipts_response() -> CustomerAccountResponse:
+    """The account with its two receipts nested underneath."""
+    return CustomerAccountResponse(
+        summary=(
+            "ABC Application Software (account 26360) has 2 recent "
+            "receipts: PA-2026-000145 for 1347.42 USD, still unapplied, "
+            "and 498949 for 1515.98 USD, applied."
+        ),
+        customer_accounts=[
+            CustomerAccountRecord(
+                account_id=300000047368512,
+                account_number="26360",
+                customer_name="ABC Application Software",
+                open_receivables=678923.69,
+                transactions_due=699039.33,
+                receipts=[
+                    AccountReceiptInfo(
+                        receipt_id=300000313660599,
+                        receipt_number="PA-2026-000145",
+                        receipt_date="2026-06-30",
+                        amount=1347.42,
+                        currency="USD",
+                        receipt_method="Lockbox",
+                        state="Unapplied",
+                        unapplied_amount=1347.42,
+                    ),
+                    AccountReceiptInfo(
+                        receipt_id=534534,
+                        receipt_number="498949",
+                        receipt_date="2024-07-03",
+                        amount=1515.98,
+                        currency="USD",
+                        receipt_method="Check (Directly/No Remit)",
+                        state="Applied",
+                        unapplied_amount=0,
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def test_collect_valid_ids_harvests_receipt_ids_separately():
+    """StandardReceiptId lands in its OWN set, at both widths.
+
+    The width mix is the point: a small id (534534) and a large one
+    (300000313660599) must BOTH be harvested, so nothing downstream can
+    treat magnitude as a signal.
+    """
+    valid = _collect_valid_ids(_account_receipts_outputs())
+    assert valid["account_receipt_ids"] == {300000313660599, 534534}
+    assert 300000047368512 in valid["customer_account_ids"]
+    # Receipts must not leak into the memo or AR-invoice id spaces.
+    assert valid["account_credit_memo_ids"] == set()
+    assert valid["customer_transaction_ids"] == set()
+
+
+def test_validate_passes_for_account_with_receipts():
+    """The nested-receipt shape survives the real validator."""
+    _validate_no_hallucinated_ids(
+        _account_receipts_response(), _account_receipts_outputs()
+    )
+
+
+def test_validate_catches_hallucinated_account_receipt_id():
+    """An invented receipt id is caught, and named in the error."""
+    bad = _account_receipts_response()
+    bad.customer_accounts[0].receipts[0].receipt_id = 999999999
+    with pytest.raises(HallucinationError) as exc_info:
+        _validate_no_hallucinated_ids(bad, _account_receipts_outputs())
+    message = str(exc_info.value)
+    assert "999999999" in message
+    assert "account_receipt_ids" in message
+
+
+def test_receipt_id_is_not_validated_against_credit_memo_ids():
+    """A real CreditMemoId must NOT satisfy the receipt check.
+
+    Both are AR account children reached the same way, so conflating
+    their id sets is the plausible mistake. 1284799 is a genuine
+    CreditMemoId from the anchor account — valid, but not a receipt.
+    """
+    outputs = _account_receipts_outputs()
+    outputs["account_credit_memos"] = [{"CreditMemoId": 1284799}]
+    bad = _account_receipts_response()
+    bad.customer_accounts[0].receipts[0].receipt_id = 1284799
+    with pytest.raises(HallucinationError):
+        _validate_no_hallucinated_ids(bad, outputs)
+
+
+def test_account_can_carry_receipts_and_memos_together():
+    """Both children can nest under one account without interfering.
+
+    Nothing routes both today, but the record allows it and the
+    validator must check each against its own set rather than merging
+    them.
+    """
+    outputs = _account_receipts_outputs()
+    outputs["account_credit_memos"] = [
+        {
+            "CreditMemoId": 1284799,
+            "CreditMemoNumber": "1358582",
+            "CreditMemoDate": "2023-07-15",
+            "TotalOriginalAmount": -215.33,
+        }
+    ]
+    response = _account_receipts_response()
+    response.customer_accounts[0].credit_memos = [
+        AccountCreditMemoInfo(
+            credit_memo_id=1284799,
+            credit_memo_number="1358582",
+            credit_memo_date="2023-07-15",
+            amount=-215.33,
+        )
+    ]
+    _validate_no_hallucinated_ids(response, outputs)
+
+
+def test_receipts_default_empty_for_non_receipt_queries():
+    """An account fetched without the receipts bucket has no receipts.
+
+    Keeps prompts 6 and 7 unchanged: the field is defaulted, so every
+    existing CustomerAccount shape still constructs.
+    """
+    record = CustomerAccountRecord(
+        account_id=300000047368512,
+        account_number="26360",
+        customer_name="ABC Application Software",
+        open_receivables=678923.69,
+    )
+    assert record.receipts == []
