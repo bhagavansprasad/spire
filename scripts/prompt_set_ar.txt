@@ -60,3 +60,14 @@ Show me the account balance for customer ABC Application Software
 # for customer X". This one parses at out=289. Do not reword it without
 # re-testing. See the runaway class in spire_expansion_plan.md.
 Show credit memos for ABC Application Software
+
+# — a customer's receipts (AR-P5, prompt 8 — AccountReceipt) —
+# NOTE the phrasing is load-bearing, same pattern as prompt 7: "Show X for
+# [name]" with NO "customer" before the name. Three other forms run the
+# parser away (out=7983/7984) — "Show me receipts for customer X", "Show
+# recent receipts for X", "What payments have we received from X". This
+# one parses at out=252. Do not reword without re-testing.
+# NOTE ALSO the receipts tool caps at 10, not 25: 25 varied receipt rows
+# overran the SYNTHESIZER's output budget on this very account and
+# returned an empty receipts array while still narrating them in prose.
+Show receipts for ABC Application Software

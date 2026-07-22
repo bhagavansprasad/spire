@@ -304,3 +304,185 @@ def test_unanswerable_takes_precedence_over_empty_entity(menu):
     assert result.is_refusal
     assert result.refusal.detail == "needs spend aggregation"
 
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR shapes: draft -> Intent conversion for the account-rooted prompts
+#
+# These stay in this file's stated scope — draft -> Intent conversion,
+# LLM held constant. They do NOT assert that Gemini follows the parser
+# rules for these prompts; that is only knowable from a live call and
+# lives in the prompt set / E2E instead.
+#
+# What IS worth pinning here: the flags and shapes added by AR-P5 travel
+# through to_intent() intact. balance_only in particular is a new
+# DraftIntent field whose passthrough had no coverage — a dropped line in
+# to_intent() would silently disable prompt 6 and no unit test would fail.
+# ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def ar_menu() -> KGMenu:
+    """A menu covering the AR account shapes.
+
+    The default `menu` fixture only knows Supplier, so an AR draft would
+    be refused at the entity gate before conversion is ever exercised.
+    """
+    return KGMenu(
+        target_entities={"Supplier", "CustomerAccount"},
+        filter_types={"country", "by_customer_name"},
+        entity_descriptions={
+            "Supplier": "A vendor or service provider.",
+            "CustomerAccount": "A customer's accounts-receivable account.",
+            "CustomerTransaction": "A transaction on a customer account.",
+            "AccountCreditMemo": "A credit memo on a customer account.",
+            "AccountReceipt": "Cash received from a customer.",
+        },
+        country_terms={"US": "US"},
+    )
+
+
+def test_balance_only_survives_conversion(ar_menu):
+    """AR-P5 prompt 6: the balance_only flag reaches the Intent.
+
+    The planner reads this flag to skip Block 3 entirely, so losing it in
+    conversion would turn a balance question into a full transaction
+    traversal — a wrong answer, not an error.
+    """
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[
+            DraftFilter(
+                type="by_customer_name",
+                value_json='"ABC Application Software"',
+            )
+        ],
+        include=[],
+        balance_only=True,
+    )
+    result = parse(
+        "Show me the account balance for customer ABC Application Software",
+        llm=MockLLM(draft),
+        menu=ar_menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent.balance_only is True
+    assert result.intent.include == []
+    assert result.intent.filters == [
+        {"type": "by_customer_name", "value": "ABC Application Software"}
+    ]
+
+
+def test_balance_only_defaults_false(ar_menu):
+    """A draft that never mentions balance_only converts with it false.
+
+    Guards the default: if it ever flipped, every customer-invoices query
+    would silently lose its transaction traversal.
+    """
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[
+            DraftFilter(
+                type="by_customer_name",
+                value_json='"ABC Corporation Americas"',
+            )
+        ],
+        include=["CustomerTransaction"],
+    )
+    result = parse(
+        "Show me AR invoices for customer ABC Corporation Americas",
+        llm=MockLLM(draft),
+        menu=ar_menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent.balance_only is False
+    assert result.intent.include == ["CustomerTransaction"]
+
+
+def test_account_credit_memo_include_converts(ar_menu):
+    """AR-P5 prompt 7: the memo child rides through as an include."""
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[
+            DraftFilter(
+                type="by_customer_name",
+                value_json='"ABC Application Software"',
+            )
+        ],
+        include=["AccountCreditMemo"],
+    )
+    result = parse(
+        "Show credit memos for ABC Application Software",
+        llm=MockLLM(draft),
+        menu=ar_menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent == Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"}
+        ],
+        include=["AccountCreditMemo"],
+    )
+
+
+def test_account_receipt_include_converts(ar_menu):
+    """AR-P5 prompt 8: the receipts child rides through as an include."""
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[
+            DraftFilter(
+                type="by_customer_name",
+                value_json='"ABC Application Software"',
+            )
+        ],
+        include=["AccountReceipt"],
+    )
+    result = parse(
+        "Show receipts for ABC Application Software",
+        llm=MockLLM(draft),
+        menu=ar_menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent == Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"}
+        ],
+        include=["AccountReceipt"],
+    )
+
+
+def test_open_only_and_invoice_limit_survive_conversion(ar_menu):
+    """AR-P2c and the top-N limit: both parsed args reach the Intent.
+
+    Neither had coverage in this file. The planner injects them onto the
+    CustomerTransaction step, so a dropped passthrough would silently
+    return ALL invoices instead of the top 5 open ones.
+    """
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[
+            DraftFilter(
+                type="by_customer_name",
+                value_json='"ABC Corporation Americas"',
+            )
+        ],
+        include=["CustomerTransaction"],
+        open_only=True,
+        invoice_limit=5,
+    )
+    result = parse(
+        "Show me the top 5 open invoices for customer ABC Corporation Americas",
+        llm=MockLLM(draft),
+        menu=ar_menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent.open_only is True
+    assert result.intent.invoice_limit == 5
+    assert result.intent.balance_only is False

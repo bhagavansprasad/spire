@@ -83,6 +83,9 @@ from spire.mcp_server.tools.customer_transactions import (
 from spire.mcp_server.tools.account_credit_memos import (
     get_account_credit_memos as _get_account_credit_memos,
 )
+from spire.mcp_server.tools.account_receipts import (
+    get_account_receipts as _get_account_receipts,
+)
 from spire.mcp_server.tools.purchase_order_schedules import (
     get_purchase_order_schedules as _get_purchase_order_schedules,
 )
@@ -701,6 +704,52 @@ async def get_account_credit_memos(
     """
     async with FusionClient(_persona) as client:
         result = await _get_account_credit_memos(
+            client, account_id=account_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_account_receipts(
+    account_id: int,
+    limit: int = 10,
+) -> dict:
+    """List a customer account's standard receipts, newest first.
+
+    Use this as the second half of a customer-scoped receipts query:
+    after get_customer_account_by_name resolves the customer to an
+    AccountId, this returns that account's receipts.
+
+    A RECEIPT is CASH RECEIVED from a customer — a payment. It is not an
+    invoice of any kind: not an AP invoice (search_invoices, money owed
+    to a supplier), not an AR invoice (get_receivables_invoice_by_id,
+    money a customer owes), and not a credit memo
+    (get_account_credit_memos). Pick this tool only for
+    payments/receipts.
+
+    Returns receipts in EVERY state. Rows with State='Unapplied' are cash
+    received but not yet matched to an invoice — real money, not noise,
+    so they are included rather than filtered.
+
+    Args:
+        account_id: The AccountId of the customer account.
+        limit: Max receipts to return. Applied server-side alongside a
+            newest-first sort, so this is a true "N most recent" — the
+            child holds receipts only, so nothing is filtered out
+            afterwards. Defaults to 10 rather than 25: 25 varied receipt
+            rows overran the synthesizer's output budget and produced an
+            answer with an empty receipts list, so keep this small unless
+            an end-to-end run proves a larger value safe.
+
+    Returns:
+        A dict with the account's receipts: StandardReceiptId,
+        ReceiptNumber, ReceiptDate, Amount, Currency, ReceiptMethod,
+        State, ProcessStatus, UnappliedAmount, CustomerSite and
+        BusinessUnit per row. Note StandardReceiptId mixes id widths —
+        backfilled rows carry small ints, recent ones large.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_account_receipts(
             client, account_id=account_id, limit=limit
         )
         return result.to_dict()

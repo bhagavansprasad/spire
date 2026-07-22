@@ -294,6 +294,28 @@ mislabeled as the open-invoice total. The plain "AR invoices for..."
 answer summed correctly by luck but uses the same fragile pattern. Cross-
 reference the "Synthesizer does arithmetic" backlog entry.
 
+**UPDATE 2026-07-22 (AR-P5): an EXPLICIT prohibition does not stop it.**
+Prompts 7 and 8 both carry a per-bucket instruction in
+`_SYSTEM_PROMPT_BY_ENTITY` spelling out "COPY every amount exactly; do
+NOT total them, do NOT negate them, do NOT compute a net". The model
+computed anyway, in three observed forms, each time producing a CORRECT
+number by a forbidden route:
+- prompt 7: "amounts ranging from -156.6 to -495.9" and "issued between
+  2022-07-15 and 2023-07-15" — min/max scans over the rows.
+- prompt 8: "Two receipts, totaling 16347.42 USD, are unapplied" — an
+  actual sum (1347.42 + 15000).
+- prompt 8 (earlier run): "The remaining 23 receipts are applied" — a
+  subtraction (25 − 2).
+The numbers being right is precisely the danger: nothing flags them, and
+the same pattern on a larger or messier set would be wrong with equal
+confidence. This is now evidence that prompt-level prohibition is not a
+sufficient fix — the instruction is present, unambiguous, adjacent to the
+data it governs, and still ignored. A structural fix (compute totals in
+the TOOL and stamp them onto the rows, as AR-P4 does for `total_credit`;
+or validate numeric claims in the summary against the fetched values) is
+the direction, not another prompt rewrite. Note the parallel with the
+parser runaway: in both cases editing the prompt text changed nothing.
+
 **Issue 5 — Truncation wording misleading (minor).** "Invoices for Lee
 Supplies in 2023" returned 11 rows but the truncation line reads "unknown
 total in source; 25 examined for filtering" — the "25 examined" wording is
@@ -346,15 +368,25 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | AR | P3 | Tax lines (prompt 3) | `ar-p3-tax-lines` | merged |
 | AR | P3 | DFF (prompt 4) | `ar-p3-dff` | merged |
 | AR | P4 | Credit memos (prompts 5, 14) | `ar-p4-credit-memos` | merged |
-| AR | P5+ | Account children (6–9,13), aggregates (10,16–18) | — | not started |
+| AR | P5 | Account balance (prompt 6, `balance_only`) | `ar-phase-5-account-children` | merged |
+| AR | P5 | A customer's credit memos (prompt 7, `AccountCreditMemo`) | `ar-phase-5-account-children` | merged |
+| AR | P5 | Account receipts (8), applications (9), site receipts (13) | `ar-phase-5-account-children` | in progress |
+| AR | P6 | Aggregates (10, 16, 17, 18) | — | not started |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
 | AP | P2+ | (defined at P1) | — | not started |
 
-**Next up:** AR P1 — the module is read-heavy and closest to Spire's
-existing supplier/invoice patterns, so it reuses the most and risks the
-least. See Module 1 below.
+**Next up:** AR-P5 remainder — prompts 8, 9 and 13. Curl discovery for all
+three is DONE (see the AR-P5 section and the endpoints reference); go
+straight to the standalone tool. Prompt 8 is nearly identical in shape to
+prompt 7; prompt 9 needs the over-fetch-and-filter-client-side pattern
+(`ApplicationStatus == 'Applied'`); prompt 13 works against the TOP-LEVEL
+`/standardReceipts` with an account-then-site two-step. Expect a phrasing
+hunt on each — prompts 6 and 7 both needed one.
+
+**Current totals:** 11 of 18 AR prompts done. KG at 19 entities / 158
+fields / 15 edges / 14 edge-tools / 89 vocab. Full suite 420 passing.
 
 ### Known test notes (not bugs)
 - **Three supplier `truncated is False` assertions** fail on pods with more
@@ -704,6 +736,37 @@ per-edge.
 - **AR-P5** — CustomerAccount + account children: activity/balance summary
   (prompt 6), account credit memos (7), account receipts (8), receipt
   applications (9), site-filtered receipts (13). All keyed by `AccountId`.
+  Branch `ar-phase-5-account-children`.
+  - **Prompt 6 ✓ merged 2026-07-22** — the cheapest shape in the codebase:
+    no tool, no KG rows, no server wrapper. The balance fields already ride
+    on the account record the AR-P2b resolver fetches, so it is parser +
+    planner + synthesizer + display only. `CustomerAccount` +
+    `by_customer_name` + `balance_only=true`, no child traversal. The FLAG
+    suppresses the include (planner Block 3:
+    `includes = [] if intent.balance_only else intent.include`) rather than
+    relying on the parser to emit an empty list — an earlier build did the
+    latter and the LLM dropped the `by_customer_name` filter along with it.
+    Synthesizer was a TWO-place change.
+  - **Prompt 7 ✓ merged 2026-07-22** — settles the open question: the
+    account's `creditMemos` child is a DISTINCT resource, NOT a filtered
+    view of AR-P4's top-level `receivablesCreditMemos`. PK `CreditMemoId`
+    (small ints) vs `CustomerTransactionId`; installment projection vs
+    transaction projection. Own entity `AccountCreditMemo`, own tool, own
+    edge `HAS_ACCOUNT_CREDIT_MEMO`, own id set `account_credit_memo_ids`.
+    Synthesizer was a FOUR-place change (traversed entity nesting under an
+    existing root, so registry and dispatch already covered it). Forced a
+    correction to prompt 6's BALANCE-ONLY rule, which had keyed on "no
+    `customertransaction` bucket" and would have misfired on a memo query;
+    it now requires no child bucket at all.
+  - **Prompts 8, 9, 13 — remaining.** Curl discovery DONE for all three
+    (see Cross-cutting reference and the endpoints reference); no further
+    discovery needed. Prompt 8 mirrors prompt 7's shape. Prompt 9 needs
+    client-side `ApplicationStatus == 'Applied'` filtering — its newest
+    rows are unapplied cash with a null transaction side. Prompt 13 runs
+    against the TOP-LEVEL `/standardReceipts` with account-server-side then
+    site-client-side, because composite `q=` returns a silent zero there.
+  - KG after prompt 7: 19 entities / 158 fields / 15 edges / 14 edge-tools,
+    8 entity-tools, 89 vocab. Suite 420.
 - **AR-P6** — aggregates (op-registry, exactly like PO's): exposure ranking
   (10, sort on `TotalOpenReceivablesForAccount` over 435 rows), cash-collection
   / DSO trends (16), receipt-method distribution (17, bucket `ReceiptMethod`),

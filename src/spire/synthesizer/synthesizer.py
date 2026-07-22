@@ -553,6 +553,52 @@ class AccountCreditMemoInfo(BaseModel):
     )
 
 
+class AccountReceiptInfo(BaseModel):
+    """One standard receipt on a customer account (AR-P5 prompt 8).
+
+    A receipt is CASH RECEIVED — a payment from the customer. Distinct
+    from an AR invoice (money owed) and a credit memo (a credit issued).
+    receipt_id is validated against the executor's output.
+    """
+
+    receipt_id: int = Field(
+        description="The receipt's StandardReceiptId (numeric PK). NOTE "
+        "this collection MIXES id widths — backfilled rows carry small "
+        "ints, recent ones large. Copy it exactly; never reformat or "
+        "truncate it."
+    )
+    receipt_number: str = Field(
+        default="", description="The receipt number."
+    )
+    receipt_date: str = Field(
+        default="", description="Receipt date."
+    )
+    amount: float | None = Field(
+        default=None,
+        description="Receipt amount, i.e. cash received. Positive. Copy "
+        "it exactly as given; do NOT sum or otherwise compute with it.",
+    )
+    currency: str = Field(
+        default="", description="Receipt currency (e.g. USD)."
+    )
+    receipt_method: str = Field(
+        default="",
+        description="How the payment arrived (e.g. Lockbox, Check).",
+    )
+    state: str = Field(
+        default="",
+        description="Application state — 'Applied' or 'Unapplied'. "
+        "Unapplied means cash received but not yet matched to an "
+        "invoice. That is normal and is real money; do NOT describe an "
+        "Unapplied receipt as missing, pending, failed or in error.",
+    )
+    unapplied_amount: float | None = Field(
+        default=None,
+        description="Portion not yet applied to a transaction. 0 on "
+        "fully applied receipts.",
+    )
+
+
 class CustomerAccountRecord(BaseModel):
     """One customer account in a customer-account-rooted response.
 
@@ -591,6 +637,13 @@ class CustomerAccountRecord(BaseModel):
         description="This account's credit memos, when the query asked for "
         "them (an 'accountcreditmemo' bucket in the data). Empty "
         "otherwise. Each credit_memo_id must appear in the executor's "
+        "output.",
+    )
+    receipts: list[AccountReceiptInfo] = Field(
+        default_factory=list,
+        description="This account's receipts (cash received), when the "
+        "query asked for them (an 'accountreceipt' bucket in the data). "
+        "Empty otherwise. Each receipt_id must appear in the executor's "
         "output.",
     )
 
@@ -987,6 +1040,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     customer_account_ids: set = set()
     customer_account_transaction_ids: set = set()
     account_credit_memo_ids: set = set()
+    account_receipt_ids: set = set()
 
     for bucket in outputs.values():
         for item in bucket:
@@ -1031,6 +1085,13 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
             # against the wrong entity's ids.
             if (acmid := item.get("CreditMemoId")) is not None:
                 account_credit_memo_ids.add(acmid)
+            # AR-P5 prompt 8: the account's receipts. StandardReceiptId is
+            # a fifth AR id space, and one that MIXES WIDTHS within a
+            # single collection (small ints for backfilled rows, large for
+            # recent). Harvested as-is — never normalized, since the raw
+            # value is what the validator compares against.
+            if (arid := item.get("StandardReceiptId")) is not None:
+                account_receipt_ids.add(arid)
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -1066,6 +1127,7 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "customer_account_ids": customer_account_ids,
         "customer_account_transaction_ids": customer_account_transaction_ids,
         "account_credit_memo_ids": account_credit_memo_ids,
+        "account_receipt_ids": account_receipt_ids,
     }
 
 
@@ -1237,14 +1299,30 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "credit_memo_id is the memo's OWN id (CreditMemoId), not a "
         "transaction id. If the bucket is absent, leave 'credit_memos' "
         "empty and do not mention it.\n"
+        "- 'accountreceipt' bucket: emit each receipt under that account's "
+        "'receipts' (receipt_id, receipt_number, receipt_date, amount, "
+        "currency, receipt_method, state, unapplied_amount), newest first "
+        "as given. A RECEIPT IS CASH RECEIVED from the customer — a "
+        "payment, NOT an invoice and NOT a credit memo. The summary must "
+        "say how many receipts and name the customer — but COPY every "
+        "amount exactly; do NOT total them, average them, or compute what "
+        "share is applied. A receipt whose state is 'Unapplied' is cash "
+        "received that has not yet been matched to an invoice: that is "
+        "normal and it is real money, so do NOT call it missing, pending, "
+        "failed, unpaid or an error. Every receipt_id must appear in the "
+        "data, copied exactly — these ids vary in length, and a short one "
+        "is just as valid as a long one. If the bucket is absent, leave "
+        "'receipts' empty and do not mention it.\n"
         "BALANCE-ONLY SHAPE — when there is NO child bucket at all "
-        "(neither 'customertransaction' NOR 'accountcreditmemo'), the "
+        "(none of 'customertransaction', 'accountcreditmemo' or "
+        "'accountreceipt'), the "
         "question asked for the account's BALANCE or ACTIVITY SUMMARY, not "
         "for a list of anything. ONLY in that case, write the summary as "
         "EXACTLY TWO SENTENCES and then STOP: (1) name the customer and "
         "account number and give the open receivables; (2) give the "
         "transactions due. Say nothing else. In particular, transactions, "
-        "invoices and credit memos are not part of this answer at all — do "
+        "invoices, credit memos and receipts are not part of this answer "
+        "at all — do "
         "not describe them, count them, comment on their absence, or note "
         "whether any were requested or found. None were fetched, so there "
         "is nothing true to say about them either way; a sentence such as "
@@ -1514,6 +1592,7 @@ def _validate_customer_account(
     bad_acct: list[int] = []
     bad_txn: list[int] = []
     bad_memo: list[int] = []
+    bad_receipt: list[int] = []
     for acct in response.customer_accounts:
         if acct.account_id not in valid["customer_account_ids"]:
             bad_acct.append(acct.account_id)
@@ -1533,6 +1612,13 @@ def _validate_customer_account(
         for memo in acct.credit_memos:
             if memo.credit_memo_id not in valid["account_credit_memo_ids"]:
                 bad_memo.append(memo.credit_memo_id)
+        # AR-P5 prompt 8: same again for receipts, against their own set.
+        # StandardReceiptId is its own id space and mixes widths, so it
+        # can neither be checked against another entity's ids nor
+        # inferred from magnitude.
+        for rcpt in acct.receipts:
+            if rcpt.receipt_id not in valid["account_receipt_ids"]:
+                bad_receipt.append(rcpt.receipt_id)
     parts = []
     if bad_acct:
         parts.append(f"customer_account_ids={bad_acct}")
@@ -1540,6 +1626,8 @@ def _validate_customer_account(
         parts.append(f"customer_account_transaction_ids={bad_txn}")
     if bad_memo:
         parts.append(f"account_credit_memo_ids={bad_memo}")
+    if bad_receipt:
+        parts.append(f"account_receipt_ids={bad_receipt}")
     _raise_if_bad(parts)
 
 

@@ -1260,3 +1260,85 @@ def test_generate_plan_balance_only_suppresses_open_only_and_limit() -> None:
     assert len(produced) == 1
     assert "open_only" not in produced[0].tool_args
     assert "limit" not in produced[0].tool_args
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AR-P5 prompts 7 and 8: the account-child traversals
+#
+# Both are plain single-parent expansions off CustomerAccount, and both
+# depend on TWO planner dicts that are pure data — easy to delete, and
+# a deletion currently fails only at plan time or in a live run. A
+# missing _TOOL_PRIMARY_ARG entry is exactly what broke AR-P3, so these
+# pin both maps rather than trusting end-to-end runs to catch it.
+#
+# The bucket-name assertions matter most: AccountCreditMemo and
+# AccountReceipt must land in SEPARATE buckets. If they ever shared one,
+# nothing would raise — one would silently overwrite the other.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _account_child_intent(include_entity: str) -> Intent:
+    """A customer-scoped intent traversing to one account child."""
+    return Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"},
+        ],
+        include=[include_entity],
+    )
+
+
+def test_generate_plan_account_credit_memos_traversal() -> None:
+    """Prompt 7: resolve the account, then walk to its credit memos."""
+    produced = generate_plan(_account_child_intent("AccountCreditMemo"))
+    assert len(produced) == 2
+    assert produced[0].tool_name == "get_customer_account_by_name"
+    assert produced[1].tool_name == "get_account_credit_memos"
+    # _TOOL_PRIMARY_ARG must name account_id, and the value comes from
+    # iterating the parent step's AccountId.
+    assert "account_id" in produced[1].tool_args
+    assert produced[1].output_name == "account_credit_memos"
+
+
+def test_generate_plan_account_receipts_traversal() -> None:
+    """Prompt 8: the same shape, to a different child."""
+    produced = generate_plan(_account_child_intent("AccountReceipt"))
+    assert len(produced) == 2
+    assert produced[0].tool_name == "get_customer_account_by_name"
+    assert produced[1].tool_name == "get_account_receipts"
+    assert "account_id" in produced[1].tool_args
+    assert produced[1].output_name == "account_receipts"
+
+
+def test_account_children_use_distinct_output_buckets() -> None:
+    """Memos and receipts must NOT share a bucket name.
+
+    A collision here would be silent: the executor writes both under one
+    key and the second overwrites the first, so the synthesizer would
+    narrate receipts as memos (or lose one entirely) with no error. Also
+    guards against either bucket colliding with AR-P4's top-level
+    'credit_memos'.
+    """
+    memo_plan = generate_plan(_account_child_intent("AccountCreditMemo"))
+    receipt_plan = generate_plan(_account_child_intent("AccountReceipt"))
+    memo_bucket = memo_plan[1].output_name
+    receipt_bucket = receipt_plan[1].output_name
+    assert memo_bucket != receipt_bucket
+    assert memo_bucket == "account_credit_memos"
+    assert receipt_bucket == "account_receipts"
+    # AR-P4's rooted CreditMemo owns the bare name; neither child may take it.
+    assert memo_bucket != "credit_memos"
+    assert receipt_bucket != "credit_memos"
+
+
+def test_generate_plan_account_child_iterates_on_account_id() -> None:
+    """The child step iterates the parent's AccountId, not a literal.
+
+    The account children do NOT echo AccountId in their row bodies — the
+    join key is the URL path — so the planner must feed it from the
+    resolve step's output.
+    """
+    produced = generate_plan(_account_child_intent("AccountReceipt"))
+    child = produced[1]
+    assert child.iterate_over is not None
+    assert "AccountId" in str(child.iterate_over)

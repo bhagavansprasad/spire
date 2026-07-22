@@ -340,7 +340,13 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/creditMemos',
   'A credit memo on a customer account, reached as a child of CustomerAccount. NOT the same as CreditMemo: different id space (CreditMemoId, small ints, vs CustomerTransactionId) and different fields (CreditMemoNumber/CreditMemoDate/TotalOriginalAmount/TotalBalanceAmount/AvailableAmount/InstallmentId vs TransactionNumber/TransactionDate/EnteredAmount). This is the installment/payment-schedule projection - a sibling of CustomerTransaction - whereas CreditMemo is the top-level transaction projection. The collection holds credit memos ONLY, so no class filtering is needed. Recent-first ordering (orderBy=CreditMemoDate:desc) and limit are done server-side; ?fields= projection also works here. Amounts are normally negative but sign is not guaranteed. The row does NOT echo AccountId - the join key is the URL path.'
 );
-PROMPT Seeded kg_entity (19 rows).
+-- AR-P5 Account Receipt (prompt 8)
+INSERT INTO kg_entity VALUES (
+  'AccountReceipt', 'StandardReceiptId', 'ReceiptNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/standardReceipts',
+  'A standard receipt (cash received from a customer) on a customer account, reached as a child of CustomerAccount. Distinct from an AR invoice (money owed) and a credit memo (a credit issued). NOTE the SAME receipts are reachable via the TOP-LEVEL /standardReceipts resource, but with a DIFFERENT projection: this child has ProcessStatus and omits CustomerName/CustomerAccountNumber/bank fields, while the top-level has Status plus customer and remittance columns. Field names do NOT carry across - naming ProcessStatus in a fields= list against the top-level resource 500s it. The two also disagree on count (child 1559 vs top-level-by-account 1386 on the anchor); do not treat them as interchangeable. StandardReceiptId MIXES ID WIDTHS - backfilled rows are small ints (130), recent ones large (300000313660599); never infer anything from magnitude. Recent-first ordering (orderBy=ReceiptDate:desc) and limit are server-side; fields= works here. CustomerSite is present but NULLABLE. The row does NOT echo AccountId - the join key is the URL path.'
+);
+PROMPT Seeded kg_entity (20 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -556,7 +562,21 @@ INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'AvailableAmount',     
 INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoStatus',    'status',       'string',  'Memo status (''Open'' or ''Closed'').');
 INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'CreditMemoCurrency',  'projection',   'string',  'Memo currency (e.g. ''USD'').');
 INSERT INTO kg_entity_field VALUES ('AccountCreditMemo', 'BillToSiteNumber',    'reference',    'string',  'Bill-to site. NOTE this carries a site NAME (e.g. ''Santa Clara''), not a number, despite the field name.');
-PROMPT Seeded kg_entity_field (158 rows).
+
+-- AR-P5 AccountReceipt (prompt 8) — the per-account receipts child.
+-- Field names differ from the top-level /standardReceipts; see the entity note.
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'StandardReceiptId', 'canonical_id', 'numeric', 'System primary key for the receipt. MIXES WIDTHS in one collection - small ints (130) for backfilled demo rows, large (300000313660599) for recent ones. Both valid; never infer anything from the magnitude.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'ReceiptNumber',     'display_id',   'string',  'Human-readable receipt number (e.g. ''498949'', or ''PA-2026-000145'' on recent rows).');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'ReceiptDate',       'date',         'iso_date','Receipt date. Server-side orderBy sorts on this for recent-first.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'Amount',            'amount',       'numeric', 'Receipt amount (cash received). Positive.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'Currency',          'projection',   'string',  'Receipt currency (e.g. ''USD'').');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'ReceiptMethod',     'projection',   'string',  'How the payment arrived (e.g. ''Lockbox'', ''Check (Directly/No Remit)'').');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'State',             'status',       'string',  'Application state (''Applied'' or ''Unapplied''). Unapplied means cash received but not yet matched to an invoice - the newest rows on the demo pod are Unapplied, which is real cash, not an error.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'ProcessStatus',     'status',       'string',  'Processing status (''Open'' or ''Closed''). NOTE this field exists ONLY on the child - the top-level /standardReceipts calls its equivalent ''Status''. Do not name it in a fields= list against the top-level resource.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'UnappliedAmount',   'amount',       'numeric', 'Portion of the receipt not yet applied to a transaction. 0 on fully applied receipts.');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'CustomerSite',      'reference',    'string',  'Bill-to site name (e.g. ''Santa Clara''). NULLABLE and sparsely populated - any grouping or filtering on it must handle nulls. NOT queryable on this child (400s).');
+INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'BusinessUnit',      'projection',   'string',  'Owning business unit (e.g. ''US1 Business Unit'').');
+PROMPT Seeded kg_entity_field (169 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -690,7 +710,16 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_CUSTOMER_TRANSACTION, but simpler: the collection holds credit memos only, so there is no client-side class filter and limit applies server-side as a true top-N.',
   NULL
 );
-PROMPT Seeded kg_edge (15 rows).
+
+-- AR-P5 (prompt 8)
+INSERT INTO kg_edge VALUES (
+  'HAS_ACCOUNT_RECEIPT', 'CustomerAccount', 'AccountReceipt', 'AccountId', 'AccountId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesCustomerAccountActivities/{account.AccountId}/child/standardReceipts. Fetch the account''s receipts, newest first (orderBy=ReceiptDate:desc, server-side). The parent AccountId is carried in the URL path and is NOT echoed in the row body.',
+  'Per-account child call, one HTTP call per account. Same expansion shape as HAS_ACCOUNT_CREDIT_MEMO: the collection holds receipts only, so there is no client-side filter and limit applies server-side as a true top-N.',
+  NULL
+);
+PROMPT Seeded kg_edge (16 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -885,6 +914,13 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memos', 'CreditMemo'
 -- these are the vocabulary hooks for it.
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account credit memo',  'AccountCreditMemo', 'A credit memo on a specific customer account (AR-P5), NOT the top-level CreditMemo list.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account credit memos', 'AccountCreditMemo', 'Plural form.');
+-- AR-P5 (prompt 8). No collision here: no existing vocab binds 'receipt'.
+-- A receipt is CASH RECEIVED (sell-side, AR) - not an AP invoice/bill and
+-- not a PO receipt/receiving transaction, neither of which Spire models.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipt',          'AccountReceipt', 'A payment received from a customer, on a specific account (AR-P5).');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipts',         'AccountReceipt', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipt',  'AccountReceipt', 'Account-scoped form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipts', 'AccountReceipt', 'Plural account-scoped form.');
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -1084,7 +1120,13 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'get_account_credit_memos',
   'Takes account_id. Fetches the account''s creditMemos child, newest first. No client-side filter (the collection is credit memos only) and no over-fetch: orderBy and limit are both server-side, so limit is a true "N most recent".'
 );
-PROMPT Seeded kg_edge_tool (14 rows).
+
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_ACCOUNT_RECEIPT',
+  'get_account_receipts',
+  'Takes account_id. Fetches the account''s standardReceipts child, newest first. No client-side filter (the collection is receipts only) and no over-fetch: orderBy and limit are both server-side, so limit is a true "N most recent". Returns receipts in every state - Unapplied rows are real cash, not noise.'
+);
+PROMPT Seeded kg_edge_tool (15 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter

@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_nineteen_rows():
+async def test_kg_entity_has_twenty_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -81,6 +81,12 @@ async def test_kg_entity_has_nineteen_rows():
     from CreditMemo: different id space (CreditMemoId vs
     CustomerTransactionId) and a different field projection — the
     installment view rather than the transaction view.
+    AR-P5 prompt 8 added AccountReceipt (the per-account standardReceipts
+    child, reached via HAS_ACCOUNT_RECEIPT) — cash received from a
+    customer. The same receipts are also reachable via the TOP-LEVEL
+    /standardReceipts resource with a DIFFERENT projection (Status vs
+    ProcessStatus, plus customer and bank columns), and the two disagree
+    on count; only the child is modeled as an entity.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -89,8 +95,8 @@ async def test_kg_entity_has_nineteen_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "AccountCreditMemo", "Address", "Buyer", "Classification",
-        "Contact", "CreditMemo",
+        "AccountCreditMemo", "AccountReceipt", "Address", "Buyer",
+        "Classification", "Contact", "CreditMemo",
         "CustomerAccount", "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
@@ -173,18 +179,26 @@ async def test_kg_table_row_counts_match_v1_1():
     the ACCOUNT-SCOPED terms — bare 'credit memo'/'credit memos' stay
     bound to AR-P4's CreditMemo, so a prompt naming no customer still
     routes to the top-level list.
+    AR-P5 prompt 8 (account receipts) added the per-account
+    standardReceipts child as a TRAVERSED entity: +1 entity
+    (AccountReceipt, 19->20), +11 fields (158->169), +1 edge
+    (HAS_ACCOUNT_RECEIPT, 15->16), +1 edge tool (14->15), +4 vocab rows
+    (receipt synonyms, 89->93). No entity tool (reached by traversal) and
+    no entity filter. Unlike the credit-memo vocab, the BARE terms
+    'receipt'/'receipts' are bound here — nothing else in the KG claimed
+    them, and Spire models no PO receiving transaction to collide with.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 19,
-        "kg_entity_field": 158,
-        "kg_edge": 15,
+        "kg_entity": 20,
+        "kg_entity_field": 169,
+        "kg_edge": 16,
         "kg_pattern": 3,
-        "kg_vocabulary": 89,
+        "kg_vocabulary": 93,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 8,
         "kg_entity_filter": 21,
-        "kg_edge_tool": 14,
+        "kg_edge_tool": 15,
     }
     async with OracleClient(persona) as oc:
         for table, expected_count in expected.items():
