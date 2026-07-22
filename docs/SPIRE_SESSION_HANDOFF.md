@@ -214,6 +214,8 @@ balance, `balance_only`) · **AR-P5 prompt 7** (`AccountCreditMemo`) ·
 KG now: **20 entities, 169 fields, 16 edges, 15 edge-tools**, 21 filters,
 8 entity-tools, 93 vocab, 3 patterns. Full suite: **435 passing**.
 
+**Parser investigation resolved (2026-07-22).** The degenerate parse issue (Issue 1 in the expansion plan) is now fixed. The root cause was a vague prompt instruction causing a repetition loop; the fix is a prompt clarification + guard + raw-output capture. The problematic prompts from the full prompt-set run now parse cleanly. See `docs/findings_llm_degenerate_parse.md` for full evidence and `spire_expansion_plan.md` for the updated Reliability backlog entry.
+
 ## What remains (6 prompts)
 
 **AR-P5 — 2 left.** Curl discovery for BOTH is DONE; go straight to the
