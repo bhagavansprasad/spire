@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE
+from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE, LLM_MAX_OUTPUT_TOKENS
 from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
@@ -309,6 +309,8 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "If the question needs ANY entity or filter that is not in the lists "
     "below, or is too vague to pin to a specific entity and filters, you "
     "MUST set unanswerable=true and briefly say why in unanswerable_reason. "
+    "When unanswerable is false, set unanswerable_reason to an empty string "
+    "(do not include any explanatory text).\n"
     "In that case do NOT guess a target_entity and do NOT map the request to "
     "the closest listed entity. It is WRONG to turn an unanswerable question "
     "into a broad in-scope query (for example, answering 'contract renewals' "
@@ -513,8 +515,28 @@ def parse(
     # handle both so token logging never breaks the mock path.
     if isinstance(result, dict) and "parsed" in result:
         from spire.config import log_usage
+        from pathlib import Path
+        import time
 
         log_usage(result.get("raw"), stage="parse")
+
+        # --- Guard: degenerate parse (runaway / non-stop) ---
+        raw = result.get("raw")
+        if raw is not None:
+            usage = getattr(raw, "usage_metadata", {})
+            out_tokens = usage.get("output_tokens", 0)
+            finish_reason = getattr(raw, "response_metadata", {}).get("finish_reason")
+            if out_tokens >= int(LLM_MAX_OUTPUT_TOKENS * 0.95) and finish_reason != "stop":
+                raw_text = getattr(raw, "content", "")
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                Path("traces").mkdir(exist_ok=True)
+                with open(f"traces/degenerate_parse_{ts}.txt", "w", encoding="utf-8") as f:
+                    f.write(f"prompt: {prompt}\nfinish_reason: {finish_reason}\nout_tokens: {out_tokens}\n--- raw response ---\n{raw_text}\n")
+                return ParseResult.refuse(
+                    flavor=RefusalFlavor.UNPARSEABLE,
+                    detail=f"Degenerate parse (finish_reason={finish_reason}, out_tokens={out_tokens})",
+                )
+
         response = result["parsed"]
     else:
         response = result
@@ -528,6 +550,14 @@ def parse(
         return ParseResult.refuse(
             flavor=RefusalFlavor.UNPARSEABLE,
             detail="The model did not produce a structured Intent for this prompt.",
+        )
+
+    # Additional degenerate guard: if unanswerable is false but unanswerable_reason is long,
+    # it's likely a repetition loop.
+    if response.unanswerable is False and response.unanswerable_reason and len(response.unanswerable_reason) > 1000:
+        return ParseResult.refuse(
+            flavor=RefusalFlavor.UNPARSEABLE,
+            detail=f"Degenerate parse: unanswerable_reason is too long ({len(response.unanswerable_reason)} chars) while unanswerable is false.",
         )
 
     # The model explicitly declared the prompt out of scope (the structural

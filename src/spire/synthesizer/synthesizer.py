@@ -36,7 +36,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE
+from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE, LLM_MAX_OUTPUT_TOKENS
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1002,6 +1002,11 @@ class UnsupportedEntityError(RuntimeError):
     design — graceful user-facing messaging is feature 8's job."""
 
 
+class DegenerateOutputError(RuntimeError):
+    """The LLM produced degenerate output (runaway tokens, empty child
+    arrays despite source data, etc.). Raw text is saved to traces/."""
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Source-data fingerprint (prompt building + validation)
 # ─────────────────────────────────────────────────────────────────────
@@ -1949,6 +1954,7 @@ def synthesize_response(
         UnsupportedEntityError if target_entity has no schema.
         HallucinationError if any structured ID isn't in the executor data.
         Pydantic ValidationError if the LLM output doesn't fit the schema.
+        DegenerateOutputError if the LLM output is degenerate (runaway tokens, empty arrays).
         Anything raised by the LLM call propagates.
     """
     # Phase 10: a count query needs no LLM — the count is already in the
@@ -2008,8 +2014,27 @@ def synthesize_response(
     # both so token logging never breaks the mock path.
     if isinstance(result, dict) and "parsed" in result:
         from spire.config import log_usage
+        from pathlib import Path
+        import time
 
         log_usage(result.get("raw"), stage="synthesize")
+
+        # --- Guard: degenerate synthesis (runaway / non-stop) ---
+        raw = result.get("raw")
+        if raw is not None:
+            usage = getattr(raw, "usage_metadata", {})
+            out_tokens = usage.get("output_tokens", 0)
+            finish_reason = getattr(raw, "response_metadata", {}).get("finish_reason")
+            if out_tokens >= int(LLM_MAX_OUTPUT_TOKENS * 0.95) and finish_reason != "stop":
+                raw_text = getattr(raw, "content", "")
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                Path("traces").mkdir(exist_ok=True)
+                with open(f"traces/degenerate_synthesize_{ts}.txt", "w", encoding="utf-8") as f:
+                    f.write(f"target_entity: {target_entity}\nfinish_reason: {finish_reason}\nout_tokens: {out_tokens}\n--- raw response ---\n{raw_text}\n")
+                raise DegenerateOutputError(
+                    f"Degenerate synthesis (finish_reason={finish_reason}, out_tokens={out_tokens})"
+                )
+
         response = result["parsed"]
     else:
         response = result
@@ -2017,14 +2042,27 @@ def synthesize_response(
     if isinstance(response, dict):
         response = schema(**response)
 
+    # --- Additional check: empty child arrays despite source data ---
+    # For CustomerAccount responses, check child arrays (transactions, credit_memos, receipts).
+    # This catches cases where the LLM generates a summary but leaves arrays empty.
+    if isinstance(response, CustomerAccountResponse):
+        for account in response.customer_accounts:
+            # Check each child array
+            if hasattr(account, "transactions") and not account.transactions:
+                if outputs.get("customertransaction"):
+                    raise DegenerateOutputError(
+                        f"Account {account.account_id} has non-empty 'customertransaction' bucket but 'transactions' list is empty."
+                    )
+            if hasattr(account, "credit_memos") and not account.credit_memos:
+                if outputs.get("accountcreditmemo"):
+                    raise DegenerateOutputError(
+                        f"Account {account.account_id} has non-empty 'accountcreditmemo' bucket but 'credit_memos' list is empty."
+                    )
+            if hasattr(account, "receipts") and not account.receipts:
+                if outputs.get("accountreceipt"):
+                    raise DegenerateOutputError(
+                        f"Account {account.account_id} has non-empty 'accountreceipt' bucket but 'receipts' list is empty."
+                    )
+
     _validate_no_hallucinated_ids(response, outputs)
     return response
-
-
-
-
-
-
-
-
-
