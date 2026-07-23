@@ -115,6 +115,7 @@ _AGGREGATION_TOOLS: dict[str, str] = {
     "po_value_by_supplier": "aggregate_purchase_orders_by_supplier",
     "po_count_by_status": "aggregate_purchase_orders_by_status",
     "open_po_summary": "summarize_open_purchase_orders",
+    "exposure_ranking": "rank_customer_accounts_by_exposure",
 }
 
 
@@ -129,6 +130,7 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     "po_value_by_supplier": ("status", "top_n"),  # no date: PO dates aren't filterable
     "po_count_by_status": (),                     # groups by status; takes nothing
     "open_po_summary": (),                        # open by identity; takes nothing
+    "exposure_ranking": ("top_n",),
 }
 
 

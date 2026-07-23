@@ -32,6 +32,7 @@ docs/design3_measurement_report.md (row 7 = no synthesizer).
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -973,7 +974,27 @@ class OpenPOSummaryResponse(BaseModel):
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
+class ExposureRankingRow(BaseModel):
+    """One account in an exposure ranking."""
 
+    account_id: int = Field(description="The account's AccountId.")
+    account_number: str = Field(description="The account's AccountNumber.")
+    customer_name: str = Field(description="The customer's display name.")
+    open_receivables: float | None = Field(default=None, description="Total open receivables for the account.")
+    transactions_due: float | None = Field(default=None, description="Total transactions due for the account.")
+
+
+class ExposureRankingResponse(BaseModel):
+    """Aggregation response: customer accounts ranked by outstanding exposure."""
+
+    summary: str = _SUMMARY_FIELD
+    accounts: list[ExposureRankingRow] = Field(
+        default_factory=list,
+        description="Accounts in ranked order (highest exposure first), copied "
+        "from the ranking data. Do not reorder, add, or drop.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+   
 class CountResponse(BaseModel):
     """Count response: the size of a (possibly filtered) entity set.
 
@@ -1058,6 +1079,8 @@ AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     ),
     "po_status_breakdown": (POStatusBreakdownResponse, "POStatusBreakdown"),
     "open_po_summary": (OpenPOSummaryResponse, "OpenPOSummary"),
+    "exposure_ranking": (ExposureRankingResponse, "ExposureRanking"),
+    "ExposureRanking": (ExposureRankingResponse, "ExposureRanking"),
 }
 
 
@@ -1214,7 +1237,17 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
                 
             if (srid := item.get("StandardReceiptId")) is not None:
                 standard_receipt_ids.add(srid)
-            
+
+            if isinstance(item.get("rows"), list):
+                for row in item["rows"]:
+                    if (rn := row.get("supplier_number")) is not None:
+                        supplier_numbers.add(rn)
+                    if (rsid := row.get("supplier_id")) is not None:
+                        supplier_ids.add(rsid)
+                    # --- Add this line ---
+                    if (aid := row.get("account_id")) is not None:
+                        customer_account_ids.add(aid)
+                                    
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -1531,6 +1564,16 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "value, how many open purchase orders it spans, and across how many "
         "suppliers. If 'truncated' is true, say plainly that the figures "
         "cover only the purchase orders examined."
+    ),
+    "ExposureRanking": (
+        "This is an EXPOSURE RANKING (an aggregation). The data has a "
+        "single 'aggregation' bucket containing one ranking object with a "
+        "'rows' list, already sorted by outstanding exposure (highest first). "
+        "For each row, emit one entry under 'accounts' in the SAME order, "
+        "copying account_id, account_number, customer_name, open_receivables, "
+        "and transactions_due EXACTLY. Do not reorder, recompute, add, or drop. "
+        "In the summary, state how many accounts were ranked and name the top "
+        "one or two with their exposure amounts."
     ),
     "StandardReceipt": (
         "This is a STANDARD-RECEIPT-rooted query (top-level cash receipts). "
@@ -1865,6 +1908,22 @@ def _validate_standard_receipt(
             "output: " + "; ".join(parts)
         )
 
+def _validate_exposure_ranking(
+    response: ExposureRankingResponse, valid: dict[str, set]
+) -> None:
+    bad_ids: list[int] = []
+    for row in response.accounts:
+        if row.account_id not in valid["customer_account_ids"]:
+            bad_ids.append(row.account_id)
+    parts = []
+    if bad_ids:
+        parts.append(f"customer_account_ids={bad_ids}")
+    if parts:
+        raise HallucinationError(
+            "Synthesizer produced IDs that do not appear in the executor "
+            "output: " + "; ".join(parts)
+        )
+
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
     InvoiceResponse: _validate_invoice,
@@ -1878,6 +1937,7 @@ _VALIDATORS = {
     POStatusBreakdownResponse: _validate_no_ids,
     OpenPOSummaryResponse: _validate_no_ids,
     StandardReceiptResponse: _validate_standard_receipt,
+    ExposureRankingResponse: _validate_exposure_ranking,
 }
 
 
@@ -2139,6 +2199,7 @@ def synthesize_response(
     # places the ranking under "aggregation" as a single object whose
     # "shape" identifies it.
     shape = _aggregation_shape(outputs)
+    print(f"[debug] shape = {shape}", file=sys.stderr)
     if shape is not None:
         entry = AGGREGATION_SCHEMAS.get(shape)
         if entry is None:

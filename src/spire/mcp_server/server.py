@@ -109,6 +109,9 @@ from spire.mcp_server.tools.standard_receipts import (
     search_standard_receipts as _search_standard_receipts,
 )
 
+from spire.mcp_server.tools.rank_customer_accounts_by_exposure import (
+    rank_customer_accounts_by_exposure as _rank_customer_accounts_by_exposure,
+)
 PERSONA_NAME = "default_dev"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 3333
@@ -1126,6 +1129,28 @@ async def search_standard_receipts(
             limit=limit,
         )
         return result.to_dict()
+
+@mcp.tool()
+async def rank_customer_accounts_by_exposure(
+    top_n: int = 10,
+) -> dict:
+    """Rank customer accounts by outstanding exposure (open receivables).
+
+    Use for "rank top accounts by outstanding exposure", "top accounts by exposure",
+    or "which accounts have the most outstanding receivables".
+
+    Args:
+        top_n: Number of accounts to return (default 10).
+
+    Returns:
+        A ranking dict with shape "exposure_ranking": rows of account_id,
+        account_number, customer_name, open_receivables, transactions_due.
+    """
+    async with FusionClient(_persona) as client:
+        return await _rank_customer_accounts_by_exposure(
+            client,
+            top_n=top_n,
+        )
         
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)

@@ -365,6 +365,13 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "POs', 'what is our open PO commitment', 'total value of outstanding "
     "purchase orders'. Takes no parameters.\n"
     "Do NOT set unanswerable for any of these — they ARE supported.\n"
+
+    "- op='exposure_ranking' — customer accounts ranked by outstanding "
+    "exposure (TotalOpenReceivablesForAccount). Use for 'rank top accounts "
+    "by outstanding exposure', 'top accounts by exposure', 'which accounts "
+    "have the most outstanding receivables'. Set top_n from any 'top N' "
+    "wording (default 10). Takes no date range.\n"    
+    
     "EXCEPTION for credit memos: 'total value of credit memos' is NOT an "
     "aggregation op and is NOT unsupported — it is handled by the CreditMemo "
     "list rule above (the fetcher returns the total). Route it to "
