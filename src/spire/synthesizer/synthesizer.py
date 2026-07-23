@@ -1079,7 +1079,6 @@ AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     ),
     "po_status_breakdown": (POStatusBreakdownResponse, "POStatusBreakdown"),
     "open_po_summary": (OpenPOSummaryResponse, "OpenPOSummary"),
-    "exposure_ranking": (ExposureRankingResponse, "ExposureRanking"),
     "ExposureRanking": (ExposureRankingResponse, "ExposureRanking"),
 }
 
