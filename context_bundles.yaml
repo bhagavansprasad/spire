@@ -5,18 +5,17 @@ bundles:
   - how-to-run-02.md
   - how-to-run-after-pull.md
   - prompt_coverage.md
-  - docs/spire_fusion_endpoints_reference.md
-  - docs/feature_roadmap.md
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
-  - docs/spire_pipeline_playbook.md
+  - docs/feature_roadmap.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
   - docs/spire_design_decisions.md
   - docs/spire_expansion_plan.md
   - docs/spire_fusion_endpoints_reference.md
   - docs/spire_pipeline_playbook.md
+  - docs/findings_llm_degenerate_parse.md
 
   scripts:
   - scripts/draw_graph.py
@@ -79,6 +78,10 @@ bundles:
   - src/spire/mcp_server/tools/customer_transactions.py
   - src/spire/mcp_server/tools/account_credit_memos.py
   - src/spire/mcp_server/tools/account_receipts.py
+  - src/spire/mcp_server/tools/account_receipt_applications.py
+  - src/spire/mcp_server/tools/standard_receipts.py
+  - src/spire/mcp_server/tools/aggregate_standard_receipts_by_method.py
+  - src/spire/mcp_server/tools/rank_customer_accounts_by_exposure.py
 
   parser_planner:
   - src/spire/nl_parser/capability.py
@@ -125,6 +128,7 @@ bundles:
   - tests/test_purchase_order_schedules_tool.py
   - tests/test_supplier_contacts_tool.py
   - tests/test_receivables_invoice_detail_tool.py
+  - tests/test_standard_receipts_tool.py
 
 excludes:
 - traces

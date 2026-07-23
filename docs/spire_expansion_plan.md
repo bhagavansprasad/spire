@@ -218,16 +218,23 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   attempting a root-cause fix on the runaway itself — without (2) there is
   nothing to root-cause FROM.
 
-  **BUILDING IS PAUSED PENDING THIS WORK** (decided 2026-07-22, after
-  prompt 8). 12 of 18 AR prompts are merged; the remaining six wait until
-  the boundaries are understood. The trigger was a fair question — *is the
-  KG framework itself flawed?* — and the answer appears to be no: every
-  observed failure sits outside the KG-driven path, every KG lookup that
-  ran worked, and when the parser produced a degenerate Intent the planner
-  REFUSED rather than guessing, which is Design 3 behaving as intended.
-  But that rests on the KG never having failed, which is evidence rather
-  than proof. The observability work is what would let it be tested rather
-  than argued.
+  **STATUS UPDATE 2026-07-22 (end of session): the PARSER half may be
+  RESOLVED; the SYNTHESIZER half is not.** All eleven documented runaway
+  prompts now parse correctly at `out=190–465`. The fix came from a change
+  to how `kg_entity_filter` rows are loaded and keyed, which altered the
+  KG menu and therefore the parser prompt. The mechanism is NOT
+  understood, so this is "appears fixed", not "fixed" — and an unexplained
+  fix can regress silently, which is itself an argument for the detection
+  guard below.
+
+  The synthesizer half stands unchanged. Prompt 8 returned valid JSON with
+  an EMPTY receipts array while narrating the rows correctly in prose, and
+  nothing detected it. Any guard built here must cover the synthesize call
+  regardless of what happened to the parser.
+
+  Building was PAUSED mid-session pending this investigation and has since
+  RESUMED (work on prompts 9, 10, 13, 17, 18 happened outside that
+  window). The detection guard and raw-output capture remain unbuilt.
 - **Open-invoices top-N limit** ✓ merged (`ar-invoice-limit-top-n`) — finishes
   AR-P2c prompt 1. Prompt 1 is "top 5 open invoices"; AR-P2c shipped open_only
   only (returned ALL open invoices). Resolved exactly as scoped: parser
@@ -253,6 +260,15 @@ correctly); these are pre-existing issues the run exposed, plus the
 parser-runaway class the token cap made visible.
 
 **Issue 1 — Parser runaway: the model generates without converging.**
+**APPARENTLY RESOLVED 2026-07-22 — verify before deleting this entry.**
+All eleven prompts listed below now parse correctly at `out=190–465`,
+including "active US suppliers" (both filters recovered) and the four
+PO 2144 prompts (which also pass end-to-end). The fix came from a change
+to `kg_entity_filter` loading that altered the KG menu and therefore the
+parser prompt; the mechanism is not understood. Keep this list until a
+full prompt-set run confirms it across the suite — and note that
+"parses correctly" is not "works": three of the prompts below now fail at
+PLAN time instead (see Issue 6).
 The `open_only` runaway (fixed by moving the instruction to its own
 section) is NOT unique — several prompts drive Gemini structured-output to
 the ceiling. The cap (config.py) makes them fail in ~13-40s instead of
@@ -360,6 +376,46 @@ Supplies in 2023" returned 11 rows but the truncation line reads "unknown
 total in source; 25 examined for filtering" — the "25 examined" wording is
 confusing when fewer are returned. Low priority; cosmetic.
 
+**Issue 6 — Entity-level filter lookup is broken (NEW 2026-07-22, a
+REGRESSION, and the first failure observed INSIDE the deterministic
+layer).** Three prompts that previously worked now fail at plan time:
+
+- "Which invoices were raised against PO 162034?" — `Invoice`/`purchase_order`
+- "Show supplier EIP Inc and its contacts" — `Supplier`/`name_fragment`
+- "Invoices for supplier 1252 over 100000" — `Invoice`/`supplier` +
+  `invoice_amount`
+
+The error reads `Intent contains filter types not supported for entity
+'Invoice': ['purchase_order']. Supported entity-level: [].` — and that
+EMPTY list is the tell, because `kg_entity_filter` holds 25 rows
+including every one of these.
+
+Cause: `_load_filter_defs()` returns a dict keyed by the TUPLE
+`(filter_type, target_entity)` — confirmed live — while its consumers
+(`_entity_level_filter_types`, `_validate_intent_filters`,
+`_pick_entity_filter`, `_build_entity_fetcher_args`) still iterate
+expecting a plain filter-type key. `ftype` therefore binds to the whole
+tuple, the resulting set contains tuples, and a plain string like
+`"supplier"` never matches. A change applied to the loader but not to its
+callers.
+
+Note every entity-level row currently shows `None` as its `target_entity`,
+so the per-entity keying may never have been fully wired into the KG rows
+either.
+
+Two coherent directions, opposite to each other:
+1. **Finish the revert** — key by `ftype` alone, matching the consumers.
+   Smaller, but loses per-entity `by_id` resolution (`po_header_id` for
+   PurchaseOrder vs `customer_transaction_id` for ReceivablesInvoice),
+   which is presumably why the tuple keying was introduced.
+2. **Finish the per-entity design** — unpack tuples in the consumers and
+   populate `target_entity` on the entity-level KG rows.
+
+Decide before touching it; check `git log` for which version was
+committed. This is worth flagging against the architecture: it is NOT an
+LLM failure. It is a lookup whose key shape changed under its callers —
+ordinary code breakage, in the layer that had until now been reliable.
+
 ### Routing mechanisms — three kinds of query
 The planner routes a parsed Intent one of three ways. Knowing which a new
 prompt needs decides what you wire.
@@ -417,18 +473,45 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |
 | AP | P2+ | (defined at P1) | — | not started |
 
-**Next up: NOT a build.** Building is PAUSED after prompt 8 (decided
-2026-07-22). The next session is the LLM-boundary investigation — see the
-"Parser observability + degenerate-parse defence" backlog item above, and
-the investigation section at the top of `SPIRE_SESSION_HANDOFF.md`. Do the
-detection guard and raw-output capture first; root-cause after.
+**Next up: VERIFY, then fix known breakage, then build.** The status of
+the AR module is PARTLY UNVERIFIED as of 2026-07-22 — see the top of
+`SPIRE_SESSION_HANDOFF.md`. A status summary produced outside the build
+window reports 17 of 18 AR prompts merged (18 in progress, 16 pending
+design), and the file evidence is consistent with it: tools exist for
+prompts 9, 10, 13 and 17, and the KG stands at 22 entities / 194 fields /
+17 edges / 16 edge-tools / 97 vocab. But none of those four prompts has
+been observed RUNNING, and a complete tool with green unit tests is not
+the same as a working prompt — prompt 8 had both while returning an empty
+receipts array end-to-end.
 
-When building resumes: prompts 9 and 13 finish AR-P5 (curl discovery for
-both is DONE — go straight to the tool), then AR-P6's four aggregates,
-which need an op-registry like PO's and share none of AR-P5's patterns.
+Confirmed working end-to-end (observed 2026-07-22): account balance (6),
+account credit memos (7), account receipts (8), customer invoices (15),
+recent credit memos (5).
 
-**Current totals:** 12 of 18 AR prompts done. KG at 20 entities / 169
-fields / 16 edges / 15 edge-tools / 93 vocab. Full suite 435 passing.
+**Known breakage to clear BEFORE building:**
+1. Three PO/Supplier prompts fail at plan time — `Invoice`/`supplier`,
+   `Invoice`/`purchase_order`, `Supplier`/`name_fragment` — with
+   `Supported entity-level: []`. Cause diagnosed: `_load_filter_defs()`
+   now returns a dict keyed by the TUPLE `(filter_type, target_entity)`
+   while its consumers still iterate expecting a plain filter-type key,
+   so validation compares strings against tuples and never matches. Half
+   an applied change. Decide whether to finish the revert (key by ftype
+   alone, losing per-entity `by_id` resolution) or finish the per-entity
+   design (unpack tuples in the consumers, populate `target_entity` on
+   the entity-level rows).
+2. KG tripwire drift: `kg_entity_tool` 10 vs expected 9,
+   `kg_entity_filter` 25 vs expected 23. Bump both `scripts/print_kg.py`
+   and `tests/test_kg_metadata.py`.
+
+**The parser runaway class appears CLOSED.** All eleven documented bad
+prompts now parse correctly at `out=190–465`, where they previously
+produced `out=7983/7984` and degenerate empty Intents; four of the PO 2144
+prompts now pass end-to-end. The cause is NOT understood — the fix
+altered how `kg_entity_filter` is loaded, which changed the KG menu and
+therefore the parser prompt (`in=` moved 7384 → 7415 → 8117). Whether
+that is the mechanism or a side effect is unestablished, and an
+unexplained fix can regress silently. See Issue 1 below, which is now
+partly historical.
 
 ### Known test notes (not bugs)
 - **Three supplier `truncated is False` assertions** fail on pods with more
