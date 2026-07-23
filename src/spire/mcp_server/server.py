@@ -112,6 +112,11 @@ from spire.mcp_server.tools.standard_receipts import (
 from spire.mcp_server.tools.rank_customer_accounts_by_exposure import (
     rank_customer_accounts_by_exposure as _rank_customer_accounts_by_exposure,
 )
+
+from spire.mcp_server.tools.aggregate_standard_receipts_by_method import (
+    aggregate_standard_receipts_by_method as _aggregate_standard_receipts_by_method,
+)
+
 PERSONA_NAME = "default_dev"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 3333
@@ -1150,6 +1155,32 @@ async def rank_customer_accounts_by_exposure(
         return await _rank_customer_accounts_by_exposure(
             client,
             top_n=top_n,
+        )
+
+@mcp.tool()
+async def aggregate_standard_receipts_by_method(
+    account_number: str | None = None,
+    limit: int | None = None,
+) -> dict:
+    """Aggregate standard receipts by receipt method.
+
+    Use for "receipt method distribution", "receipts by method", or
+    "what payment methods do we receive".
+
+    Args:
+        account_number: Optional customer account number to filter.
+        limit: If provided, return only the top N methods by total amount.
+            Omit to return all methods.
+
+    Returns:
+        A distribution dict with shape "receipt_method_distribution":
+        rows of receipt_method, receipt_count, total_amount.
+    """
+    async with FusionClient(_persona) as client:
+        return await _aggregate_standard_receipts_by_method(
+            client,
+            account_number=account_number,
+            limit=limit,
         )
         
 if __name__ == "__main__":

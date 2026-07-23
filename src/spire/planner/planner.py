@@ -116,6 +116,7 @@ _AGGREGATION_TOOLS: dict[str, str] = {
     "po_count_by_status": "aggregate_purchase_orders_by_status",
     "open_po_summary": "summarize_open_purchase_orders",
     "exposure_ranking": "rank_customer_accounts_by_exposure",
+    "receipt_method_distribution": "aggregate_standard_receipts_by_method",
 }
 
 
@@ -131,6 +132,8 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     "po_count_by_status": (),                     # groups by status; takes nothing
     "open_po_summary": (),                        # open by identity; takes nothing
     "exposure_ranking": ("top_n",),
+    "receipt_method_distribution": ("account_number", "limit"),
+    "receipt_method_distribution": ("customer_name", "limit"),
 }
 
 

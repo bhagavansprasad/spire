@@ -42,6 +42,7 @@ from spire.synthesizer.synthesizer import (
     StandardReceiptResponse,
     ExposureRankingResponse,
     synthesize_response,
+    ReceiptMethodDistributionResponse,
 )
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp"
@@ -372,7 +373,26 @@ def _format_synthesized(response: Any) -> str:
             lines.append("\nTruncation:")
             lines.extend(f"  - {note}" for note in response.truncation_notes)
         return "\n".join(lines)
-
+    
+    if isinstance(response, ReceiptMethodDistributionResponse):
+        lines.append(response.summary)
+        lines.append(
+            f"\nTotal receipts: {response.total_receipts}, total amount: {response.total_amount:,.2f}"
+        )
+        if response.methods:
+            lines.append("\nDistribution by method:")
+            for row in response.methods:
+                lines.append(
+                    f"  - {row.receipt_method}: {row.receipt_count} receipts, "
+                    f"total {row.total_amount:,.2f}"
+                )
+        else:
+            lines.append("\nNo receipts found.")
+        if response.truncation_notes:
+            lines.append("\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+        return "\n".join(lines)
+    
     # Fallback for unrecognized shape.
     return f"(Unrecognized response shape.)\n{response}"
 
@@ -404,6 +424,8 @@ def _format_summary(plan, outputs, response) -> str:
             count = len(response.standard_receipts)
         elif hasattr(response, "accounts"):
             count = len(response.accounts)
+        elif hasattr(response, "methods"):
+            count = len(response.methods)
         else:
             count = len(final_bucket)
         lines.append(f"  Final raw output:     {len(final_bucket)} record(s) under '{list(outputs.keys())[-1] if outputs else '?'}'")
