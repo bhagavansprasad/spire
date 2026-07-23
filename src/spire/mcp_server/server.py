@@ -1074,8 +1074,7 @@ async def compare_top_suppliers_orders_to_invoices(
 @mcp.tool()
 async def get_account_receipt_applications(
     account_id: int,
-    limit: int = 25,
-    fetch_limit: int = 500,
+    limit: int = 10,
 ) -> dict:
     """Fetch a customer account's receipt applications (cash-to-invoice matching), newest first.
 
@@ -1090,8 +1089,6 @@ async def get_account_receipt_applications(
     Args:
         account_id: The AccountId of the customer account.
         limit: Max applications to return AFTER filtering (default 25).
-        fetch_limit: Max raw rows to fetch BEFORE filtering (default 500).
-            Used because we filter client-side to keep only Applied rows.
 
     Returns:
         A dict with the account's receipt applications: ApplicationId,
@@ -1105,7 +1102,6 @@ async def get_account_receipt_applications(
             client,
             account_id=account_id,
             limit=limit,
-            fetch_limit=fetch_limit,
         )
         return result.to_dict()
 

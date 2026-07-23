@@ -741,7 +741,7 @@ class CustomerAccountRecord(BaseModel):
     applications: list[AccountReceiptApplicationInfo] = Field(
         default_factory=list,
         description="This account's receipt applications, when the query asked for "
-        "them (an 'accountreceiptapplication' bucket in the data). Empty "
+        "them (an 'account_receipt_applications' bucket in the data). Empty "
         "otherwise. Each application_id must appear in the executor's output.",
     )
 
@@ -1491,7 +1491,7 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "data, copied exactly — these ids vary in length, and a short one "
         "is just as valid as a long one. If the bucket is absent, leave "
         "'receipts' empty and do not mention it.\n"
-        "- 'accountreceiptapplication' bucket: emit each application under that "
+        "- 'account_receipt_applications' bucket: emit each application under that "
         "account's 'applications' (application_id, receipt_id, receipt_number, "
         "receipt_method, transaction_id, transaction_number, transaction_status, "
         "application_amount, application_date, currency). The summary must say "
@@ -2324,9 +2324,9 @@ def synthesize_response(
                     )
             # Check applications
             if hasattr(account, "applications") and not account.applications:
-                if outputs.get("accountreceiptapplication"):
+                if outputs.get("account_receipt_applications"):
                     raise DegenerateOutputError(
-                        f"Account {account.account_id} has non-empty 'accountreceiptapplication' bucket but 'applications' list is empty."
+                        f"Account {account.account_id} has non-empty 'account_receipt_applications' bucket but 'applications' list is empty."
                     )
 
     _validate_no_hallucinated_ids(response, outputs)
