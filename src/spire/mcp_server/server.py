@@ -1159,16 +1159,22 @@ async def rank_customer_accounts_by_exposure(
 
 @mcp.tool()
 async def aggregate_standard_receipts_by_method(
+    customer_name: str | None = None,
     account_number: str | None = None,
     limit: int | None = None,
 ) -> dict:
     """Aggregate standard receipts by receipt method.
 
     Use for "receipt method distribution", "receipts by method", or
-    "what payment methods do we receive".
+    "what payment methods do we receive". Scope to one customer with
+    customer_name (or account_number if the number is already known);
+    omit both for a pod-wide distribution.
 
     Args:
-        account_number: Optional customer account number to filter.
+        customer_name: Optional customer name to filter. Resolved to an
+            account number by the tool.
+        account_number: Optional customer account number to filter. Used
+            when customer_name is not provided.
         limit: If provided, return only the top N methods by total amount.
             Omit to return all methods.
 
@@ -1179,6 +1185,7 @@ async def aggregate_standard_receipts_by_method(
     async with FusionClient(_persona) as client:
         return await _aggregate_standard_receipts_by_method(
             client,
+            customer_name=customer_name,
             account_number=account_number,
             limit=limit,
         )

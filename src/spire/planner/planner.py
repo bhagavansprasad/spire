@@ -132,8 +132,9 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     "po_count_by_status": (),                     # groups by status; takes nothing
     "open_po_summary": (),                        # open by identity; takes nothing
     "exposure_ranking": ("top_n",),
-    "receipt_method_distribution": ("account_number", "limit"),
-    "receipt_method_distribution": ("customer_name", "limit"),
+    # Scoped aggregate: the scope arrives as an intent FILTER, not in the
+    # aggregate block, so _build_aggregation_plan reads both.
+    "receipt_method_distribution": ("customer_name", "account_number", "limit"),
 }
 
 
@@ -834,8 +835,7 @@ def generate_plan(
     # / edge-traversal / include flow entirely — aggregation owns its
     # own fetch+filter+math inside the tool.
     if intent.aggregate is not None:
-        return _build_aggregation_plan(intent.aggregate)
-
+        return _build_aggregation_plan(intent.aggregate, intent.filters)
     # ── P6c: comparison short-circuit ─────────────────────────────
     # When the intent carries a compare block, the question is an
     # invoiced-vs-ordered comparison, not a list. Emit a single
@@ -1131,8 +1131,10 @@ def generate_plan(
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────
 
-
-def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
+def _build_aggregation_plan(
+    aggregate: dict[str, Any],
+    filters: list[dict[str, Any]] | None = None,
+) -> Plan:
     """
     Build a single-step plan for an aggregation intent (feature 7).
 
@@ -1141,6 +1143,13 @@ def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
     result is one non-iterating Step; the tool does the fetch + math and
     returns a structured ranking, which the executor passes through to
     the synthesizer.
+
+    SCOPED aggregations also take a scope (e.g. "receipt method
+    distribution for customer X"), and the parser puts that scope in
+    intent.filters, NOT in the aggregate block. So this reads both:
+    the aggregate block first, then any filter whose type the op's tool
+    accepts. Without the second pass the filter is silently dropped and
+    the tool runs pod-wide while the answer still names the customer.
 
     Raises NotImplementedError if the op has no registered tool — the
     aggregation analog of _validate_intent_filters' unknown-type guard,
@@ -1168,6 +1177,18 @@ def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
         if aggregate.get(key) is not None:
             tool_args[key] = aggregate[key]
 
+    # Second pass: merge scoping filters the op's tool accepts. Filter
+    # types are named to match the tool's parameter (customer_name,
+    # account_number), so the accepted tuple is the whitelist for both
+    # sources. The aggregate block wins on conflict — it is the more
+    # specific statement of intent.
+    for f in filters or []:
+        ftype = f.get("type")
+        if ftype in accepted and ftype not in tool_args:
+            value = f.get("value")
+            if value is not None:
+                tool_args[ftype] = value
+
     return [
         Step(
             step_id=1,
@@ -1179,8 +1200,7 @@ def _build_aggregation_plan(aggregate: dict[str, Any]) -> Plan:
             output_dedupe_by=None,
         )
     ]
-
-
+    
 def _build_comparison_plan(compare: dict[str, Any]) -> Plan:
     """
     Build a single-step plan for a comparison intent (P6c).
