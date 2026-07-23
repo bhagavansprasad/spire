@@ -60,7 +60,7 @@ async def get_customer_transactions(
     client: FusionClient,
     account_id,
     open_only: bool = False,
-    limit: int = 25,
+    limit: int = 10,
     fetch_limit: int = 500,
 ) -> ToolResult:
     """Fetch one account's invoice transactions, filtered client-side.
