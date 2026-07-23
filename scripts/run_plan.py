@@ -40,6 +40,7 @@ from spire.synthesizer.synthesizer import (
     POStatusBreakdownResponse,
     OpenPOSummaryResponse,
     StandardReceiptResponse,
+    ExposureRankingResponse,
     synthesize_response,
 )
 
@@ -338,22 +339,35 @@ def _format_synthesized(response: Any) -> str:
     # --- StandardReceiptResponse ---
     if isinstance(response, StandardReceiptResponse):
         lines.append(response.summary)
-        # Try both possible field names
-        receipts = getattr(response, 'receipts', None)
-        if receipts is None:
-            receipts = getattr(response, 'standard_receipts', [])
+        receipts = getattr(response, 'standard_receipts', [])
         if receipts:
             lines.append("\nReceipts:")
             for r in receipts:
-                # Use getattr for safety
                 lines.append(
-                    f"  - {getattr(r, 'receipt_number', 'N/A')} ({getattr(r, 'standard_receipt_id', getattr(r, 'StandardReceiptId', 'N/A'))}) — "
-                    f"{getattr(r, 'amount', 'N/A')} {getattr(r, 'currency', 'N/A')} on {getattr(r, 'receipt_date', 'N/A')}; "
-                    f"{getattr(r, 'receipt_method', 'N/A')}; site: {getattr(r, 'customer_site', 'N/A') or 'N/A'}; "
-                    f"bank: {getattr(r, 'remittance_bank_name', 'N/A') or 'N/A'}"
+                    f"  - {r.receipt_number} ({r.standard_receipt_id}) — "
+                    f"{r.amount} {r.currency} on {r.receipt_date}; "
+                    f"{r.receipt_method}; site: {r.customer_site or 'N/A'}; "
+                    f"bank: {r.remittance_bank_name or 'N/A'}"
                 )
         else:
             lines.append("No receipts found.")
+        if response.truncation_notes:
+            lines.append("\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+        return "\n".join(lines)
+
+    # --- ExposureRankingResponse ---
+    if isinstance(response, ExposureRankingResponse):
+        lines.append(response.summary)
+        if response.accounts:
+            lines.append("\nTop accounts by outstanding exposure:")
+            for i, row in enumerate(response.accounts, 1):
+                lines.append(
+                    f"  {i}. {row.customer_name} (Account {row.account_number}) — "
+                    f"open receivables: {row.open_receivables:,.2f}"
+                )
+        else:
+            lines.append("No accounts found.")
         if response.truncation_notes:
             lines.append("\nTruncation:")
             lines.extend(f"  - {note}" for note in response.truncation_notes)
@@ -386,8 +400,10 @@ def _format_summary(plan, outputs, response) -> str:
             count = len(response.addresses)
         elif hasattr(response, "credit_memos"):
             count = len(response.credit_memos)
-        elif hasattr(response, "receipts") or hasattr(response, "standard_receipts"):
-            count = len(getattr(response, "receipts", getattr(response, "standard_receipts", [])))
+        elif hasattr(response, "standard_receipts"):
+            count = len(response.standard_receipts)
+        elif hasattr(response, "accounts"):
+            count = len(response.accounts)
         else:
             count = len(final_bucket)
         lines.append(f"  Final raw output:     {len(final_bucket)} record(s) under '{list(outputs.keys())[-1] if outputs else '?'}'")
