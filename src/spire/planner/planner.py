@@ -1257,6 +1257,36 @@ def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
             return ftype
     return "none"
 
+# Filter types whose KG tool_arg_name is a PLACEHOLDER, not a literal arg
+# name: the concrete argument depends on the SHAPE of the value. Both the
+# Invoice/supplier and Address/supplier KG rows document this routing in
+# their notes ("planner routes an all-digit value to supplier_number,
+# otherwise supplier_name") but nothing implemented it, so the placeholder
+# reached the tool verbatim and Pydantic rejected it.
+# v1.2 candidate: make this declarative — a tool_arg_name_alt column on
+# kg_entity_filter — rather than a hardcoded special case here. Same note
+# as _TOOL_PRIMARY_ARG above.
+_VALUE_SHAPE_ROUTED_ARGS: dict[str, tuple[str, str]] = {
+    # placeholder -> (arg when all-digit, arg otherwise)
+    "supplier": ("supplier_number", "supplier_name"),
+}
+
+
+def _resolve_arg_name(arg_name: str, raw_value: Any) -> str:
+    """Resolve a placeholder tool_arg_name against the value's shape.
+
+    Most KG rows name the tool argument literally. A few name a
+    placeholder because one filter type maps to two different tool
+    arguments depending on whether the user gave an id or a name —
+    'invoices for supplier 1252' vs 'invoices for Lee Supplies'.
+    Non-placeholder names pass through unchanged.
+    """
+    routed = _VALUE_SHAPE_ROUTED_ARGS.get(arg_name)
+    if routed is None:
+        return arg_name
+    numeric_arg, name_arg = routed
+    return numeric_arg if str(raw_value).strip().isdigit() else name_arg
+
 
 def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> dict[str, Any]:
     """Build tool_args for the entity fetcher."""
@@ -1270,7 +1300,7 @@ def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> di
         if defn["mechanism"] != "entity_level":
             continue
         raw_value = f.get("value")
-        arg_name = defn["tool_arg_name"]
+        arg_name = _resolve_arg_name(defn["tool_arg_name"], raw_value)
         arg_name_hi = defn.get("tool_arg_name_hi")
         if isinstance(raw_value, dict):
             low = raw_value.get("from", raw_value.get("min"))
