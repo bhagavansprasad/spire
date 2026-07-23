@@ -101,6 +101,13 @@ from spire.mcp_server.tools.compare_orders_to_invoices import (
     compare_top_suppliers_orders_to_invoices as _compare_top_suppliers_orders_to_invoices,
 )
 
+from spire.mcp_server.tools.account_receipt_applications import (
+    get_account_receipt_applications as _get_account_receipt_applications,
+)
+
+from spire.mcp_server.tools.standard_receipts import (
+    search_standard_receipts as _search_standard_receipts,
+)
 
 PERSONA_NAME = "default_dev"
 DEFAULT_HOST = "127.0.0.1"
@@ -1056,7 +1063,70 @@ async def compare_top_suppliers_orders_to_invoices(
             report_progress=ctx.report_progress,
         )
 
+@mcp.tool()
+async def get_account_receipt_applications(
+    account_id: int,
+    limit: int = 25,
+    fetch_limit: int = 500,
+) -> dict:
+    """Fetch a customer account's receipt applications (cash-to-invoice matching), newest first.
 
+    Use this as the second half of a customer-scoped receipt-applications query:
+    after get_customer_account_by_name resolves the customer to an AccountId,
+    this returns that account's applications.
+
+    A receipt application is the matching of a receipt (cash received) to an
+    invoice (money owed). Each row is PRE-JOINED: it carries the receipt side
+    and the transaction side on one record.
+
+    Args:
+        account_id: The AccountId of the customer account.
+        limit: Max applications to return AFTER filtering (default 25).
+        fetch_limit: Max raw rows to fetch BEFORE filtering (default 500).
+            Used because we filter client-side to keep only Applied rows.
+
+    Returns:
+        A dict with the account's receipt applications: ApplicationId,
+        StandardReceiptId, ReceiptNumber, ReceiptMethod, ReferenceTransactionId,
+        ReferenceTransactionNumber, ReferenceTransactionStatus, ApplicationAmount,
+        ApplicationDate, ApplicationStatus, EnteredCurrency, and CustomerSite
+        per row. Only Applied rows are returned (unapplied cash rows are filtered out).
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_account_receipt_applications(
+            client,
+            account_id=account_id,
+            limit=limit,
+            fetch_limit=fetch_limit,
+        )
+        return result.to_dict()
+
+@mcp.tool()
+async def search_standard_receipts(
+    customer_name: str | None = None,
+    customer_site: str | None = None,
+    limit: int = 25,
+) -> dict:
+    """Search top-level standard receipts (cash received from customers).
+
+    Use for receipt queries that specify both a customer account and a site,
+    e.g. "Show receipts for ABC Application Software at Santa Clara".
+
+    Args:
+        customer_name: Customer name (e.g. "ABC Application Software"). Resolved
+            to account number server-side by the tool.
+        customer_site: Customer site (e.g. "Santa Clara"). Applied client-side.
+        limit: Max records to return (default 25).
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_standard_receipts(
+            client,
+            customer_name=customer_name,
+            customer_site=customer_site,
+            limit=limit,
+        )
+        return result.to_dict()
+        
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
 

@@ -71,3 +71,36 @@ Show credit memos for ABC Application Software
 # overran the SYNTHESIZER's output budget on this very account and
 # returned an empty receipts array while still narrating them in prose.
 Show receipts for ABC Application Software
+
+# — a customer's receipt applications (AR-P5, prompt 9) —
+Show receipt applications for customer ABC Application Software
+
+# — site-filtered receipts (AR-P5, prompt 13) —
+# Uses top-level /standardReceipts, not the account child. Server-side
+# filter by CustomerAccountNumber, client-side filter by CustomerSite.
+# Composite q= returns a silent zero on this endpoint, so only one clause
+# goes to the server. `fields=` is unusable here (500s even with valid
+# names), so fetch full rows and discard fields client-side.
+Show receipts for ABC Application Software at Santa Clara
+
+# — exposure ranking (AR-P6, prompt 10) —
+# Aggregation: rank accounts by TotalOpenReceivablesForAccount descending.
+# Uses op-registry (not KG). Requires a deterministic synthesizer shape.
+Rank top accounts by outstanding exposure
+
+# — cash collection trends / DSO (AR-P6, prompt 16) —
+# DESIGN PENDING: spans two endpoints (/standardReceipts + AR balance).
+# DSO = (AR balance / credit sales) × days. Decision: one aggregate tool
+# spanning both sources, or two composed tools. Not yet built.
+# (Placeholder only — do not run.)
+# Identify cash collection trends, MoM, DSO, risks, improvements
+
+# — receipt method distribution (AR-P6, prompt 17) —
+# Aggregation: bucket receipts by ReceiptMethod, compute count and total
+# amount per method. Uses op-registry (not KG).
+Show receipt method distribution for ABC Application Software
+
+# — creation-to-update lag (AR-P6, prompt 18) —
+# Aggregation: compute LastUpdateDate − CreationDate per receipt.
+# Uses op-registry (not KG).
+Show lag between creation and last update for receipts of ABC Application Software

@@ -1,7 +1,3 @@
-
-
-
-
 SET ECHO ON
 SET FEEDBACK ON
 SET SERVEROUTPUT ON
@@ -346,7 +342,22 @@ INSERT INTO kg_entity VALUES (
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/standardReceipts',
   'A standard receipt (cash received from a customer) on a customer account, reached as a child of CustomerAccount. Distinct from an AR invoice (money owed) and a credit memo (a credit issued). NOTE the SAME receipts are reachable via the TOP-LEVEL /standardReceipts resource, but with a DIFFERENT projection: this child has ProcessStatus and omits CustomerName/CustomerAccountNumber/bank fields, while the top-level has Status plus customer and remittance columns. Field names do NOT carry across - naming ProcessStatus in a fields= list against the top-level resource 500s it. The two also disagree on count (child 1559 vs top-level-by-account 1386 on the anchor); do not treat them as interchangeable. StandardReceiptId MIXES ID WIDTHS - backfilled rows are small ints (130), recent ones large (300000313660599); never infer anything from magnitude. Recent-first ordering (orderBy=ReceiptDate:desc) and limit are server-side; fields= works here. CustomerSite is present but NULLABLE. The row does NOT echo AccountId - the join key is the URL path.'
 );
-PROMPT Seeded kg_entity (20 rows).
+
+-- AR-P5 Prompt 9: Account Receipt Application
+INSERT INTO kg_entity VALUES (
+  'AccountReceiptApplication', 'ApplicationId', 'ReceiptNumber',
+  '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/standardReceiptApplications',
+  'A receipt application (cash-to-invoice matching) on a customer account. Reached as a child of CustomerAccount. PRE-JOINED: carries both the receipt side (StandardReceiptId, ReceiptNumber, ReceiptMethod) and the transaction side (ReferenceTransactionId, ReferenceTransactionNumber, ReferenceTransactionStatus) on one record. PK is ApplicationId, a sixth AR id space. TRAP: the newest rows are unapplied cash (ApplicationStatus=''Unapplied'') with all ReferenceTransaction fields null; Spire filters client-side for ApplicationStatus=''Applied''. orderBy=ApplicationDate:desc works server-side; no second fetch is needed. The row does NOT echo AccountId - the join key is the URL path.'
+);
+
+-- Prompt 13: Top-level StandardReceipt entity (cash receipts rootable via account number and site)
+INSERT INTO kg_entity VALUES (
+  'StandardReceipt', 'StandardReceiptId', 'ReceiptNumber',
+  '/fscmRestApi/resources/11.13.18.05/standardReceipts',
+  'A cash receipt (payment from a customer) at the top level. Rootable via CustomerAccountNumber (server-side filter) and CustomerSite (client-side filter). Distinct from AccountReceipt (the per-account child) – this projection includes CustomerName, CustomerAccountNumber, and bank fields. `fields=` is broken on this endpoint (500s), so fetch full rows and discard client-side.'
+);
+
+PROMPT Seeded kg_entity (21 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -576,7 +587,37 @@ INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'ProcessStatus',     'stat
 INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'UnappliedAmount',   'amount',       'numeric', 'Portion of the receipt not yet applied to a transaction. 0 on fully applied receipts.');
 INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'CustomerSite',      'reference',    'string',  'Bill-to site name (e.g. ''Santa Clara''). NULLABLE and sparsely populated - any grouping or filtering on it must handle nulls. NOT queryable on this child (400s).');
 INSERT INTO kg_entity_field VALUES ('AccountReceipt', 'BusinessUnit',      'projection',   'string',  'Owning business unit (e.g. ''US1 Business Unit'').');
-PROMPT Seeded kg_entity_field (169 rows).
+
+-- AR-P5 Prompt 9: Account Receipt Application fields
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ApplicationId',              'canonical_id', 'numeric', 'System primary key for the application. A sixth AR id space.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'StandardReceiptId',          'reference',    'numeric', 'The receipt''s StandardReceiptId (numeric).');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ReceiptNumber',              'display_id',   'string',  'Human-readable receipt number.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ReceiptMethod',              'projection',   'string',  'How the payment arrived (e.g. Lockbox).');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ReferenceTransactionId',     'reference',    'numeric', 'The transaction''s ReferenceTransactionId (the payment schedule id, a small int). Null only when unapplied, but we filter those out.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ReferenceTransactionNumber', 'projection',   'string',  'The transaction number.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ReferenceTransactionStatus', 'projection',   'string',  'Transaction status (e.g. Open, Closed).');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ApplicationAmount',          'amount',       'numeric', 'The amount applied to the transaction.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ApplicationDate',            'date',         'iso_date','Application date.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'ApplicationStatus',          'status',       'string',  'Application status (''Applied'' or ''Unapplied''). We filter client-side to keep only ''Applied''.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'EnteredCurrency',            'projection',   'string',  'Application currency.');
+INSERT INTO kg_entity_field VALUES ('AccountReceiptApplication', 'CustomerSite',               'reference',    'string',  'Customer site (often null).');
+
+-- Prompt 13: StandardReceipt fields (top-level /standardReceipts projection)
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'StandardReceiptId', 'canonical_id', 'numeric', 'System primary key for the receipt.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'ReceiptNumber',     'display_id',   'string',  'Human-readable receipt number.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'ReceiptDate',       'date',         'iso_date','Receipt date.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'Amount',            'amount',       'numeric', 'Receipt amount (cash received).');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'Currency',          'projection',   'string',  'Receipt currency (e.g. USD).');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'ReceiptMethod',     'projection',   'string',  'How the payment arrived (e.g. Lockbox).');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'Status',            'status',       'string',  'Top-level status (Cleared, etc.).');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'CustomerName',      'projection',   'string',  'Customer display name.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'CustomerAccountNumber', 'reference', 'string', 'Customer account number. Server-filterable via q=CustomerAccountNumber=.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'CustomerSite',      'reference',    'string',  'Customer site (e.g. Santa Clara). Client-side filter.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'projection',  'string',  'Bank name for the remittance.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
+INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
+
+PROMPT Seeded kg_entity_field (181 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -719,7 +760,16 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_ACCOUNT_CREDIT_MEMO: the collection holds receipts only, so there is no client-side filter and limit applies server-side as a true top-N.',
   NULL
 );
-PROMPT Seeded kg_edge (16 rows).
+
+-- AR-P5 Prompt 9
+INSERT INTO kg_edge VALUES (
+  'HAS_RECEIPT_APPLICATION', 'CustomerAccount', 'AccountReceiptApplication', 'AccountId', 'AccountId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../receivablesCustomerAccountActivities/{account.AccountId}/child/standardReceiptApplications. Fetch the account''s receipt applications, newest first (orderBy=ApplicationDate:desc, server-side). The parent AccountId is carried in the URL path and is NOT echoed in the row body.',
+  'Per-account child call, one HTTP call per account. Same expansion shape as HAS_ACCOUNT_RECEIPT, but with client-side filtering: keep only ApplicationStatus=''Applied'' (unapplied rows have null transaction side). The tool uses an over-fetch pattern (fetch_limit) because filtering discards unapplied rows.',
+  NULL
+);
+PROMPT Seeded kg_edge (17 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -921,6 +971,12 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipt',          'Account
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipts',         'AccountReceipt', 'Plural form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipt',  'AccountReceipt', 'Account-scoped form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipts', 'AccountReceipt', 'Plural account-scoped form.');
+-- AR-P5 Prompt 9: receipt applications
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipt application',  'AccountReceiptApplication', 'A cash-to-invoice matching on a specific customer account (AR-P5 prompt 9).');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receipt applications', 'AccountReceiptApplication', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipt application',  'AccountReceiptApplication', 'Account-scoped form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'account receipt applications', 'AccountReceiptApplication', 'Plural account-scoped form.');
+
 PROMPT Seeded kg_vocabulary.
 
 -- ============================================================
@@ -1017,6 +1073,14 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'none',
   'list_receivables_credit_memos',
   'Default fetcher for CreditMemo. Lists recent credit memos (orderBy=TransactionDate:desc, server-side) up to limit. No filters. The total credit value (raw sum of EnteredAmount) is layered on by the server wrapper.'
+);
+
+-- Prompt 13: StandardReceipt entity tool (default fetcher)
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'StandardReceipt',
+  'none',
+  'search_standard_receipts',
+  'Default fetcher for StandardReceipt. Accepts account_number (server-side) and customer_site (client-side).'
 );
 PROMPT Seeded kg_entity_tool (8 rows).
 
@@ -1126,7 +1190,15 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'get_account_receipts',
   'Takes account_id. Fetches the account''s standardReceipts child, newest first. No client-side filter (the collection is receipts only) and no over-fetch: orderBy and limit are both server-side, so limit is a true "N most recent". Returns receipts in every state - Unapplied rows are real cash, not noise.'
 );
-PROMPT Seeded kg_edge_tool (15 rows).
+
+-- AR-P5 Prompt 9
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_RECEIPT_APPLICATION',
+  'get_account_receipt_applications',
+  'Takes account_id. Fetches the account''s standardReceiptApplications child, newest first (orderBy=ApplicationDate:desc). Uses over-fetch (fetch_limit) and client-side filter to keep only ApplicationStatus=''Applied'' (unapplied rows have null transaction side).'
+);
+
+PROMPT Seeded kg_edge_tool (16 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -1250,16 +1322,23 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'CustomerAccount', 'by_customer_name', 'entity_level', 'customer_name', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerName', 'equals',
   'Resolve a customer account by exact CustomerName via q= (queryable on this endpoint, unlike the AR-invoice customer fields). Dedicated fetcher get_customer_account_by_name; returns a list of matching accounts.'
 );
+
+-- Prompt 13: StandardReceipt filters
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'StandardReceipt', 'account_number', 'entity_level', 'account_number', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerAccountNumber', 'equals',
+  'Filter receipts by customer account number. Send as single server clause q=CustomerAccountNumber=<value>.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'StandardReceipt', 'customer_site', 'entity_level', 'customer_site', NULL, NULL, NULL, NULL, NULL, 'client_side', 'CustomerSite', 'equals',
+  'Filter receipts by customer site (e.g. Santa Clara). Applied client-side after over-fetch; handles nulls.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'StandardReceipt', 'customer_name', 'entity_level', 'customer_name', NULL, NULL, NULL, NULL, NULL, 'client_side', 'CustomerName', 'equals',
+  'Customer name; resolved to account number by the tool before the server call.'
+);
+
 PROMPT Seeded kg_entity_filter (21 rows).
 
 -- ============================================================
-
-
-
-
-
-
-
-
-
-

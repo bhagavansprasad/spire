@@ -92,6 +92,8 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # AR-P5 prompt 8: the account's receipts. Same shape again — a plain
     # single-parent expansion on AccountId.
     "get_account_receipts": "account_id",
+    # AR-P5 prompt 9: receipt applications.
+    "get_account_receipt_applications": "account_id",
 }
 
 # Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
@@ -175,6 +177,9 @@ _OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
     # AR-P5 prompt 8. Its own bucket, like the memos above — the
     # synthesizer nests receipts and memos separately under the account.
     "AccountReceipt": "account_receipts",
+    # AR-P5 prompt 9.
+    "AccountReceiptApplication": "account_receipt_applications",
+    "StandardReceipt": "standard_receipts",
 }
 
 # Filter-type -> short suffix used when the step's output is the
@@ -291,33 +296,26 @@ def _read_clob(value: Any) -> str:
 # KG lookups in this module.
 # ─────────────────────────────────────────────────────────────────────
 
-_FILTER_DEFS_CACHE: dict[str, dict[str, Any]] | None = None
+_FILTER_DEFS_CACHE: dict[tuple[str, str], dict[str, Any]] | None = None
 
 
-def _load_filter_defs() -> dict[str, dict[str, Any]]:
-    """Read kg_entity_filter once; cache by filter_type.
-
-    Each value carries: mechanism, tool_arg_name, tool_arg_name_hi,
-    vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind,
-    implicit_term.
-    """
+def _load_filter_defs() -> dict[tuple[str, str], dict[str, Any]]:
+    """Read kg_entity_filter once; cache by (filter_type, entity_name)."""
     global _FILTER_DEFS_CACHE
     if _FILTER_DEFS_CACHE is not None:
         return _FILTER_DEFS_CACHE
 
-    defs: dict[str, dict[str, Any]] = {}
+    defs: dict[tuple[str, str], dict[str, Any]] = {}
     with _kg_cursor() as cursor:
         cursor.execute(
             "SELECT filter_type, mechanism, tool_arg_name, tool_arg_name_hi, "
             "vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, "
-            "implicit_term FROM kg_entity_filter"
+            "implicit_term, entity_name FROM kg_entity_filter"
         )
         for row in cursor.fetchall():
             (ftype, mechanism, tool_arg, tool_arg_hi, vocab_kind, target,
-             kg_filter_type, imp_vocab, imp_term) = row
-            # Key by (ftype, target) to support the same filter type for different entities
-            # (e.g., "by_id" for PurchaseOrder and ReceivablesInvoice).
-            key = (ftype, target)
+             kg_filter_type, imp_vocab, imp_term, entity) = row
+            key = (ftype, entity)
             defs[key] = {
                 "mechanism": mechanism,
                 "tool_arg_name": tool_arg,
@@ -332,27 +330,24 @@ def _load_filter_defs() -> dict[str, dict[str, Any]]:
     return defs
 
 
-def _filter_def_for(ftype: str, entity: str | None = None) -> dict[str, Any]:
-    """Return the filter definition for the given filter type and optional entity."""
+def _filter_def_for(ftype: str, entity: str) -> dict[str, Any]:
+    """Return the filter definition for (filter_type, source_entity)."""
     defs = _load_filter_defs()
     key = (ftype, entity)
-    if key in defs:
-        return defs[key]
-    # If not found and entity is not None, try with entity None
-    if entity is not None:
-        fallback = (ftype, None)
-        if fallback in defs:
-            return defs[fallback]
-    raise KeyError(f"No filter definition for ({ftype!r}, {entity!r})")
+    if key not in defs:
+        raise KeyError(f"No filter definition for ({ftype!r}, {entity!r})")
+    return defs[key]
 
-def _entity_level_filter_types() -> dict[str | None, set[str]]:
-    """Filter types with a dedicated entity-level fetcher, grouped by entity (None for global)."""
+
+def _entity_level_filter_types() -> dict[str, set[str]]:
+    """Filter types with a dedicated entity-level fetcher, grouped by source entity."""
     defs = _load_filter_defs()
-    result: dict[str | None, set[str]] = {}
+    result: dict[str, set[str]] = {}
     for (ftype, entity), d in defs.items():
         if d["mechanism"] == "entity_level":
             result.setdefault(entity, set()).add(ftype)
     return result
+
 
 def _edge_traversal_filters() -> dict[str, tuple[str, str]]:
     """Edge-traversal filters: type -> (target_entity, kg_filter_type)."""
@@ -360,7 +355,7 @@ def _edge_traversal_filters() -> dict[str, tuple[str, str]]:
     result: dict[str, tuple[str, str]] = {}
     for (ftype, entity), d in defs.items():
         if d["mechanism"] == "edge_traversal":
-            result[ftype] = (entity, d["kg_filter_type"])
+            result[ftype] = (d["target_entity"], d["kg_filter_type"])
     return result
 
 
@@ -371,25 +366,6 @@ def _edge_filter_implicit_values() -> dict[str, tuple[str, str]]:
     for (ftype, entity), d in defs.items():
         if d["implicit_vocab_kind"] is not None:
             result[ftype] = (d["implicit_vocab_kind"], d["implicit_term"])
-    return result
-
-
-def _filter_value_vocab_kind() -> dict[str, str]:
-    """Filter types whose value resolves via a vocab kind.
-
-    NOTE: This is now per-entity, so we need to pass entity to resolve.
-    Keeping it as a flat dict of (ftype, entity) -> vocab_kind would be more
-    accurate, but currently only 'country' and 'status' are used, and they
-    are not duplicated across entities. So we keep it simple.
-    """
-    defs = _load_filter_defs()
-    result: dict[str, str] = {}
-    for (ftype, entity), d in defs.items():
-        if d["vocab_kind"] is not None:
-            # Only add if this filter type is not already in the dict,
-            # or if it's the first occurrence (we assume vocab_kind is the same).
-            if ftype not in result:
-                result[ftype] = d["vocab_kind"]
     return result
 
 
@@ -1265,7 +1241,8 @@ def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) 
             f"Supported entity-level: {sorted(entity_level)}. "
             f"Supported edge-traversal: {sorted(edge_filters)}."
         )
-        
+
+
 def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
     """Return the first entity-level filter type, or 'none'."""
     entity_level = _entity_level_filter_types().get(entity, set())
@@ -1273,30 +1250,21 @@ def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
         ftype = f.get("type")
         if ftype in entity_level:
             return ftype
-        # Special-case by_id for PurchaseOrder and ReceivablesInvoice
-        if ftype == "by_id" and entity in ("PurchaseOrder", "ReceivablesInvoice"):
-            return ftype
     return "none"
+
 
 def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> dict[str, Any]:
     """Build tool_args for the entity fetcher."""
     args = {}
     for f in filters:
         ftype = f.get("type")
-        # Special-case by_id for PurchaseOrder and ReceivablesInvoice
-        if ftype == "by_id" and entity in ("PurchaseOrder", "ReceivablesInvoice"):
-            raw_value = f.get("value")
-            if entity == "PurchaseOrder":
-                args["po_header_id"] = raw_value
-            elif entity == "ReceivablesInvoice":
-                args["customer_transaction_id"] = raw_value
-            continue
-        # Otherwise, only include if it's in the entity-level filter set
-        entity_level = _entity_level_filter_types().get(entity, set())
-        if ftype not in entity_level:
+        try:
+            defn = _filter_def_for(ftype, entity)
+        except KeyError:
+            continue  # not an entity-level filter for this entity
+        if defn["mechanism"] != "entity_level":
             continue
         raw_value = f.get("value")
-        defn = _filter_def_for(ftype, entity)
         arg_name = defn["tool_arg_name"]
         arg_name_hi = defn.get("tool_arg_name_hi")
         if isinstance(raw_value, dict):
@@ -1307,7 +1275,7 @@ def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> di
             if high is not None and arg_name_hi:
                 args[arg_name_hi] = high
             continue
-        vocab_kind = _filter_value_vocab_kind().get(ftype)
+        vocab_kind = defn.get("vocab_kind")
         if vocab_kind is not None:
             args[arg_name] = resolve_vocab(vocab_kind, raw_value)
         else:
@@ -1574,16 +1542,18 @@ def _make_output_name(
     base = _OUTPUT_NAME_BY_ENTITY.get(entity_name, entity_name.lower())
 
     # Country-filtered entity fetch: prefix with the country code.
+    # We need the entity name to look up the vocab kind, but we can just
+    # resolve the country value directly – the vocab_kind is always 'country'
+    # for this filter, and the value is already normalized by the parser.
     if filter_type == "country" and filters:
         matching = next((f for f in filters if f.get("type") == "country"), None)
         if matching is not None:
             country_value = matching["value"]
-            vocab_kind = _filter_value_vocab_kind().get("country")
-            if vocab_kind is not None:
-                try:
-                    country_value = resolve_vocab(vocab_kind, country_value)
-                except KeyError:
-                    pass  # Fall back to the raw value.
+            try:
+                # Try to canonicalize it if it's not already a code.
+                country_value = resolve_vocab('country', country_value)
+            except KeyError:
+                pass  # Fall back to the raw value.
             return f"{country_value.lower()}_{base}"
 
     # PurchaseOrder output naming. The anchor plan's PO step always carries
