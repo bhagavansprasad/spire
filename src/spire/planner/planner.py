@@ -854,7 +854,7 @@ def generate_plan(
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
         has_supplier = any(
-            f.get("type") == "supplier" for f in intent.filters
+            f.get("type") in ("supplier", "purchase_order") for f in intent.filters
         )
         if not has_supplier:
             raise ValueError(
