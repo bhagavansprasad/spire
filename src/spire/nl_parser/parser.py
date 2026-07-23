@@ -372,6 +372,14 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "have the most outstanding receivables'. Set top_n from any 'top N' "
     "wording (default 10). Takes no date range.\n"    
     
+    "- op='receipt_method_distribution' — receipts grouped by ReceiptMethod, "
+    "with a count and total amount per method. Use for 'receipt method "
+    "distribution', 'receipts by method', 'what payment methods do we "
+    "receive', 'show me receipt method breakdown'. Optionally set "
+    "account_number from a customer name (the parser emits customer_name "
+    "which the tool resolves, or account_number directly), and limit from "
+    "any 'top N' wording (default None = all methods).\n"
+        
     "EXCEPTION for credit memos: 'total value of credit memos' is NOT an "
     "aggregation op and is NOT unsupported — it is handled by the CreditMemo "
     "list rule above (the fetcher returns the total). Route it to "

@@ -994,7 +994,27 @@ class ExposureRankingResponse(BaseModel):
         "from the ranking data. Do not reorder, add, or drop.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
-   
+
+class ReceiptMethodDistributionRow(BaseModel):
+    """One receipt method bucket in a distribution."""
+
+    receipt_method: str = Field(description="The receipt method (e.g. Lockbox, Check).")
+    receipt_count: int = Field(description="Number of receipts using this method.")
+    total_amount: float = Field(description="Total amount for this method.")
+
+
+class ReceiptMethodDistributionResponse(BaseModel):
+    """Aggregation response: receipts grouped by receipt method."""
+
+    summary: str = _SUMMARY_FIELD
+    total_receipts: int = Field(description="Total number of receipts examined.")
+    total_amount: float = Field(description="Total amount across all receipts.")
+    methods: list[ReceiptMethodDistributionRow] = Field(
+        default_factory=list,
+        description="One row per method, sorted by total_amount descending.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+       
 class CountResponse(BaseModel):
     """Count response: the size of a (possibly filtered) entity set.
 
@@ -1080,6 +1100,7 @@ AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     "po_status_breakdown": (POStatusBreakdownResponse, "POStatusBreakdown"),
     "open_po_summary": (OpenPOSummaryResponse, "OpenPOSummary"),
     "ExposureRanking": (ExposureRankingResponse, "ExposureRanking"),
+    "receipt_method_distribution": (ReceiptMethodDistributionResponse, "ReceiptMethodDistribution"),
 }
 
 
@@ -1585,6 +1606,15 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "should mention that the receipts are for the specified site. If the list is "
         "empty, say so plainly."
     ),
+    "ReceiptMethodDistribution": (
+        "This is a RECEIPT METHOD DISTRIBUTION (an aggregation). The data has a "
+        "single 'aggregation' bucket containing one object with 'total_receipts', "
+        "'total_amount', and a 'rows' list already sorted by total amount "
+        "(highest first). For each row, emit one entry under 'methods' in the "
+        "SAME order, copying receipt_method, receipt_count, and total_amount "
+        "EXACTLY. In the summary, state the total receipts and total amount, "
+        "and name the top one or two methods."
+    ),
 }
 
 
@@ -1923,6 +1953,12 @@ def _validate_exposure_ranking(
             "output: " + "; ".join(parts)
         )
 
+def _validate_receipt_method_distribution(
+    response: ReceiptMethodDistributionResponse, valid: dict[str, set]
+) -> None:
+    # No IDs to validate; counts and sums are copied from the data.
+    return
+
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
     InvoiceResponse: _validate_invoice,
@@ -1937,6 +1973,7 @@ _VALIDATORS = {
     OpenPOSummaryResponse: _validate_no_ids,
     StandardReceiptResponse: _validate_standard_receipt,
     ExposureRankingResponse: _validate_exposure_ranking,
+    ReceiptMethodDistributionResponse: _validate_receipt_method_distribution,
 }
 
 
