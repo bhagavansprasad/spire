@@ -599,6 +599,97 @@ class AccountReceiptInfo(BaseModel):
     )
 
 
+class AccountReceiptApplicationInfo(BaseModel):
+    """One receipt application on a customer account (AR-P5 prompt 9).
+
+    A receipt application is the matching of a receipt (cash received) to an
+    invoice (money owed). Each row is PRE-JOINED: it carries the receipt side
+    and the transaction side on one record. application_id is validated against
+    the executor's output.
+    """
+
+    application_id: int = Field(
+        description="The application's ApplicationId (numeric PK)."
+    )
+    receipt_id: int = Field(
+        description="The receipt's StandardReceiptId (numeric)."
+    )
+    receipt_number: str = Field(
+        default="", description="The receipt number."
+    )
+    receipt_method: str = Field(
+        default="", description="How the payment arrived (e.g. Lockbox)."
+    )
+    transaction_id: int | None = Field(
+        default=None,
+        description="The transaction's ReferenceTransactionId (the payment "
+        "schedule id, a small int). Null only when unapplied, but we filter "
+        "those out, so this is always populated.",
+    )
+    transaction_number: str = Field(
+        default="", description="The transaction number."
+    )
+    transaction_status: str = Field(
+        default="", description="Transaction status (e.g. Open, Closed)."
+    )
+    application_amount: float = Field(
+        description="The amount applied to the transaction."
+    )
+    application_date: str = Field(
+        default="", description="Application date."
+    )
+    currency: str = Field(
+        default="", description="Application currency (EnteredCurrency)."
+    )
+
+class StandardReceiptRecord(BaseModel):
+    """One standard receipt in a top-level StandardReceipt-rooted response (Prompt 13).
+
+    This is the top-level /standardReceipts projection, which includes CustomerName,
+    CustomerAccountNumber, and bank fields. Distinct from AccountReceipt (the
+    per-account child) which has ProcessStatus and omits these fields.
+    """
+
+    standard_receipt_id: int = Field(
+        description="The receipt's StandardReceiptId (numeric PK)."
+    )
+    receipt_number: str = Field(
+        default="", description="Human-readable receipt number."
+    )
+    receipt_date: str = Field(
+        default="", description="Receipt date."
+    )
+    amount: float | None = Field(
+        default=None, description="Receipt amount (cash received)."
+    )
+    currency: str = Field(
+        default="", description="Receipt currency (e.g. USD)."
+    )
+    receipt_method: str = Field(
+        default="", description="How the payment arrived (e.g. Lockbox, Check)."
+    )
+    status: str = Field(
+        default="", description="Top-level status (Cleared, etc.)."
+    )
+    customer_name: str = Field(
+        default="", description="Customer display name."
+    )
+    customer_account_number: str = Field(
+        default="", description="Customer account number."
+    )
+    customer_site: str = Field(
+        default="", description="Customer site (e.g. Santa Clara)."
+    )
+    remittance_bank_name: str = Field(
+        default="", description="Remittance bank name."
+    )
+    remittance_bank_branch: str = Field(
+        default="", description="Remittance bank branch."
+    )
+    remittance_bank_account_number: str = Field(
+        default="", description="Remittance bank account number."
+    )
+    
 class CustomerAccountRecord(BaseModel):
     """One customer account in a customer-account-rooted response.
 
@@ -645,6 +736,12 @@ class CustomerAccountRecord(BaseModel):
         "query asked for them (an 'accountreceipt' bucket in the data). "
         "Empty otherwise. Each receipt_id must appear in the executor's "
         "output.",
+    )
+    applications: list[AccountReceiptApplicationInfo] = Field(
+        default_factory=list,
+        description="This account's receipt applications, when the query asked for "
+        "them (an 'accountreceiptapplication' bucket in the data). Empty "
+        "otherwise. Each application_id must appear in the executor's output.",
     )
 
 
@@ -693,6 +790,16 @@ class AddressResponse(BaseModel):
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
+class StandardReceiptResponse(BaseModel):
+    """StandardReceipt-rooted synthesized response (Prompt 13)."""
+
+    summary: str = _SUMMARY_FIELD
+    standard_receipts: list[StandardReceiptRecord] = Field(
+        default_factory=list,
+        description="One entry per standard receipt in the final set. "
+        "Empty if none.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
 
 class CreditMemoRecord(BaseModel):
     """One credit memo in a credit-memo-rooted response."""
@@ -930,6 +1037,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "ReceivablesInvoice": ReceivablesInvoiceResponse,
     "CustomerAccount": CustomerAccountResponse,
     "CreditMemo": CreditMemoListResponse,
+    "StandardReceipt": StandardReceiptResponse,
 }
 
 
@@ -1046,7 +1154,9 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
     customer_account_transaction_ids: set = set()
     account_credit_memo_ids: set = set()
     account_receipt_ids: set = set()
-
+    application_ids: set = set()
+    standard_receipt_ids: set = set()
+    
     for bucket in outputs.values():
         for item in bucket:
             if (sid := item.get("SupplierId")) is not None:
@@ -1097,6 +1207,14 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
             # value is what the validator compares against.
             if (arid := item.get("StandardReceiptId")) is not None:
                 account_receipt_ids.add(arid)
+            # Prompt 9: receipt applications. ApplicationId is a sixth AR
+            # id space.
+            if (aid := item.get("ApplicationId")) is not None:
+                application_ids.add(aid)
+                
+            if (srid := item.get("StandardReceiptId")) is not None:
+                standard_receipt_ids.add(srid)
+            
             # Phase 9: a supplier-rooted query with addresses nests each
             # supplier's addresses under "addresses"; harvest their ids so
             # the nested AddressInfo entries validate.
@@ -1133,6 +1251,8 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
         "customer_account_transaction_ids": customer_account_transaction_ids,
         "account_credit_memo_ids": account_credit_memo_ids,
         "account_receipt_ids": account_receipt_ids,
+        "application_ids": application_ids,
+        "standard_receipt_ids": standard_receipt_ids,
     }
 
 
@@ -1318,6 +1438,14 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "data, copied exactly — these ids vary in length, and a short one "
         "is just as valid as a long one. If the bucket is absent, leave "
         "'receipts' empty and do not mention it.\n"
+        "- 'accountreceiptapplication' bucket: emit each application under that "
+        "account's 'applications' (application_id, receipt_id, receipt_number, "
+        "receipt_method, transaction_id, transaction_number, transaction_status, "
+        "application_amount, application_date, currency). The summary must say "
+        "how many applications and name the customer — but COPY every amount "
+        "exactly; do NOT total them. Every application_id must appear in the "
+        "data. If the bucket is absent, leave 'applications' empty and do not "
+        "mention it.\n"
         "BALANCE-ONLY SHAPE — when there is NO child bucket at all "
         "(none of 'customertransaction', 'accountcreditmemo' or "
         "'accountreceipt'), the "
@@ -1403,6 +1531,17 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "value, how many open purchase orders it spans, and across how many "
         "suppliers. If 'truncated' is true, say plainly that the figures "
         "cover only the purchase orders examined."
+    ),
+    "StandardReceipt": (
+        "This is a STANDARD-RECEIPT-rooted query (top-level cash receipts). "
+        "For each receipt in the final set, emit one entry under 'standard_receipts' "
+        "with its standard_receipt_id, receipt_number, receipt_date, amount, currency, "
+        "receipt_method, status, customer_name, customer_account_number, customer_site, "
+        "and bank fields (remittance_bank_name, remittance_bank_branch, "
+        "remittance_bank_account_number). standard_receipt_id must appear in the data. "
+        "Copy every amount exactly. If the query included a site filter, the summary "
+        "should mention that the receipts are for the specified site. If the list is "
+        "empty, say so plainly."
     ),
 }
 
@@ -1598,6 +1737,7 @@ def _validate_customer_account(
     bad_txn: list[int] = []
     bad_memo: list[int] = []
     bad_receipt: list[int] = []
+    bad_apps: list[int] = []
     for acct in response.customer_accounts:
         if acct.account_id not in valid["customer_account_ids"]:
             bad_acct.append(acct.account_id)
@@ -1624,6 +1764,10 @@ def _validate_customer_account(
         for rcpt in acct.receipts:
             if rcpt.receipt_id not in valid["account_receipt_ids"]:
                 bad_receipt.append(rcpt.receipt_id)
+        # Prompt 9: receipt applications.
+        for app in acct.applications:
+            if app.application_id not in valid["application_ids"]:
+                bad_apps.append(app.application_id)
     parts = []
     if bad_acct:
         parts.append(f"customer_account_ids={bad_acct}")
@@ -1633,6 +1777,8 @@ def _validate_customer_account(
         parts.append(f"account_credit_memo_ids={bad_memo}")
     if bad_receipt:
         parts.append(f"account_receipt_ids={bad_receipt}")
+    if bad_apps:
+        parts.append(f"application_ids={bad_apps}")
     _raise_if_bad(parts)
 
 
@@ -1703,6 +1849,21 @@ def _validate_no_ids(response: BaseModel, valid: dict[str, set]) -> None:
     that is the instruction plus zero-temperature, not this function."""
     return
 
+def _validate_standard_receipt(
+    response: StandardReceiptResponse, valid: dict[str, set]
+) -> None:
+    bad_ids: list[int] = []
+    for rec in response.standard_receipts:
+        if rec.standard_receipt_id not in valid["standard_receipt_ids"]:
+            bad_ids.append(rec.standard_receipt_id)
+    parts = []
+    if bad_ids:
+        parts.append(f"standard_receipt_ids={bad_ids}")
+    if parts:
+        raise HallucinationError(
+            "Synthesizer produced IDs that do not appear in the executor "
+            "output: " + "; ".join(parts)
+        )
 
 _VALIDATORS = {
     SupplierResponse: _validate_supplier,
@@ -1716,6 +1877,7 @@ _VALIDATORS = {
     SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
     POStatusBreakdownResponse: _validate_no_ids,
     OpenPOSummaryResponse: _validate_no_ids,
+    StandardReceiptResponse: _validate_standard_receipt,
 }
 
 
@@ -2062,6 +2224,12 @@ def synthesize_response(
                 if outputs.get("accountreceipt"):
                     raise DegenerateOutputError(
                         f"Account {account.account_id} has non-empty 'accountreceipt' bucket but 'receipts' list is empty."
+                    )
+            # Check applications
+            if hasattr(account, "applications") and not account.applications:
+                if outputs.get("accountreceiptapplication"):
+                    raise DegenerateOutputError(
+                        f"Account {account.account_id} has non-empty 'accountreceiptapplication' bucket but 'applications' list is empty."
                     )
 
     _validate_no_hallucinated_ids(response, outputs)
