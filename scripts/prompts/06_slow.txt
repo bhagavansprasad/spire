@@ -1,0 +1,70 @@
+# Spire prompt set — 06 SLOW. Read by scripts/run_prompt_set.py.
+#
+# Every prompt here is expensive. Two cost shapes:
+#
+#   EDGE FILTERS — one child HTTP call PER SUPPLIER over the candidate
+#   set. Minutes, not seconds.
+#
+#   AGGREGATIONS — paginate a full collection. The invoice spend rankings
+#   page a whole year (~2 min each); the PO scans cover ~3,362 POs (~60s).
+#
+# Run this set overnight or when you can leave it. Everything here is
+# split out of 01/02 so a quick verification run stays quick.
+#
+# DEDUPLICATION NOTE: three near-identical spend aggregations appeared
+# across the old sets ("Top 10 suppliers by spend in 2022", "Top 5
+# suppliers by spend in 2022", "Which suppliers did we spend the most
+# with in 2022"). They exercise ONE code path. Two are kept — one to test
+# the top_n parameter, one to test the paraphrase routing — and the third
+# is dropped.
+
+# ===== SUPPLIER EDGE FILTERS (one child call per supplier) =====
+
+# — cross-entity value filter (Phase 11) —
+Suppliers with invoice amount greater than 10000
+which suppliers invoiced more than 50000
+
+# — open PO / no recent invoices (Phase 11) —
+suppliers with open purchase orders
+suppliers with no invoices in the last 6 months
+
+# — supplier sites by business unit (Phase 12) —
+List suppliers with a site in the US1 business unit
+suppliers with a site in the France business unit
+
+# — supplier business classification (Phase 13) —
+List suppliers that are small business
+woman owned suppliers
+which suppliers are veteran owned
+
+# ===== SUPPLIER AGGREGATIONS (paginate a full year, ~2 min each) =====
+
+# — top-N by spend: tests the top_n parameter —
+Top 10 suppliers by spend in 2022
+
+# — same aggregation, paraphrased: tests routing, not arithmetic —
+Which suppliers did we spend the most with in 2022
+
+# ===== PURCHASE ORDER FULL SCANS (~60s each) =====
+
+# — top suppliers by PO value (P6, prompt 19) —
+# NOTE: unfiltered, so it pages all ~3,362 POs. "by PO value" must route
+# to po_value_by_supplier, NOT the invoice spend ranking. Getting this
+# wrong is a silent wrong answer, not an error.
+Top 5 suppliers by purchase order value
+
+# — PO status breakdown (P6, prompt 7) —
+# Takes no filter by design: grouping BY status needs every status, so
+# nothing can be pushed to the server.
+How many purchase orders are there and what are they worth?
+
+# — committed spend (P6, prompt 18) —
+How much have we committed in open purchase orders?
+
+# — invoiced vs ordered: top suppliers / concentration (P6c, prompts 23-24) —
+# SLOWEST IN THE SET: ranks all ~3,362 POs, then per top supplier pages
+# POs + invoices.
+# NOTE ON DATA: most invoices on this pod are NOT PO-linked (debit memos,
+# prepayments), so PO-matched invoiced totals run far below total
+# invoiced; each row's unmatched_invoice_count carries that context.
+Compare ordered vs invoiced for our top 3 suppliers

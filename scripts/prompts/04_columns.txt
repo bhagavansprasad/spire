@@ -1,0 +1,62 @@
+# Spire prompt set — 04 COLUMN SELECTION. Read by scripts/run_prompt_set.py.
+#
+# STATUS AS OF 2026-07-24: THIS FEATURE DOES NOT WORK. This set exists to
+# capture the failure precisely, not to demonstrate a capability.
+#
+# Design intent: the user names the columns they want and the output
+# honours them.
+#
+# TWO DISTINCT DEFECTS, both confirmed live:
+#
+# 4a. `fields` is parsed but NEVER APPLIED. The parser extracts the field
+#     list into the Intent correctly. Nothing downstream uses it.
+#     _project_outputs(outputs, fields) exists in graph/pipeline.py, but
+#     run_plan.py calls execute_plan and synthesize_response directly and
+#     never invokes it. Evidence: asking for ONE field and asking for TWO
+#     produced BYTE-IDENTICAL output — same token counts (in=2729,
+#     out=2487), same answer text, same six columns.
+#
+# 4b. Requesting `country` as a FIELD triggers an over-fetch that overruns
+#     the synthesizer. Synthesizer input 16,881 tokens vs 2,729 for the
+#     working prompts — six times the payload, then MAX_TOKENS. Per the KG,
+#     Supplier/country is client_side with the note "Country lives on the
+#     addresses child; over-fetch." Requesting country as a field appears
+#     to trigger the same address expansion used for country FILTERING.
+#     The four-field form also degraded the PARSER (out=820 vs 227-285).
+#
+# What to check per prompt:
+#   - does the Intent carry a `fields` list, and is it the right one?
+#   - do the Outputs rows show only those columns, or the default six?
+#   - does the Answer list only the requested columns?
+#   - does anything WARN that the projection was not applied?
+
+# — two columns, no country (parses clean, projection ignored) —
+Show only supplier name and status for active suppliers
+
+# — one column (parses clean, projection ignored) —
+Just the names of active suppliers
+
+# — two columns INCLUDING country (MAX_TOKENS runaway) —
+Supplier number and country for active suppliers
+
+# — four columns including country (parser degrades, then runaway) —
+Supplier name, number, status and country for active suppliers
+
+# — projection on a different root: Invoice —
+# Untested. Invoice has no addresses child, so the country over-fetch
+# should not apply here — this isolates 4a from 4b.
+Invoice number, amount, and date for supplier 1252
+
+# — projection combined with an edge filter —
+# Untested. The edge traversal already over-fetches; a field request on
+# top of it may compound.
+Just the names of woman owned suppliers
+
+# — projection on a PO root —
+# Untested.
+Order number and status for purchase orders created before 2015
+
+# — projection naming a field that does not exist on the entity —
+# Untested. Should say so rather than silently dropping it or inventing
+# a column.
+Show supplier name and credit rating for active suppliers

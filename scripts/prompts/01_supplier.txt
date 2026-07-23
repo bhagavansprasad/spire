@@ -1,0 +1,93 @@
+# Spire prompt set — 01 SUPPLIER. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# Merged from prompt_set_supplier.txt, 02_test_prompts_e2e.txt and the
+# supplier sections of spire_v1_2_review_prompts.txt, deduplicated.
+# Cross-module prompts whose ROOT entity is Supplier live here
+# (e.g. "suppliers with open POs" roots on Supplier).
+#
+# SLOW prompts (edge filters that make one child call per supplier, and
+# the spend aggregations) have moved to 06_slow.txt.
+# Out-of-scope refusals have moved to 05_refusals.txt.
+#
+# Anchors: supplier 1252 = Lee Supplies (SupplierId 300000047414503, US,
+# ACTIVE, Spend Authorized, 25 addresses). Supplier 1262 = EIP Inc
+# (10 contacts). 421 of 424 suppliers are ACTIVE.
+# NOTE "Lee Supplies" is AMBIGUOUS by name — the pod also carries clones
+# like "Lee Supplies56 2026". Name-matched results may span them.
+
+# — status (paraphrase variety) —
+Get list of active suppliers
+which suppliers are currently active
+show me all the active vendors
+suppliers that are not inactive
+List inactive suppliers
+suppliers whose status is inactive
+
+# — country —
+List US suppliers
+suppliers based in America
+vendors in the United States
+which suppliers are located in the UK
+suppliers from India
+show me suppliers in Great Britain
+
+# — name fragment —
+Suppliers named Lee
+find vendors with Corp in the name
+any supplier called Dell
+
+# — business relationship —
+Prospective suppliers
+show me spend authorized suppliers
+which vendors are prospective
+
+# — created date —
+Suppliers created between Jan and Mar 2025
+vendors added in 2024
+suppliers created after June 2025
+
+# — combinations (stacked filters) —
+active US suppliers
+active prospective suppliers
+woman owned suppliers in the US
+
+# — collision traps (most likely to misroute) —
+# "US suppliers" must route to country, NOT the US1 business unit.
+# "small suppliers" is a size adjective, not the Small Business
+# classification — the label case is debatable, not a bug.
+US suppliers
+suppliers in the US1 business unit
+small business suppliers
+suppliers with a UK business unit site
+suppliers in the UK
+
+# — count —
+Count of suppliers
+how many suppliers do we have
+how many active suppliers are there
+
+# — supplier contacts (P4) —
+# EIP Inc resolves to supplier 1262 with 10 contacts.
+Show supplier EIP Inc and its contacts
+
+# — address (Phase 6) —
+Addresses for supplier 1252
+
+# — nested addresses on a supplier query (Phase 9) —
+# Path B: satisfied by expand=addresses on the supplier fetch itself,
+# NOT by a separate Address step.
+Suppliers with their addresses
+
+# — invoice target + filters (Phase 5) —
+# The 'supplier' filter's tool_arg_name is a PLACEHOLDER: an all-digit
+# value routes to supplier_number, anything else to supplier_name.
+Show me invoices for supplier 1252
+Invoices for supplier 1252 over 100000
+Invoices for Lee Supplies in 2023
+
+# — ambiguous / underspecified —
+# Both are debatable rather than broken: "show me suppliers" is a valid
+# unfiltered list; "recent invoices" has no supplier and should refuse.
+show me suppliers
+everything about supplier 1252

@@ -1,4 +1,4 @@
-# Spire prompt set — ACCOUNTS RECEIVABLE module. Read by scripts/run_prompt_set.py.
+# Spire prompt set — 03 ACCOUNTS RECEIVABLE. Read by scripts/run_prompt_set.py.
 # One prompt per line. Blank lines and lines starting with # are ignored.
 # Ordered fast-first.
 #
@@ -19,6 +19,12 @@
 # Corporation Worldwide 25750) and they are NOT interchangeable. The balance
 # figures DRIFT (open receivables read 680,271.11 on 2026-07-19 and 678,923.69
 # on 2026-07-22), so never assert an exact value for prompt 6.
+#
+# FLOAT NOTE: account 26370's TotalTransactionsDueForAccount is 1179915.3225.
+# Four decimal places do not terminate in IEEE-754 and the synthesizer once
+# emitted the full binary expansion to the token cap. Four layers of rounding
+# now guard this; if a MAX_TOKENS runaway reappears on a CustomerAccount
+# prompt, check the trace for a long decimal before assuming anything else.
 
 # — AR invoice by id + lines (AR-P2 Shape A, prompts 11, 12, 2) —
 Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
@@ -73,19 +79,29 @@ Show credit memos for ABC Application Software
 Show receipts for ABC Application Software
 
 # — a customer's receipt applications (AR-P5, prompt 9) —
+# Of 15,636 applications on this account, 8,598 are Unapplied (null
+# transaction side, largely sign-mirrored reversals) and 7,038 Applied.
+# Filtered server-side via q=ApplicationStatus='Applied'. Row limit is 10:
+# at 25 the synthesizer returns an EMPTY applications array with a short
+# summary rather than truncating. The answer must state the total (7,038),
+# not the returned row count.
 Show receipt applications for customer ABC Application Software
 
 # — site-filtered receipts (AR-P5, prompt 13) —
+# NEVER OBSERVED RUNNING as of 2026-07-24.
 # Uses top-level /standardReceipts, not the account child. Server-side
 # filter by CustomerAccountNumber, client-side filter by CustomerSite.
 # Composite q= returns a silent zero on this endpoint, so only one clause
 # goes to the server. `fields=` is unusable here (500s even with valid
 # names), so fetch full rows and discard fields client-side.
+# TRAP: "Santa Clara" spans accounts 26360 AND 26370. A result that does
+# not resolve to an AccountNumber cannot be trusted.
 Show receipts for ABC Application Software at Santa Clara
 
 # — exposure ranking (AR-P6, prompt 10) —
 # Aggregation: rank accounts by TotalOpenReceivablesForAccount descending.
-# Uses op-registry (not KG). Requires a deterministic synthesizer shape.
+# Uses op-registry (not KG). 435 accounts ranked; top is Motique Gym
+# (23129) at 165,428,563.24.
 Rank top accounts by outstanding exposure
 
 # — cash collection trends / DSO (AR-P6, prompt 16) —
@@ -97,10 +113,14 @@ Rank top accounts by outstanding exposure
 
 # — receipt method distribution (AR-P6, prompt 17) —
 # Aggregation: bucket receipts by ReceiptMethod, compute count and total
-# amount per method. Uses op-registry (not KG).
+# amount per method. Uses op-registry (not KG). Pages to exhaustion when
+# scoped to an account — 1,386 receipts on 26360, in two methods
+# (Lockbox 993 / Check 393). An earlier 500-row cap reported a sample as
+# a total and hid the Check bucket entirely.
 Show receipt method distribution for ABC Application Software
 
 # — creation-to-update lag (AR-P6, prompt 18) —
 # Aggregation: compute LastUpdateDate − CreationDate per receipt.
-# Uses op-registry (not KG).
+# Uses op-registry (not KG). Reported as needing a lag_query parameter on
+# the server wrapper — unverified.
 Show lag between creation and last update for receipts of ABC Application Software

@@ -1,39 +1,39 @@
-# Spire prompt set — DIPSTICK. Read by scripts/run_prompt_set.py.
+# Spire prompt set — 00 DIPSTICK. Read by scripts/run_prompt_set.py.
 # Six fast prompts, ordered by increasing pipeline depth. The purpose is
 # stability triage, not coverage: the FIRST failure tells you the depth at
 # which the pipeline breaks, so later failures can be attributed correctly.
 #
+# Run this FIRST in any batch. If depth 1 or 2 fails, nothing below is
+# worth reading.
+#
 # Read the ANSWERS, not the summary line. run_prompt_set.py has previously
 # reported prompts as running cleanly while they were being wrongly REFUSED.
-#
+
 # Depth 1 — Supplier root, count path, no children, no filters.
-#   If this fails: pod connection, credentials or parser. Nothing below
-#   this line is worth reading.
+#   If this fails: pod connection, credentials or parser.
+#   KNOWN ISSUE: count_only is parsed but the planner ignores it — the plan
+#   fetches 25 rows. The stated total (424) is plausible but its provenance
+#   is unverified.
 Count of suppliers
 
-# Depth 2 — one ENTITY-LEVEL filter. This is the real dipstick.
-#   The filter layer is the suspected regression (handoff Issue 6:
-#   _load_filter_defs keys by (filter_type, target_entity) but its callers
-#   iterate expecting ftype, d). If this fails with
-#   "Supported entity-level: []" the regression is WIDER than the three
-#   known prompts.
+# Depth 2 — one ENTITY-LEVEL filter. The real dipstick: this is the layer
+#   that regressed once already.
 Get list of active suppliers
 
-# Depth 3 — by-id resolution + one child fetch.
-#   Tests the executor's child-traversal path and the by_id filter, which
-#   the handoff flags as the capability direction 1 would lose.
+# Depth 3 — by-id resolution + one child fetch. Exercises the value-shape
+#   arg routing (all-digit -> supplier_number, else supplier_name).
 Addresses for supplier 1252
 
 # Depth 4 — PO root + traversal + synthesizer. Oldest complete path.
-#   PO 2144 = OrderNumber 162352, EIP Inc, 2 lines. Confirmed working
-#   end-to-end last session.
+#   PO 2144 = OrderNumber 162352, EIP Inc, 2 lines.
 Show PO 2144 and its lines
 
 # Depth 5 — AR root + customer-name resolution + synthesizer.
-#   Verified working last session. Confirms AR is not broadly broken.
 #   ABC Corporation Americas = AccountId 300000047368527, AccountNumber
 #   26370. Do NOT accept a result that does not resolve to this account —
 #   three ABC entities exist on this pod and two share a site.
+#   This prompt exposed the float-expansion runaway (TotalTransactionsDue
+#   = 1179915.3225, non-terminating in IEEE-754).
 Show me AR invoices for customer ABC Corporation Americas
 
 # Depth 6 — refusal path. Must refuse cleanly, not guess.
