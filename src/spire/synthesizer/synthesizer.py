@@ -1638,16 +1638,16 @@ def _build_synthesis_prompt(
         f"by that step.\n\n```json\n{rendered}\n```\n"
     ]
 
-    # ---- Add metadata note if available (fixes receipt‑applications count) ----
+# ---- Add metadata note if available (fixes receipt-applications count) ----
     if metadata_by_step:
         apps_meta = metadata_by_step.get("account_receipt_applications")
         if apps_meta and apps_meta.get("total_available") is not None:
             total = apps_meta["total_available"]
             parts.append(
                 f"\nThe total number of applied receipt applications for this account "
-                f"is {total}. The list below shows only the most recent ones.\n"
+                f"is {total}.\n"
             )
-
+            
     if truncation_by_step:
         truncation_rendered = json.dumps(truncation_by_step, default=str, indent=2)
         parts.append(
@@ -2324,24 +2324,6 @@ def synthesize_response(
     # This catches cases where the LLM generates a summary but leaves arrays empty.
     if isinstance(response, CustomerAccountResponse):
         # --- Structural fallback: populate applications from bucket if empty ---
-        bucket = outputs.get("account_receipt_applications")
-        if bucket and isinstance(bucket, list) and len(bucket) > 0:
-            for account in response.customer_accounts:
-                if not account.applications:  # empty list
-                    for row in bucket:
-                        mapped = {
-                            "application_id": row.get("ApplicationId"),
-                            "receipt_id": row.get("StandardReceiptId"),
-                            "receipt_number": row.get("ReceiptNumber"),
-                            "receipt_method": row.get("ReceiptMethod"),
-                            "transaction_id": row.get("ReferenceTransactionId"),
-                            "transaction_number": row.get("ReferenceTransactionNumber"),
-                            "transaction_status": row.get("ReferenceTransactionStatus"),
-                            "application_amount": row.get("ApplicationAmount"),
-                            "application_date": row.get("ApplicationDate"),
-                            "currency": row.get("EnteredCurrency"),
-                        }
-                        account.applications.append(AccountReceiptApplicationInfo(**mapped))
         for account in response.customer_accounts:
             # Check each child array
             if hasattr(account, "transactions") and not account.transactions:
