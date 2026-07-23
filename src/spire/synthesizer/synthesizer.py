@@ -32,6 +32,7 @@ docs/design3_measurement_report.md (row 7 = no synthesizer).
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 import sys
 from typing import Any
 
@@ -1328,6 +1329,10 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "language.\n"
     "- If the final set is empty, say so plainly and return an empty "
     "records list.\n"
+    "- For any numeric value, copy it exactly as given in the data."
+    "If the data shows a number with more than two decimal places, "
+    "round it to two decimal places. Do NOT generate numbers with more"
+    "than two decimal places.\n"
     "- If the input includes a 'truncation' block, populate "
     "truncation_notes with one note per entry: the step's output_name, "
     "the total_available count (or 'unknown' if null), and how many "
@@ -1514,7 +1519,12 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "is nothing true to say about them either way; a sentence such as "
         "'no transaction details were requested or found' is WRONG and "
         "must not appear. If ANY child bucket IS present, this shape does "
-        "not apply — describe that child instead, per the rules above."
+        "not apply — describe that child instead, per the rules above.\n"
+        "\n"
+        "IMPORTANT: Round all floating-point numbers (amounts, balances, "
+        "totals) to exactly 2 decimal places. Do NOT output more than 2 "
+        "decimal places. This applies to the summary and every numeric field. "
+        "For example, output 1179915.32, not 1179915.3225000001."
     ),
     "CreditMemo": (
         "This is a CREDIT-MEMO-rooted query. The data has a 'credit_memos' "
@@ -1624,6 +1634,16 @@ def _build_system_prompt(target_entity: str) -> str:
     return _SYSTEM_PROMPT_PREAMBLE + block
 
 
+def _round_floats(obj):
+    """Recursively round floats in a dict/list to 2 decimal places."""
+    if isinstance(obj, (float, Decimal)):
+        return round(float(obj), 2)
+    if isinstance(obj, dict):
+        return {k: _round_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_round_floats(item) for item in obj]
+    return obj
+
 def _build_synthesis_prompt(
     outputs: dict[str, list[dict]],
     truncation_by_step: dict[str, dict] | None = None,
@@ -1631,14 +1651,14 @@ def _build_synthesis_prompt(
 ) -> str:
     """Build the user-message portion of the prompt: outputs as JSON,
     plus an optional truncation block and optional metadata totals."""
-    rendered = json.dumps(outputs, default=str, indent=2)
+    rounded = _round_floats(outputs)
+    rendered = json.dumps(rounded, default=str, indent=2)
     parts = [
         "Here is the executor's output. Each top-level key is the "
         "output_name of a step; each value is a list of records returned "
         f"by that step.\n\n```json\n{rendered}\n```\n"
     ]
-
-# ---- Add metadata note if available (fixes receipt-applications count) ----
+    # ---- Add metadata note if available (fixes receipt-applications count) ----
     if metadata_by_step:
         apps_meta = metadata_by_step.get("account_receipt_applications")
         if apps_meta and apps_meta.get("total_available") is not None:
@@ -2323,7 +2343,6 @@ def synthesize_response(
     # For CustomerAccount responses, check child arrays (transactions, credit_memos, receipts, applications).
     # This catches cases where the LLM generates a summary but leaves arrays empty.
     if isinstance(response, CustomerAccountResponse):
-        # --- Structural fallback: populate applications from bucket if empty ---
         for account in response.customer_accounts:
             # Check each child array
             if hasattr(account, "transactions") and not account.transactions:
@@ -2349,4 +2368,11 @@ def synthesize_response(
                     )
 
     _validate_no_hallucinated_ids(response, outputs)
+
+    # --- Post-process: round any float values in the response (defend against LLM-generated long decimals) ---
+    # The LLM sometimes generates many decimal places even when the input is rounded.
+    response_dict = response.model_dump()
+    rounded_dict = _round_floats(response_dict)
+    response = response.__class__(**rounded_dict)
+
     return response

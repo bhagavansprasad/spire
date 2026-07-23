@@ -23,6 +23,20 @@ reference's non-queryable list).
 Returns a list of account dicts (possibly empty if the name matches
 nothing). Each carries AccountId (the key the transaction traversal needs),
 AccountNumber, CustomerName, CustomerId, and the account balance.
+
+BALANCES ARE ROUNDED TO 2dp HERE — deliberately, and not for display.
+The pod returns TotalTransactionsDueForAccount as 1179915.3225 for account
+26370. Four decimal places do not terminate in IEEE-754, and the
+synthesizer emitted the full binary expansion —
+1179915.3225000001207768917083740234375 — then trailing zeros until it hit
+the output token cap (finish_reason=MAX_TOKENS, out=7983). The summary and
+every other field in that response were correct; the run died on this one
+number. Captured in traces/degenerate_synthesize_20260724_014659.txt.
+
+The failure is sampling-dependent: the same prompt succeeded earlier the
+same day at out=3066. Rounding removes the pathological value rather than
+asking the model not to expand it, on the principle that compute belongs in
+the tool. Currency to 2dp loses nothing an AR answer needs.
 """
 
 from spire.fusion.client import FusionClient
@@ -41,9 +55,22 @@ _PROJECTED_FIELDS = [
     "TotalTransactionsDueForAccount",
 ]
 
+# Monetary fields rounded to 2dp before they leave the tool. See the
+# module docstring: an un-rounded value ran the synthesizer to its token
+# cap emitting a float's full binary expansion.
+_MONEY_FIELDS = (
+    "TotalOpenReceivablesForAccount",
+    "TotalTransactionsDueForAccount",
+)
+
 
 def _project(source: dict) -> dict:
-    return {k: source.get(k) for k in _PROJECTED_FIELDS}
+    row = {k: source.get(k) for k in _PROJECTED_FIELDS}
+    for field in _MONEY_FIELDS:
+        value = row.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            row[field] = round(value, 2)
+    return row
 
 
 async def get_customer_account_by_name(
@@ -58,7 +85,9 @@ async def get_customer_account_by_name(
 
     Returns:
         A list of account dicts with the projected fields, one per matching
-        account. Empty if the name matches no account.
+        account. Empty if the name matches no account. Balance fields are
+        rounded to 2dp — see the module docstring for why this is not
+        merely cosmetic.
     """
     params = {
         "onlyData": "true",
