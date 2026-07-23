@@ -1198,6 +1198,10 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes account_id. Fetches the account''s standardReceiptApplications child, newest first (orderBy=ApplicationDate:desc). Uses over-fetch (fetch_limit) and client-side filter to keep only ApplicationStatus=''Applied'' (unapplied rows have null transaction side).'
 );
 
+-- Entity tool for lag_query
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes)
+VALUES ('StandardReceipt', 'lag_query', 'get_receipts_with_lag', 'Fetches receipts with computed lag_days field. Takes customer_name and limit.');
+
 PROMPT Seeded kg_edge_tool (16 rows).
 
 -- ============================================================
@@ -1338,6 +1342,10 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'StandardReceipt', 'customer_name', 'entity_level', 'customer_name', NULL, NULL, NULL, NULL, NULL, 'client_side', 'CustomerName', 'equals',
   'Customer name; resolved to account number by the tool before the server call.'
 );
+
+-- Entity-level filter for lag_query on StandardReceipt
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes)
+VALUES ('StandardReceipt', 'lag_query', 'entity_level', 'lag_query', NULL, NULL, NULL, NULL, NULL, 'client_side', NULL, NULL, 'Computed field: list receipts with creation-to-update lag (lag_days = LastUpdateDate - CreationDate). Handled by get_receipts_with_lag tool.');
 
 PROMPT Seeded kg_entity_filter (21 rows).
 

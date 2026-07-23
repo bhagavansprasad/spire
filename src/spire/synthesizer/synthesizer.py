@@ -690,6 +690,19 @@ class StandardReceiptRecord(BaseModel):
     remittance_bank_account_number: str = Field(
         default="", description="Remittance bank account number."
     )
+
+class ReceiptLagRecord(StandardReceiptRecord):
+    """A receipt with computed creation‑to‑update lag.
+
+    Extends StandardReceiptRecord with the lag_days field.
+    """
+
+    creation_date: str = Field(default="", description="Creation date (ISO).")
+    last_update_date: str = Field(default="", description="Last update date (ISO).")
+    lag_days: int | None = Field(
+        default=None,
+        description="Days between LastUpdateDate and CreationDate. Positive integer, or None if dates are missing."
+    )
     
 class CustomerAccountRecord(BaseModel):
     """One customer account in a customer-account-rooted response.
@@ -1063,6 +1076,36 @@ class ComparisonResponse(BaseModel):
         description="Any truncation note carried from the tool.",
     )
 
+class ReceiptLagRecord(BaseModel):
+    """A receipt with computed creation‑to‑update lag."""
+
+    standard_receipt_id: int = Field(description="The receipt's StandardReceiptId.")
+    receipt_number: str = Field(default="", description="Receipt number.")
+    receipt_date: str = Field(default="", description="Receipt date.")
+    amount: float | None = Field(default=None, description="Receipt amount.")
+    currency: str = Field(default="", description="Receipt currency.")
+    receipt_method: str = Field(default="", description="Payment method.")
+    status: str = Field(default="", description="Receipt status.")
+    customer_name: str = Field(default="", description="Customer display name.")
+    customer_account_number: str = Field(default="", description="Customer account number.")
+    customer_site: str | None = Field(default=None, description="Customer site.")
+    creation_date: str = Field(default="", description="Creation date.")
+    last_update_date: str = Field(default="", description="Last update date.")
+    lag_days: int | None = Field(default=None, description="Days between LastUpdateDate and CreationDate.")
+
+class ReceiptLagResponse(BaseModel):
+    """Response for receipt lag query."""
+
+    summary: str = _SUMMARY_FIELD
+    receipts: list[ReceiptLagRecord] = Field(
+        default_factory=list,
+        description="Receipts with lag_days computed, sorted by lag descending.",
+    )
+    min_lag: int | None = Field(default=None, description="Minimum lag in days.")
+    max_lag: int | None = Field(default=None, description="Maximum lag in days.")
+    avg_lag: float | None = Field(default=None, description="Average lag in days (rounded to 2 decimals).")
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+    
 # SynthesizedResponse. Keeping the name means supplier-path code and
 # tests that import SynthesizedResponse / SupplierSummary still work.
 SynthesizedResponse = SupplierResponse
@@ -1079,6 +1122,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "CustomerAccount": CustomerAccountResponse,
     "CreditMemo": CreditMemoListResponse,
     "StandardReceipt": StandardReceiptResponse,
+    "ReceiptLag": ReceiptLagResponse,
 }
 
 
@@ -1615,6 +1659,13 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "EXACTLY. In the summary, state the total receipts and total amount, "
         "and name the top one or two methods."
     ),
+    "ReceiptLag": (
+        "This is a RECEIPT LAG query. For each receipt, you are given its standard fields "
+        "plus a computed 'lag_days' field (LastUpdateDate - CreationDate in days). "
+        "Emit each receipt under 'receipts' with all its fields, including lag_days. "
+        "In the summary, state the number of receipts, and the min, max, and average lag. "
+        "If the list is empty, say so. Copy every amount and date exactly as given; do not compute anything yourself."
+    ),
 }
 
 
@@ -1937,6 +1988,22 @@ def _validate_standard_receipt(
             "output: " + "; ".join(parts)
         )
 
+def _validate_receipt_lag(
+    response: ReceiptLagResponse, valid: dict[str, set]
+) -> None:
+    bad_ids: list[int] = []
+    for rec in response.receipts:
+        if rec.standard_receipt_id not in valid["standard_receipt_ids"]:
+            bad_ids.append(rec.standard_receipt_id)
+    parts = []
+    if bad_ids:
+        parts.append(f"standard_receipt_ids={bad_ids}")
+    if parts:
+        raise HallucinationError(
+            "Synthesizer produced IDs that do not appear in the executor "
+            "output: " + "; ".join(parts)
+        )
+        
 def _validate_exposure_ranking(
     response: ExposureRankingResponse, valid: dict[str, set]
 ) -> None:
@@ -1974,6 +2041,7 @@ _VALIDATORS = {
     StandardReceiptResponse: _validate_standard_receipt,
     ExposureRankingResponse: _validate_exposure_ranking,
     ReceiptMethodDistributionResponse: _validate_receipt_method_distribution,
+    ReceiptLagResponse: _validate_receipt_lag,
 }
 
 

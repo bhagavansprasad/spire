@@ -267,6 +267,13 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "RECEIVED from a customer — a payment. It is NOT an invoice of any kind. "
     "Route site-filtered receipt queries HERE, not to AccountReceipt (which "
     "is the account-child receipts list without site filtering).\n"
+
+    "- 'lag between creation and last update for receipts of [customer]' / "
+    "'show lag between creation and update for receipts of [customer]' / "
+    "'creation-to-update lag for receipts' / 'show lag_days for receipts' -> "
+    "target_entity 'StandardReceipt' with a 'customer_name' filter whose value is "
+    "the customer name exactly as written, and a 'lag_query' filter with value true.\n"    
+    
     "- 'show receipt applications for customer [name]' / 'receipt applications "
     "for [customer]' / 'show me [name]'s receipt applications' / 'what invoices "
     "has [customer]'s cash been applied to' -> target_entity 'CustomerAccount' "

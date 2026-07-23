@@ -1251,27 +1251,34 @@ def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) 
 def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
     """Return the first entity-level filter type, or 'none'."""
     entity_level = _entity_level_filter_types().get(entity, set())
+    # Prioritize lag_query over other entity-level filters
+    for f in filters:
+        if f.get("type") == "lag_query":
+            return "lag_query"
     for f in filters:
         ftype = f.get("type")
         if ftype in entity_level:
             return ftype
     return "none"
 
-
 def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> dict[str, Any]:
     """Build tool_args for the entity fetcher."""
     args = {}
+
     for f in filters:
         ftype = f.get("type")
         try:
             defn = _filter_def_for(ftype, entity)
         except KeyError:
-            continue  # not an entity-level filter for this entity
+            continue
         if defn["mechanism"] != "entity_level":
             continue
         raw_value = f.get("value")
         arg_name = defn["tool_arg_name"]
+        if arg_name is None:
+            continue
         arg_name_hi = defn.get("tool_arg_name_hi")
+            
         if isinstance(raw_value, dict):
             low = raw_value.get("from", raw_value.get("min"))
             high = raw_value.get("to", raw_value.get("max"))

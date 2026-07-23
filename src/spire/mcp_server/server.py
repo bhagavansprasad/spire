@@ -1,5 +1,4 @@
 
-
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
@@ -117,6 +116,9 @@ from spire.mcp_server.tools.aggregate_standard_receipts_by_method import (
     aggregate_standard_receipts_by_method as _aggregate_standard_receipts_by_method,
 )
 
+from spire.mcp_server.tools.get_receipts_with_lag import (
+    get_receipts_with_lag as _get_receipts_with_lag,
+)
 PERSONA_NAME = "default_dev"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 3333
@@ -1182,14 +1184,31 @@ async def aggregate_standard_receipts_by_method(
             account_number=account_number,
             limit=limit,
         )
-        
+
+@mcp.tool()
+async def get_receipts_with_lag(
+    customer_name: str | None = None,
+    limit: int = 25,
+    lag_query: bool = False,  # <-- ADD THIS
+) -> dict:
+    """Fetch receipts with computed creation‑to‑update lag (in days).
+
+    Use for "lag between creation and last update for receipts", "show lag_days",
+    or "creation-to-update lag for customer X".
+
+    Args:
+        customer_name: Optional customer name to filter receipts.
+        limit: Max records to return (default 25).
+        lag_query: Ignored – the tool always computes lag.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_receipts_with_lag(
+            client,
+            customer_name=customer_name,
+            limit=limit,
+            lag_query=lag_query,  # <-- PASS IT THROUGH
+        )
+        return result.to_dict()
+                        
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
-
-
-
-
-
-
-
-

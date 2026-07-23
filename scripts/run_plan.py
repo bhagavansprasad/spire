@@ -43,6 +43,7 @@ from spire.synthesizer.synthesizer import (
     ExposureRankingResponse,
     synthesize_response,
     ReceiptMethodDistributionResponse,
+    ReceiptLagResponse,
 )
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp"
@@ -357,6 +358,29 @@ def _format_synthesized(response: Any) -> str:
             lines.extend(f"  - {note}" for note in response.truncation_notes)
         return "\n".join(lines)
 
+    if isinstance(response, ReceiptLagResponse):
+        lines.append(response.summary)
+        if response.receipts:
+            lines.append("\nReceipts with lag (largest first):")
+            for r in response.receipts:
+                lines.append(
+                    f"  - {r.receipt_number} ({r.standard_receipt_id}) — "
+                    f"lag: {r.lag_days or 'N/A'} days; "
+                    f"created: {r.creation_date}, updated: {r.last_update_date}"
+                )
+            if response.min_lag is not None:
+                lines.append(
+                    f"\nSummary: min lag = {response.min_lag} days, "
+                    f"max lag = {response.max_lag} days, "
+                    f"avg lag = {response.avg_lag:.2f} days"
+                )
+        else:
+            lines.append("No receipts found.")
+        if response.truncation_notes:
+            lines.append("\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+        return "\n".join(lines)
+    
     # --- ExposureRankingResponse ---
     if isinstance(response, ExposureRankingResponse):
         lines.append(response.summary)
@@ -392,7 +416,30 @@ def _format_synthesized(response: Any) -> str:
             lines.append("\nTruncation:")
             lines.extend(f"  - {note}" for note in response.truncation_notes)
         return "\n".join(lines)
-    
+
+    if isinstance(response, ReceiptLagResponse):
+        lines.append(response.summary)
+        if response.receipts:
+            lines.append("\nReceipts (lag in days, newest first):")
+            for r in response.receipts:
+                lines.append(
+                    f"  - {r.receipt_number} ({r.standard_receipt_id}) — "
+                    f"{r.amount} {r.currency} on {r.receipt_date}; "
+                    f"lag: {r.lag_days} days"
+                )
+            if response.min_lag is not None:
+                lines.append(
+                    f"\nLag summary: min {response.min_lag} days, "
+                    f"max {response.max_lag} days, "
+                    f"avg {response.avg_lag:.2f} days"
+                )
+        else:
+            lines.append("No receipts found.")
+        if response.truncation_notes:
+            lines.append("\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+        return "\n".join(lines)
+        
     # Fallback for unrecognized shape.
     return f"(Unrecognized response shape.)\n{response}"
 
@@ -426,6 +473,8 @@ def _format_summary(plan, outputs, response) -> str:
             count = len(response.accounts)
         elif hasattr(response, "methods"):
             count = len(response.methods)
+        elif hasattr(response, "receipts"):
+            count = len(response.receipts)
         else:
             count = len(final_bucket)
         lines.append(f"  Final raw output:     {len(final_bucket)} record(s) under '{list(outputs.keys())[-1] if outputs else '?'}'")
