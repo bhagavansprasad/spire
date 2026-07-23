@@ -1627,15 +1627,27 @@ def _build_system_prompt(target_entity: str) -> str:
 def _build_synthesis_prompt(
     outputs: dict[str, list[dict]],
     truncation_by_step: dict[str, dict] | None = None,
+    metadata_by_step: dict[str, dict] | None = None,
 ) -> str:
     """Build the user-message portion of the prompt: outputs as JSON,
-    plus an optional truncation block."""
+    plus an optional truncation block and optional metadata totals."""
     rendered = json.dumps(outputs, default=str, indent=2)
     parts = [
         "Here is the executor's output. Each top-level key is the "
         "output_name of a step; each value is a list of records returned "
         f"by that step.\n\n```json\n{rendered}\n```\n"
     ]
+
+    # ---- Add metadata note if available (fixes receipt‑applications count) ----
+    if metadata_by_step:
+        apps_meta = metadata_by_step.get("account_receipt_applications")
+        if apps_meta and apps_meta.get("total_available") is not None:
+            total = apps_meta["total_available"]
+            parts.append(
+                f"\nThe total number of applied receipt applications for this account "
+                f"is {total}. The list below shows only the most recent ones.\n"
+            )
+
     if truncation_by_step:
         truncation_rendered = json.dumps(truncation_by_step, default=str, indent=2)
         parts.append(
@@ -1644,6 +1656,7 @@ def _build_synthesis_prompt(
             "examined. Populate truncation_notes from this block; do NOT "
             f"invent counts.\n\n```json\n{truncation_rendered}\n```\n"
         )
+
     parts.append(
         "\nProduce the structured response per the schema. Remember: only "
         "reference IDs present in the data above; do not invent."
@@ -2190,6 +2203,7 @@ def synthesize_response(
     llm: Any | None = None,
     truncation_by_step: dict[str, dict] | None = None,
     count_only: bool = False,
+    metadata_by_step: dict[str, dict] | None = None,
 ) -> BaseModel:
     """Turn the executor's output into a validated structured response,
     using the schema for the Intent's target_entity.
@@ -2203,6 +2217,9 @@ def synthesize_response(
             built (reads GEMINI_API_KEY from the environment).
         truncation_by_step: Optional dict from execute_plan keyed by
             output_name. When present, the LLM populates truncation_notes.
+        metadata_by_step: Optional dict from execute_plan containing
+            ToolResult metadata (e.g. total_available) for non-iterating
+            steps. Used to provide exact totals to the LLM.
 
     Returns:
         A Pydantic model — SupplierResponse, InvoiceResponse, or
@@ -2261,7 +2278,8 @@ def synthesize_response(
 
     structured_llm = llm.with_structured_output(schema, include_raw=True)
     system_prompt = _build_system_prompt(prompt_key)
-    user_message = _build_synthesis_prompt(outputs, truncation_by_step)
+    # Pass metadata_by_step to the prompt builder
+    user_message = _build_synthesis_prompt(outputs, truncation_by_step, metadata_by_step)
 
     result = structured_llm.invoke(
         [("system", system_prompt), ("human", user_message)]
@@ -2302,9 +2320,28 @@ def synthesize_response(
         response = schema(**response)
 
     # --- Additional check: empty child arrays despite source data ---
-    # For CustomerAccount responses, check child arrays (transactions, credit_memos, receipts).
+    # For CustomerAccount responses, check child arrays (transactions, credit_memos, receipts, applications).
     # This catches cases where the LLM generates a summary but leaves arrays empty.
     if isinstance(response, CustomerAccountResponse):
+        # --- Structural fallback: populate applications from bucket if empty ---
+        bucket = outputs.get("account_receipt_applications")
+        if bucket and isinstance(bucket, list) and len(bucket) > 0:
+            for account in response.customer_accounts:
+                if not account.applications:  # empty list
+                    for row in bucket:
+                        mapped = {
+                            "application_id": row.get("ApplicationId"),
+                            "receipt_id": row.get("StandardReceiptId"),
+                            "receipt_number": row.get("ReceiptNumber"),
+                            "receipt_method": row.get("ReceiptMethod"),
+                            "transaction_id": row.get("ReferenceTransactionId"),
+                            "transaction_number": row.get("ReferenceTransactionNumber"),
+                            "transaction_status": row.get("ReferenceTransactionStatus"),
+                            "application_amount": row.get("ApplicationAmount"),
+                            "application_date": row.get("ApplicationDate"),
+                            "currency": row.get("EnteredCurrency"),
+                        }
+                        account.applications.append(AccountReceiptApplicationInfo(**mapped))
         for account in response.customer_accounts:
             # Check each child array
             if hasattr(account, "transactions") and not account.transactions:
@@ -2313,18 +2350,18 @@ def synthesize_response(
                         f"Account {account.account_id} has non-empty 'customertransaction' bucket but 'transactions' list is empty."
                     )
             if hasattr(account, "credit_memos") and not account.credit_memos:
-                if outputs.get("accountcreditmemo"):
+                if outputs.get("account_credit_memos"):
                     raise DegenerateOutputError(
                         f"Account {account.account_id} has non-empty 'accountcreditmemo' bucket but 'credit_memos' list is empty."
                     )
             if hasattr(account, "receipts") and not account.receipts:
-                if outputs.get("accountreceipt"):
+                if outputs.get("account_receipts"):
                     raise DegenerateOutputError(
                         f"Account {account.account_id} has non-empty 'accountreceipt' bucket but 'receipts' list is empty."
                     )
-            # Check applications
+            # Check applications – corrected bucket name
             if hasattr(account, "applications") and not account.applications:
-                if outputs.get("account_receipt_applications"):
+                if outputs.get("account_receipt_applications"):   # was "accountreceiptapplication"
                     raise DegenerateOutputError(
                         f"Account {account.account_id} has non-empty 'account_receipt_applications' bucket but 'applications' list is empty."
                     )

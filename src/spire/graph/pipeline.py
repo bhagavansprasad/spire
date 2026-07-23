@@ -1,5 +1,3 @@
-
-
 """
 Design 3 pipeline expressed as a LangGraph custom graph.
 
@@ -46,7 +44,7 @@ class GraphState(TypedDict, total=False):
             callback; the execute node forwards it to execute_plan so a
             long tool call reports progress back to the caller.
     Produced along the way:
-        intent, refusal, plan, outputs, truncation_by_step, response.
+        intent, refusal, plan, outputs, truncation_by_step, metadata_by_step, response.
         error: set if a node failed; downstream nodes short-circuit.
     """
 
@@ -61,6 +59,7 @@ class GraphState(TypedDict, total=False):
     outputs: Optional[dict]
     projected_outputs: Optional[dict]
     truncation_by_step: Optional[dict]
+    metadata_by_step: Optional[dict]   # added
     response: Optional[Any]
     error: Optional[str]
 
@@ -109,7 +108,7 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
 
 async def execute_node(state: GraphState) -> dict:
     try:
-        outputs, truncation = await execute_plan(
+        outputs, truncation, metadata = await execute_plan(
             state["plan"],
             state["session"],
             progress_handler=state.get("progress_handler"),
@@ -120,6 +119,7 @@ async def execute_node(state: GraphState) -> dict:
             "outputs": outputs,
             "projected_outputs": projected,
             "truncation_by_step": truncation,
+            "metadata_by_step": metadata,   # added
         }
     except Exception as exc:
         return {"error": f"execute: {exc}"}
@@ -134,6 +134,7 @@ def synthesize_node(state: GraphState) -> dict:
             target_entity=target_entity,
             truncation_by_step=state.get("truncation_by_step"),
             count_only=getattr(intent, "count_only", False),
+            metadata_by_step=state.get("metadata_by_step"),   # added
         )
         return {"response": response}
     except Exception as exc:
@@ -211,7 +212,3 @@ def _maybe_save_png(compiled) -> None:
 
 # Module-level compiled graph (compilation is cheap and reusable).
 GRAPH = build_graph()
-
-
-
-

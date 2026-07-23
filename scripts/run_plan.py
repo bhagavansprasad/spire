@@ -373,7 +373,7 @@ def _format_synthesized(response: Any) -> str:
             lines.append("\nTruncation:")
             lines.extend(f"  - {note}" for note in response.truncation_notes)
         return "\n".join(lines)
-    
+
     if isinstance(response, ReceiptMethodDistributionResponse):
         lines.append(response.summary)
         lines.append(
@@ -392,7 +392,7 @@ def _format_synthesized(response: Any) -> str:
             lines.append("\nTruncation:")
             lines.extend(f"  - {note}" for note in response.truncation_notes)
         return "\n".join(lines)
-    
+
     # Fallback for unrecognized shape.
     return f"(Unrecognized response shape.)\n{response}"
 
@@ -455,7 +455,7 @@ async def _run(prompt: str) -> int:
 
     # Execute.
     async with Client(MCP_SERVER_URL) as session:
-        outputs, truncation_by_step = await execute_plan(plan, session)
+        outputs, truncation_by_step, metadata_by_step = await execute_plan(plan, session)
 
     # Synthesize.
     response = synthesize_response(
@@ -463,6 +463,7 @@ async def _run(prompt: str) -> int:
         target_entity=intent.target_entity,
         truncation_by_step=truncation_by_step,
         count_only=intent.count_only,
+        metadata_by_step=metadata_by_step,   # added
     )
 
     # Print.

@@ -1,4 +1,3 @@
-
 """
 Executor for the KG-driven path (Architecture Option 3).
 
@@ -9,8 +8,8 @@ Scope (current):
 - Non-iterating steps (A.1)
 - Iterating steps with $iteration_value substitution and
   output_dedupe_by handling (A.2)
-- Multi-field iterating steps: when iterate_over declares a "fields"
-  map ({tool_arg: parent_field}) instead of a single "field", the step
+- Multi-field iterating steps: when iterate_over declares a
+  "fields" map ({tool_arg: parent_field}) instead of a single "field", the step
   carries several sentinel-valued args and each iteration substitutes
   ALL of them from one parent row. Needed where a resource requires
   more than one id (PO distributions need POHeaderId + POLineId +
@@ -325,12 +324,18 @@ def _collect_iteration_values(
 
 async def _execute_non_iterating_step(
     step: Step, session: Client, progress_handler=None
-) -> tuple[list[dict], dict | None]:
+) -> tuple[list[dict], dict | None, dict]:
     """
     Execute a single step that does NOT iterate.
 
     The step's tool_args go to the MCP tool verbatim. Result is parsed
     and any client_filters applied.
+
+    Returns:
+        (items, truncation, metadata)
+        - items: the list of records (unwrapped)
+        - truncation: the truncation dict (if any) from the ToolResult
+        - metadata: the full ToolResult metadata dict (total_available, etc.)
     """
     # Sanity check: a non-iterating step should not contain the
     # iteration sentinel in its args. Catch a planner bug loudly.
@@ -347,14 +352,19 @@ async def _execute_non_iterating_step(
     )
     items = _parse_tool_result(call_result)
     truncation = _extract_truncation_meta(call_result)
+    # Build metadata from the ToolResult envelope (if present)
+    metadata = {}
+    if truncation is not None:
+        # Keep all metadata fields (total_available, limit_applied, truncated)
+        metadata = truncation.copy()
     items = _apply_client_filters(items, step.client_filters)
-    return items, truncation
+    return items, truncation, metadata
 
 async def _execute_iterating_step(
     step: Step,
     session: Client,
     outputs: dict[str, list[dict]],
-) -> list[dict]:
+) -> tuple[list[dict], dict | None]:
     """
     Execute a single step that iterates over a previous step's output.
 
@@ -372,6 +382,11 @@ async def _execute_iterating_step(
     redundant calls like get_buyer with the same buyer_id twice).
     v1 implements iteration-value dedup; v1.1 could distinguish if
     output-item dedup ever becomes a separate need.
+
+    Returns:
+        (aggregated_items, metadata) where metadata is the ToolResult
+        envelope from the first iteration (assumed representative for
+        total_available, limit_applied, truncated).
     """
     if step.iterate_over is None:
         # Should never reach here; execute_plan dispatches based on
@@ -393,6 +408,7 @@ async def _execute_iterating_step(
     values = _collect_iteration_values(outputs, step.iterate_over, dedupe)
 
     aggregated: list[dict] = []
+    metadata: dict | None = None
     for value in values:
         per_iter_args = dict(step.tool_args)  # shallow copy is enough
         if multi_field:
@@ -404,6 +420,10 @@ async def _execute_iterating_step(
 
         call_result = await session.call_tool(step.tool_name, per_iter_args)
         items = _parse_tool_result(call_result)
+        # Capture metadata from the first iteration (assume all iterations
+        # share the same total_available, limit_applied, truncated).
+        if metadata is None:
+            metadata = _extract_truncation_meta(call_result)
         items = _apply_client_filters(items, step.client_filters)
         # Stamp the parent field(s) this iteration was keyed by onto each
         # child row — but ONLY when the planner flagged this step (a child
@@ -421,7 +441,7 @@ async def _execute_iterating_step(
                         item.setdefault(k, v)
         aggregated.extend(items)
 
-    return aggregated
+    return aggregated, metadata
 
 
 def _parent_stamp(
@@ -588,10 +608,10 @@ async def _execute_filter_source_nonempty_step(
 
 async def execute_plan(
     plan: Plan, session: Client, progress_handler=None
-) -> tuple[dict[str, list[dict]], dict[str, dict]]:
+) -> tuple[dict[str, list[dict]], dict[str, dict], dict[str, dict]]:
     """
     Run a Plan against the MCP server. Returns the outputs of every
-    step keyed by output_name.
+    step keyed by output_name, plus truncation and metadata dictionaries.
 
     Args:
         plan: The list of Steps produced by spire.planner.generate_plan.
@@ -605,14 +625,23 @@ async def execute_plan(
             progress back to the caller mid-call. None disables it.
 
     Returns:
-        dict mapping each step's output_name to its result list.
-        For tools that return a single record (e.g. get_buyer), the
-        record is wrapped in a single-element list.
-        For iterating steps, results across iterations are concatenated
-        into one flat list.
-        For filter_source_when_empty steps, the output is the source
-        items kept by negation-by-absence (i.e. those whose iteration
-        returned empty).
+        (outputs, truncation_by_step, metadata_by_step)
+        - outputs: dict mapping each step's output_name to its result list.
+          For tools that return a single record (e.g. get_buyer), the
+          record is wrapped in a single-element list.
+          For iterating steps, results across iterations are concatenated
+          into one flat list.
+          For filter_source_when_empty steps, the output is the source
+          items kept by negation-by-absence (i.e. those whose iteration
+          returned empty).
+        - truncation_by_step: dict mapping output_name to truncation info
+          (total_available, limit_applied, truncated) for steps that were
+          truncated.
+        - metadata_by_step: dict mapping output_name to the full metadata
+          dict from the ToolResult envelope (currently total_available,
+          limit_applied, truncated) for non-iterating steps that returned
+          a ToolResult. This is used by the synthesizer to know the true
+          total counts.
 
     Raises:
         RuntimeError: if MCP returns an unexpectedly shaped result,
@@ -626,6 +655,7 @@ async def execute_plan(
     """
     outputs: dict[str, list[dict]] = {}
     truncation_by_step: dict[str, dict] = {}
+    metadata_by_step: dict[str, dict] = {}
 
     for step in plan:
         if step.iterate_over is None:
@@ -635,11 +665,13 @@ async def execute_plan(
                     "but iterate_over is None. Planner bug: these fields "
                     "are coupled."
                 )
-            items, truncation = await _execute_non_iterating_step(
+            items, truncation, metadata = await _execute_non_iterating_step(
                 step, session, progress_handler
             )
-            if truncation is not None and truncation.get("truncated"):
+            if truncation and truncation.get("truncated"):
                 truncation_by_step[step.output_name] = truncation
+            if metadata:
+                metadata_by_step[step.output_name] = metadata
         elif step.filter_source_when_empty:
             items = await _execute_filter_source_step(step, session, outputs)
         elif step.filter_source_when_nonempty:
@@ -647,10 +679,9 @@ async def execute_plan(
                 step, session, outputs
             )
         else:
-            items = await _execute_iterating_step(step, session, outputs)
+            items, metadata = await _execute_iterating_step(step, session, outputs)
+            if metadata:
+                metadata_by_step[step.output_name] = metadata
         outputs[step.output_name] = items
 
-    return outputs, truncation_by_step
-
-
-
+    return outputs, truncation_by_step, metadata_by_step
