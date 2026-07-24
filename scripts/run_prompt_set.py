@@ -1,18 +1,31 @@
 #!/usr/bin/env python3
 """
-Run a fixed set of prompts through the live Spire pipeline, in-process.
+Run one or more sets of prompts through the live Spire pipeline, in-process.
 
 No subprocesses. The harness imports the same pipeline pieces run_plan.py
 uses (parser, planner, executor, synthesizer) and runs each prompt
 sequentially in a single loop, reusing run_plan's own formatters so the
 output matches a manual run. The MCP session is opened ONCE and shared
-across all prompts.
+across every prompt in every set.
 
-The prompt set mixes aggregation, ordinary list, and refusal prompts so
-one run exercises all three pipeline outcomes.
+--prompt-file takes SEVERAL paths, so a whole batch runs under one MCP
+connection and produces one grouped summary:
 
-This is a convenience harness, not a regression test: it runs the
-prompts and prints the output. Reading the results is left to you.
+    python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+
+This replaces the bash for-loop that used to wrap the script. The loop
+worked, but it opened a fresh connection per set and produced seven
+disconnected summaries with no indication of which set a failure came
+from.
+
+CRASH ISOLATION. Each prompt runs inside a try/except so one failure
+cannot abort the set. This was not always so: on 2026-07-24 an
+AttributeError in the DISPLAY layer — run_plan._format_synthesized
+reading a schema field that did not exist — killed the process after the
+FIRST prompt of the AR set, and the remaining 15 never ran. The pipeline
+itself had worked. A harness that loses a module's coverage to a
+formatter typo is worse than no harness, because the run looks like it
+happened.
 
 Prerequisites (same as a manual run_plan.py run):
   - MCP server running (python -m spire.mcp_server.server)
@@ -20,10 +33,11 @@ Prerequisites (same as a manual run_plan.py run):
   - GEMINI_API_KEY set; KG reachable
 
 Usage:
-  python scripts/run_prompt_set.py                 # all modules
-  python scripts/run_prompt_set.py --all           # all modules (explicit)
-  python scripts/run_prompt_set.py --prompt-file scripts/prompt_set_po.txt
+  python scripts/run_prompt_set.py --prompt-file scripts/prompts/03_ar.txt
+  python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+  python scripts/run_prompt_set.py --prompt-file a.txt b.txt c.txt
   python scripts/run_prompt_set.py --prompts "List US suppliers" "Show PO 2144 and its lines"
+  python scripts/run_prompt_set.py --all      # every prompt_set_*.txt in scripts/
 """
 
 from __future__ import annotations
@@ -32,6 +46,7 @@ import argparse
 import asyncio
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from fastmcp import Client
@@ -51,12 +66,6 @@ from run_plan import (
 )
 
 
-# Prompts live in per-module files alongside this script
-# (prompt_set_<module>.txt): one prompt per line, blank lines and '#'
-# comment lines ignored, slow prompts ordered last within each file.
-# With no args, every module file is run (equivalent to --all).
-
-
 def load_prompts(path: Path) -> list[str]:
     """Read prompts from a text file: one per line, skipping blank lines
     and '#' comment lines."""
@@ -69,21 +78,19 @@ def load_prompts(path: Path) -> list[str]:
     return prompts
 
 
-def load_all_module_prompts(scripts_dir: Path) -> list[str]:
-    """Load and concatenate every per-module prompt file
-    (prompt_set_*.txt) in scripts_dir, sorted by filename for stable
-    order. Fast/slow ordering is preserved WITHIN each module file; the
-    files themselves run in alphabetical order (po before supplier, etc.).
+def load_all_module_prompts(scripts_dir: Path) -> list[tuple[str, list[str]]]:
+    """Load every legacy per-module prompt file (prompt_set_*.txt) in
+    scripts_dir, sorted by filename for stable order.
+
+    Returns (set_name, prompts) pairs so the roll-up can group by set.
+    Fast/slow ordering is preserved WITHIN each file.
     """
     module_files = sorted(scripts_dir.glob("prompt_set_*.txt"))
     if not module_files:
         raise SystemExit(
             f"No prompt_set_*.txt files found in {scripts_dir}."
         )
-    prompts: list[str] = []
-    for path in module_files:
-        prompts.extend(load_prompts(path))
-    return prompts
+    return [(p.stem, load_prompts(p)) for p in module_files]
 
 
 async def _run_one(prompt: str, menu, client) -> str:
@@ -140,35 +147,98 @@ async def _run_one(prompt: str, menu, client) -> str:
     return "ok"
 
 
-async def _run_all(prompts: list[str]) -> int:
-    menu = load_kg_menu()
-    results: list[tuple[str, str, float]] = []
+async def _run_all(sets: list[tuple[str, list[str]]]) -> int:
+    """Run every prompt in every set under ONE MCP connection.
 
-    # One connection for the whole set.
+    `sets` is a list of (set_name, prompts) pairs. Results are grouped by
+    set in the roll-up: with a hundred-odd prompts across seven files, a
+    flat summary makes it needlessly hard to see which module a failure
+    belongs to.
+    """
+    menu = load_kg_menu()
+    # (set_name, prompt, label, elapsed)
+    results: list[tuple[str, str, str, float]] = []
+
+    total_prompts = sum(len(p) for _, p in sets)
+    print(f"Running {total_prompts} prompt(s) across {len(sets)} set(s).")
+    print("(Requires the MCP server up, the pod reachable, and Gemini.)")
+
+    # One connection for the whole batch.
     async with Client(MCP_SERVER_URL) as client:
-        for prompt in prompts:
-            start = time.monotonic()
-            label = await _run_one(prompt, menu, client)
-            elapsed = time.monotonic() - start
-            print(f"\n[{label} — {elapsed:.1f}s]", flush=True)
-            results.append((prompt, label, elapsed))
+        for set_name, prompts in sets:
+            header = "#" * 78
+            print(
+                f"\n{header}\n########## {set_name}  ({len(prompts)} prompts)\n{header}",
+                flush=True,
+            )
+            for prompt in prompts:
+                start = time.monotonic()
+                try:
+                    label = await _run_one(prompt, menu, client)
+                except Exception as exc:
+                    # A crash in ONE prompt must not abort the set. See the
+                    # CRASH ISOLATION note in the module docstring: an
+                    # AttributeError in the display layer once cost 15 AR
+                    # prompts that had never been observed running.
+                    #
+                    # The traceback goes to stderr so it lands in the log
+                    # next to the prompt that caused it, and the label
+                    # carries the exception into the RUN SUMMARY so a crash
+                    # is visible in the roll-up, not only in the body.
+                    print(
+                        f"CRASH: {type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    traceback.print_exc(file=sys.stderr)
+                    label = f"crash: {type(exc).__name__}: {exc}"
+                elapsed = time.monotonic() - start
+                print(f"\n[{label} — {elapsed:.1f}s]", flush=True)
+                results.append((set_name, prompt, label, elapsed))
 
     banner = "=" * 78
     print(f"\n{banner}\nRUN SUMMARY\n{banner}")
-    for prompt, label, elapsed in results:
-        print(f"  [{label}] ({elapsed:.1f}s) {prompt}")
 
-    failures = [
-        p for p, lab, _ in results
-        if lab != "ok" and not lab.startswith("refused")
-    ]
-    print(f"\n{len(results) - len(failures)}/{len(results)} ran cleanly.")
-    return 1 if failures else 0
+    def _is_failure(label: str) -> bool:
+        # A crash counts as a failure: its label starts with "crash:",
+        # which is neither "ok" nor a "refused" prefix.
+        return label != "ok" and not label.startswith("refused")
+
+    all_failures: list[tuple[str, str]] = []
+    for set_name, _ in sets:
+        rows = [r for r in results if r[0] == set_name]
+        if not rows:
+            continue
+        fails = [r for r in rows if _is_failure(r[2])]
+        elapsed_total = sum(r[3] for r in rows)
+        print(
+            f"\n--- {set_name}: {len(rows) - len(fails)}/{len(rows)} clean, "
+            f"{elapsed_total:.0f}s ---"
+        )
+        for _, prompt, label, elapsed in rows:
+            print(f"  [{label}] ({elapsed:.1f}s) {prompt}")
+        all_failures.extend((set_name, r[1]) for r in fails)
+
+    print(f"\n{banner}")
+    clean = len(results) - len(all_failures)
+    print(f"TOTAL: {clean}/{len(results)} ran cleanly.")
+    if all_failures:
+        print(f"{len(all_failures)} did not:")
+        for set_name, prompt in all_failures:
+            print(f"  [{set_name}] {prompt}")
+
+    # The tally is NOT a verdict. A prompt can run cleanly and still give a
+    # wrong answer — a page size stated as a total, a claim about a field
+    # absent from the output, an empty child array behind confident prose.
+    # Read the answers.
+    print("\nNOTE: 'ran cleanly' means it did not error. It does NOT mean")
+    print("the answer is correct. Read the answers, not this tally.")
+    return 1 if all_failures else 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run a set of prompts through the live Spire pipeline."
+        description="Run one or more prompt sets through the live Spire pipeline."
     )
     parser.add_argument(
         "--prompts",
@@ -178,19 +248,20 @@ def main() -> int:
     parser.add_argument(
         "--prompt-file",
         type=Path,
+        nargs="+",
         default=None,
+        metavar="FILE",
         help=(
-            "Run a single prompt file instead of all modules. With no "
-            "flags, every prompt_set_*.txt module file is run."
+            "One or more prompt files to run, in the order given. Shell "
+            "globs work: scripts/prompts/0*.txt"
         ),
     )
     parser.add_argument(
         "--all",
         action="store_true",
         help=(
-            "Run every per-module prompt file (prompt_set_*.txt) in the "
-            "scripts dir, concatenated. Mutually exclusive with "
-            "--prompt-file."
+            "Run every legacy per-module prompt file (prompt_set_*.txt) in "
+            "the scripts dir. Mutually exclusive with --prompt-file."
         ),
     )
     args = parser.parse_args()
@@ -199,19 +270,31 @@ def main() -> int:
         parser.error("--all and --prompt-file are mutually exclusive.")
 
     scripts_dir = Path(__file__).parent
-    if args.prompts:
-        prompts = args.prompts
-    elif args.all:
-        prompts = load_all_module_prompts(scripts_dir)
-    elif args.prompt_file is not None:
-        prompts = load_prompts(args.prompt_file)
-    else:
-        # No flags: run every module file.
-        prompts = load_all_module_prompts(scripts_dir)
 
-    print(f"Running {len(prompts)} prompt(s) through the live pipeline.")
-    print("(Requires the MCP server up, the pod reachable, and Gemini.)")
-    return asyncio.run(_run_all(prompts))
+    if args.prompts:
+        sets = [("inline", args.prompts)]
+    elif args.prompt_file:
+        missing = [p for p in args.prompt_file if not p.is_file()]
+        if missing:
+            parser.error(
+                "prompt file(s) not found: " + ", ".join(str(p) for p in missing)
+            )
+        sets = [(p.stem, load_prompts(p)) for p in args.prompt_file]
+        empty = [name for name, prompts in sets if not prompts]
+        if empty:
+            print(
+                f"WARNING: no prompts found in {', '.join(empty)} "
+                "(all lines blank or commented?)",
+                file=sys.stderr,
+            )
+    elif args.all:
+        sets = load_all_module_prompts(scripts_dir)
+    else:
+        parser.error(
+            "nothing to run: pass --prompt-file FILE [FILE ...], --prompts, or --all."
+        )
+
+    return asyncio.run(_run_all(sets))
 
 
 if __name__ == "__main__":

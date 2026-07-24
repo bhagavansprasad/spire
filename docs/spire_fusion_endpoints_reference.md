@@ -1170,3 +1170,154 @@ transactions.
 AR invoice and credit-memo detail fetch by `CustomerTransactionId` (numeric).
 Invoice lines by the parent `CustomerTransactionId` in the path; tax lines need
 invoice id + line id (deep nested, same pattern as PO distributions).
+
+---
+
+## 12. Verification session findings (2026-07-24)
+
+Facts confirmed by curl during a full verification-and-fix session. Each
+was checked against the pod before any code changed — the fixes that
+stuck this session all started here, and the attempts that were reverted
+all started from a theory instead.
+
+### 12.1 `standardReceiptApplications` — status IS server-queryable
+
+The account child at
+`/receivablesCustomerAccountActivities/{AccountId}/child/standardReceiptApplications`
+accepts `q=ApplicationStatus='...'` server-side. Confirmed live on
+account 26360 (`AccountId=300000047368512`):
+
+```bash
+# Total, unfiltered
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --compressed \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/300000047368512/child/standardReceiptApplications?onlyData=true&totalResults=true&limit=5"
+# -> totalResults 15636, hasMore true
+
+# Applied only
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --compressed \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/300000047368512/child/standardReceiptApplications?q=ApplicationStatus='Applied'&orderBy=ApplicationDate:desc&onlyData=true&totalResults=true&limit=3"
+# -> totalResults 7038
+
+# Unapplied only
+# -> totalResults 8598
+```
+
+**7,038 + 8,598 = 15,636.** The two statuses are exhaustive.
+
+**Two consequences for tooling:**
+
+1. No need to over-fetch and filter client-side. An earlier version
+   pulled 500 raw rows and filtered in Python, which meant the reported
+   "total" was the applied count WITHIN THAT PAGE — the answer stated
+   "25 receipt applications" for an account with 7,038.
+2. `orderBy=ApplicationDate:desc` IS honoured. **Without it this child
+   returns OLDEST first** (2012 rows on this account), which is not what
+   "recent applications" means.
+
+**The unapplied rows are mostly reversals, not real unapplied cash.**
+They carry `ReferenceTransactionNumber: null` — no transaction side at
+all — and their amounts sign-mirror applied rows (`-2434.55` against
+`+2434.55`, `-2208.30` against `+2208.30`). Including them makes any
+total meaningless.
+
+### 12.2 `/standardReceipts` — paging without `orderBy` is NOT stable
+
+**This is an open issue, recorded here because it is a pod behaviour, not
+a code bug.**
+
+Two runs of the same receipt-method aggregation over account 26360, on
+consecutive days, with identical code:
+
+| | Run A | Run B |
+|---|---|---|
+| Total receipts | 1,386 | 1,386 |
+| Total amount | 215,721,775.28 | 250,557,301.49 |
+| Lockbox | 993 / 211,999,593.81 | 1,132 / 247,941,421.77 |
+| Check (Directly/No Remit) | 393 / 3,722,181.47 | 254 / 2,615,879.72 |
+
+Same row COUNT, and both splits sum correctly to 1,386 — but a 35M
+difference in total. That is not reclassification; it is a **different
+set of 1,386 rows**.
+
+The endpoint has no documented default ordering. A paginated fetch that
+walks `offset` without an `orderBy` can therefore see shifted or
+overlapping pages between calls.
+
+**Rule: any paginated fetch against `/standardReceipts` must specify a
+deterministic `orderBy`.** Not yet confirmed by curl which sort keys are
+accepted here — do that before relying on it.
+
+### 12.3 Float precision — `TotalTransactionsDueForAccount`
+
+Account 26370 returns `TotalTransactionsDueForAccount: 1179915.3225`.
+Four decimal places, and the value does not terminate in IEEE-754: its
+exact double representation is
+`1179915.322500000120776891708374023437500`.
+
+The synthesizer emitted that full expansion followed by trailing zeros
+until it hit the output token cap (`finish_reason=MAX_TOKENS`,
+`out=7983`). The summary line of the SAME response rendered it correctly
+as `1179915.32`, so the problem is specific to structured-output float
+emission.
+
+**Sampling-dependent** — the same prompt succeeded at `out=3066` earlier
+the same day and failed three times consecutively afterwards.
+
+**Rounding at source was NOT sufficient.** With the tool returning
+`1179915.32`, the model still emitted the unrounded expansion: it was
+GENERATING those digits, not copying them. The fix required
+post-processing the response after synthesis.
+
+**Rule: monetary values from AR account endpoints carry more than two
+decimal places and must be normalised. Do not assume currency values are
+already 2dp.**
+
+### 12.4 Anchor data confirmed
+
+| Anchor | Value | Endpoint |
+|---|---|---|
+| Supplier 1252 (Lee Supplies) addresses | exactly 25, `hasMore: false` | `/suppliers?q=SupplierNumber='1252'&expand=addresses` |
+| Supplier 1252 name-match | resolves to ONE supplier, `count: 1` | `/suppliers?q=SupplierNumber='1252'` |
+| Account 26360 receipts | 1,386 | `/standardReceipts?q=CustomerAccountNumber='26360'` |
+| Account 26360 applications | 15,636 (7,038 Applied) | account child |
+| Account 26370 transactions | 25 shown; total unconfirmed | `transactionPaymentSchedules` child |
+| AR invoice 1002 (TransactionNumber 5) | 4 lines, 8 tax lines (2 per line: STATE 6.5%, COUNTY 2.25%) | `/receivablesInvoices/1002` + children |
+| Exposure ranking | 435 accounts; top Motique Gym (23129) at 165,428,563.24 | `/receivablesCustomerAccountActivities` |
+
+Tax arithmetic on invoice 1002 verified line by line: line 1 taxable
+10,592 → COUNTY 238.32 (2.25%) + STATE 688.48 (6.5%); line 3 taxable
+210,470 → COUNTY 4,735.58 + STATE 13,680.55. All eight rows correct, and
+each line's taxable amount equals its `LineAmount`.
+
+### 12.5 Address labels are NOT supplier names
+
+Worth recording because it caused a false bug report. Supplier 1252's
+addresses carry `AddressName` values like `KFKA SUP`, `Lee DAVIDS`,
+`Lee Supremo Energy US` — site nicknames on the supplier record, not
+other suppliers. A result listing them under one supplier looks wrong at
+a glance and is correct.
+
+Confirmed by:
+
+```bash
+curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --compressed \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?q=SupplierNumber='1252'&expand=addresses&onlyData=true&fields=SupplierNumber,Supplier"
+# -> count: 1, hasMore: false, one supplier: Lee Supplies
+```
+
+### 12.6 Method note
+
+Five bugs this session were misdiagnosed at least once before a curl
+settled them. In every case the wrong diagnosis came from reasoning about
+symptom similarity — "this looks like the token-cap runaway we saw
+before" — and the right one came from asking the pod.
+
+Three specific traps:
+
+- **A `totalResults` you did not request is not there.** Several
+  "reported a sample as a total" bugs came from tools that never asked
+  for `totalResults=true` and reported `len(items)` instead.
+- **A round number is suspicious.** `500` receipts and `10000` purchase
+  orders both turned out to be fetch caps presented as totals.
+- **An identical count across two runs does not mean identical rows.**
+  See 12.2.

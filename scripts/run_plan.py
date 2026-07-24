@@ -200,6 +200,24 @@ def _format_synthesized(response: Any) -> str:
                 )
                 if inv.lines:
                     lines.append(f"    lines: {len(inv.lines)}")
+                    # Tax lines nest under each invoice line. Without this
+                    # loop the synthesizer populates them correctly and the
+                    # display silently drops them: the tax-line prompt
+                    # printed "lines: 4" and no tax at all, while the
+                    # executor had fetched 8 tax rows and the narration
+                    # described them. `ln` rather than `line` — `lines` is
+                    # the output buffer being appended to.
+                    for ln in inv.lines:
+                        if ln.tax_lines:
+                            lines.append(
+                                f"      line {ln.line_number} — "
+                                f"{len(ln.tax_lines)} tax line(s):"
+                            )
+                            for tx in ln.tax_lines:
+                                lines.append(
+                                    f"        {tx.tax} {tx.tax_rate}% — "
+                                    f"tax {tx.tax_amount} on {tx.taxable_amount}"
+                                )
                 if inv.dff:
                     lines.append(f"    DFF context: {inv.dff.context}")
         else:
