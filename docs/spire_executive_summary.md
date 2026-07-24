@@ -10,15 +10,9 @@ what has never been observed running.
 
 ## 1. What Spire is
 
-An AI-native natural-language query system over Oracle Fusion Cloud
-procurement (P2P) and receivables (AR) data. Deterministic KG-driven
-pipeline — **parse → plan → execute → synthesize** (Design 3). Tool
-selection is a knowledge-graph lookup, not an LLM judgment. Not an agent
-architecture.
+An AI-native natural-language query system over Oracle Fusion Cloud procurement (P2P) and receivables (AR) data. Deterministic KG-driven pipeline — **parse → plan → execute → synthesize** (Design 3). Tool selection is a knowledge-graph lookup, not an LLM judgment. Not an agent architecture.
 
-Two LLM boundaries: the parser (NL → Intent) and the synthesizer
-(rows → prose + structured response). Everything between them is
-deterministic.
+Two LLM boundaries: the parser (NL → Intent) and the synthesizer (rows → prose + structured response). Everything between them is deterministic.
 
 ---
 

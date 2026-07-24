@@ -250,6 +250,138 @@ Base REST path for all resources: `/fscmRestApi/resources/11.13.18.05/`.
   synthesizer only templates. Affects Shape B narration generally, not
   just open invoices. Fix belongs in the synthesizer, not this phase.
 
+### Known issues — verification session (2026-07-24) — SUPERSEDES MUCH OF THE 07-21 LIST BELOW
+
+A full verification session ran every prompt set end-to-end. **Nine bugs
+found and fixed, all verified live.** Read this section before the
+2026-07-21 list below, which is partly stale.
+
+**Issue 6 in the list below was already fixed when it was written.**
+`planner.py` unpacks the tuple key correctly at lines 351/361/371; the
+error it describes (`Supported entity-level: []`) does not occur anywhere.
+The three "broken" prompts were failing for three DIFFERENT reasons and
+one was not broken at all. About an hour was lost chasing it. **Treat a
+diagnosis carried between sessions as a claim, not a fact.**
+
+#### Fixed and verified (2026-07-24)
+
+| # | Bug | Layer |
+|---|---|---|
+| 1 | `tool_arg_name: 'supplier'` was a PLACEHOLDER — both KG rows document the routing ("all-digit → `supplier_number`, else `supplier_name`") and no code implemented it | planner |
+| 2 | Invoice guard demanded a supplier and rejected `purchase_order`. The PO guard's own comment described the Invoice guard as already widened; it was not | planner |
+| 3 | Synthesizer registry keyed `ExposureRanking` where the parser emits `exposure_ranking` — the lone PascalCase entry among five | synthesizer |
+| 4 | `_build_aggregation_plan` never read `intent.filters`: customer scope silently dropped, tool ran pod-wide, answer named the customer. Plus a duplicate dict key shadowing `account_number` | planner |
+| 5 | Server wrapper missing `customer_name` that the standalone tool had | server |
+| 6 | Aggregation tool capped at 500 rows, no pagination — reported a sample of 1,386 as a total and hid an entire receipt method | tool |
+| 7 | Receipt applications over-fetched 500 and filtered client-side; bucket name wrong in FOUR places | tool + synthesizer |
+| 8 | `total_available` discarded by the executor unwrap — count reported page size (10) as account total (7,038). Fixed by threading `metadata_by_step` through `execute_plan` | executor |
+| 9 | Synthesizer expanded `1179915.3225` to its full IEEE-754 binary form, then trailing zeros to the token cap | synthesizer |
+
+**Three validators had never fired.** The empty-array guards in
+`synthesize_response` checked bucket names that do not exist. All four
+now match `_OUTPUT_NAME_BY_ENTITY`; one caught a real failure the moment
+it was corrected. **Any new child bucket needs its guard name checked
+against `_OUTPUT_NAME_BY_ENTITY`, not guessed.**
+
+**Crash isolation added to `run_prompt_set.py`.** One `AttributeError`
+in the DISPLAY layer killed the AR set after prompt 1 and 15 prompts
+never ran. Each prompt now runs in a try/except.
+
+#### Open, observed failing (2026-07-24)
+
+**Issue A — receipt-method aggregate is not reproducible.** Two runs,
+same account, same code, consecutive days: identical row count (1,386),
+different totals (215.7M vs 250.6M) and different method splits (993/393
+vs 1132/254). Same count, different rows. Hypothesis: `/standardReceipts`
+has no default ordering and the paginated fetch walks `offset` without an
+`orderBy`. Confirm by curl before fixing. See endpoints reference §12.2.
+
+**Issue B — column selection is designed and inert.** `fields` parses
+into the Intent correctly and nothing downstream uses it.
+`_project_outputs(outputs, fields)` exists in `graph/pipeline.py`;
+`run_plan.py` never calls it. Asking for ONE field and asking for TWO
+produced byte-identical output. Separately, requesting `country` as a
+FIELD triggers the address over-fetch used for country FILTERING —
+synthesizer input 16,881 tokens vs 2,729, then MAX_TOKENS.
+
+**Issue C — `open_only` may not filter.** "Show me open invoices for
+customer X" returns 25 open invoices; the unfiltered prompt on the same
+account says all 25 transactions are "currently closed with a balance of
+0.00". Both cannot be true.
+
+**Issue D — `count_only` parsed and ignored.** Intent carries
+`count_only: True`; the plan fetches 25 rows. The stated answer (424) is
+plausible but is not among the returned rows.
+
+**Issue E — page size stated as total, at least five prompts.** The
+truncation block reports the real number; the narration does not always
+use it. Prompt 9 was fixed by threading metadata; the same pattern
+applies to open invoices, credit memos and supplier lists.
+
+**Issue F — creation-to-update lag prompt refuses** despite a
+`lag_query` KG filter and a registered `get_receipts_with_lag` tool.
+
+**Issue G — `Suppliers with their addresses` hits MAX_TOKENS.** Same root
+as Issue B's country over-fetch.
+
+**Issue H — PO totals disagree between prompts.** "Show PO 2144 and its
+lines" reports 41,250.00 (`Ordered`, ex-tax); "What is purchase order
+2144 about?" reports 45,168.75 (`Total`, inc-tax). Both defensible; a
+user asking twice gets two numbers with no explanation.
+
+**Issue I — PO status breakdown reports 10,000 POs** where the prompt set
+says ~3,362, and the per-status counts do not sum to it either.
+
+**Issue J — `pytest` has NOT been run since `execute_plan` changed from
+2 return values to 3.** `test_executor.py` very likely asserts the old
+shape. Highest-risk unknown in the repo.
+
+#### Cross-cutting lessons (2026-07-24)
+
+**Naming across un-typechecked boundaries is now the dominant bug
+class** — five instances this session: KG→tool arg, parser→synthesizer
+shape key, planner→wrapper parameter, synthesizer→executor bucket name
+(×4), schema→display field. None type-check; all failed silently.
+
+**The display layer runs behind the schema.** Three separate bugs: a
+field the formatter read that did not exist, a field the formatter never
+read, and a projection function never called. A generic formatter walking
+the Pydantic model would have had none of them. **Worth doing.**
+
+**Repair code placed before a check disables the check.** A structural
+fallback populating an empty list ran before the validator testing for an
+empty list. Removing it revealed the model had NEVER been populating that
+list — the fallback was doing all the work, invisibly, on every run.
+
+**A factual statement in the synthesis prompt can suppress row
+emission.** "The total is 7038. The list below shows only the most recent
+ones." — the second clause read as permission to skip the rows
+(out≈793). Dropping it restored emission (out≈2148).
+
+**Compute in the tool, not the prompt.** Every numeric bug fixed this
+session was fixed this way. Where the tool computed the value it was
+right first time; where the prompt asked the model, it took multiple
+rounds.
+
+#### Token profile (measured, ~15 runs)
+
+| Stage | Input | Output |
+|---|---|---|
+| Parse | ~8,120 **constant** | 200–800 |
+| Synthesize | 1,100–5,900 | 720–3,100 |
+
+Parse input is fixed regardless of the question: the KG menu (22
+entities, 25 filters, 97 vocabulary terms) is rebuilt and re-sent on
+every call, and the actual question is 10–20 tokens of it. Parse:
+synthesize runs about 1.5:1 overall, from 4:1 on a single-record answer
+to 1.1:1 on a 25-row answer.
+
+**Highest-leverage cost reduction: prompt caching on the parse call.**
+The system prompt is byte-identical across every call and no behaviour
+would change.
+
+---
+
 ### Known issues — full prompt-set run (2026-07-21)
 
 A full `run_prompt_set.py` run (38 prompts, all modules) after AR-P2c
@@ -466,8 +598,10 @@ Status vocab: `not started` · `in progress` · `blocked` · `merged`.
 | AR | P5 | Account balance (prompt 6, `balance_only`) | `ar-phase-5-account-children` | merged |
 | AR | P5 | A customer's credit memos (prompt 7, `AccountCreditMemo`) | `ar-phase-5-account-children` | merged |
 | AR | P5 | A customer's receipts (prompt 8, `AccountReceipt`) | `ar-phase-5-account-receipts` | merged |
-| AR | P5 | Receipt applications (9), site receipts (13) | — | **paused** |
-| AR | P6 | Aggregates (10, 16, 17, 18) | — | **paused** |
+| AR | P5 | Receipt applications (9), site receipts (13) | `prompt9-metadata-threading` | **merged 2026-07-24** |
+| AR | P6 | Exposure ranking (10), receipt-method distribution (17) | — | **fixed + verified 2026-07-24** |
+| AR | P6 | Creation-to-update lag (18) | — | **refuses — see Issue F** |
+| AR | P6 | Cash collection / DSO (16) | — | **not built — design pending** |
 | **GL** | **P1** | **Dedupe + plan** | `gl-phase-1-dedupe` | **not started** |
 | GL | P2+ | (defined at P1) | — | not started |
 | **AP** | **P1** | **Dedupe + write-safety design + plan** | `ap-phase-1-dedupe` | **not started** |

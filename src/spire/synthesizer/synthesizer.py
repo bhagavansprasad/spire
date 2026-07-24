@@ -442,6 +442,11 @@ class ReceivablesInvoiceRecord(BaseModel):
     transaction_number: str = Field(
         description="The invoice's TransactionNumber."
     )
+    transaction_date: str = Field(
+        default="",
+        description="The invoice's TransactionDate, ISO format (e.g. "
+        "'2012-03-21'). Copy it exactly from the data; do not reformat.",
+    )
     bill_to_customer_name: str = Field(
         default="", description="Bill-to customer display name."
     )
@@ -460,9 +465,9 @@ class ReceivablesInvoiceRecord(BaseModel):
     lines: list[ReceivablesInvoiceLineInfo] = Field(
         default_factory=list,
         description="This invoice's lines, when the query asked for them (a "
-        "'receivablesinvoiceline' bucket in the data). Empty otherwise. Each "
+        "'receivables_invoice_lines' bucket in the data). Empty otherwise. Each "
         "customer_transaction_line_id must appear in the executor's output.",
-    )
+        )
     dff: ReceivablesInvoiceTransactionDFFInfo | None = Field(
         default=None,
         description="This invoice's transaction DFF, when the query asked for "
@@ -2346,7 +2351,7 @@ def synthesize_response(
         for account in response.customer_accounts:
             # Check each child array
             if hasattr(account, "transactions") and not account.transactions:
-                if outputs.get("customertransaction"):
+                if outputs.get("customer_transactions"):
                     raise DegenerateOutputError(
                         f"Account {account.account_id} has non-empty 'customertransaction' bucket but 'transactions' list is empty."
                     )
