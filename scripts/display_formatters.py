@@ -273,7 +273,22 @@ def _format_synthesized(response: Any) -> str:
                     f"{cm.entered_amount} {cm.currency} on {cm.transaction_date}; "
                     f"customer: {cm.customer_name}; status: {cm.status}"
                 )
-            lines.append(f"\nTotal credit value: {response.total_credit}")
+            # Exactly one of total_credit / total_credit_note is set. A
+            # null total means the memos span several currencies: show
+            # the reason, never "None" and never a number.
+            if response.total_credit is None:
+                lines.append(
+                    "\n"
+                    + (
+                        response.total_credit_note
+                        or "Total not shown: these memos span several "
+                        "currencies."
+                    )
+                )
+            else:
+                lines.append(
+                    f"\nTotal credit value: {response.total_credit}"
+                )
         else:
             lines.append("No credit memos found.")
         if response.truncation_notes:
