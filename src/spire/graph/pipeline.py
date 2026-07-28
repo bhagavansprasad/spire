@@ -30,7 +30,7 @@ from langgraph.graph import END, StateGraph
 from spire.executor.executor import execute_plan
 from spire.nl_parser.parser import parse as parse_prompt
 from spire.planner.planner import generate_plan
-from spire.synthesizer.synthesizer import synthesize_response
+from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
 
 
 class GraphState(TypedDict, total=False):
@@ -61,6 +61,7 @@ class GraphState(TypedDict, total=False):
     truncation_by_step: Optional[dict]
     metadata_by_step: Optional[dict]   # added
     response: Optional[Any]
+    synth_failed: Optional[str]        # set when synthesis overran the cap
     error: Optional[str]
 
 
@@ -137,6 +138,13 @@ def synthesize_node(state: GraphState) -> dict:
             metadata_by_step=state.get("metadata_by_step"),   # added
         )
         return {"response": response}
+    except DegenerateOutputError as exc:
+        # The summary overran the token cap. Do NOT abort the run: fall
+        # through with a flag so the print step can show the table alone
+        # (the table is always available from `outputs`). Only applies when
+        # the intent carries `fields`; a degenerate synthesis on a normal
+        # query still leaves response=None and prints no summary.
+        return {"synth_failed": str(exc)}
     except Exception as exc:
         return {"error": f"synthesize: {exc}"}
 
