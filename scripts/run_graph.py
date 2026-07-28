@@ -65,6 +65,18 @@ async def _run(prompt: str) -> int:
         print(usage_report())
         return 4
 
+    # A planner REFUSAL is Spire declining, not Spire breaking: the
+    # message names what is missing and gives an example to type.
+    # Printing it as "ERROR:" on stderr made a good answer look like a
+    # crash — and made this runner disagree with run_prompt_set.py
+    # about the very same prompt. Exit 4, the same code as a parser
+    # refusal, because it is the same kind of outcome.
+    if state.get("error") and state.get("plan_refusal"):
+        print(f"REFUSED (planner guard): {state['error']}")
+        print()
+        print(usage_report())
+        return 4
+
     # Error in any node.
     if state.get("error"):
         print(f"ERROR: {state['error']}", file=sys.stderr)
@@ -114,3 +126,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

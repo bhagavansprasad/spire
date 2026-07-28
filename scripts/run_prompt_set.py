@@ -124,13 +124,19 @@ async def _run_one(prompt: str, menu, client) -> str:
 
     if state.get("error"):
         err = str(state["error"])
-        # A planner guard rejecting an under-specified query is a REFUSAL,
-        # not a failure: "Invoice queries require a supplier or a purchase
-        # order", "Purchase-order queries require a PO id", "Address
-        # queries require a supplier or a country". These are the system
-        # correctly declining, so the prompt set should count them as
-        # expected — same as a parser refusal.
-        if err.startswith("plan: ") and "require" in err:
+        # A planner guard rejecting an under-specified or unsupported
+        # query is a REFUSAL, not a failure: the system correctly
+        # declining, and the message names what is missing plus an
+        # example to type. Counted as expected, like a parser refusal.
+        #
+        # This used to match the message text — `"require" in err` —
+        # which tied the tally to wording nobody thought of as an
+        # interface. It broke exactly that way: a planner message
+        # reworded to name the supported filters ("Spire can't filter
+        # CustomerAccount by 'account_number' ...") stopped matching,
+        # and a good refusal was reported as a crash. plan_node now
+        # sets plan_refusal from the exception type instead.
+        if state.get("plan_refusal"):
             print(f"REFUSED (planner guard): {err}")
             return "refused (expected — planner guard)"
         print(f"ERROR: {err}", file=sys.stderr)
@@ -317,3 +323,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
