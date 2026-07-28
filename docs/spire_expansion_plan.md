@@ -17,6 +17,17 @@ Structure:
 - **Endpoints catalog** — the raw endpoint/prompt tables for all four
   modules, plus column-capture status.
 
+- **Lifecycle goal** — see `docs/spire_lifecycle_goal.md`, the target
+  state this plan builds toward.
+  
+**Where this plan is heading:** `docs/spire_lifecycle_goal.md` states the
+end goal — Spire answering the state of a business object across its full
+lifecycle, with reconciliation, exception detection and ownership
+attribution. That document is capability-blind: it describes the
+destination regardless of what exists today. This plan is how we get
+there. When the two disagree, the goal document wins on *what*, this plan
+wins on *how* and *when*.
+
 ---
 
 ## Conventions & build sequence

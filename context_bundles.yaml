@@ -93,6 +93,7 @@ bundles:
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
   - src/spire/synthesizer/synthesizer.py
+  - src/spire/graph/pipeline.py
 
   tests:
   - tests/spire_sme_validation_checklist.md

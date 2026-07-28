@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-24
 **Audience:** internal — Bhagavan, Siva, next session
-**Purpose:** current-state snapshot after a full verification-and-fix
-session. Written to be honest about what is verified, what is claimed, and
+**Purpose:** current-state snapshot after a full 103-prompt verification
+run. Written to be honest about what is verified, what is claimed, and
 what has never been observed running.
 
 ---
@@ -18,14 +18,14 @@ Two LLM boundaries: the parser (NL → Intent) and the synthesizer (rows → pro
 
 ## 2. Modules supported
 
-| Module | Status | Tools | Endpoints | Notes |
-|---|---|---|---|---|
-| **Supplier** | Complete | 6 | 5 | Filters, contacts, addresses, sites, classifications, counts, spend aggregation |
-| **Purchase Order** | Complete through P6c | 9 | 3 | Detail, lines, schedules, distributions, received-vs-ordered, invoiced-vs-ordered, aggregates |
-| **AP Invoice** | Complete | 3 | 1 | By supplier, by PO, date and amount ranges |
-| **Accounts Receivable** | ~17 of 18 prompts built | 13 | 4 | Invoices, lines, tax lines, DFF, credit memos, account balance, receipts, receipt applications, exposure ranking, receipt-method distribution |
-| **Buyer** | Complete | 1 | 1 | Cross-pillar (FSCM → HCM) |
-| **Total** | | **32** | **11** (14 incl. child paths) | |
+| Module | Status | Tools | Endpoints | Prompts run | Result |
+|---|---|---|---|---|---|
+| **Supplier** | Complete | 6 | 5 | 40 | Retrieval clean; page-size and generalisation defects in narration |
+| **Purchase Order** | Complete through P6c | 9 | 3 | 9 | Clean |
+| **AP Invoice** | Complete | 3 | 1 | — | Exercised via supplier and PO sets |
+| **Accounts Receivable** | ~17 of 18 prompts built | 13 | 4 | 16 | 6 wrong or suspicious |
+| **Buyer** | Complete | 1 | 1 | — | Not exercised this run |
+| **Total** | | **32** | **11** (14 incl. child paths) | **103** | |
 
 Tool counts are MCP-exposed tools (`@mcp.tool()` in `server.py`), assigned
 to the module whose entity they root on. The three comparison tools span
@@ -37,7 +37,7 @@ where the child is a genuinely separate resource with its own projection
 
 **Not yet supported:** Contracts, payment terms, supplier ratings/quality
 scores, requisitions, sourcing, inventory. These refuse cleanly rather
-than guessing — verified.
+than guessing — **re-verified this run**, all 9 refusal prompts correct.
 
 ---
 
@@ -99,13 +99,13 @@ child and grandchild paths.
 **Tripwire drift, unresolved:** `kg_entity_tool` reads 10 against an
 expected 9; `kg_entity_filter` reads 25 against an expected 23. Rows were
 added without bumping the expected values in `scripts/print_kg.py` and
-`tests/test_kg_metadata.py`. `test_kg_metadata.py` is failing on this.
+`tests/test_kg_metadata.py`.
 
 ---
 
 ## 5. MCP tools
 
-**32 tools** exposed by `server.py`, backed by ~25 standalone tool
+**32 tools** exposed by `server.py`, backed by 26 standalone tool
 modules. Breakdown by kind:
 
 - Search / list: 8
@@ -119,90 +119,130 @@ modules. Breakdown by kind:
 
 ## 6. Prompt coverage
 
-| Set | File | Prompts |
-|---|---|---|
-| Purchase Order | `prompt_set_po.txt` | 14 |
-| Supplier | `prompt_set_supplier.txt` | 19 |
-| Accounts Receivable | `prompt_set_ar.txt` | 15 runnable (+1 placeholder, not built) |
-| Dipstick | `dipstick/01_prompt_set_dipstick.txt` | 6 |
-| Parser stress | `01_test_prompts_parser.txt` | 60 (scorer format) |
-| E2E stress | `02_test_prompts_e2e.txt` | ~50 |
+Prompt sets were reorganised on 2026-07-24. Current layout:
+
+| Set | File | Prompts | Run result |
+|---|---|---|---|
+| Dipstick | `scripts/prompts/00_dipstick.txt` | 6 | Depth-ordered triage |
+| Supplier | `scripts/prompts/01_supplier.txt` | 40 | Mostly clean |
+| Purchase Order | `scripts/prompts/02_purchase_order.txt` | 9 | Clean |
+| Accounts Receivable | `scripts/prompts/03_ar.txt` | 16 | 6 wrong or suspicious |
+| Columns | `scripts/prompts/04_columns.txt` | 8 | Feature broken; set documents it |
+| Refusals | `scripts/prompts/05_refusals.txt` | 9 | Clean |
+| Slow | `scripts/prompts/06_slow.txt` | 15 | Aggregations, minutes each |
+| Parser stress | `scripts/prompts/scorer/parser_stress.txt` | 60 | Scorer format, not in this run |
+| **Total run** | | **103** | |
 
 AR is tracked as a numbered 1–18 series. **17 built, 1 unbuilt**
-(prompt 16, DSO / cash-collection trends — design pending, spans
-`/standardReceipts` plus AR balance).
+(prompt 16, DSO / cash-collection trends — design pending).
 
 ---
 
-## 7. This session — verification and fixes
+## 7. This run — outcome
 
-The session began with the handoff's own warning that its status was
-partly unverified. That warning was correct. **Nine bugs found and
-fixed**, all verified end-to-end against the live pod.
+**103 prompts, 7 sets, live pod.**
 
-| # | Bug | Prompts affected |
+| | Count | Share |
 |---|---|---|
-| 1 | `tool_arg_name: 'supplier'` was a placeholder nothing implemented; value-shape routing (digit → `supplier_number`, else `supplier_name`) missing | Address/supplier, Invoice/supplier |
-| 2 | Invoice guard demanded a supplier filter, rejected `purchase_order` — the widening was described in a neighbouring comment but never applied | Invoice/purchase_order |
-| 3 | Synthesizer registry key was `ExposureRanking` (PascalCase) where the parser emits `exposure_ranking` | Prompt 10 |
-| 4 | Aggregation planner never read `intent.filters`; customer scope silently dropped. Plus a duplicate dict key silently shadowing | Prompt 17 |
-| 5 | Server wrapper missing `customer_name` | Prompt 17 |
-| 6 | Aggregation tool capped at 500 rows with no pagination — reported a sample as a total (500 of 1,386) | Prompt 17 |
-| 7 | Receipt applications over-fetched 500 and filtered client-side; bucket name wrong in **four** places | Prompt 9 |
-| 8 | `total_available` discarded by the executor; count reported page size (10) as account total (7,038) | Prompt 9 |
-| 9 | Synthesizer expanded a float to the token cap (`1179915.3225` → full IEEE-754 binary expansion) | AR invoices by customer |
+| Completed without error | 100 | 97% |
+| Errored | 3 | 3% |
 
-**Plus: a validator that had never fired.** The empty-array guard in
-`synthesize_response` checked a bucket name that does not exist. It has
-been silently passing since it was written. Corrected, it immediately
-caught two real failures.
+The three errors share **one** root cause: address expansion overrunning
+the synthesizer token cap.
+
+### Quality behind the tally
+
+| Score | Count | Meaning |
+|---|---|---|
+| Pass | ~70 | Answer matches the data |
+| Wrong or unverifiable | ~30 | Ran cleanly, answer not supported |
+| Error | 3 | MAX_TOKENS |
+
+**The tally counts errors, not correctness.** Roughly thirty prompts
+returned confident, well-formed prose that the data does not support.
+
+### Layer health
+
+| Layer | State | Evidence |
+|---|---|---|
+| Parse | Healthy | Intents correct across all sets |
+| Plan | Healthy | Multi-hop traversals land correctly |
+| Execute | Healthy | Filters resolve, joins hold |
+| Synthesize | **Defective** | Source of nearly all wrong answers |
+| Display | Weak | Projection hides rows the narration cites |
+
+Retrieval is sound. All nine fixes from the previous session held; no
+regressions. The defects are concentrated in the last stage.
 
 ---
 
 ## 8. Open issues
 
-### Confirmed this session, unfixed
+### Failure patterns — thirty wrong answers, six causes
 
-| Issue | Detail |
-|---|---|
-| **Column selection does not work** | See section 9 — the largest open gap |
-| **`count_only` dropped by the planner** | Intent carries `count_only: True`; the plan ignores it and fetches 25 rows. The answer ("424 suppliers") is plausible but its provenance is unverified |
-| **Synthesizer asserts unshown fields** | Seen 5+ times across different prompts: "all currently closed with a balance of 0.00", "the administrative contact is John Kim", "all in USD". Fields absent from the displayed projection. Probably real data behind display truncation — unverified |
-| **Page presented as total** | "The query returned 25 suppliers" where 421 exist. The truncation block reports it; the narration does not always use it |
-| **Over-generalised narration** | "These suppliers are active and have a 'Spend Authorized' business relationship" — true of the five rows shown, not the set |
-| **KG tripwire drift** | `kg_entity_tool` 10 vs 9, `kg_entity_filter` 25 vs 23 |
-| **`pytest` has not been run this session** | `execute_plan`'s signature changed from 2 return values to 3. `test_executor.py` very likely asserts the old shape. **Highest-risk unknown.** |
+| # | Pattern | Prompts | Root cause |
+|---|---|---|---|
+| 1 | Narration cites fields not in output | ~12 | Model sees full rows, display shows a subset |
+| 2 | Page size stated as total | ~8 | Truncation metadata not threaded to narration |
+| 3 | Arithmetic over undisplayed rows | ~4 | Model computes instead of copying tool output |
+| 4 | Parsed intent ignored downstream | ~4 | `count_only`, `open_only`, `fields` never applied |
+| 5 | Address expansion overrun | 3 | Nested addresses exceed token cap |
+| 6 | Generalisation from visible rows | ~3 | True of 25 shown, asserted of the set |
+
+**Sharpest example.** Two AR prompts over the same 25 rows reported two
+different amount ranges — 211.09–75313.86 and 7039.39–216378.00. At least
+one was invented.
+
+### Designed features, parsed but inert
+
+| Feature | Parsed | Applied | Evidence |
+|---|---|---|---|
+| `count_only` | Yes | No | Fetches 25 rows anyway |
+| `open_only` | Yes | No | Same 25 rows as unfiltered prompt |
+| `fields` | Yes | No | One-field and two-field output byte-identical |
 
 ### Structural / carried forward
 
 | Issue | Detail |
 |---|---|
-| **Row-count ceiling on nested child arrays** | 25 wide rows → synthesizer returns an EMPTY array with a short summary rather than truncating. 10 works. Distinct from the token-cap runaway: output is small, not truncated. Currently handled by capping limits at 10 |
-| **Synthesizer arithmetic (Issue 4 in the plan)** | Prompt-level prohibition has repeatedly proved insufficient. The structural fix is to compute in the TOOL and stamp per row |
-| **Validator bucket names unverified** | The credit-memo, receipts and `customertransaction` guards use names that were changed on a guess or never changed. `_OUTPUT_NAME_BY_ENTITY` is authoritative. The receipts one is the guard that missed prompt 8's empty array |
+| **Credit-memo total** | Sums 25 of an unknown total, mixes USD and CAD, and includes a positive 10,000.00 row inside a credit-memo set |
+| **List vs total conflation** | "List recent credit memos" and "What is the total value of credit memos?" returned byte-identical prose |
+| **Row-count ceiling on nested child arrays** | 25 wide rows → synthesizer returns an EMPTY array with a short summary. 10 works. Currently handled by capping limits at 10 |
 | **Metadata block is hardcoded** | `_build_synthesis_prompt` special-cases `account_receipt_applications`; does not generalise |
-| **Prompt phrasing is load-bearing** | AR prompts 6, 7 and 8 have specific phrasings recorded above them in the prompt set. Alternate forms ran the parser away. May now be historical — not re-confirmed across the set |
+| **`pytest` has not been run** | `execute_plan`'s signature changed from 2 return values to 3. **Highest-risk unknown.** |
 
-### Never observed running
+### Receipt-method stability — downgraded
 
-Prompt 13 (site-filtered receipts, "Santa Clara"). Note the trap: Santa
-Clara spans accounts 26360 AND 26370, and composite `q=` returns a silent
-zero on `/standardReceipts`.
+Previously suspected unstable: two consecutive runs gave 215.7M and
+250.6M on the same 1,386 rows.
+
+**This run matched the first exactly** — 1,386 receipts, 215,721,775.28,
+Lockbox 993, Check 393. Two of three runs now agree.
+
+The divergence is real but intermittent, not systematic. **Do not treat
+the pagination hypothesis as confirmed.**
+
+### Still never observed working
+
+`Show lag between creation and last update for receipts of X` — refuses
+as out-of-scope. The KG has a `lag_query` filter and a
+`get_receipts_with_lag` tool is registered. Either the filter is not
+reaching the parser menu or the tool is not wired.
 
 ---
 
-## 9. Column selection — status: NOT WORKING
+## 9. Column selection — status: STILL NOT WORKING
 
 Design intent: a user names the columns they want and the output honours
-them. Four variants tested tonight against the same query (active
-suppliers).
+them. Eight prompts in `04_columns.txt`; the defect is unchanged from the
+previous session.
 
-| Prompt | Parsed `fields` | Result |
-|---|---|---|
-| "Show only supplier name and status for active suppliers" | `['Supplier', 'Status']` | **Ignored** — 6 columns returned |
-| "Just the names of active suppliers" | `['Supplier']` | **Ignored** — 6 columns returned |
-| "Supplier number and country for active suppliers" | parsed | **MAX_TOKENS runaway**, `in=16881` |
-| "Supplier name, number, status and country for active suppliers" | parsed (`out=820`, 3× normal) | **MAX_TOKENS runaway**, `in=16881` |
+| Prompt | Result |
+|---|---|
+| "Show only supplier name and status for active suppliers" | **Ignored** — 6 columns returned |
+| "Just the names of active suppliers" | **Ignored** — 6 columns returned |
+| "Supplier number and country for active suppliers" | **MAX_TOKENS**, `out=7985` |
+| "Supplier name, number, status and country for active suppliers" | **MAX_TOKENS**, `out=7985` |
 
 **Two distinct defects.**
 
@@ -211,19 +251,16 @@ field list into the Intent correctly. Nothing downstream uses it.
 `_project_outputs(outputs, fields)` exists in `graph/pipeline.py`, but
 `run_plan.py` calls `execute_plan` and `synthesize_response` directly and
 never invokes it. Evidence: asking for ONE field and asking for TWO
-produced **byte-identical output** — same token counts, same answer text,
-same six columns.
+produced **byte-identical output**.
 
 **9b. Requesting `country` triggers an over-fetch that overruns the
-synthesizer.** Both failing prompts name `country`. Synthesizer input was
-16,881 tokens against 2,729 for the working prompts — six times the
-payload. Per the KG, `Supplier`/`country` is `client_side` with the note
-"Country lives on the addresses child; over-fetch." Requesting country as
-a FIELD appears to trigger the same address expansion used for country
-FILTERING, pulling every supplier's addresses into the payload.
+synthesizer.** Both failing prompts name `country`. Per the KG,
+`Supplier`/`country` is `client_side` with the note "Country lives on the
+addresses child; over-fetch." Requesting country as a FIELD triggers the
+same address expansion used for country FILTERING.
 
-Prompt 4's parse also degraded (`out=820` vs 227–285), so the four-field
-form strains the parser before the synthesizer is reached.
+**Same root cause as `Suppliers with their addresses`** — one defect
+accounts for all three of the run's errors.
 
 **Assessment:** 9a is a missing wire-up — likely small. 9b is a real
 design question: field requests and filter mechanisms are being conflated.
@@ -232,36 +269,82 @@ design question: field requests and filter mechanisms are being conflated.
 
 ## 10. What to do next, in order
 
-1. **Run `python -m pytest -q`.** It has not run this session. The
-   executor signature change is unvalidated. Everything else is built on
-   this.
+**Prerequisites — before any code:**
+
+1. **Run `python -m pytest -q`.** Still not run. The executor signature
+   change is unvalidated. Everything else is built on this.
 2. **Bump the two KG tripwires** to 10 and 25 in both `print_kg.py` and
    `tests/test_kg_metadata.py`.
-3. **Verify the validator bucket names** against `_OUTPUT_NAME_BY_ENTITY`.
-   Three guards are suspect; one of them is the guard that missed prompt
-   8's empty array.
-4. **Wire up column selection (9a)** — connect the parsed `fields` to
-   `_project_outputs` on the `run_plan.py` path.
-5. **Investigate the country over-fetch (9b).**
-6. **Run prompt 13**, the last never-observed AR prompt.
-7. **Design and build AR prompt 16** (DSO / cash-collection).
+3. **Curl `/standardReceipts` with `orderBy`** before touching pagination.
+
+**Fixes, by yield:**
+
+| # | Fix | Kills patterns | Effort |
+|---|---|---|---|
+| 4 | Narrate only from displayed projection | 1, 3, 6 | Medium |
+| 5 | Thread truncation metadata into every narration | 2 | Small |
+| 6 | Wire `_project_outputs` into `run_plan.py` (9a) | 4 | Small |
+| 7 | Apply `count_only` in the planner | 4 | Small |
+| 8 | Apply `open_only` to the transaction filter | 4 | Small |
+| 9 | Cap or flatten address expansion (9b) | 5 | Medium |
+| 10 | Route credit-memo total to an aggregate tool | 3 | Medium |
+
+Fix 4 is the highest yield: one change, three patterns, roughly nineteen
+prompts. Fix 9 is the only one that clears the three hard errors.
+
+Then: **build AR prompt 16** (DSO / cash-collection), the last unbuilt
+item in the AR series.
 
 ---
 
 ## 11. Method note
 
-Nine fixes landed. The ones that stuck were the ones where a `curl` was
-run against the pod BEFORE changing code — the supplier arg routing, the
-aggregation pagination, the receipt-application counts. The attempts that
-failed and were reverted were the ones reasoned from symptom similarity.
+**The summary line is not a verdict.** "100/103 ran cleanly" was true of a
+run in which roughly thirty answers were wrong. Every defect recorded here
+was invisible at the summary level and required reading the answers.
 
-Two specific traps this session, both worth remembering:
+Two lessons this run reinforced:
 
-- **A handoff diagnosis can go stale.** Issue 6 in the expansion plan
-  described a tuple-keying bug in `_load_filter_defs`. That bug had
-  already been fixed; the three "broken" prompts were failing for three
-  different reasons, and one was not broken at all.
-- **Repair code placed before a check disables the check.** A structural
-  fallback that populated an empty list ran before the validator that
-  tested for an empty list. Removing it revealed the model had never been
-  populating that list at all.
+- **A diagnosis from a previous session is a claim, not a fact.** The
+  receipt-method instability was carried forward as established and did
+  not reproduce. Re-observe before acting.
+- **Compute in the tool, not the prompt.** Every numeric defect still open
+  is one where the model was asked to do arithmetic. Where the tool
+  computed and the synthesizer copied, the answer was right.
+
+---
+
+## 12. Codebase size
+
+**By area**
+
+| Area | Lines | Share |
+|---|---|---|
+| `src/spire` | ~12,900 | 52% |
+| `tests` | 8,371 | 34% |
+| `scripts` | 2,764 | 11% |
+| Other Python | 612 | 3% |
+| **Total** | **24,837** | |
+
+**Source modules**
+
+| Module | Lines |
+|---|---|
+| `mcp_server` (incl. 26 tool files, 4,421) | 5,619 |
+| `synthesizer` | 2,382 |
+| `planner` | 1,669 |
+| `nl_parser` | 1,606 |
+| `executor` | 686 |
+| `agent` | 295 |
+| `kg` | 262 |
+| `graph` | 214 |
+| `oracle` | 94 |
+| `fusion` | 61 |
+
+**Observation.** The synthesizer is the second-largest source module and
+the origin of nearly every wrong answer in this run. The executor, planner
+and parser — 3,961 lines combined — produced no observed defects.
+
+Tests are 8,371 lines against roughly 12,900 of source. A healthy ratio on
+paper, but the suite has not run since the executor signature changed, so
+the figure is currently unverified.
