@@ -759,6 +759,90 @@ def test_generate_plan_raises_on_unknown_filter_type() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# W1 — refusal quality: guards run BEFORE filter validation
+#
+# An intent naming a filter an entity does not support is often really a
+# missing-root-reference intent in disguise. "show details for invoice
+# number LEE-01-1006-111" parses to Invoice + by_id, but what the user
+# needs to hear is "name the supplier" — not a dump of internal filter
+# names. Validation used to run first and win every time.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_invoice_by_id_reaches_the_supplier_guard() -> None:
+    """Invoice + by_id hits the supplier guard (ValueError with a worked
+    example), NOT the filter-validation dump."""
+    intent = Intent(
+        target_entity="Invoice",
+        filters=[{"type": "by_id", "value": "LEE-01-1006-111"}],
+    )
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "require a supplier" in msg
+    assert "Lee Supplies" in msg          # a prompt the user can type
+    assert "Intent contains filter types" not in msg
+
+
+def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
+    """PurchaseOrder + status/supplier hits the PO guard, which names the
+    supplier route — the actual answer to 'open POs for supplier X'."""
+    intent = Intent(
+        target_entity="PurchaseOrder",
+        filters=[
+            {"type": "status", "value": "OPEN"},
+            {"type": "supplier", "value": "EIP Inc"},
+        ],
+    )
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "PO id or a date bound" in msg
+    assert "EIP Inc" in msg
+
+
+def test_unguarded_entity_still_validates_with_an_example() -> None:
+    """An entity with no guard falls through to validation — which must
+    still name what IS supported and give something typeable."""
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[{"type": "account_number", "value": "300000047368512"}],
+    )
+    with pytest.raises(NotImplementedError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "account_number" in msg              # what was rejected
+    assert "by_customer_name" in msg            # what works instead
+    assert "For example:" in msg                # something typeable
+
+
+def test_validation_message_carries_no_internal_jargon() -> None:
+    """The old message opened with 'Intent contains filter types not
+    supported for entity ...' and printed Python list reprs. Nothing a
+    user can act on."""
+    with pytest.raises(NotImplementedError) as exc_info:
+        _validate_intent_filters(
+            [{"type": "is_strategic_supplier", "value": True}], "Supplier"
+        )
+    msg = str(exc_info.value)
+    assert "Intent contains filter types" not in msg
+    assert msg.startswith("Spire can't filter Supplier by")
+
+
+def test_validation_still_precedes_plan_building() -> None:
+    """Moving validation after the guards must not let an unknown filter
+    reach the plan blocks — Supplier has no guard, so validation is the
+    only thing standing between this intent and a silent drop."""
+    intent = Intent(
+        target_entity="Supplier",
+        filters=[{"type": "is_diversity_supplier", "value": True}],
+    )
+    with pytest.raises(NotImplementedError):
+        generate_plan(intent)
+
+
+
+# ─────────────────────────────────────────────────────────────────────
 # F2 helpers — unit tests (no DB for the pure-Python ones)
 # ─────────────────────────────────────────────────────────────────────
 
