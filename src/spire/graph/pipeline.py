@@ -46,6 +46,10 @@ class GraphState(TypedDict, total=False):
     Produced along the way:
         intent, refusal, plan, outputs, truncation_by_step, metadata_by_step, response.
         error: set if a node failed; downstream nodes short-circuit.
+        plan_refusal: True when `error` is a planner REFUSAL (Spire
+            declining an under-specified or unsupported query) rather
+            than a failure. Read this instead of matching on the
+            message text.
     """
 
     prompt: str
@@ -63,6 +67,13 @@ class GraphState(TypedDict, total=False):
     response: Optional[Any]
     synth_failed: Optional[str]        # set when synthesis overran the cap
     error: Optional[str]
+    # True when `error` is Spire DECLINING rather than Spire BREAKING.
+    # Callers render a refusal differently from a failure, and used to
+    # tell them apart by grepping the message ("require" in err) — so
+    # rewording a guard silently reclassified it. It did: a planner
+    # message reworded to name the supported filters stopped matching,
+    # and a perfectly good refusal started being counted as a crash.
+    plan_refusal: Optional[bool]
 
 
 # ── Nodes ─────────────────────────────────────────────────────────────
@@ -79,7 +90,20 @@ def plan_node(state: GraphState) -> dict:
     try:
         plan = generate_plan(state["intent"])
         return {"plan": plan}
-    except Exception as exc:  # planner raises on unsupported shapes
+    except (ValueError, NotImplementedError) as exc:
+        # Spire DECLINING, not Spire breaking — both carry a message
+        # written for the user, naming what is missing and giving an
+        # example to type:
+        #   ValueError          an entity guard: the query has no root
+        #                       reference ("Invoice queries require a
+        #                       supplier ...")
+        #   NotImplementedError an unsupported filter for this entity
+        #                       ("Spire can't filter CustomerAccount
+        #                       by 'account_number' ...")
+        # The distinction between the two matters inside the planner
+        # (and its tests) but not to a caller: both are answers.
+        return {"error": f"plan: {exc}", "plan_refusal": True}
+    except Exception as exc:  # a genuine planner failure
         return {"error": f"plan: {exc}"}
 
 
@@ -220,3 +244,4 @@ def _maybe_save_png(compiled) -> None:
 
 # Module-level compiled graph (compilation is cheap and reusable).
 GRAPH = build_graph()
+
