@@ -8,37 +8,42 @@ bundles:
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
-  - docs/feature_roadmap.md
+  - docs/spire_plan.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
   - docs/spire_design_decisions.md
-  - docs/spire_expansion_plan.md
+  - docs/spire_executive_summary.md
+  - docs/spire_target_outputs.md
   - docs/spire_fusion_endpoints_reference.md
   - docs/spire_pipeline_playbook.md
   - docs/findings_llm_degenerate_parse.md
 
   prompts:
-    
+  - scripts/prompts/00_dipstick.txt
+  - scripts/prompts/01_supplier.txt
+  - scripts/prompts/02_purchase_order.txt
+  - scripts/prompts/03_ar.txt
+  - scripts/prompts/04_columns.txt
+  - scripts/prompts/05_refusals.txt
+  - scripts/prompts/06_slow.txt
+  - scripts/prompts/07_alacarte.txt
+  - scripts/prompts/README.md
+  - scripts/prompts/scorer/parser_stress.txt
+
   scripts:
   - scripts/draw_graph.py
   - scripts/ask.py
   - scripts/inspect_trace.py
   - scripts/print_kg.py
   - scripts/rebuild_kg.py
+  - scripts/rebuild_kg.sh
   - scripts/run_graph.py
-  - scripts/run_plan.py
   - scripts/run_prompt_set.py
+  - scripts/display_formatters.py
   - scripts/test_kg_connection.py
   - scripts/verify_invoices.py
   - scripts/verify_business_relationship.py
   - scripts/verify_nested_addresses.py
-  - scripts/01_test_prompts_parser.txt
-  - scripts/02_test_prompts_e2e.txt
-  - scripts/03_test_prompts_failed.txt
-  - scripts/prompt_set_po.txt
-  - scripts/prompt_set_supplier.txt
-  - scripts/prompt_set_ar.txt
-  - scripts/spire_v1.2_review_prompts.txt
   - scripts/score_parser_prompts.py
 
   graph_kg:
