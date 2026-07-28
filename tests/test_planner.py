@@ -26,7 +26,7 @@ from spire.planner.planner import (
     Plan,
     Step,
     _arg_name_for_tool,
-    _build_fetcher_args,
+    _build_entity_fetcher_args,
     _build_iteration_args_with_computed,
     _compute_date_n_months_ago,
     _filter_target_entity,
@@ -529,35 +529,35 @@ def test_pick_entity_filter_finds_country() -> None:
         {"type": "country", "value": "US"},
         {"type": "has_open_PO", "value": True},
     ]
-    assert _pick_entity_filter(filters) == "country"
+    assert _pick_entity_filter(filters, "Supplier") == "country"
 
 
 def test_pick_entity_filter_returns_none_when_no_match() -> None:
     """If no filter has a dedicated fetcher, returns the literal 'none'."""
     filters = [{"type": "has_open_PO", "value": True}]
-    assert _pick_entity_filter(filters) == "none"
+    assert _pick_entity_filter(filters, "Supplier") == "none"
 
 
 def test_pick_entity_filter_empty_returns_none() -> None:
     """An intent with no filters returns 'none'."""
-    assert _pick_entity_filter([]) == "none"
+    assert _pick_entity_filter([], "Supplier") == "none"
 
 
-def test_build_fetcher_args_none_returns_empty() -> None:
-    """filter_type='none' produces an empty arg dict."""
-    assert _build_fetcher_args("none", []) == {}
+def test_build_entity_fetcher_args_empty_returns_empty() -> None:
+    """No filters produces an empty arg dict."""
+    assert _build_entity_fetcher_args([], "Supplier") == {}
 
 
-def test_build_fetcher_args_country_canonical_passthrough() -> None:
+def test_build_entity_fetcher_args_country_canonical_passthrough() -> None:
     """Already-canonical 'US' resolves to 'US' (a real KG lookup)."""
     filters = [{"type": "country", "value": "US"}]
-    assert _build_fetcher_args("country", filters) == {"country": "US"}
+    assert _build_entity_fetcher_args(filters, "Supplier") == {"country": "US"}
 
 
-def test_build_fetcher_args_country_normalizes_full_name() -> None:
+def test_build_entity_fetcher_args_country_normalizes_full_name() -> None:
     """Full name 'United States' normalizes to 'US' via vocab."""
     filters = [{"type": "country", "value": "United States"}]
-    assert _build_fetcher_args("country", filters) == {"country": "US"}
+    assert _build_entity_fetcher_args(filters, "Supplier") == {"country": "US"}
 
 
 def test_filters_needing_edge_traversal_returns_only_traversal_filters() -> None:
@@ -687,7 +687,7 @@ def test_validate_intent_filters_accepts_all_known_types() -> None:
         {"type": "has_open_PO", "value": True},
     ]
     # Should not raise.
-    _validate_intent_filters(filters)
+    _validate_intent_filters(filters, "Supplier")
 
 
 def test_validate_intent_filters_accepts_all_known_types_including_no_recent() -> None:
@@ -697,20 +697,20 @@ def test_validate_intent_filters_accepts_all_known_types_including_no_recent() -
         {"type": "has_no_recent_invoices", "value": {"months": 6}},
         {"type": "has_open_PO", "value": True},
     ]
-    _validate_intent_filters(filters)
+    _validate_intent_filters(filters, "Supplier")
 
 
 def test_validate_intent_filters_accepts_empty_list() -> None:
     """No filters at all is a valid intent shape (e.g., a fetch-all).
     Validation passes."""
-    _validate_intent_filters([])
+    _validate_intent_filters([], "Supplier")
 
 
 def test_validate_intent_filters_raises_on_single_unknown_type() -> None:
     """An unknown filter type raises NotImplementedError naming the type."""
     filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     assert "is_strategic_supplier" in str(exc_info.value)
 
 
@@ -724,7 +724,7 @@ def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
         {"type": "is_diversity_supplier", "value": True},   # unknown
     ]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     msg = str(exc_info.value)
     assert "is_strategic_supplier" in msg
     assert "is_diversity_supplier" in msg
@@ -735,7 +735,7 @@ def test_validate_intent_filters_error_message_names_supported_types() -> None:
     so the gap is actionable, not just a 'no'."""
     filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     msg = str(exc_info.value)
     assert "country" in msg          # entity-level support listed
     assert "has_open_PO" in msg      # edge-traversal support listed
