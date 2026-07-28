@@ -11,12 +11,8 @@ bundles:
   - docs/spire_plan.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
-  - docs/spire_design_decisions.md
-  - docs/spire_executive_summary.md
-  - docs/spire_target_outputs.md
   - docs/spire_fusion_endpoints_reference.md
   - docs/spire_pipeline_playbook.md
-  - docs/findings_llm_degenerate_parse.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
