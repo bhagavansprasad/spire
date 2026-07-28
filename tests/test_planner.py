@@ -801,6 +801,40 @@ def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
     assert "EIP Inc" in msg
 
 
+def test_standard_receipt_unscoped_is_refused() -> None:
+    """"Get standardReceipts" reached the executor and failed inside the
+    tool: "At least one of customer_name or customer_site is required."
+    The KG advertises a (none) entity tool for StandardReceipt, but that
+    tool refuses to run unscoped — so the planner promised something the
+    tool would not honour, and the user saw a raw exception."""
+    intent = Intent(target_entity="StandardReceipt")
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "require a customer or a site" in msg
+    assert "ABC Application Software" in msg      # something typeable
+
+
+def test_standard_receipt_with_customer_name_plans() -> None:
+    """A scoped receipt query must still plan."""
+    intent = Intent(
+        target_entity="StandardReceipt",
+        filters=[{"type": "customer_name", "value": "ABC Application Software"}],
+    )
+    plan = generate_plan(intent)
+    assert plan
+    assert plan[0].tool_name == "search_standard_receipts"
+
+
+def test_standard_receipt_with_site_alone_plans() -> None:
+    """Site alone is a valid scope — the tool accepts either."""
+    intent = Intent(
+        target_entity="StandardReceipt",
+        filters=[{"type": "customer_site", "value": "Santa Clara"}],
+    )
+    assert generate_plan(intent)
+
+
 def test_unguarded_entity_still_validates_with_an_example() -> None:
     """An entity with no guard falls through to validation — which must
     still name what IS supported and give something typeable."""

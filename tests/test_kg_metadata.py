@@ -197,6 +197,18 @@ async def test_kg_table_row_counts_match_v1_1():
     per-receipt applications child, reached by traversal — hence the edge
     and edge tool, and no entity tool.
 
+    Two later corrections. (1) A stale StandardReceipt account_number
+    filter was removed (25->24 then ->23 with the lag row below): the
+    tool takes customer_name/customer_site and has no account_number
+    parameter, so the row built an argument the tool rejects. (2) A
+    lag_query filter and a get_receipts_with_lag entity tool were live
+    in the DATABASE but in neither the seed nor master — the code is on
+    feature/ar-prompt-18-parking. The KG was advertising a tool the
+    running server does not have. Both rows are gone (kg_entity_tool
+    10->9, kg_entity_filter 24->23) and belong with prompt 18 when it
+    lands. Seed and database now agree; before this they did not, and a
+    rebuild would have silently changed behaviour.
+
     NOTE this REVERSES a decision recorded above. AR-P5 prompt 8 stated
     that the top-level resource was deliberately NOT modeled ("only the
     child is modeled as an entity") because its projection differs from
@@ -215,8 +227,8 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 97,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 10,
-        "kg_entity_filter": 25,
+        "kg_entity_tool": 9,
+        "kg_entity_filter": 23,
         "kg_edge_tool": 16,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted

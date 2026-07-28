@@ -937,6 +937,34 @@ def generate_plan(
                 "invoices, ask about the customer account."
             )
 
+
+    # StandardReceipt has a (none) entity tool — search_standard_receipts —
+    # but that tool REFUSES to run unscoped: its first statement raises
+    # "At least one of customer_name or customer_site is required." So the
+    # KG advertised a fetcher the tool would not honour, and "Get
+    # standardReceipts" reached the executor before failing. The user saw
+    # a raw tool exception; the planner had every means to say so first.
+    #
+    # A lag_query filter and a get_receipts_with_lag entity tool were
+    # live in the KG database but in NEITHER the seed nor master: the
+    # code sits on feature/ar-prompt-18-parking. The KG was advertising
+    # a tool the running server does not have, so a lag query planned
+    # cleanly and then failed at dispatch. Those rows are gone; when
+    # prompt 18 lands it should bring them, and add "lag_query" to the
+    # scope list below (it routes to its own tool with its own args).
+    if intent.target_entity == "StandardReceipt":
+        has_scope = any(
+            f.get("type") in ("customer_name", "customer_site")
+            for f in intent.filters
+        )
+        if not has_scope:
+            raise ValueError(
+                "Receipt queries require a customer or a site. For example "
+                "'receipts for ABC Application Software', or 'receipts at "
+                "Santa Clara'. The top-level receipts collection is too "
+                "large to list unscoped."
+            )
+
     # Validate AFTER the entity guards. Unknown filter types still raise
     # loudly rather than being silently dropped by
     # _filters_needing_edge_traversal — this runs before every plan block
