@@ -59,11 +59,15 @@ async def list_receivables_credit_memos(
     Returns:
         ToolResult whose items are the projected credit-memo dicts, newest
         first. Empty items means no credit memos exist on the pod.
+        total_available is the pod's count of credit memos (from
+        totalResults), NOT the number returned — so a caller can honestly
+        say "25 of 1,343" rather than "25 credit memos".
     """
     params = {
         "onlyData": "true",
         "orderBy": "TransactionDate:desc",
         "limit": limit,
+        "totalResults": "true",
         "fields": ",".join(_PROJECTED_FIELDS),
     }
     try:
@@ -81,10 +85,20 @@ async def list_receivables_credit_memos(
     items = response.get("items", [])
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
 
+    # The pod's own count for this collection. Without it, total_available
+    # equals the returned row count, ToolResult.build computes
+    # `total_available > len(items)` as false, and the result claims nothing
+    # was truncated — so a capped slice is indistinguishable from a complete
+    # answer. Falls back to the row count when the endpoint omits
+    # totalResults: an honest floor, not an invented total.
+    total_available = response.get("totalResults")
+    if not isinstance(total_available, int):
+        total_available = len(projected)
+
     return ToolResult.build(
         items=projected,
         limit_applied=limit,
-        total_available=len(projected),
+        total_available=total_available,
     )
 
 
