@@ -851,10 +851,20 @@ class CreditMemoListResponse(BaseModel):
         description="Credit memos in date-descending (recent-first) order. "
         "Empty if none exist.",
     )
-    total_credit: float = Field(
-        description="Total credit value: the raw sum of EnteredAmount across "
-        "the listed memos, copied from the executor's total_credit. Do NOT "
-        "recompute it.",
+    total_credit: float | None = Field(
+        default=None,
+        description="Total credit value: the ledger sum of EnteredAmount "
+        "across the listed memos, copied from the executor's total_credit. "
+        "Do NOT recompute it. NULL when the memos span more than one "
+        "currency — there is no single total to give, and inventing one "
+        "would be a figure in no currency at all. When this is null, "
+        "total_credit_note says why.",
+    )
+    total_credit_note: str | None = Field(
+        default=None,
+        description="Why no total was given, copied verbatim from the "
+        "executor's total_credit_note. Null whenever total_credit has a "
+        "value. Exactly one of the two is ever set.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
@@ -1541,10 +1551,16 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "status, customer_name, and customer_number. Set the response's "
         "'total_credit' to the 'total_credit' value from any row EXACTLY — "
         "do NOT recompute or sum entered_amount yourself; the total is "
-        "provided. The summary MUST state how many credit memos were listed "
-        "and the total credit value. If the list is empty, say there are no "
-        "credit memos and set total_credit to 0. Every "
-        "customer_transaction_id must appear in the data."
+        "provided. If that value is NULL, the memos span several "
+        "currencies: set 'total_credit' to null, copy the row's "
+        "'total_credit_note' into 'total_credit_note' verbatim, and the "
+        "summary MUST NOT state any total — say instead that the memos "
+        "span multiple currencies and were not totalled. Never add up the "
+        "amounts yourself to fill the gap. Otherwise the summary MUST "
+        "state how many credit memos were listed and the total credit "
+        "value. If the list is empty, say there are no credit memos and "
+        "set total_credit to 0. Every customer_transaction_id must appear "
+        "in the data."
     ),
     "SupplierSpendRanking": (
         "This is a SUPPLIER SPEND RANKING (an aggregation). The data has a "
