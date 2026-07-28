@@ -206,6 +206,28 @@ _FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
 }
 
 
+# W1 (refusal quality): a worked example per entity, used when an intent
+# names a filter type the entity does not support. Without one the user
+# got a raw dump of internal filter names and had to guess what to type
+# instead. This mirrors what the entity guards in generate_plan already
+# do inline — those cover Invoice, Address, PurchaseOrder and
+# ReceivablesInvoice; this covers everything else, and any entity added
+# later. An entity absent from this map degrades to the supported-filter
+# list alone: the old behaviour minus the internal jargon.
+_ENTITY_EXAMPLE_PROMPT: dict[str, str] = {
+    "Supplier": "active suppliers in US",
+    "Invoice": "invoices for Lee Supplies",
+    "Address": "addresses for supplier 1252",
+    "PurchaseOrder": "show PO 2144 and its lines",
+    "ReceivablesInvoice": (
+        "show the AR invoice with CustomerTransactionId 300000248096352"
+    ),
+    "CustomerAccount": "account balance for ABC Application Software",
+    "CreditMemo": "list recent credit memos",
+    "StandardReceipt": "receipts for ABC Application Software",
+}
+
+
 # ─────────────────────────────────────────────────────────────────────
 # KG connection
 # ─────────────────────────────────────────────────────────────────────
@@ -846,10 +868,6 @@ def generate_plan(
     if intent.compare is not None:
         return _build_comparison_plan(intent.compare)
 
-    # Validate up front so unknown filter types raise loudly instead
-    # of being silently dropped by _filters_needing_edge_traversal.
-    _validate_intent_filters(intent.filters, intent.target_entity)
-
     # Invoice queries require a supplier reference. Without it the fetch
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
@@ -918,6 +936,14 @@ def generate_plan(
                 "300000248096352 and its lines'. To list a customer's "
                 "invoices, ask about the customer account."
             )
+
+    # Validate AFTER the entity guards. Unknown filter types still raise
+    # loudly rather than being silently dropped by
+    # _filters_needing_edge_traversal — this runs before every plan block
+    # below. But the guards above are better aimed for the cases they
+    # cover, and an unsupported-filter intent is often a
+    # missing-root-reference intent in disguise.
+    _validate_intent_filters(intent.filters, intent.target_entity)
 
     ref_date = reference_date if reference_date is not None else date.today()
 
@@ -1248,7 +1274,22 @@ def _build_comparison_plan(compare: dict[str, Any]) -> Plan:
 
 
 def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) -> None:
-    """Verify every filter in the intent has a known handler for the target entity."""
+    """Verify every filter in the intent has a known handler for the target entity.
+
+    Raises NotImplementedError naming the unsupported types, what IS
+    supported for this entity, and — where one is known — a prompt the
+    user can actually type. The exception TYPE is load-bearing: callers
+    and tests distinguish it from the ValueError the entity guards raise.
+
+    Called AFTER the entity guards in generate_plan. Those guards give a
+    better-aimed message for the cases they cover, and several
+    unsupported-filter intents are really missing-root-reference intents
+    wearing a different hat: 'show details for invoice number X' parses
+    to Invoice + by_id, but what the user needs to hear is "name the
+    supplier". Validating first meant the raw filter dump always won.
+    This still runs before any plan block, so an unknown filter type can
+    never be silently dropped.
+    """
     entity_level = _entity_level_filter_types().get(target_entity, set())
     edge_filters = _edge_traversal_filters()
     unknown = []
@@ -1260,12 +1301,28 @@ def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) 
         if ftype == "by_id" and target_entity in ("PurchaseOrder", "ReceivablesInvoice"):
             continue
         unknown.append(ftype)
-    if unknown:
-        raise NotImplementedError(
-            f"Intent contains filter types not supported for entity {target_entity!r}: {unknown}. "
-            f"Supported entity-level: {sorted(entity_level)}. "
-            f"Supported edge-traversal: {sorted(edge_filters)}."
+    if not unknown:
+        return
+
+    named = ", ".join(repr(u) for u in unknown)
+    supported = sorted(entity_level)
+    parts = [f"Spire can't filter {target_entity} by {named}."]
+    if supported:
+        parts.append(
+            f"Supported {target_entity} filters: {', '.join(supported)}."
         )
+    else:
+        parts.append(
+            f"{target_entity} has no filters of its own; it is reached by "
+            "traversal from another entity."
+        )
+    example = _ENTITY_EXAMPLE_PROMPT.get(target_entity)
+    if example:
+        parts.append(f"For example: {example!r}.")
+    parts.append(
+        f"Filters that work across entities: {', '.join(sorted(edge_filters))}."
+    )
+    raise NotImplementedError(" ".join(parts))
 
 
 def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
