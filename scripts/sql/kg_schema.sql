@@ -357,7 +357,7 @@ INSERT INTO kg_entity VALUES (
   'A cash receipt (payment from a customer) at the top level. Rootable via CustomerAccountNumber (server-side filter) and CustomerSite (client-side filter). Distinct from AccountReceipt (the per-account child) – this projection includes CustomerName, CustomerAccountNumber, and bank fields. `fields=` is broken on this endpoint (500s), so fetch full rows and discard client-side.'
 );
 
-PROMPT Seeded kg_entity (21 rows).
+PROMPT Seeded kg_entity (22 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -617,7 +617,7 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (181 rows).
+PROMPT Seeded kg_entity_field (194 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1080,9 +1080,9 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'StandardReceipt',
   'none',
   'search_standard_receipts',
-  'Default fetcher for StandardReceipt. Accepts account_number (server-side) and customer_site (client-side).'
+  'Default fetcher for StandardReceipt. Accepts customer_name (resolved to an account number inside the tool) and customer_site (client-side). REFUSES to run unscoped - the planner guards for this before dispatch.'
 );
-PROMPT Seeded kg_entity_tool (8 rows).
+PROMPT Seeded kg_entity_tool (9 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -1324,10 +1324,20 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 -- Prompt 13: StandardReceipt filters
-INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
-  'StandardReceipt', 'account_number', 'entity_level', 'account_number', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerAccountNumber', 'equals',
-  'Filter receipts by customer account number. Send as single server clause q=CustomerAccountNumber=<value>.'
-);
+--
+-- NO account_number FILTER. There used to be one, and it was a live
+-- crash: search_standard_receipts takes (customer_name, customer_site,
+-- limit) and has NO account_number parameter, so 'receipts for account
+-- 26360' built a tool_arg the tool rejects --
+--   TypeError: got an unexpected keyword argument 'account_number'
+-- The tool moved to name-resolution (it resolves customer_name to an
+-- account number itself) and this row was never retired with it. No
+-- prompt set covered it, so nothing surfaced it.
+--
+-- NOTE the asymmetry: the sibling aggregate_standard_receipts_by_method
+-- DOES still accept account_number. Two tools over one resource with
+-- different interfaces is worth resolving deliberately, one way or the
+-- other; it is not resolved here.
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'StandardReceipt', 'customer_site', 'entity_level', 'customer_site', NULL, NULL, NULL, NULL, NULL, 'client_side', 'CustomerSite', 'equals',
@@ -1339,6 +1349,6 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Customer name; resolved to account number by the tool before the server call.'
 );
 
-PROMPT Seeded kg_entity_filter (21 rows).
+PROMPT Seeded kg_entity_filter (23 rows).
 
 -- ============================================================
