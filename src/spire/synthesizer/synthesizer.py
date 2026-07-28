@@ -313,7 +313,10 @@ _TRUNCATION_FIELD = Field(
 
 _SUMMARY_FIELD = Field(
     description="One-paragraph natural-language summary (3-5 sentences). "
-    "Do not invent specifics not in the data."
+    "Do not invent specifics not in the data. If truncation_notes is "
+    "non-empty this summary MUST say the result is partial and give the "
+    "total from the truncation block — the count of rows shown is NOT the "
+    "number that exist."
 )
 
 
@@ -1353,7 +1356,13 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "the total_available count (or 'unknown' if null), and how many "
     "records were examined. Example: 'us_suppliers: 137 total in source; "
     "25 examined for filtering.' Copy numbers from the truncation block; "
-    "never invent them. If no truncation block, return an empty list.\n\n"
+    "never invent them. If no truncation block, return an empty list.\n"
+    "- When there IS a truncation block, the SUMMARY must say so too, "
+    "with the total: 'showing 25 of 2,111 credit memos'. Filling "
+    "truncation_notes is not enough — a reader stops at the summary. "
+    "A summary that says 'there are 25 credit memos' when 2,111 exist "
+    "is wrong even with a correct note printed below it. Never state a "
+    "count as the total when the data says otherwise.\n\n"
 )
 
 # Per-entity instruction block, appended to the preamble.
