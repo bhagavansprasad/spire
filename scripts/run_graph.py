@@ -72,9 +72,9 @@ def _format_projected_table(outputs: dict[str, list[dict]], fields: list[str]) -
             if addrs:
                 a = addrs[0]
                 r["Address"] = (
-                    a.get("formatted_address")
+                    a.get("FormattedAddress")
                     or ", ".join(
-                        str(a[k]) for k in ("city", "state", "country")
+                        str(a[k]) for k in ("City", "State", "Country")
                         if a.get(k)
                     )
                     or None
