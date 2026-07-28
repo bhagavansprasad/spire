@@ -332,6 +332,20 @@ class SupplierResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class SupplierSummaryResponse(BaseModel):
+    """Summary-only schema for the plain supplier-list path.
+
+    The supplier records are built deterministically from the executor
+    output (build_supplier_records), so the LLM is asked for the one
+    thing it is actually needed for: the prose. Asking it to ALSO re-emit
+    25 supplier rows with their addresses cost ~7,900 output tokens, hit
+    the model ceiling mid-string, and produced nothing at all.
+    """
+
+    summary: str = _SUMMARY_FIELD
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class InvoiceResponse(BaseModel):
     """Invoice-rooted synthesized response."""
 
@@ -1333,6 +1347,93 @@ def _collect_valid_ids(outputs: dict[str, list[dict]]) -> dict[str, set]:
 # ─────────────────────────────────────────────────────────────────────
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Deterministic record building
+#
+# "Suppliers with their addresses" used to fail outright. The LLM was
+# asked to emit the whole SupplierResponse — every supplier_id,
+# supplier_number, supplier_name and nested address copied verbatim from
+# data the executor already had. 16,390 tokens in, 7,985 out, response
+# truncated mid-string, degenerate-output guard fired, user got nothing
+# after a 48-second wait. The saved trace shows well-formed, correct,
+# non-repeating JSON that simply ran out of room: the model was doing a
+# transcription, not a synthesis.
+#
+# Records are now built from the executor output directly and the LLM is
+# asked only for the summary. Output drops ~7,900 -> ~150 tokens, and the
+# answer arrives.
+#
+# This removes a class of error rather than guarding against it: an id
+# copied by code cannot be hallucinated, so the id-validation pass has
+# nothing to catch on this path.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _address_info(raw: dict) -> AddressInfo:
+    """One nested address row -> AddressInfo. The incoming field names are
+    the tool's (see _flatten_address in suppliers.py)."""
+    return AddressInfo(
+        address_id=raw.get("SupplierAddressId") or 0,
+        country=raw.get("Country") or "",
+        city=raw.get("City") or "",
+        state=raw.get("State") or "",
+        formatted_address=raw.get("FormattedAddress") or "",
+    )
+
+
+def build_supplier_records(rows: list[dict]) -> list[SupplierRecord]:
+    """Executor supplier rows -> SupplierRecord list, verbatim.
+
+    Pure: no LLM, no I/O. Addresses arrive already nested on each row (the
+    suppliers tool sets row["addresses"] when include_addresses is on), so
+    this is a field rename, not a reconstruction — there is no join here.
+
+    buyers, contacts and open_po_count stay empty BY DESIGN: this path
+    only runs when the executor produced a single supplier bucket, which
+    means nothing was fetched to put in them. A query that DOES fetch
+    buyers takes the LLM path, where the cross-bucket join is still the
+    model's job.
+    """
+    records: list[SupplierRecord] = []
+    for row in rows:
+        records.append(
+            SupplierRecord(
+                supplier_id=row.get("SupplierId") or 0,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                addresses=[
+                    _address_info(a) for a in (row.get("addresses") or [])
+                ],
+            )
+        )
+    return records
+
+
+def plain_supplier_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the supplier bucket when this is a PLAIN supplier list.
+
+    "Plain" means one bucket of supplier rows and nothing else, so every
+    field the response needs is already on those rows. Returns None the
+    moment anything would have to be joined across buckets — the anchor
+    question fetches suppliers, open POs and buyers, and working out which
+    buyer belongs to which supplier is real work that stays with the LLM.
+
+    Deliberately conservative: returning None too often costs tokens,
+    returning a wrong bucket costs correctness.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "SupplierId" in first and "Supplier" in first:
+        return name
+    return None
+
+
 _SYSTEM_PROMPT_PREAMBLE = (
     "You are a response synthesizer for an Oracle Fusion Cloud query "
     "assistant. You are given the structured output of a deterministic "
@@ -1367,6 +1468,16 @@ _SYSTEM_PROMPT_PREAMBLE = (
 
 # Per-entity instruction block, appended to the preamble.
 _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
+    "SupplierSummaryOnly": (
+        "This is a SUPPLIER LIST. Write ONLY the summary and the "
+        "truncation notes — the supplier records are built from the data "
+        "directly and are NOT your job. Do not emit supplier rows, ids, "
+        "names or addresses as structured output. In the summary state "
+        "how many suppliers are shown and what they have in common "
+        "(status, country, whether addresses were included). Name at most "
+        "two or three suppliers as examples; do not list them all — the "
+        "records below the summary already do that."
+    ),
     "Supplier": (
         "This is a SUPPLIER-rooted query. For each supplier in the final "
         "filtered set, emit one entry under 'suppliers'. "
@@ -2320,6 +2431,55 @@ def synthesize_response(
                 f"Supported: {sorted(SYNTHESIS_SCHEMAS)}."
             )
         prompt_key = target_entity
+
+    # Plain supplier list: build the records here and ask the LLM only for
+    # the summary. See build_supplier_records for why. Placed with the
+    # other pre-LLM short-circuits (count_only, comparison, aggregation)
+    # because it is the same idea: when the data already determines the
+    # answer, do not pay a language model to restate it.
+    supplier_bucket = (
+        plain_supplier_bucket(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_bucket is not None:
+        if llm is None:
+            from spire.config import build_llm
+
+            llm = build_llm(_TEMPERATURE)
+        # include_raw so the call lands in the token log like every
+        # other stage. Without it this call is invisible in the usage
+        # totals — and those totals are the evidence base for the
+        # parse-cost work ("parse is 65% of consumption"). A synthesize
+        # call missing from the ledger would quietly flatter it.
+        summary_llm = llm.with_structured_output(
+            SupplierSummaryResponse, include_raw=True
+        )
+        result = summary_llm.invoke(
+            [
+                ("system", _build_system_prompt("SupplierSummaryOnly")),
+                (
+                    "human",
+                    _build_synthesis_prompt(
+                        outputs, truncation_by_step, metadata_by_step
+                    ),
+                ),
+            ]
+        )
+        # Real LLM returns {"raw", "parsed", ...}; unit-test mocks return
+        # the bare model or a dict. Handle both, as the main path does.
+        if isinstance(result, dict) and "parsed" in result:
+            from spire.config import log_usage
+
+            log_usage(result.get("raw"), stage="synthesize")
+            summary = result["parsed"]
+        else:
+            summary = result
+        if isinstance(summary, dict):
+            summary = SupplierSummaryResponse(**summary)
+        return SupplierResponse(
+            summary=summary.summary,
+            suppliers=build_supplier_records(outputs[supplier_bucket]),
+            truncation_notes=summary.truncation_notes,
+        )
 
     if llm is None:
         from spire.config import build_llm
