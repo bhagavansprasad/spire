@@ -17,6 +17,8 @@ bundles:
   - docs/spire_pipeline_playbook.md
   - docs/findings_llm_degenerate_parse.md
 
+  prompts:
+    
   scripts:
   - scripts/draw_graph.py
   - scripts/ask.py

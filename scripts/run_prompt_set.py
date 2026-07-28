@@ -55,12 +55,13 @@ from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
 
-# Reuse run_plan's formatters and server URL so output matches exactly.
-from run_plan import (
+# Formatters live in display_formatters (run_plan.py is deprecated).
+from display_formatters import (
     MCP_SERVER_URL,
     _format_intent,
     _format_outputs,
     _format_plan,
+    _format_projected_table,
     _format_summary,
     _format_synthesized,
 )
@@ -135,15 +136,32 @@ async def _run_one(prompt: str, menu, client) -> str:
         print(f"ERROR: {err}", file=sys.stderr)
         return f"error: {err}"
 
+    _outputs = state.get("outputs") or {}
     print(_format_intent(state["intent"]))
     print()
     print(_format_plan(state["plan"]))
     print()
-    print(_format_outputs(state["outputs"]))
+    print(_format_outputs(_outputs))
     print()
-    print(_format_synthesized(state["response"]))
+    _fields = state["intent"].fields
+    _synth_failed = state.get("synth_failed")
+    if _fields:
+        # Column query: summary on top (when it succeeded), table below.
+        # The table reads RAW outputs (it trims to the requested columns
+        # itself and flattens nested addresses).
+        if _synth_failed:
+            print(
+                "Answer summary: (skipped — result too large to summarize; "
+                "showing the table only)"
+            )
+        else:
+            print(_format_synthesized(state.get("response")))
+        print()
+        print(_format_projected_table(_outputs, _fields))
+    else:
+        print(_format_synthesized(state.get("response")))
     print()
-    print(_format_summary(state["plan"], state["outputs"], state["response"]))
+    print(_format_summary(state["plan"], _outputs, state.get("response")))
     return "ok"
 
 

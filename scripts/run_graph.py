@@ -24,97 +24,15 @@ from spire.config import reset_usage, usage_report
 from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
-from run_plan import (  # reuse the existing formatters + URL
+from display_formatters import (
     MCP_SERVER_URL,
     _format_intent,
     _format_outputs,
     _format_plan,
+    _format_projected_table,
     _format_summary,
     _format_synthesized,
 )
-
-
-def _format_projected_table(outputs: dict[str, list[dict]], fields: list[str]) -> str:
-    """Print the final output bucket as a table of exactly the requested
-    columns, in the order named.
-
-    Used when the intent carries ``fields`` — an explicit column request.
-    Reads the projected rows the executor already produced and prints those
-    columns directly, rather than routing through the typed synthesizer
-    response (whose fixed attributes cannot carry arbitrary requested
-    columns). A missing key on a row prints as an em dash so an absent value
-    is visibly distinct from an empty string.
-
-    Address flattening (self-gating): when the rows carry a nested
-    ``addresses`` list (from include_addresses=True), each supplier's first
-    address is flattened to a one-line string under an ``Address`` column,
-    and ``Address`` is appended to the printed columns. This fires only when
-    address data is actually present, so it never misfires, needs no parser
-    change, and keeps the whole address tree out of the synthesizer.
-    """
-    if not outputs:
-        return "Answer:\nNo records found."
-
-    bucket_name = list(outputs.keys())[-1]
-    rows = outputs[bucket_name]
-
-    # Self-gating address flatten: only if some row carries an addresses list.
-    cols = list(fields)
-    has_addresses = any(
-        isinstance(r, dict) and r.get("addresses") for r in rows
-    )
-    if has_addresses:
-        rows = [dict(r) if isinstance(r, dict) else r for r in rows]
-        for r in rows:
-            if not isinstance(r, dict):
-                continue
-            addrs = r.get("addresses") or []
-            if addrs:
-                a = addrs[0]
-                r["Address"] = (
-                    a.get("FormattedAddress")
-                    or ", ".join(
-                        str(a[k]) for k in ("City", "State", "Country")
-                        if a.get(k)
-                    )
-                    or None
-                )
-            else:
-                r["Address"] = None
-        if "Address" not in cols:
-            cols.append("Address")
-
-    lines = [
-        "Answer:",
-        f"\n{bucket_name} ({len(rows)} record(s)) — "
-        f"columns: {', '.join(cols)}\n",
-    ]
-
-    if not rows:
-        lines.append("  (no rows)")
-        return "\n".join(lines)
-
-    # Compute a width per column so the table aligns.
-    widths = {}
-    for f in cols:
-        cell_lens = [
-            len(str(r.get(f))) if isinstance(r, dict) and r.get(f) is not None else 1
-            for r in rows
-        ]
-        widths[f] = max([len(f)] + cell_lens)
-
-    header = "  " + " | ".join(f.ljust(widths[f]) for f in cols)
-    rule = "  " + "-+-".join("-" * widths[f] for f in cols)
-    lines.append(header)
-    lines.append(rule)
-    for r in rows:
-        cells = []
-        for f in cols:
-            v = r.get(f) if isinstance(r, dict) else None
-            cells.append(("—" if v is None else str(v)).ljust(widths[f]))
-        lines.append("  " + " | ".join(cells))
-    return "\n".join(lines)
-
 
 async def _run(prompt: str) -> int:
     reset_usage()

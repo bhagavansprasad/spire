@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
 """
-Run the Design 3 pipeline imperatively.
+Shared display formatters for the Spire pipeline runners.
 
-This is the non‑graph version of the same pipeline as run_graph.py.
-It expects the MCP server to be running on localhost:3333.
+Extracted from the former run_plan.py so that run_graph.py and
+run_prompt_set.py have one home for output formatting and no dependency on
+run_plan.py (which is deprecated and slated for deletion).
 
-Usage:
-    python scripts/run_plan.py --prompt "Show me suppliers in US"
+Everything here is presentation only: it turns the pipeline's Intent,
+Plan, outputs dict and synthesized response into printable text. No
+pipeline logic lives here.
+
+_format_projected_table is the column-output formatter: when an intent
+carries `fields`, the runner prints an aligned table of exactly those
+columns instead of the typed per-entity block. Nested addresses flatten to
+an Address column. See run_graph.py / run_prompt_set.py for the branch that
+chooses it.
 """
 
 from __future__ import annotations
 
-import argparse
-import asyncio
-import sys
 from typing import Any
 
-from fastmcp import Client
-
-from spire.config import reset_usage, usage_report
-from spire.executor.executor import execute_plan
-from spire.nl_parser.capability import capability_message
-from spire.nl_parser.parser import parse
-from spire.nl_parser.vocabulary import load_kg_menu
-from spire.planner.planner import generate_plan
 from spire.synthesizer.synthesizer import (
     SynthesizedResponse,
     SupplierResponse,
@@ -41,7 +38,6 @@ from spire.synthesizer.synthesizer import (
     OpenPOSummaryResponse,
     StandardReceiptResponse,
     ExposureRankingResponse,
-    synthesize_response,
     ReceiptMethodDistributionResponse,
 )
 
@@ -453,60 +449,83 @@ def _format_summary(plan, outputs, response) -> str:
     return "\n".join(lines)
 
 
-async def _run(prompt: str) -> int:
-    reset_usage()
-    menu = load_kg_menu()
+def _format_projected_table(outputs: dict[str, list[dict]], fields: list[str]) -> str:
+    """Print the final output bucket as a table of exactly the requested
+    columns, in the order named.
 
-    # Parse.
-    parse_result = parse(prompt, menu=menu)
-    if parse_result.is_refusal:
-        print(capability_message(parse_result.refusal, menu))
-        print(f"  (refusal: {parse_result.refusal.flavor.value} — {parse_result.refusal.detail})")
-        print()
-        print(usage_report())
-        return 4
+    Used when the intent carries ``fields`` — an explicit column request.
+    Reads the projected rows the executor already produced and prints those
+    columns directly, rather than routing through the typed synthesizer
+    response (whose fixed attributes cannot carry arbitrary requested
+    columns). A missing key on a row prints as an em dash so an absent value
+    is visibly distinct from an empty string.
 
-    intent = parse_result.intent
+    Address flattening (self-gating): when the rows carry a nested
+    ``addresses`` list (from include_addresses=True), each supplier's first
+    address is flattened to a one-line string under an ``Address`` column,
+    and ``Address`` is appended to the printed columns. This fires only when
+    address data is actually present, so it never misfires and needs no
+    parser change. Keys match the tool's flattened shape (FormattedAddress,
+    City, State, Country).
+    """
+    if not outputs:
+        return "Answer:\nNo records found."
 
-    # Plan.
-    plan = generate_plan(intent)
+    bucket_name = list(outputs.keys())[-1]
+    rows = outputs[bucket_name]
 
-    # Execute.
-    async with Client(MCP_SERVER_URL) as session:
-        outputs, truncation_by_step, metadata_by_step = await execute_plan(plan, session)
-
-    # Synthesize.
-    response = synthesize_response(
-        outputs,
-        target_entity=intent.target_entity,
-        truncation_by_step=truncation_by_step,
-        count_only=intent.count_only,
-        metadata_by_step=metadata_by_step,   # added
+    # Self-gating address flatten: only if some row carries an addresses list.
+    cols = list(fields)
+    has_addresses = any(
+        isinstance(r, dict) and r.get("addresses") for r in rows
     )
+    if has_addresses:
+        rows = [dict(r) if isinstance(r, dict) else r for r in rows]
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            addrs = r.get("addresses") or []
+            if addrs:
+                a = addrs[0]
+                r["Address"] = (
+                    a.get("FormattedAddress")
+                    or ", ".join(
+                        str(a[k]) for k in ("City", "State", "Country")
+                        if a.get(k)
+                    )
+                    or None
+                )
+            else:
+                r["Address"] = None
+        if "Address" not in cols:
+            cols.append("Address")
 
-    # Print.
-    print(_format_intent(intent))
-    print()
-    print(_format_plan(plan))
-    print()
-    print(_format_outputs(outputs))
-    print()
-    print(_format_synthesized(response))
-    print()
-    print(_format_summary(plan, outputs, response))
-    print()
-    print(usage_report())
-    return 0
+    lines = [
+        "Answer:",
+        f"\n{bucket_name} ({len(rows)} record(s)) — "
+        f"columns: {', '.join(cols)}\n",
+    ]
 
+    if not rows:
+        lines.append("  (no rows)")
+        return "\n".join(lines)
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run the Spire pipeline imperatively."
-    )
-    parser.add_argument("--prompt", required=True, help="Natural-language prompt.")
-    args = parser.parse_args()
-    return asyncio.run(_run(args.prompt))
+    widths = {}
+    for f in cols:
+        cell_lens = [
+            len(str(r.get(f))) if isinstance(r, dict) and r.get(f) is not None else 1
+            for r in rows
+        ]
+        widths[f] = max([len(f)] + cell_lens)
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    header = "  " + " | ".join(f.ljust(widths[f]) for f in cols)
+    rule = "  " + "-+-".join("-" * widths[f] for f in cols)
+    lines.append(header)
+    lines.append(rule)
+    for r in rows:
+        cells = []
+        for f in cols:
+            v = r.get(f) if isinstance(r, dict) else None
+            cells.append(("—" if v is None else str(v)).ljust(widths[f]))
+        lines.append("  " + " | ".join(cells))
+    return "\n".join(lines)

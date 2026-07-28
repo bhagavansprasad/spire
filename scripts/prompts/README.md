@@ -8,14 +8,20 @@ scripts/prompts/
   01_supplier.txt         38    supplier-rooted
   02_purchase_order.txt    9    PO-rooted
   03_ar.txt               15    accounts receivable
-  04_columns.txt           8    column selection (FEATURE IS BROKEN)
+  04_columns.txt           8    column selection (WORKS as of 2026-07-24)
   05_refusals.txt         10    out-of-scope, consolidated
   06_slow.txt             16    edge filters + aggregations (minutes each)
+  07_alacarte.txt         14    column-feature regression (run_graph path)
   scorer/
     parser_stress.txt     60    EXPECT ||| format — SCORER ONLY
 ```
 
-Roughly 100 runnable prompts, down from ~160 before deduplication.
+Roughly 115 runnable prompts, down from ~160 before deduplication.
+
+`00_dipstick` and `07_alacarte` are both fast and both worth running first:
+dipstick samples the whole pipeline by depth; à la carte drills the
+column-output feature (table, address flatten, graceful overrun, and the
+paths that must stay unchanged).
 
 ## Two formats — do not mix them
 
@@ -36,7 +42,7 @@ python scripts/run_prompt_set.py --prompt-file scripts/prompts/00_dipstick.txt
 Full run excluding the slow set:
 
 ```
-for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals; do
+for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals 07_alacarte; do
   echo "########## $s ##########"
   python scripts/run_prompt_set.py --prompt-file scripts/prompts/$s.txt
 done > run_$(date +%Y%m%d).txt 2>&1
@@ -46,7 +52,7 @@ Everything, overnight:
 
 ```
 nohup bash -c '
-for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals 06_slow; do
+for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals 07_alacarte 06_slow; do
   echo "########## $s ##########"
   python scripts/run_prompt_set.py --prompt-file scripts/prompts/$s.txt
 done' > overnight_$(date +%Y%m%d).txt 2>&1 &
@@ -93,3 +99,17 @@ Run it first and read it first.
   became `04_columns.txt`; the rest duplicated the supplier set.
 - One of three near-identical spend aggregations. They exercise one code
   path at ~2 minutes each.
+
+## What changed 2026-07-24 (column feature)
+
+- Column selection now works on the `run_graph` path. When a prompt names
+  columns, the output is an aligned table of exactly those columns; the
+  synthesizer summary prints above it. `04_columns.txt` was flipped from a
+  failure-capture set to a verification set.
+- Nested addresses flatten to an Address column.
+- A synthesizer token-cap overrun is caught (DegenerateOutputError) and the
+  table prints alone instead of the run aborting.
+- `07_alacarte.txt` added as the regression set for all of the above.
+- KNOWN follow-up: the address query still runs the synthesizer only to
+  discard its overrun output (~25K wasted tokens). Skipping the synthesizer
+  for column-only queries is the next optimisation, not yet done.

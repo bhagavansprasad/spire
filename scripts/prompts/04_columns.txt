@@ -1,62 +1,69 @@
 # Spire prompt set — 04 COLUMN SELECTION. Read by scripts/run_prompt_set.py.
 #
-# STATUS AS OF 2026-07-24: THIS FEATURE DOES NOT WORK. This set exists to
-# capture the failure precisely, not to demonstrate a capability.
+# STATUS AS OF 2026-07-24: THIS FEATURE NOW WORKS (run_graph path). This
+# set verifies it. The two defects this file used to document are fixed —
+# their history is kept below because the fix is only meaningful against
+# what it repaired.
 #
 # Design intent: the user names the columns they want and the output
-# honours them.
+# honours them — an aligned table of exactly those columns, in the order
+# named, with the synthesizer's summary above it.
 #
-# TWO DISTINCT DEFECTS, both confirmed live:
+# HOW IT WORKS NOW:
+#   - The parser carries a `fields` list into the Intent (it always did).
+#   - run_graph prints a projected table from the RAW outputs when `fields`
+#     is non-empty, reading exactly those columns. The synthesizer still
+#     runs; its summary prints ABOVE the table.
+#   - Nested addresses flatten to an Address column when present.
+#   - If the synthesizer overruns the token cap, the run catches the
+#     DegenerateOutputError, skips the summary, and prints the table alone.
 #
-# 4a. `fields` is parsed but NEVER APPLIED. The parser extracts the field
-#     list into the Intent correctly. Nothing downstream uses it.
-#     _project_outputs(outputs, fields) exists in graph/pipeline.py, but
-#     run_plan.py calls execute_plan and synthesize_response directly and
-#     never invokes it. Evidence: asking for ONE field and asking for TWO
-#     produced BYTE-IDENTICAL output — same token counts (in=2729,
-#     out=2487), same answer text, same six columns.
+# WHAT THE TWO OLD DEFECTS WERE (both fixed):
+#   4a. `fields` was parsed but never applied on the print path — asking
+#       for one column vs two gave byte-identical output. FIXED: the table
+#       reads the projected columns directly.
+#   4b. Requesting `country`/`address` triggered an address over-fetch that
+#       overran the synthesizer to MAX_TOKENS and ABORTED the run. FIXED:
+#       the overrun is caught and the table prints regardless.
 #
-# 4b. Requesting `country` as a FIELD triggers an over-fetch that overruns
-#     the synthesizer. Synthesizer input 16,881 tokens vs 2,729 for the
-#     working prompts — six times the payload, then MAX_TOKENS. Per the KG,
-#     Supplier/country is client_side with the note "Country lives on the
-#     addresses child; over-fetch." Requesting country as a field appears
-#     to trigger the same address expansion used for country FILTERING.
-#     The four-field form also degraded the PARSER (out=820 vs 227-285).
-#
-# What to check per prompt:
-#   - does the Intent carry a `fields` list, and is it the right one?
-#   - do the Outputs rows show only those columns, or the default six?
-#   - does the Answer list only the requested columns?
-#   - does anything WARN that the projection was not applied?
+# WHAT TO CHECK PER PROMPT (read the ANSWER, not the summary line):
+#   - does the Intent carry the right `fields` list?
+#   - does the printed table show exactly those columns, in order?
+#   - are same-entity values populated (not em dashes)?
+#   - on the address/country prompts: does it NO LONGER crash, and does the
+#     Address column populate?
+#   - does aggregation stay on its own format (no table)?
 
-# — two columns, no country (parses clean, projection ignored) —
+# — two columns (was 4a: parsed, ignored; now projects) —
 Show only supplier name and status for active suppliers
 
-# — one column (parses clean, projection ignored) —
+# — one column (was 4a; now projects) —
 Just the names of active suppliers
 
-# — two columns INCLUDING country (MAX_TOKENS runaway) —
+# — two columns including country (was 4b: MAX_TOKENS crash) —
+# Country lives on the addresses child. This used to overrun and abort.
+# Now the overrun is caught; expect the table, with country populated from
+# the address where available.
 Supplier number and country for active suppliers
 
-# — four columns including country (parser degrades, then runaway) —
+# — four columns including country (was 4b: parser degrade + crash) —
+# The widest of the old failures. Must now complete: table with all four.
 Supplier name, number, status and country for active suppliers
 
-# — projection on a different root: Invoice —
-# Untested. Invoice has no addresses child, so the country over-fetch
-# should not apply here — this isolates 4a from 4b.
+# — projection on the Invoice root (isolates the non-address path) —
+# Invoice has no addresses child, so no over-fetch. All three populate.
 Invoice number, amount, and date for supplier 1252
 
 # — projection combined with an edge filter —
-# Untested. The edge traversal already over-fetches; a field request on
-# top of it may compound.
+# The edge traversal over-fetches; the field request rides on top. Expect
+# the named column(s) in a table over the filtered set.
 Just the names of woman owned suppliers
 
 # — projection on a PO root —
-# Untested.
 Order number and status for purchase orders created before 2015
 
-# — projection naming a field that does not exist on the entity —
-# Untested. Should say so rather than silently dropping it or inventing
-# a column.
+# — a field that does not exist on the entity —
+# "credit rating" is not a Supplier field. The parser drops cross-entity /
+# unknown columns by design; the table shows the survivors. Confirm it does
+# not invent a column or crash — document what actually prints.
 Show supplier name and credit rating for active suppliers
