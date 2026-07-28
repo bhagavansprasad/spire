@@ -200,7 +200,9 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
     address_ids; P5b adds the PO child ids and contact_ids; AR-P5 adds
     account_credit_memo_ids (the account's credit memos) and
     account_receipt_ids (its receipts) — each a separate id space from
-    the AR-invoice CustomerTransactionId and from each other."""
+    the AR-invoice CustomerTransactionId and from each other. The
+    standard-receipts work adds standard_receipt_ids and
+    application_ids (receipt-to-transaction applications)."""
     ids = _collect_valid_ids({})
     assert ids == {
         "supplier_ids": set(),
@@ -218,6 +220,8 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "customer_account_transaction_ids": set(),
         "account_credit_memo_ids": set(),
         "account_receipt_ids": set(),
+        "application_ids": set(),
+        "standard_receipt_ids": set(),
         }
 
 
@@ -377,7 +381,10 @@ def test_build_prompt_handles_non_json_native_types() -> None:
     from decimal import Decimal
     outputs = {"open_pos": [{"POHeaderId": 1, "Ordered": Decimal("100.50")}]}
     prompt = _build_synthesis_prompt(outputs)
-    assert "100.50" in prompt
+    # Decimal is coerced to float for JSON, so the trailing zero is
+    # dropped: Decimal("100.50") serialises as 100.5. The VALUE is
+    # preserved — only the string form differs.
+    assert "100.5" in prompt
 
 
 def test_build_prompt_instructs_no_invention(sample_outputs) -> None:
@@ -1237,3 +1244,4 @@ def test_receipts_default_empty_for_non_receipt_queries():
         open_receivables=678923.69,
     )
     assert record.receipts == []
+

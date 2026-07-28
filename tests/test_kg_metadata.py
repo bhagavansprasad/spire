@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_twenty_rows():
+async def test_kg_entity_has_twentytwo_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -95,13 +95,13 @@ async def test_kg_entity_has_twenty_rows():
         )
     names = [row[0] for row in rows]
     assert names == [
-        "AccountCreditMemo", "AccountReceipt", "Address", "Buyer",
-        "Classification", "Contact", "CreditMemo",
+        "AccountCreditMemo", "AccountReceipt", "AccountReceiptApplication",
+        "Address", "Buyer", "Classification", "Contact", "CreditMemo",
         "CustomerAccount", "CustomerTransaction", "Invoice",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
         "ReceivablesInvoiceTransactionDFF", "ReceivablesTaxLine", "Site",
-        "Supplier"
+        "StandardReceipt", "Supplier"
     ]
 
 
@@ -187,24 +187,56 @@ async def test_kg_table_row_counts_match_v1_1():
     no entity filter. Unlike the credit-memo vocab, the BARE terms
     'receipt'/'receipts' are bound here — nothing else in the KG claimed
     them, and Spire models no PO receiving transaction to collide with.
+
+    The standard-receipts work added TWO entities (20->22), +25 fields
+    (169->194), +1 edge (16->17), +1 edge tool (15->16), +2 entity tools
+    (8->10), +4 filter rows (21->25) and +4 vocab rows (93->97).
+    StandardReceipt is the TOP-LEVEL /standardReceipts resource, ROOTED,
+    with two fetchers of its own (search and aggregate-by-method) — hence
+    +2 entity tools and no edge. AccountReceiptApplication is the
+    per-receipt applications child, reached by traversal — hence the edge
+    and edge tool, and no entity tool.
+
+    NOTE this REVERSES a decision recorded above. AR-P5 prompt 8 stated
+    that the top-level resource was deliberately NOT modeled ("only the
+    child is modeled as an entity") because its projection differs from
+    the child's AND THE TWO DISAGREE ON COUNT. Both are modeled now. Two
+    entities over the same underlying receipts, with different
+    projections and different counts, are both routable by the planner —
+    so two near-identical prompts can return different numbers. That is a
+    modelling hazard rather than a test concern, but this row count is
+    where it becomes visible, so it is recorded here.
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 20,
-        "kg_entity_field": 169,
-        "kg_edge": 16,
+        "kg_entity": 22,
+        "kg_entity_field": 194,
+        "kg_edge": 17,
         "kg_pattern": 3,
-        "kg_vocabulary": 93,
+        "kg_vocabulary": 97,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 8,
-        "kg_entity_filter": 21,
-        "kg_edge_tool": 15,
+        "kg_entity_tool": 10,
+        "kg_entity_filter": 25,
+        "kg_edge_tool": 16,
     }
+    # Collect ALL mismatches before asserting. The previous loop asserted
+    # per table and stopped at the first failure, so a phase that moved
+    # several counts surfaced them one run at a time.
+    actual: dict[str, int] = {}
     async with OracleClient(persona) as oc:
-        for table, expected_count in expected.items():
+        for table in expected:
             row = await oc.fetch_one(f"SELECT COUNT(*) FROM {table}")
-            assert row is not None
-            assert row[0] == expected_count, f"{table}: expected {expected_count}, got {row[0]}"
+            assert row is not None, f"{table}: COUNT(*) returned nothing"
+            actual[table] = row[0]
+
+    mismatches = [
+        f"{table}: expected {expected[table]}, got {actual[table]}"
+        for table in expected
+        if actual[table] != expected[table]
+    ]
+    assert not mismatches, (
+        "KG row counts drifted:\n  " + "\n  ".join(mismatches)
+    )
 
 
 # ----- The asymmetry that crashed Track A ----------------------------
@@ -339,6 +371,7 @@ async def test_no_child_in_n_months_pattern_has_parseable_parameters():
     params = json.loads(params_str)
     param_names = {p["name"] for p in params}
     assert param_names == {"parent", "child_edge", "date_field", "months_param"}
+
 
 
 

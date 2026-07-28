@@ -143,7 +143,7 @@ async def test_aggregation_ranking_passes_through_executor():
         )
     )
     session = _mock_session(ranking)
-    outputs, _ = await execute_plan(plan, session)
+    outputs, _, _ = await execute_plan(plan, session)
 
     # The ranking is not items-shaped, so the executor wraps the dict in a
     # single-element list. The synthesizer reads outputs["aggregation"][0].
@@ -193,7 +193,7 @@ async def test_aggregation_plan_against_live_mcp_server() -> None:
     async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            outputs, _ = await execute_plan(plan, session)
+            outputs, _, _ = await execute_plan(plan, session)
 
     assert set(outputs.keys()) == {"aggregation"}
     agg = outputs["aggregation"]

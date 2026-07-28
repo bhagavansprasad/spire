@@ -39,13 +39,16 @@ class _ParseRefused:
 def patch_nodes(monkeypatch):
     """Patch the four wrapped functions in the pipeline namespace."""
     async def fake_execute(plan, session, progress_handler=None):
-        return ({"out": [{"id": 1}]}, {})
+        # execute_plan returns three values:
+        # (outputs, truncation_by_step, metadata_by_step)
+        return ({"out": [{"id": 1}]}, {}, {})
     
     monkeypatch.setattr(pipeline, "generate_plan", lambda intent: ["step1"])
     monkeypatch.setattr(pipeline, "execute_plan", fake_execute)
     monkeypatch.setattr(
         pipeline, "synthesize_response",
-        lambda outputs, target_entity, truncation_by_step=None, count_only=False: "ANSWER",
+        lambda outputs, target_entity, truncation_by_step=None,
+        count_only=False, metadata_by_step=None: "ANSWER",
     )
     return monkeypatch
 
@@ -94,5 +97,6 @@ async def test_plan_error_short_circuits(patch_nodes):
     assert state.get("error", "").startswith("plan:")
     assert state.get("outputs") is None
     assert state.get("response") is None
+
 
 
