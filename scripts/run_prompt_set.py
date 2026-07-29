@@ -153,6 +153,11 @@ async def _run_one(prompt: str, menu, client) -> str:
     _synth_failed = state.get("synth_failed")
     if _fields:
         # Column query: summary on top (when it succeeded), table below.
+        # SUMMARY ONLY — not the typed record block. The table below
+        # prints the columns the user asked for; printing the records
+        # too repeats every value, and on an address query that is ~200
+        # lines of "address: ..." followed by the same data in the
+        # table.
         # The table reads RAW outputs (it trims to the requested columns
         # itself and flattens nested addresses).
         if _synth_failed:
@@ -161,7 +166,7 @@ async def _run_one(prompt: str, menu, client) -> str:
                 "showing the table only)"
             )
         else:
-            print(_format_synthesized(state.get("response")))
+            print(_format_synthesized(state.get("response"), summary_only=True))
         print()
         print(_format_projected_table(_outputs, _fields))
     else:
