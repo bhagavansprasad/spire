@@ -110,12 +110,44 @@ def _format_outputs(outputs: dict[str, list[dict]]) -> str:
     return "\n".join(lines)
 
 
-def _format_synthesized(response: Any) -> str:
+def _format_synthesized(response: Any, summary_only: bool = False) -> str:
+    """Render a synthesized response.
+
+    summary_only=True prints the summary paragraph and the truncation
+    notes, and STOPS — no typed record block.
+
+    That mode exists for column queries. When the user names the
+    columns they want, _format_projected_table prints exactly those, and
+    this module's own docstring says the table goes "instead of the
+    typed per-entity block". Printing both repeats every value twice.
+
+    It was harmless-looking until the address case: "List active
+    suppliers with supplier name, supplier number, and address" emits 25
+    suppliers with up to 25 addresses EACH — about 200 lines of
+    "address: ..." — and then the same data again, one line per
+    supplier, in the table below. The rule was previously honoured by
+    accident: synthesis overran on that query and failed, so only the
+    table printed. Once synthesis started succeeding, nothing enforced
+    it.
+    """
     if response is None:
         return "Synthesized response: (none)"
     # If it's a plain dict, just print it.
     if isinstance(response, dict):
         return f"Synthesized response:\n{response}"
+
+    if summary_only:
+        summary = getattr(response, "summary", None)
+        if summary is None:
+            # Not a summary-bearing shape; fall through to the full
+            # render rather than printing nothing.
+            return _format_synthesized(response)
+        out = ["Answer:", summary]
+        notes = getattr(response, "truncation_notes", None)
+        if notes:
+            out.append("\nTruncation:")
+            out.extend(f"  - {n}" for n in notes)
+        return "\n".join(out)
 
     lines = ["Answer:"]
     if isinstance(response, SynthesizedResponse) or isinstance(response, SupplierResponse):
@@ -273,7 +305,22 @@ def _format_synthesized(response: Any) -> str:
                     f"{cm.entered_amount} {cm.currency} on {cm.transaction_date}; "
                     f"customer: {cm.customer_name}; status: {cm.status}"
                 )
-            lines.append(f"\nTotal credit value: {response.total_credit}")
+            # Exactly one of total_credit / total_credit_note is set. A
+            # null total means the memos span several currencies: show
+            # the reason, never "None" and never a number.
+            if response.total_credit is None:
+                lines.append(
+                    "\n"
+                    + (
+                        response.total_credit_note
+                        or "Total not shown: these memos span several "
+                        "currencies."
+                    )
+                )
+            else:
+                lines.append(
+                    f"\nTotal credit value: {response.total_credit}"
+                )
         else:
             lines.append("No credit memos found.")
         if response.truncation_notes:

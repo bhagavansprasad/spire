@@ -12,9 +12,11 @@ Same object model as ReceivablesInvoice, with two differences that matter:
 
 "Recent" ordering is done SERVER-SIDE via orderBy=TransactionDate:desc
 (confirmed working on this pod), so the newest memos come first and `limit`
-gives a clean top-N. The total credit value is computed by the caller (the
-server wrapper) over the returned rows as the raw sum of EnteredAmount — the
-ledger figure, letting a positive outlier offset the negatives.
+gives a clean top-N. The total credit value is computed by
+compute_total_credit() below and layered on by the server wrapper. It is a
+raw ledger sum WITHIN ONE CURRENCY — a positive outlier offsets the
+negatives — and is withheld entirely when the rows span several
+currencies, because there is no meaningful number to give.
 
 Returns a ToolResult (like the other AR tools) so callers can tell a
 complete result from a capped subset. The total is layered on by the wrapper.
@@ -57,11 +59,15 @@ async def list_receivables_credit_memos(
     Returns:
         ToolResult whose items are the projected credit-memo dicts, newest
         first. Empty items means no credit memos exist on the pod.
+        total_available is the pod's count of credit memos (from
+        totalResults), NOT the number returned — so a caller can honestly
+        say "25 of 1,343" rather than "25 credit memos".
     """
     params = {
         "onlyData": "true",
         "orderBy": "TransactionDate:desc",
         "limit": limit,
+        "totalResults": "true",
         "fields": ",".join(_PROJECTED_FIELDS),
     }
     try:
@@ -79,8 +85,74 @@ async def list_receivables_credit_memos(
     items = response.get("items", [])
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
 
+    # The pod's own count for this collection. Without it, total_available
+    # equals the returned row count, ToolResult.build computes
+    # `total_available > len(items)` as false, and the result claims nothing
+    # was truncated — so a capped slice is indistinguishable from a complete
+    # answer. Falls back to the row count when the endpoint omits
+    # totalResults: an honest floor, not an invented total.
+    total_available = response.get("totalResults")
+    if not isinstance(total_available, int):
+        total_available = len(projected)
+
     return ToolResult.build(
         items=projected,
         limit_applied=limit,
-        total_available=len(projected),
+        total_available=total_available,
     )
+
+
+def compute_total_credit(
+    items: list[dict],
+) -> tuple[float | None, str | None]:
+    """Total the credit memos — but ONLY within a single currency.
+
+    Returns (total, note). Exactly one is None.
+
+    WHY THIS IS NOT A PLAIN SUM
+    The earlier version summed EnteredAmount across every returned row
+    regardless of currency. On this pod that produced
+
+        Total credit value: -17232.52
+
+    over 25 memos denominated in USD, CAD, GBP and EUR. The arithmetic
+    was right and the number was meaningless — it is a figure in no
+    currency at all, and nothing in the output said so. A reader has no
+    way to tell it apart from a real total.
+
+    So: when the rows span more than one currency there is no total to
+    give, and this returns None plus a note saying why. Callers must
+    render the note instead of the number, not alongside it.
+
+    THE SIGN IS DELIBERATE, AND STAYS
+    EnteredAmount is normally negative (a credit), but the pod carries at
+    least one POSITIVE, Incomplete memo. The single-currency total is the
+    raw ledger sum, so a positive memo offsets the negatives. That is the
+    ledger figure and it is the intended reading — not a defect. Whether
+    an Incomplete memo belongs in the total at all is a domain question,
+    unanswered here.
+
+    Args:
+        items: Credit-memo rows as projected by
+            list_receivables_credit_memos.
+
+    Returns:
+        (total, None)  when every row shares one currency (or there are
+                       no rows: the total is 0.0).
+        (None, note)   when the rows span two or more currencies.
+    """
+    currencies = {
+        item.get("CreditMemoCurrency")
+        for item in items
+        if item.get("CreditMemoCurrency")
+    }
+    if len(currencies) > 1:
+        listed = ", ".join(sorted(currencies))
+        return None, (
+            f"Not totalled: these memos span {len(currencies)} currencies "
+            f"({listed}). A single sum across them would be a figure in no "
+            "currency at all."
+        )
+    total = sum((item.get("EnteredAmount") or 0) for item in items)
+    return float(total), None
+

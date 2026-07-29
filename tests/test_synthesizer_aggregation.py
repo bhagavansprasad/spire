@@ -95,7 +95,9 @@ def test_synthesize_routes_to_ranking_schema(
     # data shape, and the ranking schema must be the one bound.
     llm = _mock_llm(well_formed_ranking)
     result = synthesize_response(ranking_outputs, target_entity="", llm=llm)
-    assert result is well_formed_ranking
+    # The synthesizer re-validates and returns a new instance rather
+    # than the caller's object, so compare by value, not identity.
+    assert result == well_formed_ranking
     llm.with_structured_output.assert_called_once_with(
         SupplierSpendRankingResponse, include_raw=True
     )
@@ -122,4 +124,5 @@ def test_non_ranking_empty_target_still_raises():
     llm = _mock_llm(None)
     with pytest.raises(UnsupportedEntityError):
         synthesize_response({"suppliers": []}, target_entity="", llm=llm)
+
 

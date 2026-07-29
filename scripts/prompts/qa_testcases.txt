@@ -1,0 +1,123 @@
+# QEI test cases — Spire v3 (Invoice / PO / Suppliers)
+#
+# Source: 01_Spire_v3_Invoice_PO_Suppliers.docx (12 prompts)
+#         02_Spire_v3_Invoice_PO_Suppliers.docx (13 prompts)
+# Captured: 2026-07-28
+#
+# All 25 prompts verbatim, including the malformed one (D1-11). Do not
+# tidy them: the wording IS the test.
+#
+# BASELINE RUN (2026-07-28) — 4 real successes, 21 failures.
+# Every refusal reported: "Known target entities: ['Address', 'Invoice',
+# 'Supplier']" and parse input of 6,837-6,858 tokens against a known-good
+# baseline of ~8,118. The KG in the database is stale/partial relative to
+# the code (expected: 16 entities, 137 fields, 13 edges, 12 edge-tools).
+# Run scripts/rebuild_kg.py and re-run this set before reading anything
+# else into the results.
+#
+# Legend on each prompt's comment line:
+#   PASS      answered correctly
+#   FAIL-KG   refused only because the KG is missing the entity
+#   FAIL      real defect, survives a KG rebuild
+#   REFUSE-OK correct refusal; the prompt is genuinely underspecified
+#             (several assume a prior conversational turn and cannot pass
+#             one-shot through run_graph.py)
+
+
+# ===================================================================
+# Doc 1 — AR invoices
+# ===================================================================
+
+# D1-01 FAIL-KG / REFUSE-OK — no customer named; also AR entity absent
+List all open invoices for the customer, top 5
+
+# D1-02 FAIL-KG — refused: ReceivablesInvoice not a known entity
+Show invoice lines for invoice 300000248096352
+
+# D1-03 REFUSE-OK — "that invoice line" needs a prior turn
+Get tax lines for that invoice line
+
+# D1-04 REFUSE-OK — "this invoice" needs a prior turn
+Fetch descriptive flexfield (DFF) values for this invoice.
+
+# D1-05 FAIL-KG — refused: CreditMemo not a known entity
+List recent credit memos, top 5
+
+# D1-06 REFUSE-OK — "top accounts" undefined; message cited aggregation
+Show account activity summary for top accounts
+
+# D1-07 FAIL-KG — credit memos by account
+Get all credit memos for account 300000047368512
+
+# D1-08 FAIL-KG — refused: ReceivablesInvoice not a known entity
+Get the AR invoice with CustomerTransactionId 300000248096352
+
+# D1-09 PASS (with defects) — narration claimed "US and France" with no
+# France in the rows; said "25 suppliers" where 425 exist
+Get list of Active Suppliers
+
+# D1-10 FAIL — marked success in the doc but produced NO answer:
+# "Synthesized response: (none)" after 24,377 tokens. Address shape gap.
+Suppliers with their addresses
+
+
+# ===================================================================
+# Doc 1 — Purchase orders
+# ===================================================================
+
+# D1-11 FAIL-KG — verbatim: leading space, unbalanced quote. Highest
+# parse output in either doc (1,842 tokens vs a ~250 norm).
+ List all open purchase orders for supplier 'EIP Inc
+
+# D1-12 REFUSE-OK — "that PO" needs a prior turn
+For that PO, how much has actually been received versus ordered
+
+
+# ===================================================================
+# Doc 2 — Invoices
+# ===================================================================
+
+# D2-01 PASS
+invoices for Lee Supplies
+
+# D2-02 REFUSE-OK — good refusal: gave an actionable hint
+Show invoices
+
+# D2-03 FAIL-KG — business unit filter not available for Invoice
+invoices for US1 Business Unit
+
+# D2-04 FAIL-KG — no filter to retrieve an AP invoice by invoice number
+show details for invoice number LEE-01-1006-111
+
+# D2-05 FAIL-KG — invoice lines not a supported include
+show lines for invoice number LEE-01-1006-111
+
+# D2-06 FAIL-KG — refused: PurchaseOrder not a supported target entity
+list purchase orders
+
+# D2-07 FAIL-KG — PurchaseOrder known but no entity-level fetcher;
+# user-facing message wrongly blamed aggregation
+Show PO 2144 and its distributions
+
+# D2-08 FAIL-KG — refused: ReceivablesInvoice not a known entity
+get account receivables transactions
+
+# D2-09 REFUSE-OK — genuinely too vague
+get transaction number
+
+
+# ===================================================================
+# Doc 2 — Suppliers
+# ===================================================================
+
+# D2-10 PASS
+List suppliers
+
+# D2-11 REFUSE-OK — no supplier named
+Get Supplier contacts
+
+# D2-12 PASS
+Get supplier sites for suppliers
+
+# D2-13 FAIL-KG — standard receipts; refusal asked for customer + site
+Get standardReceipts

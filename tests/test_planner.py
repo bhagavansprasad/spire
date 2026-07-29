@@ -26,7 +26,7 @@ from spire.planner.planner import (
     Plan,
     Step,
     _arg_name_for_tool,
-    _build_fetcher_args,
+    _build_entity_fetcher_args,
     _build_iteration_args_with_computed,
     _compute_date_n_months_ago,
     _filter_target_entity,
@@ -529,35 +529,35 @@ def test_pick_entity_filter_finds_country() -> None:
         {"type": "country", "value": "US"},
         {"type": "has_open_PO", "value": True},
     ]
-    assert _pick_entity_filter(filters) == "country"
+    assert _pick_entity_filter(filters, "Supplier") == "country"
 
 
 def test_pick_entity_filter_returns_none_when_no_match() -> None:
     """If no filter has a dedicated fetcher, returns the literal 'none'."""
     filters = [{"type": "has_open_PO", "value": True}]
-    assert _pick_entity_filter(filters) == "none"
+    assert _pick_entity_filter(filters, "Supplier") == "none"
 
 
 def test_pick_entity_filter_empty_returns_none() -> None:
     """An intent with no filters returns 'none'."""
-    assert _pick_entity_filter([]) == "none"
+    assert _pick_entity_filter([], "Supplier") == "none"
 
 
-def test_build_fetcher_args_none_returns_empty() -> None:
-    """filter_type='none' produces an empty arg dict."""
-    assert _build_fetcher_args("none", []) == {}
+def test_build_entity_fetcher_args_empty_returns_empty() -> None:
+    """No filters produces an empty arg dict."""
+    assert _build_entity_fetcher_args([], "Supplier") == {}
 
 
-def test_build_fetcher_args_country_canonical_passthrough() -> None:
+def test_build_entity_fetcher_args_country_canonical_passthrough() -> None:
     """Already-canonical 'US' resolves to 'US' (a real KG lookup)."""
     filters = [{"type": "country", "value": "US"}]
-    assert _build_fetcher_args("country", filters) == {"country": "US"}
+    assert _build_entity_fetcher_args(filters, "Supplier") == {"country": "US"}
 
 
-def test_build_fetcher_args_country_normalizes_full_name() -> None:
+def test_build_entity_fetcher_args_country_normalizes_full_name() -> None:
     """Full name 'United States' normalizes to 'US' via vocab."""
     filters = [{"type": "country", "value": "United States"}]
-    assert _build_fetcher_args("country", filters) == {"country": "US"}
+    assert _build_entity_fetcher_args(filters, "Supplier") == {"country": "US"}
 
 
 def test_filters_needing_edge_traversal_returns_only_traversal_filters() -> None:
@@ -687,7 +687,7 @@ def test_validate_intent_filters_accepts_all_known_types() -> None:
         {"type": "has_open_PO", "value": True},
     ]
     # Should not raise.
-    _validate_intent_filters(filters)
+    _validate_intent_filters(filters, "Supplier")
 
 
 def test_validate_intent_filters_accepts_all_known_types_including_no_recent() -> None:
@@ -697,20 +697,20 @@ def test_validate_intent_filters_accepts_all_known_types_including_no_recent() -
         {"type": "has_no_recent_invoices", "value": {"months": 6}},
         {"type": "has_open_PO", "value": True},
     ]
-    _validate_intent_filters(filters)
+    _validate_intent_filters(filters, "Supplier")
 
 
 def test_validate_intent_filters_accepts_empty_list() -> None:
     """No filters at all is a valid intent shape (e.g., a fetch-all).
     Validation passes."""
-    _validate_intent_filters([])
+    _validate_intent_filters([], "Supplier")
 
 
 def test_validate_intent_filters_raises_on_single_unknown_type() -> None:
     """An unknown filter type raises NotImplementedError naming the type."""
     filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     assert "is_strategic_supplier" in str(exc_info.value)
 
 
@@ -724,7 +724,7 @@ def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
         {"type": "is_diversity_supplier", "value": True},   # unknown
     ]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     msg = str(exc_info.value)
     assert "is_strategic_supplier" in msg
     assert "is_diversity_supplier" in msg
@@ -735,7 +735,7 @@ def test_validate_intent_filters_error_message_names_supported_types() -> None:
     so the gap is actionable, not just a 'no'."""
     filters = [{"type": "is_strategic_supplier", "value": True}]
     with pytest.raises(NotImplementedError) as exc_info:
-        _validate_intent_filters(filters)
+        _validate_intent_filters(filters, "Supplier")
     msg = str(exc_info.value)
     assert "country" in msg          # entity-level support listed
     assert "has_open_PO" in msg      # edge-traversal support listed
@@ -756,6 +756,124 @@ def test_generate_plan_raises_on_unknown_filter_type() -> None:
     with pytest.raises(NotImplementedError) as exc_info:
         generate_plan(intent)
     assert "is_strategic_supplier" in str(exc_info.value)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# W1 — refusal quality: guards run BEFORE filter validation
+#
+# An intent naming a filter an entity does not support is often really a
+# missing-root-reference intent in disguise. "show details for invoice
+# number LEE-01-1006-111" parses to Invoice + by_id, but what the user
+# needs to hear is "name the supplier" — not a dump of internal filter
+# names. Validation used to run first and win every time.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_invoice_by_id_reaches_the_supplier_guard() -> None:
+    """Invoice + by_id hits the supplier guard (ValueError with a worked
+    example), NOT the filter-validation dump."""
+    intent = Intent(
+        target_entity="Invoice",
+        filters=[{"type": "by_id", "value": "LEE-01-1006-111"}],
+    )
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "require a supplier" in msg
+    assert "Lee Supplies" in msg          # a prompt the user can type
+    assert "Intent contains filter types" not in msg
+
+
+def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
+    """PurchaseOrder + status/supplier hits the PO guard, which names the
+    supplier route — the actual answer to 'open POs for supplier X'."""
+    intent = Intent(
+        target_entity="PurchaseOrder",
+        filters=[
+            {"type": "status", "value": "OPEN"},
+            {"type": "supplier", "value": "EIP Inc"},
+        ],
+    )
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "PO id or a date bound" in msg
+    assert "EIP Inc" in msg
+
+
+def test_standard_receipt_unscoped_is_refused() -> None:
+    """"Get standardReceipts" reached the executor and failed inside the
+    tool: "At least one of customer_name or customer_site is required."
+    The KG advertises a (none) entity tool for StandardReceipt, but that
+    tool refuses to run unscoped — so the planner promised something the
+    tool would not honour, and the user saw a raw exception."""
+    intent = Intent(target_entity="StandardReceipt")
+    with pytest.raises(ValueError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "require a customer or a site" in msg
+    assert "ABC Application Software" in msg      # something typeable
+
+
+def test_standard_receipt_with_customer_name_plans() -> None:
+    """A scoped receipt query must still plan."""
+    intent = Intent(
+        target_entity="StandardReceipt",
+        filters=[{"type": "customer_name", "value": "ABC Application Software"}],
+    )
+    plan = generate_plan(intent)
+    assert plan
+    assert plan[0].tool_name == "search_standard_receipts"
+
+
+def test_standard_receipt_with_site_alone_plans() -> None:
+    """Site alone is a valid scope — the tool accepts either."""
+    intent = Intent(
+        target_entity="StandardReceipt",
+        filters=[{"type": "customer_site", "value": "Santa Clara"}],
+    )
+    assert generate_plan(intent)
+
+
+def test_unguarded_entity_still_validates_with_an_example() -> None:
+    """An entity with no guard falls through to validation — which must
+    still name what IS supported and give something typeable."""
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[{"type": "account_number", "value": "300000047368512"}],
+    )
+    with pytest.raises(NotImplementedError) as exc_info:
+        generate_plan(intent)
+    msg = str(exc_info.value)
+    assert "account_number" in msg              # what was rejected
+    assert "by_customer_name" in msg            # what works instead
+    assert "For example:" in msg                # something typeable
+
+
+def test_validation_message_carries_no_internal_jargon() -> None:
+    """The old message opened with 'Intent contains filter types not
+    supported for entity ...' and printed Python list reprs. Nothing a
+    user can act on."""
+    with pytest.raises(NotImplementedError) as exc_info:
+        _validate_intent_filters(
+            [{"type": "is_strategic_supplier", "value": True}], "Supplier"
+        )
+    msg = str(exc_info.value)
+    assert "Intent contains filter types" not in msg
+    assert msg.startswith("Spire can't filter Supplier by")
+
+
+def test_validation_still_precedes_plan_building() -> None:
+    """Moving validation after the guards must not let an unknown filter
+    reach the plan blocks — Supplier has no guard, so validation is the
+    only thing standing between this intent and a silent drop."""
+    intent = Intent(
+        target_entity="Supplier",
+        filters=[{"type": "is_diversity_supplier", "value": True}],
+    )
+    with pytest.raises(NotImplementedError):
+        generate_plan(intent)
+
 
 
 # ─────────────────────────────────────────────────────────────────────

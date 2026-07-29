@@ -8,6 +8,7 @@ __pycache__/
 venv/
 env/
 ENV/
+test_results/
 
 # Env files
 .env

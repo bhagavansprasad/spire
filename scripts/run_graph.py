@@ -65,6 +65,18 @@ async def _run(prompt: str) -> int:
         print(usage_report())
         return 4
 
+    # A planner REFUSAL is Spire declining, not Spire breaking: the
+    # message names what is missing and gives an example to type.
+    # Printing it as "ERROR:" on stderr made a good answer look like a
+    # crash — and made this runner disagree with run_prompt_set.py
+    # about the very same prompt. Exit 4, the same code as a parser
+    # refusal, because it is the same kind of outcome.
+    if state.get("error") and state.get("plan_refusal"):
+        print(f"REFUSED (planner guard): {state['error']}")
+        print()
+        print(usage_report())
+        return 4
+
     # Error in any node.
     if state.get("error"):
         print(f"ERROR: {state['error']}", file=sys.stderr)
@@ -82,6 +94,10 @@ async def _run(prompt: str) -> int:
     _synth_failed = state.get("synth_failed")
     if _fields:
         # Column query: summary on top (when it succeeded), table below.
+        # SUMMARY ONLY — not the typed record block. The table below
+        # prints the columns the user asked for; printing the records too
+        # repeats every value, and on an address query that is ~200 lines
+        # of "address: ..." followed by the same data in the table.
         # The table trims to the requested columns itself and flattens any
         # nested addresses, so it takes the RAW outputs (projected_outputs
         # has already stripped the addresses key).
@@ -91,7 +107,7 @@ async def _run(prompt: str) -> int:
                 "showing the table only)"
             )
         else:
-            print(_format_synthesized(state.get("response")))
+            print(_format_synthesized(state.get("response"), summary_only=True))
         print()
         print(_format_projected_table(_outputs, _fields))
     else:
@@ -114,3 +130,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
