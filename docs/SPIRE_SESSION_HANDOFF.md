@@ -1,345 +1,295 @@
-# SPIRE — SESSION HANDOFF
+# Spire — Session Handoff (2026-07-29)
 
-**Written:** 2026-07-24, end of a verification-and-fix session.
-**Supersedes:** the 2026-07-23 handoff, whose Issue 6 diagnosis was
-already stale when it was written. See "What the last handoff got wrong".
+Paste into the new window to continue. Supersedes the 2026-07-28 handoff.
 
 ---
 
-## READ THIS FIRST
+## Who / what
 
-The previous session ended with prompts claimed as working but never
-observed running. This session ran them. **Nine bugs were found and
-fixed, all verified end-to-end against the live pod.** Everything below
-marked VERIFIED was watched running; everything marked OPEN was observed
-failing and is not fixed.
+Continuing **Spire** — AI-native NL query over Oracle Fusion Cloud (P2P +
+AR). Deterministic KG pipeline: parse → plan → execute → synthesize, two
+LLM boundaries only (parser, synthesizer). Tool selection is a KG lookup,
+not an LLM judgement. Not an agent architecture.
 
-The one instruction worth carrying: **run a curl against the pod before
-changing code.** Every fix that stuck this session started with a curl.
-Every attempt that was reverted started with a theory.
+Repo `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`, pod
+`fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`, creds in
+`personas.yaml` (gitignored).
+
+**Currently on branch `lifecycle-poc`**, freshly merged with master, 504
+tests passing.
 
 ---
 
-## WHAT THE LAST HANDOFF GOT WRONG
+## What the last session did
 
-Recorded because the failure mode matters more than the specific error.
+An SME (Venu) ran 25 prompts and reported 21 failures. The session
+started by analysing that report and ended nine merged phases later.
 
-**Issue 6 ("three prompts broken, filter-lookup change applied to the
-loader but not its callers") was already fixed.** `planner.py` lines 351,
-361 and 371 unpack the tuple key correctly. The error it described,
-`Supported entity-level: []`, does not occur anywhere.
+**The report was wrong in both directions.** Twelve of the 21 "failures"
+were one stale KG — parse input was ~6,845 tokens against a known-good
+~8,119, which is the KG menu arriving short. Seven more were correct
+refusals of genuinely unanswerable prompts. Meanwhile FOUR real defects
+sat inside prompts marked `[ok]`, including a credit-memo total that
+summed USD, CAD, GBP and EUR into one number and printed it as fact.
 
-The three prompts were failing for **three different reasons**, and one
-was not failing at all:
+Score went from **11/25 to 25/25 behaving correctly.**
 
-| Prompt | Handoff said | Actually |
+### Merged to master (nine phases)
+
+| # | What | Why it mattered |
 |---|---|---|
-| `Supplier`/`name_fragment` | broken | **passes** — was already fine |
-| `Invoice`/`supplier` | broken, plan time | failed at EXECUTE — placeholder arg |
-| `Invoice`/`purchase_order` | broken, plan time | failed at PLAN — a stale guard |
+| 0 | Test-suite realignment | Suite could not COLLECT. 32 failures: 31 stale tests, 1 real bug |
+| 1 | Planner refusal quality | Filter dumps → guards with typeable examples |
+| 2 | Credit-memo currency | `Total credit value: -17232.52` across 4 currencies |
+| 3a | Tools report `totalResults` | 3 tools could never report truncation |
+| 3b | Synthesizer narrates truncation | "25 credit memos" where 2,111 exist |
+| 4 | Deterministic supplier records | 2 prompts burned 48,750 tokens producing NOTHING |
+| 5 | `plan_refusal` flag | Refusal-vs-crash was decided by grepping the message |
+| 6 | StandardReceipt KG alignment | KG advertised a tool the server does not have |
+| 7 | Column display | Record block + table printed the same data twice |
 
-**The lesson:** a diagnosis written in one session and read in the next
-is a claim, not a fact. Re-observe before acting on it. Roughly an hour
-went into chasing a bug that had already been fixed.
+### The finding that outranks the fixes
 
----
+**The KG was not reproducible.** A `lag_query` filter and a
+`get_receipts_with_lag` entity tool were live in the Oracle KG but in
+NEITHER the seed nor master — the code is on
+`feature/ar-prompt-18-parking`. The KG was advertising a tool the running
+server does not have. Anyone running `rebuild_kg.sh` got a different
+system from the one being tested against.
 
-## VERIFIED THIS SESSION — nine fixes
-
-Each was watched failing, then watched passing.
-
-| # | Bug | Where | Prompts |
-|---|---|---|---|
-| 1 | `tool_arg_name: 'supplier'` was a PLACEHOLDER nothing implemented. Both KG rows document the routing ("all-digit → supplier_number, else supplier_name") but no code did it | planner | Address/supplier, Invoice/supplier |
-| 2 | Invoice guard demanded a supplier and rejected `purchase_order`. The PO guard's own comment described the Invoice guard as already widened — it was not | planner | Invoice/purchase_order |
-| 3 | Synthesizer registry keyed `ExposureRanking` (PascalCase) where the parser emits `exposure_ranking`. Lone PascalCase entry among five | synthesizer | 10 |
-| 4 | `_build_aggregation_plan` never read `intent.filters`, so the customer scope was silently dropped and the tool ran pod-wide. Plus a duplicate dict key silently shadowing `account_number` | planner | 17 |
-| 5 | Server wrapper missing `customer_name` — the standalone tool had it, the MCP-exposed wrapper did not | server | 17 |
-| 6 | Aggregation tool capped at 500 rows with no pagination: reported a 500-row sample of 1,386 as a total, and hid an entire receipt method | tool | 17 |
-| 7 | Receipt applications over-fetched 500 and filtered client-side; bucket name wrong in FOUR places | tool + synthesizer | 9 |
-| 8 | `total_available` discarded by the executor's unwrap. Count reported the page size (10) as the account total (7,038) | executor | 9 |
-| 9 | Synthesizer expanded a float to the token cap: `1179915.3225` → full IEEE-754 binary expansion, then trailing zeros | synthesizer | AR invoices by customer |
-
-**Plus: three dead validators.** The empty-array guards in
-`synthesize_response` checked bucket names that do not exist
-(`accountreceiptapplication`, `customertransaction`, and two others).
-They had never fired. All four now match `_OUTPUT_NAME_BY_ENTITY` and
-one caught a real failure the moment it was corrected.
-
-**Plus: display-layer fixes.** `transaction_date` missing from the AR
-invoice schema (crashed the whole AR set), and `run_plan.py` having no
-tax-line branch at all (8 tax lines fetched, none displayed).
-
-**Plus: crash isolation in `run_prompt_set.py`.** One `AttributeError`
-in the display layer killed the AR set after prompt 1; 15 prompts never
-ran. Each prompt now runs in a try/except.
+Both rows were removed; they belong with prompt 18 when it lands.
+Seed and database now agree. Counts: `kg_entity_tool` 9,
+`kg_entity_filter` 23.
 
 ---
 
-## OPEN ISSUES — observed failing, not fixed
+## Where the lifecycle work stands
 
-Ordered by severity.
+Target prompt (SME catalog A.4 + A.2, agreed):
 
-### 1. Receipt-method aggregate is not reproducible
+> "Has PO [number] been fully received, fully invoiced, and fully paid?
+> Show ordered, received, invoiced, paid, and remaining amounts with
+> supplier details, and identify the current lifecycle stage and
+> responsible team."
 
-Two runs, same account, same tool, consecutive days:
+**Build sequence position: steps 1–2 done, step 3 next.**
 
-| | Run A | Run B |
+| Step | Status |
+|---|---|
+| curl discovery | ✅ done |
+| standalone tool | ✅ `src/spire/mcp_server/tools/po_lifecycle.py` |
+| KG rows | ⬅ **NEXT** |
+| planner / parser / server wrapper | pending |
+| synthesizer / display / prompts / tests | pending |
+
+### Curl findings (all verified 2026-07-28)
+
+- `/purchaseOrders`, `/purchaseOrderSchedules` both filter server-side on
+  `q=OrderNumber='<n>'` — the schedules one was previously undocumented
+  (only `POHeaderId` was known).
+- **`ReceivedAmount` is 0 or null on EVERY schedule row on this pod**
+  (~4,500 rows checked). The received leg exists only as a QUANTITY, so
+  the amount is DERIVED: `Amount * (ReceivedQuantity / Quantity)`.
+  Oracle's own arithmetic agrees — PO 701337 line 1 is Amount 1116,
+  Quantity 4, ReceivedQuantity 1, and the pod's BilledAmount is 279,
+  exactly 1116 × ¼.
+- Header `Ordered` is Oracle's own total; the schedule sum cross-checks it.
+
+### The two test POs
+
+| PO | Ordered | Received | Invoiced | Paid |
+|---|---|---|---|---|
+| **701337** (JGA, Open) | 1235.00 | 398.00 derived (2 of 5 units) | 398.00 | none |
+| **162034** (Lee Supplies, Closed) | 758.00 | 758.00 | 758.00 | 830.01 ✓ |
+
+Neither has all four legs; together they cover everything. 701337 proves
+partial reconciliation and mixed line statuses (one Open, one Closed);
+162034 proves the invoice join and carries a genuine exception — an
+invoice **72.01 ABOVE** the order, probably tax, unconfirmed.
+
+701337 has `PayOnReceiptFlag: true`, which may explain why it has billing
+with no PO-linked invoice (self-billing). **Unconfirmed hypothesis.**
+
+### Two decisions still open on `po_lifecycle.py`
+
+**1. The paid leg for a PO with no matched invoice.** 701337 reports
+`remaining_to_pay: 398.00`, computed as invoiced − paid where "invoiced"
+comes from SCHEDULES. But no AP invoice exists, so it asserts 398 is owed
+when the truth is "the bill cannot be found."
+
+Options were: leave it; base the paid leg on matched invoices (gives 0.00
+but then `fully_paid: true` on a PO where nothing was paid); or
+**tri-state it** — paid / partially paid / **unknown**. The third was
+recommended and NOT yet decided: it is the only one that doesn't assert
+something false, and "the chain breaks here" is what a lifecycle view
+should say.
+
+**2. The tool predates this session's patterns.** Its `_page_all` does
+not request `totalResults` — the same gap fixed in three AR tools in
+phase 3a. Low impact (both fetches are scoped to one PO) but the
+`MAX_PAGES` cap can still be hit silently. Worth aligning before KG rows
+lock the interface.
+
+---
+
+## Open issues, carried forward
+
+Ordered by how much damage each can do.
+
+### Can put a wrong number in front of someone
+
+- **Invoice total over a sample.** "invoices for Lee Supplies" says "The
+  total amount for these invoices is 36646.61 USD" — a sum over 25 of
+  1,343 rows, stated flat. Same family as the credit-memo total already
+  fixed, different mechanism.
+- **"country" returns a full address.** "Supplier number and country for
+  active suppliers" produces an `Address` column holding
+  `7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM`. An analyst asking for
+  country wants "United Kingdom".
+- **Only the FIRST address is shown**, silently, for suppliers with 25.
+- **`StandardReceipt` and `AccountReceipt` model the same receipts** with
+  different projections and — per the KG's own notes — DISAGREEING
+  COUNTS. Both are routable by the planner, so two near-identical prompts
+  can return different numbers.
+
+### Known bugs, pinned
+
+- **`search_standard_receipts` can never report `truncated=True`.** It
+  computes truncation then passes `total_available=None`, and
+  `ToolResult.build` derives truncated FROM that None. Pinned by a
+  `strict=True` xfail in `tests/test_standard_receipts_tool.py`, so it
+  cannot be fixed silently. Needs `ToolResult` to express "truncated,
+  total unknown".
+- **W7 — "supplier sites" mis-parses as addresses.** Root cause found:
+  `Address` and `Site` have ZERO `entity_synonym` vocab rows while ten
+  other entities have them, so the parser guesses. But this is a full
+  phase, not a data fix: the synthesizer has NO concept of a site (no
+  `SiteInfo`, no `SupplierRecord.sites`, no prompt clause, no display).
+  Five of ten build steps outstanding.
+
+### Housekeeping
+
+- **17 tests are DESELECTED** by a marker filter nobody has examined. A
+  green suite that silently skips 17 tests is a weaker guarantee than it
+  looks. One command to find out.
+- `print_kg.py` counts may disagree with the tests again after phase 6.
+- Address flattening exists TWICE: `_format_projected_table` for the
+  table, `_address_info` in the synthesizer. One behaviour, two places.
+- "Answer:" prints twice on column queries — once for the summary, once
+  above the table.
+- 31 branches on the remote, most looking merged. Worth a prune.
+
+---
+
+## Token profile (measured, 25-prompt run, post-fixes)
+
+```
+parse       25 calls  in=202,980  out= 7,990  total=210,970   (75%)
+synthesize  10 calls  in= 53,110  out=15,562  total= 68,672   (25%)
+GRAND                                          total=279,642
+```
+
+**Parse input is constant at ~8,119 per call** — the KG menu (22
+entities, 23 filters, 97 vocab terms) rebuilt and re-sent every time. The
+question itself is 10–20 tokens of that.
+
+Parse rose from 65% to **75% of consumption** this session — not because
+parse grew, but because synthesize shrank. The prompt-caching argument is
+now stronger, and its target is unchanged: 202,980 input tokens
+re-sending the same menu 25 times.
+
+**Diagnostic:** if `parse in=` is much below ~8,119, the KG did not
+rebuild. Everything downstream is then meaningless. Check this before
+reading anything into a run.
+
+---
+
+## How to test (give this to QA)
+
+```
+1. git pull
+2. python scripts/rebuild_kg.py          # don't skip — the seed changed
+3. Terminal 1:  python -m spire.mcp_server.server
+   (already running? restart it, or you test old code)
+4. Terminal 2:  python scripts/run_prompt_set.py \
+                  --prompt-file scripts/prompts/qa_testcases.txt
+```
+
+**Classify results in four buckets, not pass/fail:**
+
+| Bucket | Meaning | Bug? |
 |---|---|---|
-| Total receipts | 1,386 | 1,386 |
-| Total amount | 215,721,775.28 | **250,557,301.49** |
-| Lockbox | 993 / 211,999,593.81 | **1,132 / 247,941,421.77** |
-| Check | 393 / 3,722,181.47 | **254 / 2,615,879.72** |
+| Passed | Answered, and the answer is right | no |
+| Not a valid prompt | Can't be answered as written | no — fix the prompt |
+| Refused | Fair question, not supported yet | no — feature request |
+| Failed | Crashed, or answered WRONGLY | **yes** |
 
-Same row COUNT, different rows. Both splits sum to 1,386. A 35M
-difference in total means it is fetching a different 1,386 rows each
-time.
+A refusal is not a failure. The dangerous outcome is a confident wrong
+answer — it is the only one that passes a quick read, and it is exactly
+what the SME's original report missed.
 
-**Hypothesis (unconfirmed):** `/standardReceipts` has no default
-ordering. The tool pages with `offset` and no `orderBy`, so the pod can
-return shifted or overlapping pages. Fix is the same as the one applied
-to receipt applications: add a deterministic `orderBy` to the paginated
-fetch. **Confirm with a curl before changing code.**
-
-### 2. Column selection does not work — a designed feature, inert
-
-`fields` is parsed into the Intent correctly and NOTHING downstream uses
-it. `_project_outputs(outputs, fields)` exists in `graph/pipeline.py`;
-`run_plan.py` never calls it.
-
-Evidence: asking for ONE field and asking for TWO produced
-**byte-identical output** — same token counts, same answer text, same six
-columns. Same for the Invoice and PO roots.
-
-Second, separate defect: requesting `country` as a FIELD triggers the
-address over-fetch used for country FILTERING. Synthesizer input 16,881
-tokens vs 2,729 for the working prompts, then MAX_TOKENS. The four-field
-form also degraded the parser (out=820 vs 227-285).
-
-### 3. `open_only` may not filter
-
-`Show me open invoices for customer ABC Corporation Americas` returns 25
-"open" invoices. The unfiltered prompt on the SAME account says all 25
-transactions are "currently closed with a balance of 0.00". Both cannot
-be true. Either `open_only=True` is not reaching the filter or the closed
-claim is fabricated.
-
-### 4. `count_only` is parsed and ignored
-
-Intent carries `count_only: True`; the plan ignores it and fetches 25
-rows. The answer ("424 suppliers") is plausible and consistent with the
-truncation note, but its provenance is unverified — the executor returns
-25 rows and the number is not among them.
-
-### 5. Page size stated as total — at least five prompts
-
-"There are 25 receipt applications", "The account has 5 open invoices",
-"25 credit memos", "The query returned 25 suppliers" (of 421). The
-truncation block reports the real number; the narration does not always
-use it. Prompt 9 was fixed by threading `metadata_by_step`; the same
-pattern applies elsewhere.
-
-### 6. Synthesizer asserts fields absent from the output
-
-Seen 5+ times: "all currently closed with a balance of 0.00", "the
-administrative contact is John Kim", "some invoices are marked as paid,
-while others are unpaid". None of those fields are in the displayed
-projection. Probably real data behind display truncation, but
-unverified — and indistinguishable from fabrication without checking.
-
-### 7. `Suppliers with their addresses` — MAX_TOKENS
-
-The nested-address expansion overruns the synthesizer. Same root as the
-`country` column failure.
-
-### 8. Creation-to-update lag prompt refuses
-
-`Show lag between creation and last update for receipts of X` refuses as
-out-of-scope. The KG has a `lag_query` filter and a
-`get_receipts_with_lag` tool is registered. Either the filter is not
-reaching the parser menu or the tool is not wired.
-
-### 9. PO totals disagree between prompts
-
-`Show PO 2144 and its lines` reports 41,250.00; `What is purchase order
-2144 about?` reports 45,168.75. Same PO. One is `Ordered` (ex-tax), the
-other `Total` (inc-tax). Both defensible; a user asking twice gets two
-numbers with no explanation.
-
-### 10. `How many purchase orders are there and what are they worth?`
-
-Reports 10,000 POs. The prompt set says ~3,362. 10,000 is a suspiciously
-round cap, and the per-status counts (6,991 + 713 + 262 + …) do not reach
-it either.
-
-### 11. `Invoices for Lee Supplies in 2023` — inconsistent across days
-
-Returned 11 invoices with real amounts across the year on one run, then 5
-invoices all dated 2023-06-23 and all 0.00 USD on the next. Either the
-data changed or the filter did. Not investigated.
-
-### 12. Housekeeping
-
-- **`pytest` has NOT been run this session.** `execute_plan`'s signature
-  changed from 2 return values to 3. `test_executor.py` very likely
-  asserts the old shape. This is the highest-risk unknown in the repo.
-- KG tripwires drifting: `kg_entity_tool` 10 vs expected 9,
-  `kg_entity_filter` 25 vs expected 23. Bump both in `print_kg.py` AND
-  `tests/test_kg_metadata.py` together.
-- No validator exists for tax lines. Four child buckets have guards; tax
-  lines does not.
-- `_build_synthesis_prompt`'s metadata block is hardcoded to the
-  `account_receipt_applications` bucket. Does not generalise.
+**Every prompt runs on its own.** No memory of the prompt before or
+after. "For that PO, how much was received?" cannot work; write "For PO
+2144, how much was received versus ordered?" instead.
 
 ---
 
-## HARD-WON LESSONS FROM THIS SESSION
+## Hard-won lessons (carried + new)
 
-**Repair code placed before a check disables the check.** A structural
-fallback populated an empty `applications` list from the raw bucket. It
-ran BEFORE the validator that tested for an empty list, so the validator
-could never fire — recreating the exact silent failure that had just been
-fixed. Removing it revealed the model had never been populating that list
-at all; the fallback was doing 100% of the work on every run.
+**Curl before code.** Every fix that stuck started with a curl; every
+theory-first attempt got reverted.
 
-**A factual statement in the synthesis prompt can suppress row
-emission.** The metadata sentence read "The total ... is 7038. The list
-below shows only the most recent ones." That second clause read as
-permission to skip the rows: the model stated the total and wrote a
-summary (out≈793) instead of emitting them. Dropping the clause restored
-emission (out≈2148). Same family as the parser runaway — the model
-over-reads an instruction.
+**A diagnosis from a previous session is a claim, not a fact.**
+Re-observe before acting.
 
-**Rounding at source was NOT sufficient for the float bug.** With the
-tool returning `1179915.32`, the model still emitted the unrounded
-expansion. It was GENERATING those digits, not copying them. Only
-post-processing the response (`_round_floats` after synthesis) made it
-deterministic.
+**Read the answers, not the tally.** "21/25 ran cleanly" was true of a
+run where 4 answers were silently wrong. The runner prints this warning
+itself.
 
-**Naming across un-typechecked boundaries is the dominant bug class.**
-Five this session: KG→tool arg name, parser→synthesizer shape key,
-planner→wrapper parameter, synthesizer→executor bucket name (×4), and
-schema→display field name. None of these boundaries type-check. All five
-failed silently.
+**Check the environment before believing a failure report.** One token
+count would have invalidated 12 of the SME's 21 findings before anyone
+read them.
 
-**The display layer runs behind the schema.** Three separate bugs:
-a schema field the formatter read but did not exist, a schema field the
-formatter never read, and a projection function never called. A generic
-formatter walking the Pydantic model would have had none of them.
+**Fixing a bug can expose a rule the bug was enforcing.** Making the
+synthesizer succeed on address queries removed the failure that had been
+keeping the record block off column output. Nothing else enforced it.
 
-**Compute in the tool, not the prompt.** Every numeric bug fixed this
-session was fixed by having the tool compute the value and the
-synthesizer copy it. Where the tool did the work it was right first time;
-where the prompt asked the model to do it, it took multiple rounds.
+**Don't classify on message text.** Refusal-vs-crash was decided by
+`"require" in err`. Rewording a guard silently reclassified it — and did.
+
+**Compute in the tool, not the prompt.** Every numeric bug fixed has been
+fixed by having the tool compute and the synthesizer copy.
+
+**Ask what already exists before building.** The deterministic-record fix
+was built parallel to the column feature, which had already established
+the same principle and even the same address flattening. Cost: duplicated
+logic and a display regression.
 
 ---
 
-## TOKEN PROFILE (measured, ~15 runs)
+## Reference
 
-| Stage | Input | Output |
-|---|---|---|
-| Parse | ~8,120 (constant) | 200–800 |
-| Synthesize | 1,100–5,900 | 720–3,100 |
+- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch.
+- **Restart the MCP server after ANY change under
+  `src/spire/mcp_server/`.** Tool definitions are built at import. This
+  has cost false diagnoses more than once. Planner, parser and
+  synthesizer changes do NOT need a restart.
+- Synthesizer five-place rule: adding an entity touches the registry,
+  `_SYSTEM_PROMPT_BY_ENTITY`, `_collect_valid_ids`, the validator
+  function, and the validator dispatch — plus the empty-array guard,
+  whose bucket name must match `_OUTPUT_NAME_BY_ENTITY` exactly.
+- KG tripwires: bump `print_kg.py` AND `tests/test_kg_metadata.py`
+  together.
+- Pod quirks (confirmed): composite `q=` fails silently with HTTP 200 /
+  `totalResults: 0` — use SINGLE clauses only; `expand=sites` ignored on
+  bulk fetches; `/standardReceipts` rejects `fields=` (500);
+  `Supplier.Status` must be matched client-side; child bodies omit the
+  parent id (join key is the URL path); addresses use `expand=addresses`
+  with PascalCase keys and `SupplierAddressId`;
+  `TransacationBusinessCategory` is misspelled by Oracle — use the typo;
+  `curl --compressed` required.
 
-**Parse input is fixed at ~8,120 regardless of the question.** That is
-the KG menu — 22 entities, 25 filters, 97 vocabulary terms — rebuilt and
-re-sent on every call. The actual question is 10-20 tokens of it.
-
-Parse:synthesize on total tokens runs about **1.5:1**, ranging from 4:1
-on a single-record answer to 1.1:1 on a 25-row answer.
-
-**Highest-leverage cost reduction: prompt caching on the parse call.**
-The system prompt is byte-identical across every call. No behaviour
-change.
-
----
-
-## RECOMMENDED ORDER FOR THE NEXT SESSION
-
-1. **`python -m pytest -q`.** It has not run. The executor signature
-   changed. Everything else is built on this.
-2. **Bump the two KG tripwires** (10 and 25) in both files.
-3. **Curl `/standardReceipts` with and without `orderBy`** to confirm
-   the pagination hypothesis behind open issue 1, then fix.
-4. **Wire `_project_outputs` into `run_plan.py`** — column selection is
-   designed and inert.
-5. Investigate `open_only` (issue 3) and `count_only` (issue 4).
-6. Prompt caching on the parse call.
-
----
-
-# REFERENCE
-
-## Repo & environment
-
-- Repo `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`
-- Demo pod `fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`
-- Credentials in `personas.yaml` (gitignored)
-- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch, never
-  incrementally
-- LLM: Gemini via Vertex AI; multi-provider seam in `build_llm()`
-- `LLM_MAX_OUTPUT_TOKENS = 8000` — deliberately not lower; legitimate
-  synthesizer output on large result sets needs ~3,400
-
-## Prompt sets — REORGANISED 2026-07-24
-
-```
-scripts/prompts/
-  00_dipstick.txt          6   depth-ordered triage — run first
-  01_supplier.txt         38
-  02_purchase_order.txt    9
-  03_ar.txt               15
-  04_columns.txt           8   feature is BROKEN, set documents it
-  05_refusals.txt         10
-  06_slow.txt             16   minutes each
-  scorer/parser_stress.txt 60  EXPECT ||| format — SCORER ONLY
-```
-
-`run_prompt_set.py` takes several files:
-
-```
-python scripts/run_prompt_set.py --prompt-file \
-  scripts/prompts/00_dipstick.txt scripts/prompts/03_ar.txt
-```
-
-**The summary line is not a verdict.** "16/16 ran cleanly" was true of an
-AR run in which 6 of 16 answers were wrong. Read the answers.
-
-## MCP server
-
-Restart after ANY change under `src/spire/mcp_server/`. Tool definitions
-are built at import. This cost three false diagnoses in one session —
-edits looked like they had failed when the old process was still serving.
-
-```
-pkill -f "spire.mcp_server.server"
-python -m spire.mcp_server.server
-```
-
-Planner, parser and synthesizer changes do NOT need a restart.
-
-## Build sequence for a new phase
-
-curl discovery → standalone tool → KG rows → planner → parser → **server
-wrapper** → synthesizer → `run_plan.py` display → prompt set → tests →
-verify end-to-end → branch/PR/merge.
-
-The two steps most often skipped, both of which bit this session: the
-**server wrapper** (a standalone tool gains a parameter, the wrapper does
-not) and the **`run_plan.py` display** (the schema grows, the formatter
-does not).
-
-## Synthesizer update points
-
-Adding an entity touches: registry `SYNTHESIS_SCHEMAS`,
-`_SYSTEM_PROMPT_BY_ENTITY`, `_collect_valid_ids`, the validator function,
-the validator dispatch dict — **and the empty-array guard, whose bucket
-name must match `_OUTPUT_NAME_BY_ENTITY` exactly.** That last one is new:
-three of the four existing guards had the wrong name and had never fired.
-
-## Files to share in a new window
-
-`spire_expansion_plan.md`, `spire_fusion_endpoints_reference.md`, this
-handoff, plus whichever of `planner.py` / `synthesizer.py` /
-`server.py` / the relevant tool the task touches. **Always re-share
-before editing** — do not work from a copy pasted earlier in the session.
+**Files to share when starting a task:** `docs/spire_plan.md`,
+`docs/spire_fusion_endpoints_reference.md`, this handoff, plus the code
+files the task touches. Always re-share before editing — never work from
+a copy pasted earlier in the session.

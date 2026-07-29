@@ -23,6 +23,7 @@ bundles:
   - scripts/prompts/05_refusals.txt
   - scripts/prompts/06_slow.txt
   - scripts/prompts/07_alacarte.txt
+  - scripts/prompts/qa_testcases.txt
   - scripts/prompts/README.md
   - scripts/prompts/scorer/parser_stress.txt
 
@@ -71,6 +72,7 @@ bundles:
   - src/spire/mcp_server/tools/purchase_order_distributions.py
   - src/spire/mcp_server/tools/purchase_order_lines.py
   - src/spire/mcp_server/tools/purchase_order_schedules.py
+  - src/spire/mcp_server/tools/po_lifecycle.py
   - src/spire/mcp_server/tools/supplier_contacts.py
   - src/spire/mcp_server/tools/receivables_invoice_by_id.py
   - src/spire/mcp_server/tools/receivables_invoice_lines.py
@@ -107,6 +109,7 @@ bundles:
   - tests/test_compare_orders_to_invoices.py
   - tests/test_config.py
   - tests/test_customer_invoices_tool.py
+  - tests/test_display_summary_only.py
   - tests/test_executor.py
   - tests/test_fusion_client.py
   - tests/test_graph_pipeline.py
@@ -121,11 +124,15 @@ bundles:
   - tests/test_planner.py
   - tests/test_prompts.py
   - tests/test_purchase_orders_tool.py
+  - tests/test_receivables_credit_memos_tool.py
   - tests/test_suppliers_by_country_tool.py
   - tests/test_suppliers_tool.py
   - tests/test_synthesizer.py
   - tests/test_synthesizer_aggregation.py
+  - tests/test_synthesizer_supplier_records.py
+  - tests/test_synthesizer_truncation_narration.py
   - tests/test_tool_result.py
+  - tests/test_truncation_reporting.py
   - tests/test_aggregate_purchase_orders_tool.py
   - tests/test_purchase_order_detail_tool.py
   - tests/test_purchase_order_distributions_tool.py
@@ -137,6 +144,8 @@ bundles:
 excludes:
 - traces
 - traces/*
+- test_results
+- test_results/*
 - personas.yaml
 - '*.pyc'
 - __pycache__
