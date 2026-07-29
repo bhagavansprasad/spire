@@ -1052,6 +1052,13 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Default fetcher for PurchaseOrder — the collection search. Handles the entity-level filters that are not by_id (created_before, created_since, and any future PO list filter), stacking their args like the Supplier default fetcher does. P2 made PurchaseOrder rootable via its by_id fetcher alone and deferred this row; P6''s date filters made it necessary, because Block 1 falls back to (entity, ''none'') for any filter without its own dedicated tool and that fallback had nothing to find.'
 );
 
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'PurchaseOrder',
+  'lifecycle_status',
+  'get_purchase_order_lifecycle_status',
+  'Reconciles ONE purchase order end to end: ordered vs received vs invoiced vs paid, across six resources (PO header, schedules, invoices, invoice installments, supplier, supplier site). Returns a single po_lifecycle_status record - NOT a list. Distinct from get_purchase_order_by_id (header only) and from compare_orders_to_invoices (many POs, two legs). Takes po_number (OrderNumber, the number printed on the order), never POHeaderId. Computes lifecycle_stage, responsible_team, risk with risk_reasons, and recommended_action; the synthesizer must COPY these, never re-derive them. paid_state is TRI-STATE and can be ''unknown'' when billing exists with no matched AP invoice - in that case fully_paid and remaining_to_pay are BOTH null and must not be read as false or zero.'
+);
+
 
 INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
   'ReceivablesInvoice',
@@ -1082,7 +1089,7 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'search_standard_receipts',
   'Default fetcher for StandardReceipt. Accepts customer_name (resolved to an account number inside the tool) and customer_site (client-side). REFUSES to run unscoped - the planner guards for this before dispatch.'
 );
-PROMPT Seeded kg_entity_tool (9 rows).
+PROMPT Seeded kg_entity_tool (10 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -1297,6 +1304,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'lifecycle_status', 'entity_level', 'po_number', NULL, NULL, NULL, NULL, NULL, 'server_q', 'OrderNumber', 'equals',
+  'Full lifecycle reconciliation for ONE PO, selected by OrderNumber (not POHeaderId - by_id is the other filter and takes that). Choose this filter when the question asks whether a PO has been received, invoiced or paid; what stage it is at or who owns the next action; why it is still open or where it is blocked; or for a summary of a single PO covering supplier setup through payment. Choose by_id instead when only the header is wanted, and the default fetcher when several POs are being listed or filtered. Returns one record with the four amounts, three remainders, per-schedule detail, supplier and site setup, holds, risk and a recommended action.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'Invoice', 'purchase_order', 'entity_level', 'purchase_order', NULL, NULL, NULL, NULL, NULL, 'server_q', 'PurchaseOrderNumber', 'equals',
   'Invoices raised against a PO. Value is the PO NUMBER (e.g. "162034"), not POHeaderId — invoices carry PurchaseOrderNumber on the header and it filters server-side (single clause). Most selective invoice filter, so it wins the server q= clause.'
 );
@@ -1349,6 +1361,6 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Customer name; resolved to account number by the tool before the server call.'
 );
 
-PROMPT Seeded kg_entity_filter (23 rows).
+PROMPT Seeded kg_entity_filter (24 rows).
 
 -- ============================================================

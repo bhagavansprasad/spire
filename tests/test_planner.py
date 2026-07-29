@@ -797,7 +797,7 @@ def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
     with pytest.raises(ValueError) as exc_info:
         generate_plan(intent)
     msg = str(exc_info.value)
-    assert "PO id or a date bound" in msg
+    assert "PO id, a PO number, or a date bound" in msg
     assert "EIP Inc" in msg
 
 

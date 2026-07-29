@@ -222,7 +222,8 @@ def test_collect_valid_ids_handles_empty_outputs() -> None:
         "account_receipt_ids": set(),
         "application_ids": set(),
         "standard_receipt_ids": set(),
-        }
+        "lifecycle_order_numbers": set(),
+    }
 
 
 def test_collect_valid_ids_skips_none_values() -> None:

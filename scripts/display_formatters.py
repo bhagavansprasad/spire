@@ -39,6 +39,7 @@ from spire.synthesizer.synthesizer import (
     StandardReceiptResponse,
     ExposureRankingResponse,
     ReceiptMethodDistributionResponse,
+    POLifecycleResponse,
 )
 
 MCP_SERVER_URL = "http://127.0.0.1:3333/mcp"
@@ -455,6 +456,103 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return "\n".join(lines)
 
     # Fallback for unrecognized shape.
+    # --- POLifecycleResponse (Module 5) ---
+    #
+    # A verdict first, then the evidence. Catalog prompt A.4 asks three
+    # yes/no questions in one sentence; a reader should get all three
+    # answers before any table.
+    #
+    # THE PAID ROW IS WHY THIS RENDERER IS CAREFUL. When the paid leg is
+    # unknown its amount is None, and an empty cell in a money column
+    # reads as zero — which is the assertion the whole tri-state exists
+    # to prevent. Null amounts print as an em dash with the reason
+    # alongside, never as blank and never as 0.00.
+    if isinstance(response, POLifecycleResponse):
+        def _verdict(leg) -> str:
+            if leg.complete is None:
+                return "cannot be determined"
+            return "yes" if leg.complete else "no"
+
+        def _money(value) -> str:
+            return "—" if value is None else f"{value:,.2f}"
+
+        by_name = {leg.name: leg for leg in response.legs}
+        head = f"PO {response.order_number}"
+        if response.supplier:
+            head += f" — {response.supplier}"
+        lines.append(head)
+
+        verdicts = []
+        for name in ("Received", "Invoiced", "Paid"):
+            leg = by_name.get(name)
+            if leg is not None:
+                verdicts.append(f"{name}: {_verdict(leg)}")
+        if verdicts:
+            lines.append("  " + " · ".join(verdicts))
+        lines.append(
+            f"  Stage: {response.lifecycle_stage}"
+            f"  ·  Owner: {response.responsible_team}"
+            f"  ·  Risk: {response.risk}"
+        )
+
+        lines.append("")
+        lines.append(response.summary)
+
+        if response.legs:
+            currency = f" ({response.currency})" if response.currency else ""
+            lines.append(f"\nAmounts{currency}:")
+            lines.append(f"  {'Leg':<10} {'Amount':>12} {'Remaining':>12}")
+            for leg in response.legs:
+                lines.append(
+                    f"  {leg.name:<10} {_money(leg.amount):>12} "
+                    f"{_money(leg.remaining):>12}"
+                )
+            for leg in response.legs:
+                if leg.note:
+                    lines.append(f"    {leg.name}: {leg.note}")
+
+        if response.risk_reasons:
+            lines.append(f"\nRisk ({response.risk}):")
+            lines.extend(f"  - {reason}" for reason in response.risk_reasons)
+
+        if response.recommended_action:
+            lines.append(f"\nRecommended action:\n  {response.recommended_action}")
+
+        if response.setup_notes:
+            lines.append("\nSupplier setup:")
+            lines.extend(f"  - {note}" for note in response.setup_notes)
+
+        # Only when a line is actually short: on a fully received PO the
+        # table repeats what the amounts block already said.
+        short_lines = [
+            row for row in response.schedules
+            if (row.outstanding_amount or 0) > 0
+        ]
+        if short_lines:
+            lines.append("\nOutstanding lines:")
+            lines.append(
+                f"  {'Line':>5} {'Status':<9} {'Amount':>11} "
+                f"{'Received':>11} {'Outstanding':>12}"
+            )
+            for row in short_lines:
+                lines.append(
+                    f"  {str(row.line_number or '-'):>5} "
+                    f"{str(row.status or '-'):<9} "
+                    f"{_money(row.amount):>11} "
+                    f"{_money(row.received_amount):>11} "
+                    f"{_money(row.outstanding_amount):>12}"
+                )
+
+        if response.exceptions:
+            lines.append("\nUnresolved:")
+            lines.extend(f"  - {item}" for item in response.exceptions)
+
+        if response.truncation_notes:
+            lines.append("\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+
+        return "\n".join(lines)
+
     return f"(Unrecognized response shape.)\n{response}"
 
 

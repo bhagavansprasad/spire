@@ -56,6 +56,11 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     "search_suppliers_by_classification": "supplier_id",
     # P2: single-PO fetch and its lines child. Both key off POHeaderId.
     "get_purchase_order_by_id": "po_header_id",
+    # Module 5: the lifecycle reconciliation. Keys off the PO NUMBER
+    # (OrderNumber), not POHeaderId — the only PO tool that does. Rooted
+    # and single-fetch, so nothing iterates on it today; registered for
+    # any single-arg reader, as the distributions and tax-line tools are.
+    "get_purchase_order_lifecycle_status": "po_number",
     "get_purchase_order_lines": "po_header_id",
     # P3: PO schedules (flat endpoint), one-hop expansion by POHeaderId.
     "get_purchase_order_schedules": "po_header_id",
@@ -906,15 +911,18 @@ def generate_plan(
         # Same widening as the Invoice guard, which accepts a supplier OR
         # a purchase order.
         has_root_ref = any(
-            f.get("type") in ("by_id", "created_before", "created_since")
+            f.get("type") in (
+                "by_id", "created_before", "created_since", "lifecycle_status"
+            )
             for f in intent.filters
         )
         if not has_root_ref:
             raise ValueError(
-                "Purchase-order queries require a PO id or a date bound. "
-                "For example 'show PO 2144 and its lines', or 'POs created "
-                "before 2015'. To list a supplier's POs, ask about the "
-                "supplier (e.g. 'open POs for supplier EIP Inc')."
+                "Purchase-order queries require a PO id, a PO number, or "
+                "a date bound. For example 'show PO 2144 and its lines', "
+                "'has PO 701337 been fully received, invoiced and paid', or "
+                "'POs created before 2015'. To list a supplier's POs, ask "
+                "about the supplier (e.g. 'open POs for supplier EIP Inc')."
             )
 
     # ReceivablesInvoice is a valid root only for a single-invoice fetch
@@ -1753,3 +1761,4 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+

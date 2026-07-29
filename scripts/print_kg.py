@@ -41,8 +41,9 @@ from spire.oracle.client import OracleClient
 TABLES: list[dict] = [
     {
         "name": "kg_entity",
-        "purpose": "The 5 entities Spire knows about (Supplier, Invoice, "
-                   "PurchaseOrder, Buyer, Address).",
+        "purpose": "The entities Spire knows about, across P2P and AR. "
+                   "Started at 5 (Supplier, Invoice, PurchaseOrder, Buyer, "
+                   "Address); now 22.",
         "columns": ["entity_name", "canonical_id_field", "display_name_field",
                     "endpoint_path", "description"],
         "sql": "SELECT entity_name, canonical_id_field, display_name_field, "
@@ -122,7 +123,7 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 9,
+        "expected_rows": 10,
     },
     {
         "name": "kg_entity_filter",
@@ -139,7 +140,7 @@ TABLES: list[dict] = [
                "filter_field, filter_op, notes "
                "FROM kg_entity_filter ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 23,
+        "expected_rows": 24,
     },
     {
         "name": "kg_edge_tool",
