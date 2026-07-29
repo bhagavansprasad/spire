@@ -1504,3 +1504,230 @@ curled with no `fields=` specifically to see what it actually carries
 under its real names — `Buyer` vs `BuyerDisplayName`, `Ordered` vs
 `Total` — rather than guessing and debugging later.
 
+---
+
+## 14. PO lifecycle discovery — AP, holds and supplier setup (2026-07-29)
+
+Extends section 13. Everything below was curled against `fa-esll-dev37`
+on 2026-07-29 before any code was written, and backs Module 5 phases 3
+and 4 (`lifecycle-phase-3-4-tool-layer`).
+
+Two anchors throughout: **PO 701337** (JGA, Open, partially received, no
+matched AP invoice) and **PO 162034** (Lee Supplies, Closed, settled).
+
+### 14.0 Rows to add to the quirk table
+
+Paste these into the dated quirk table at the top of this file.
+
+| 2026-07-29 | /purchaseOrderSchedules, /invoices | **`totalResults=true` is honoured on both.** Re-verified under a single-clause `q=`: schedules for PO 701337 returned `totalResults: 2`, invoices for PO 162034 returned `totalResults: 1`, invoices for 701337 returned `totalResults: 0` on an empty set. Read it from the FIRST page — reading it from the last loses it entirely when a page cap is hit, which is the case the count is needed for. |
+| 2026-07-29 | /invoices | **`AmountPaid` is on the invoice HEADER, and it is the only usable paid figure.** Summing `InvoiceAmount` gated on `PaidStatus == "Paid"` silently drops partial payments: a partly paid invoice is not in Paid status, so it contributes ZERO and a "partially paid" state can never be detected. Also on the header: `CanceledFlag` (exclude from totals — counting cancelled invoices inflates what appears owed), `ValidationStatus` ("Validated"), `ApprovalStatus` ("Not required"), `InvoiceDate`, `TermsDate`, `SupplierNumber`, `PaymentMethod`, `BankAccount`. |
+| 2026-07-29 | /invoices/{id} | **Children are `appliedPrepayments`, `attachments`, `availablePrepayments`, `invoiceDff`, `invoiceGdf`, `invoiceInstallments`, `invoiceLines`. There is NO `holds` child and NO `payments` child.** Listing `.links[]` on the single-record fetch is the cheap way to settle "does resource X have child Y" instead of guessing paths. |
+| 2026-07-29 | /invoices/{id}/child/invoiceInstallments | **This is where invoice HOLDS live** — not on the invoice header, which carries no hold field at all. Fields: `HoldFlag`, `HoldReason`, `HoldType`, `HeldBy`, `HoldDate`, plus `DueDate` (a real due date, not a derivation), `UnpaidAmount` (the pod's own remaining balance), `GrossAmount`, `InstallmentNumber`, `PaymentMethod`, `PaymentPriority`. `fields=` is accepted. One call per invoice — an N+1, so cap it. |
+| 2026-07-29 | (AP payment documents) | **There is NO payment document anywhere on the AP path.** No payment number, no payment date, on either the invoice header or `invoiceInstallments`, and no payments child. What exists is payment STATUS (`PaidStatus`), AMOUNT (`AmountPaid`), METHOD (`PaymentMethod`, `BankAccount`) and DUE DATE. "Which payment settled this invoice" is unanswerable on this pod — this is an absence, not an undiscovered endpoint. |
+| 2026-07-29 | /suppliers/{id} | **Fetch the supplier by ID, never by name+status.** `Supplier.Status` must be matched client-side on the collection (quirk documented earlier), but the PO header carries `SupplierId`, so a single-record fetch sidesteps the problem entirely. Setup fields: `Status` ("ACTIVE"), `InactiveDate`, `BusinessRelationship`/`BusinessRelationshipCode` ("SPEND_AUTHORIZED"), `SupplierNumber`, `OnOFACListFlag` (sanctions screening — **null, which is NOT False**), `UseWithholdingTaxFlag` + `WithholdingTaxGroup`, `ParentSupplier`, `TaxOrganizationType`. |
+| 2026-07-29 | /suppliers/{id}?expand=sites | **`expand=sites` WORKS on a single-record supplier GET.** The existing quirk — that `expand=sites` is silently ignored — applies to BULK fetches only and should be read as such. It returned all 22 sites for JGA at ~100 fields each, so it is the wrong tool when one site is wanted. |
+| 2026-07-29 | /suppliers/{id}/child/sites/{siteId} | **Returns the one site, and ACCEPTS `fields=`** (not a given — `/standardReceipts` 500s on `fields=`). This is the right path when the PO header already carries `SupplierSiteId`. Fields: `Status`, `InactiveDate`, `SitePurposePurchasingFlag`, `SitePurposePayFlag`, `MatchApprovalLevel` ("3 Way"), `InvoiceMatchOption` ("Receipt"), `PaymentTerms`, and FIVE hold fields — `HoldAllNewPurchasingDocumentsFlag`, `PurchasingHoldReason`, `HoldAllInvoicesFlag`, `HoldUnvalidatedInvoicesFlag`, `PaymentHoldDate`/`PaymentHoldReason`. |
+| 2026-07-29 | /purchaseOrders | **Supplier-communication fields exist on the header** (prompt A.3): `RequiredAcknowledgment` ("None" on 701337, "Document" on 162034), `AcknowledgmentDueDate`, `AcknowledgeWithinDays`, `SupplierCommunicationMethod`, `PendingResponseRole`. **But there is NO approval date and no approver on the header** — only `Status` and `Revision`. A lifecycle timeline cannot show "approved on DATE" from this resource. |
+| 2026-07-29 | /purchaseOrders | **`TotalTax` is 0 on PO 701337, and `FundsStatus` is null on the CLOSED PO 162034** (it is "Partially Liquidated" on the open one — closed POs release their reservation). The zero tax matters: it rules out PO-side tax as the explanation for 162034's 72.01 over-invoice, which section 13.6 had guessed. Also on the header: `Requisition` (the requisition number, so the requisition leg needs no extra call), `ShipToLocationCode`, `SupplierContactDisplayName`. |
+| 2026-07-29 | (demo data age) | **Every date on this pod is 2013–2024.** PO 701337 was created 2014-08-12; invoice 162034inv is dated 2013-12-16 and fell due 2014-01-15. Any age or overdue figure computed against today is ~4,500 days and useless as a business signal. Compute overdue ONLY where an unpaid balance genuinely exists, so settled documents produce no absurd age — and treat any non-null value as a demo-data artefact. |
+
+### 14.1 `totalResults` on the two lifecycle collections
+
+```bash
+# Schedules for PO 701337 — the D2 check and the D1 re-check in one call
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "q=OrderNumber='701337'" \
+  --data-urlencode "fields=LineNumber,ScheduleNumber,Quantity,Amount,ReceivedQuantity,ReceivedAmount,BilledQuantity,BilledAmount,ScheduleStatus" \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "totalResults=true" \
+  --data-urlencode "limit=50" \
+  ".../purchaseOrderSchedules"
+# -> totalResults: 2
+#    line 2: Qty 1, Amount 119,  RecdQty 1, RecdAmount 0, BilledAmount 119, Closed
+#    line 1: Qty 4, Amount 1116, RecdQty 1, RecdAmount 0, BilledAmount 279, Open
+```
+
+Three things confirmed at once: `totalResults` is honoured; `ReceivedAmount`
+is still 0 on every row (13.2 holds); and the derivation still reconciles —
+1116 × ¼ + 119 × 1 = **398.00**, matching the billed sum exactly.
+
+### 14.2 The empty invoice result is DATA, not a broken filter
+
+```bash
+# 701337 -> {"items": [], "totalResults": 0}
+# 162034 -> {"items": [{...830.01, PaidStatus "Paid"...}], "totalResults": 1}
+```
+
+The control against 162034 is what makes the 701337 zero trustworthy. A
+zero alone cannot distinguish "no data" from quirk 1's silent-composite
+failure. **Run the control before believing an empty result.**
+
+Consequence for reconciliation: a PO can carry `BilledAmount` on its
+schedules with no AP invoice bearing its number, so the paid leg is
+**unknown, not zero**. Reporting `remaining_to_pay = invoiced − paid`
+asserts a debt that may not exist.
+
+### 14.3 Asking the invoice what children it has
+
+```bash
+curl -sS --compressed -u "..." ".../invoices/300000049373131" \
+  | jq -r '.links[] | "\(.rel)\t\(.name)"'
+# child  appliedPrepayments      child  invoiceDff
+# child  attachments             child  invoiceGdf
+# child  availablePrepayments    child  invoiceInstallments
+#                                child  invoiceLines
+```
+
+No `holds`, no `payments`. **This is the cheap way to settle a "does X
+have child Y" question** — one call, and it replaces a series of guessed
+paths that would each 404.
+
+A caution against reading too fast: the absence of a `holds` child was
+briefly taken to mean holds are unavailable. They are not — they are one
+level down, on `invoiceInstallments` (14.4). An absent child rules out a
+PATH, not a capability.
+
+### 14.4 `invoiceInstallments` — holds, due dates, unpaid balance
+
+```bash
+curl -sS --compressed -u "..." \
+  ".../invoices/300000049373131/child/invoiceInstallments?onlyData=true"
+# InstallmentNumber 1   GrossAmount 830.01   UnpaidAmount 0
+# DueDate 2014-01-15    HoldFlag false       HoldReason/HoldType/HeldBy null
+# PaymentMethod Electronic   PaymentPriority 99   BankAccount XXX831252
+```
+
+Three finds:
+
+- **`HoldFlag` and friends live here.** Nowhere else on the AP path.
+- **`DueDate` is real**, and matches `TermsDate` + `Net 30` exactly
+  (2013-12-16 + 30 = 2014-01-15). Use the field; drop the derivation.
+- **`UnpaidAmount` is the pod's own remaining balance** per installment.
+
+**But do not source money from here.** Installments are one call per
+invoice — the only N+1 in a lifecycle assembly — and must therefore be
+capped. Invoice headers are never capped. Rule adopted: **money from
+headers, context from installments**, with `UnpaidAmount` used only as a
+cross-check that lands in a note. A bitten cap then costs hold
+visibility, never a number.
+
+### 14.5 The PO header, unprojected
+
+Beyond what 13.4 records:
+
+| Field | 701337 | 162034 | Use |
+|---|---|---|---|
+| `RequiredAcknowledgment` | None | Document | A.3 communication status |
+| `SupplierCommunicationMethod` | None | None | A.3 |
+| `PendingResponseRole` | null | null | A.3 — ambiguous, see below |
+| `TotalTax` | 0 | 0 | rules out PO-side tax |
+| `FundsStatus` | Partially Liquidated | null | closed POs release |
+| `Requisition` | 914032 | — | A.6 requisition leg, free |
+| `SupplierId` | 300000047414635 | — | the setup join key |
+| `SupplierSiteId` | 300000076246906 | — | the site join key |
+
+**No approval date, no approver, anywhere on the header.** `Status` and
+`Revision` are all there is. The "approved on DATE" line in the Shape C
+mockup is not buildable from this resource.
+
+**`PendingResponseRole: null` is ambiguous** — it may mean acknowledged,
+or it may mean not tracked. Unconfirmed. Do not let a prompt turn it into
+a claim.
+
+### 14.6 Supplier setup, by ID
+
+```bash
+curl -sS --compressed -u "..." ".../suppliers/300000047414635"
+# Status ACTIVE   BusinessRelationshipCode SPEND_AUTHORIZED
+# SupplierNumber 1254   InactiveDate null   OnOFACListFlag null
+# UseWithholdingTaxFlag true   WithholdingTaxGroup 1099-PRG-10-PCT
+```
+
+Fetching by ID sidesteps the documented `Supplier.Status` client-side
+matching problem entirely: there is nothing to filter.
+
+**`OnOFACListFlag: null` is not `False`.** Sanctions screening null means
+"not screened", which is a different state from "screened clean". Treat
+null as not-a-blocker, but do not report it as a clean screen.
+
+**`UseWithholdingTaxFlag: true` with a 1099 group** is a legitimate
+reason a payment can differ from an invoice — worth knowing before
+diagnosing a variance.
+
+### 14.7 `expand=sites` — narrowing an existing quirk
+
+`expand=sites` **works on a single-record supplier GET** and returned all
+22 JGA sites. The existing quirk that it is "silently ignored" is about
+BULK fetches and should be read as scoped to those.
+
+It is still the wrong tool when one site is wanted: 22 sites × ~100
+fields for a lifecycle answer that needs one.
+
+### 14.8 The site child path, by ID
+
+```bash
+curl -sS --compressed -u "..." -G \
+  --data-urlencode "onlyData=true" \
+  --data-urlencode "fields=SupplierSiteId,SupplierSite,ProcurementBU,Status,InactiveDate,SitePurposePurchasingFlag,SitePurposePayFlag,HoldAllNewPurchasingDocumentsFlag,PurchasingHoldReason,HoldAllInvoicesFlag,HoldUnvalidatedInvoicesFlag,PaymentHoldDate,PaymentHoldReason,MatchApprovalLevel,InvoiceMatchOption,PaymentTerms" \
+  ".../suppliers/300000047414635/child/sites/300000076246906"
+# Status ACTIVE   purchasing true   pay true
+# MatchApprovalLevel "3 Way"   InvoiceMatchOption "Receipt"
+# PaymentTerms "2/10 Net 30"   all five hold fields false/null
+```
+
+**`fields=` is accepted here** — worth verifying rather than assuming,
+since `/standardReceipts` 500s on any projection.
+
+Two things this gives that nothing else does:
+
+- **Five site-level hold flags.** A site on payment hold or holding all
+  new purchasing documents blocks transactions regardless of how healthy
+  the PO looks. First-class risk signal.
+- **`MatchApprovalLevel` and `InvoiceMatchOption`** — the CONFIGURED
+  matching rule. Prompt A.3 can say "3-way match required against
+  receipt". It still cannot say "1 of 3 invoices failed match": no
+  per-invoice match RESULT exists on this pod.
+
+**Site terms can differ from PO terms.** 701337 is `Net 30` against a
+site default of `2/10 Net 30`. Not an error — the order overrode the
+default — but it is exactly what prompt A.2 ("supplier setup through
+payment") is asking about, so report it.
+
+### 14.9 What does NOT exist — checked, not merely unfound
+
+Recorded so nobody spends a session looking again.
+
+| Wanted | Status |
+|---|---|
+| Payment number / payment date | **Absent.** Not on the invoice header, not on `invoiceInstallments`, no payments child |
+| Per-invoice match RESULT | **Absent.** Only the configured `MatchApprovalLevel` |
+| PO approval date / approver | **Absent** from `/purchaseOrders` |
+| Receipt documents | Still blocked — see the 2026-07-17 rows on the three receiving resources |
+
+The first is the one to be careful about in a demo: payment STATUS and
+AMOUNT are fully answerable, so "has it been paid" works. "Which payment
+paid it" does not.
+
+### 14.10 Method notes
+
+**A `.links[]` listing beats guessing paths.** One call named every child
+of `/invoices` and ruled out two guesses at once.
+
+**An absent child rules out a path, not a capability.** Holds were
+briefly written off on the strength of no `holds` child; they were one
+level down. Check the children of the children before declaring absence.
+
+**Verify `fields=` per endpoint.** `/standardReceipts` 500s on any
+projection; the supplier-site child accepts it. Neither is inferable from
+the other.
+
+**A control curl is what makes an empty result trustworthy.** 701337's
+zero invoices only became a finding once 162034 proved the filter works.
+This is the second time in two sessions that a control has changed the
+diagnosis (see 13.8).
+
+**An unprojected fetch first, every time.** Both the invoice header and
+the supplier record were curled with no `fields=` specifically to see
+what they carry under their real names. `AmountPaid`, `CanceledFlag` and
+`OnOFACListFlag` were all found that way — none of them was on the list
+of fields anyone had thought to ask for.

@@ -1816,8 +1816,9 @@ entry point, and shared formatters live in `scripts/display_formatters.py`.
 
 # Module 5: PO Lifecycle (cross-module) — build plan and status (2026-07-29)
 
-Appended 2026-07-29. Supersedes the "Shape C proof of concept" framing
-carried in the 2026-07-29 session handoff.
+Appended 2026-07-29, revised the same day after phases 3 and 4 merged.
+Supersedes the "Shape C proof of concept" framing carried in the
+2026-07-29 session handoff.
 
 **This is a module delivery, not a proof of concept.** The question "can
 a deterministic KG pipeline reconcile a lifecycle at all" was answered
@@ -1826,8 +1827,16 @@ same eleven-step build sequence as Module 4 (PO) and Module 1 (AR), held
 to the same bar.
 
 **Cross-module** is the distinction from the other modules: this one owns
-no endpoint family of its own. It spans Purchasing and Accounts Payable,
-assembling a single business object across three resources.
+no endpoint family of its own. It spans Purchasing, Accounts Payable and
+Supplier Master, assembling one business object across six resources —
+PO header, schedules, invoices, invoice installments, supplier, supplier
+site.
+
+> **Corrections in this revision.** Two claims in the first draft were
+> wrong and are corrected below: that `responsible_team` returned
+> "Payments" on PO 701337, and that neither test PO reaches the
+> `Complete` stage. Both were written from inspection rather than from a
+> run. Details in L4 and L5.
 
 ## L0. The goal of this activity
 
@@ -1851,51 +1860,56 @@ written capability-blind and turns out to hold.
 The five collapse into three shapes and ride ONE tool
 (`src/spire/mcp_server/tools/po_lifecycle.py`).
 
-| Catalog | Shape | Reader's question | Data source |
+| Catalog | Shape | Reader's question | What it needs from the tool |
 |---|---|---|---|
-| A.4 | C — Status matrix | Is it done? | `po_lifecycle` as built |
-| A.3 | C — Status matrix | Is it done, per module? | + supplier status join |
-| A.2 | B — Executive summary | Should I care? | + supplier setup fields |
-| A.10 | B — Executive summary | Should I care? | `po_lifecycle` + derivations |
-| A.7 | D — Diagnostic | Why is it stuck? | `po_lifecycle`, narrated |
+| A.4 | C — Status matrix | Is it done? | the four amounts, three flags |
+| A.3 | C — Status matrix | Is it done, per module? | + `setup`, `ApprovalStatus`, `ValidationStatus` |
+| A.2 | B — Executive summary | Should I care? | + `setup`, terms override |
+| A.10 | B — Executive summary | Should I care? | + `risk`, `recommended_action` |
+| A.7 | D — Diagnostic | Why is it stuck? | + `schedules` per-line detail |
 
-Four of the five need no new endpoint. A.3 needs a supplier-master join
-that A.2 wants anyway. That is the whole reason this set was chosen over
-any other five.
+Five prompts, one tool, three renderings. That is the whole reason this
+set was chosen over any other five: no other combination shares a single
+data assembly.
 
-**Scope correction.** The handoff describes this work as Shape C alone.
-It is not. Shapes B and D are in scope, and they are not free: B needs
-risk and recommended-action derivations, D needs the notes list narrated
-as prose rather than listed. Both are synthesizer work that Shape C does
-not require. This was underestimated and is recorded here so it is not
-underestimated again.
+**Scope correction, unchanged from the first draft.** The handoff
+describes this work as Shape C alone. It is not. Shapes B and D are in
+scope and they are not free: B needs risk and recommended-action, D needs
+per-line detail and the notes narrated as prose rather than listed. The
+data for all three now exists; the rendering does not.
 
 ## L2. All ten — what is in, what is outstanding, and why
 
 | # | Prompt (abbreviated) | Shape | In this delivery | What it still needs |
 |---|---|---|---|---|
-| A.1 | Complete lifecycle: lines, schedules, distributions, receipts, holds, approvals, payments | A | no | Receiving + holds + payments resources. Per handoff, all three are unconfirmed or failing on this pod |
-| A.2 | End-to-end summary from supplier setup through payment; stage + team | B | **yes** | Supplier-master join (status, flags, terms) |
-| A.3 | Supplier status, PO approval/communication, receipt, matching, approval, payment status, exceptions | C | **yes** | Supplier status; invoice `ApprovalStatus` (already fetched, unused); PO communication status — UNCURLED |
-| A.4 | Fully received / invoiced / paid, with amounts and supplier detail | C | **yes** | Nothing new. Covered by the tool as built, pending the contract fix |
-| A.5 | Trace across all five modules, all document numbers and statuses | A | no | Receipt numbers, payment numbers |
-| A.6 | Every connected document incl. returns, credit/debit memos, holds | A | no | Same as A.5 plus memo and hold resources |
-| A.7 | Plain-English why-still-open; whose blockage | D | **yes** | Nothing new. `lifecycle_stage` + `responsible_team` + `notes`, narrated |
-| A.8 | Timeline from creation through payment | E | no | Dates on every leg — UNCURLED |
+| A.1 | Complete lifecycle: lines, schedules, distributions, receipts, holds, approvals, payments | A | no | Receiving and payments resources. Holds are now solved (installments); receiving and payment documents are not |
+| A.2 | End-to-end summary from supplier setup through payment; stage + team | B | **yes** | Synthesizer only — data complete |
+| A.3 | Supplier status, PO approval/communication, receipt, matching, approval, payment status, exceptions | C | **yes** | Synthesizer only — see the matching caveat below |
+| A.4 | Fully received / invoiced / paid, with amounts and supplier detail | C | **yes** | Synthesizer only — data complete |
+| A.5 | Trace across all five modules, all document numbers and statuses | A | no | Receipt numbers, payment numbers. **Payment documents do not exist on this path at all** — see L10 |
+| A.6 | Every connected document incl. returns, credit/debit memos, holds | A | no | Same as A.5 plus memo resources. `Requisition` is on the PO header, so the requisition leg is free |
+| A.7 | Plain-English why-still-open; whose blockage | D | **yes** | Synthesizer only — data complete |
+| A.8 | Timeline from creation through payment | E | no | Dates exist (`OrderDate`, `CreationDate`, `InvoiceDate`, `DueDate`) but **no approval or receipt dates** |
 | A.9 | Total cycle time; slowest stage | E | no | Depends entirely on A.8 |
-| A.10 | Executive summary: value, delivery, invoice, payment, risk, action | B | **yes** | Risk and recommended-action derivations |
+| A.10 | Executive summary: value, delivery, invoice, payment, risk, action | B | **yes** | Synthesizer only — `risk` and `recommended_action` are computed |
+
+**A.3's matching caveat.** The tool reports `match_approval_level`
+("3 Way") and `invoice_match_option` ("Receipt") — the CONFIGURED
+matching rule from the supplier site. It does not report a per-invoice
+match RESULT, because no such field exists on this pod. A.3 can say what
+matching was required and whether the invoice validated and was approved;
+it cannot say "1 of 3 invoices failed match". The prompt is answerable;
+the answer is narrower than the catalog's example.
 
 **The other five are a coverage gap this module owns, not a non-goal.**
-Section 4.A is ten prompts; Module 5 will have delivered five of them.
-That is a stated half-coverage of the catalog's strongest demo section,
-and it stays on this module's ledger until closed — it does not quietly
-become someone else's problem or a permanent exclusion.
+Section 4.A is ten prompts; Module 5 will have delivered five. That
+half-coverage of the catalog's strongest demo section stays on this
+module's ledger until closed.
 
-The gap is smaller than 5/10 suggests. A.1, A.5 and A.6 all block on the
-same missing receiving/payments/holds coverage; A.8 and A.9 on the same
-missing dates. **Two curl-discovery efforts would unlock all five**, and
-neither has been attempted. Sequencing them after this delivery is a
-scheduling choice, not a capability limit.
+The gap narrowed during phase 4. Holds turned out to be reachable, and
+dates are richer than assumed. What remains genuinely absent is
+**receiving documents** and **payment documents** — and the second is not
+a discovery problem, it is an absence (L10).
 
 ## L3. Build sequence position
 
@@ -1903,112 +1917,148 @@ Standard sequence, per "Conventions & build sequence" above.
 
 | # | Step | Status |
 |---|---|---|
-| 1 | curl discovery | done 2026-07-28 — see the two POs below |
-| 2 | standalone tool | `tools/po_lifecycle.py` exists; **contract not final** |
-| 2b | **tool contract fix** | **IN PROGRESS — `lifecycle-phase-3-lifecycle-contract`** |
-| 2c | supplier setup join | not started — needs its own curl first |
-| 3 | KG rows | blocked on 2b and 2c. The KG must not lock an interface that is about to change |
+| 1 | curl discovery | **done** — six resources, all verified 2026-07-29 |
+| 2 | standalone tool | **done** — `tools/po_lifecycle.py`, contract final |
+| 3 | KG rows | **NEXT** — the return dict is now stable |
 | 4 | planner | not started |
 | 5 | parser | not started |
 | 6 | server wrapper | not started — historically the most-skipped step |
 | 7 | synthesizer | not started — five-place rule applies |
 | 8 | run display | not started — the other most-skipped step |
 | 9 | prompt set | not started |
-| 10 | tests | not started |
+| 10 | tests | tool-level done (98 tests); pipeline-level not started |
 | 11 | verify end-to-end | not started |
 
-**The ordering constraint that matters:** steps 2b and 2c both change
-`po_lifecycle.py`'s return dict. Step 3 encodes that dict into the KG.
-Doing 3 first means doing it twice.
+**The ordering constraint that mattered has cleared.** Phases 3 and 4
+both changed `po_lifecycle.py`'s return dict, and step 3 encodes that
+dict into the KG. Doing the KG first would have meant doing it twice. The
+dict is now settled and `test_result_shape_is_stable` pins its keys.
 
 **No step is optional here.** Steps 6 and 8 — the server wrapper and the
 display formatter — are the two this project has skipped most often, and
 they are the two that decide whether a working tool becomes a working
 prompt.
 
-## L4. The two open contract decisions
+## L4. The contract decisions — closed
 
-Both predate this activity. Both must close before KG rows.
+Both closed on 2026-07-29 and merged. Recorded because the reasoning
+constrains everything downstream.
 
-### D1 — the paid leg on a PO with no matched invoice
+### D1 — the paid leg on a PO with no matched invoice — CLOSED, tri-state
 
-**Today:** `fully_paid = _is_complete(paid, invoiced)` where `invoiced`
-is the sum of schedule `BilledAmount`, not anything AP holds.
+**Was:** `fully_paid = _is_complete(paid, invoiced)` where `invoiced` is
+the sum of schedule `BilledAmount`, not anything AP holds. On PO 701337
+that evaluated `_is_complete(0.00, 398.00)` → `False`, and the tool
+returned `remaining_to_pay: 398.00` — asserting 398 is owed when no AP
+invoice carrying the PO number exists. The truth is *the bill cannot be
+found*: a different statement with a different owner.
 
-On PO 701337 that evaluates `_is_complete(0.00, 398.00)` → `False`, and
-the tool returns `remaining_to_pay: 398.00`. It asserts 398 is owed. No
-AP invoice carrying this PO number exists, so the truth is *the bill
-cannot be found* — a different statement with a different owner.
+**Now:** `paid_state: "unknown"`, `fully_paid: None`,
+`remaining_to_pay: None`, plus a note naming the break.
 
 | Option | Result on 701337 | Verdict |
 |---|---|---|
-| Leave it | `remaining_to_pay: 398.00`, note explains | Asserts a debt that may not exist |
+| Leave it | `remaining_to_pay: 398.00` | Asserts a debt that may not exist |
 | Base the leg on matched invoices | `_is_complete(0, 0)` → `fully_paid: True` | Worse — claims paid where nothing was paid |
-| **Tri-state** | `fully_paid: None`, stage names the break | **Recommended** |
+| **Tri-state** | `fully_paid: None`, stage names the break | **Chosen** |
 
-**Recommendation: tri-state.** It is the only option that does not assert
-something false, and "the chain breaks here" is precisely what a
-lifecycle view exists to say.
+`paid_state` is the field downstream code must branch on. `fully_paid`
+survives only because A.4 asks for the three flags literally.
 
-**This is larger than it looks.** `fully_paid` is a boolean feeding both
-`_lifecycle_stage()` and `_responsible_team()`, each of which takes three
-booleans. Tri-stating changes all three functions and the return
-contract. Downstream, the synthesizer must render a third state.
+**CORRECTION — the "Payments" claim was wrong.** The first draft stated
+that on a PO with unmatched billing `responsible_team` returned
+"Payments". It did not, on either test PO. 701337 is only partially
+received, so it stops at *Awaiting receipt* / *Supplier / Receiving* —
+both legs before the paid leg. The wrong-team bug was real but reachable
+only on a PO that is fully received AND fully invoiced with unmatched
+billing, which neither test PO is. It was confirmed synthetically and is
+fixed: that case now returns *Accounts Payable — AP invoice not matched
+to this PO*.
 
-**A.7 raises the stakes.** A.7's literal answer *is* `responsible_team`.
-Today, on a PO with unmatched billing, that field returns **"Payments"**
-— the wrong team. The chain breaks at invoicing, so the owner is Accounts
-Payable. D1 is therefore not a nicety; it is the correctness of a
-delivered prompt.
+The lesson is the one this project keeps relearning: **a claim from
+inspection is not a finding.** The correction cost nothing here because
+it surfaced before the doc landed. It would have cost more as an SME
+demo.
 
-### D2 — `_page_all` does not request `totalResults`
+### D2 — `_page_all` did not request `totalResults` — CLOSED
 
-The tool predates phase 3a, which fixed exactly this gap in three AR
-tools. `_page_all` returns `(items, hit_page_cap)` and never asks the pod
-how many rows exist. Impact is low — both fetches are scoped to a single
-PO — but `MAX_PAGES` can still be reached silently, and the fix is cheap
-while the interface is still open.
+Same gap phase 3a fixed in three AR tools. `totalResults=true` is now
+requested on every page and read from the FIRST page only — reading it
+from the last loses it entirely when the cap is hit, which is the case
+the count is needed for. Verified honoured on both
+`/purchaseOrderSchedules` and `/invoices`.
 
-**Note the shape difference:** `po_lifecycle` returns a plain dict, not a
-`ToolResult`, so there is no `total_available` field to populate. The
-totals need somewhere to land — either new keys on the return, or the
-notes list.
+### D3 — where risk and recommended action are computed — NEW, closed
 
-**Unverified premise.** Neither decision has been re-observed this
-session. Per "a diagnosis from a previous session is a claim, not a
-fact", two curls run before either fix:
+A.10 asks for a risk rating and a recommended action. Both are computed
+in the tool (`_assess_risk`, `_recommend_action`), never in the
+synthesizer.
 
-1. Does 701337 still show billed schedules with zero matched invoices?
-   D1's entire basis.
-2. Do `/purchaseOrderSchedules` and `/invoices` return `totalResults`
-   under a single-clause `q=`? D2 is pointless if not.
+The architecture has exactly two LLM boundaries and neither may reason
+about the data. A rating an LLM invents is unreproducible and
+unauditable, and every numeric defect this project has fixed was fixed by
+moving the computation into the tool. `risk_reasons` accompanies every
+rating: **a rating without its cause is an opinion.**
+
+The rule:
+
+| Level | Trigger |
+|---|---|
+| **High** | OFAC listing, supplier/site inactive, site purchasing or payment hold, invoice installment hold, unpaid balance past due, **or truncation** |
+| **Medium** | paid leg unknown, any leg incomplete, matched invoices disagree with schedules, payment terms overridden |
+| **Low** | everything complete and reconciled |
+
+Truncation is High for a different reason from the rest: every other
+trigger is a business condition, but truncation says the ANSWER may be
+wrong. It is the only trigger that can make a confident number false.
+
+### D4 — money source vs context source — NEW, closed
+
+Installments carry holds and due dates but are fetched one call per
+invoice and are therefore CAPPED. Invoice headers are never capped.
+
+**Money comes from headers; context comes from installments.**
+`UnpaidAmount` is a cross-check that lands in `notes`, never a source. A
+bitten cap therefore costs hold visibility, never a number.
 
 ## L5. Test data — the two POs
 
-Verified 2026-07-28. Neither PO exercises all four legs; together they
-cover everything.
+Verified 2026-07-29 against fa-esll-dev37.
 
-| PO | Supplier | Status | Ordered | Received | Invoiced | Paid |
-|---|---|---|---|---|---|---|
-| 701337 | JGA | Open | 1235.00 | 398.00 (derived, 2 of 5 units) | 398.00 | none |
-| 162034 | Lee Supplies | Closed | 758.00 | 758.00 | 758.00 | 830.01 |
+| PO | Supplier | Status | Ordered | Received | Invoiced | Paid | Stage |
+|---|---|---|---|---|---|---|---|
+| 701337 | JGA | Open | 1235.00 | 398.00 (derived, 2 of 5 units) | 398.00 | unknown | Awaiting receipt |
+| 162034 | Lee Supplies | Closed | 758.00 | 758.00 | 758.00 | 830.01 | **Complete** |
 
-**701337** proves partial reconciliation and mixed line statuses (one
-Open, one Closed), and is the sole test case for D1's unknown state. It
-carries `PayOnReceiptFlag: true`, which *may* explain billing with no
-PO-linked invoice via self-billing. **Unconfirmed hypothesis** — do not
-write it into output as fact.
+**701337** proves partial reconciliation, mixed line statuses (line 1
+Open with 837.00 outstanding, line 2 Closed), the unknown paid state, and
+the payment-terms override (PO Net 30 against a site default of
+2/10 Net 30). It carries `PayOnReceiptFlag: true`, which *may* explain
+billing with no PO-linked invoice via self-billing. **Unconfirmed
+hypothesis** — labelled as such in output, never stated as the cause.
 
-**162034** proves the invoice join and carries a genuine exception: an
-invoice **72.01 above** the order, probably tax. Also unconfirmed.
-Nothing in the tool treats over-invoicing as an error, matching
-`compare_orders_to_invoices`; tax, freight and price variance all push an
-invoice above its order legitimately.
+**162034** proves the invoice join, the installment join, and the
+`Complete` stage. It carries a genuine exception: an invoice **72.01
+above** the order. The first draft guessed tax; the PO header reports
+`TotalTax: 0`, so PO-side tax does NOT explain it. The cause remains
+unknown and the tool reports the difference without diagnosing it.
 
-**Two POs is thin for a module delivery.** Before LC-10 signs off, find a
-PO that is fully received, fully invoiced AND fully paid — the "Complete"
-branch of `_lifecycle_stage()` is currently exercised by neither test
-case.
+**CORRECTION — the `Complete` stage is NOT untested.** The first draft
+claimed neither PO reaches it. 162034 does, under both the old and new
+code. Same error class as the "Payments" claim: written from reading, not
+from running.
+
+**What the two POs genuinely do not cover:**
+
+- a partly paid invoice (`paid_state: partial`)
+- an invoice installment on hold
+- a supplier or site setup blocker
+- a truncated fetch
+
+All four are covered by synthetic cases in
+`tests/test_po_lifecycle_tool.py`, which is weaker than real data.
+Finding real POs for the first two would be worth an hour before the SME
+demo.
 
 ## L6. Why `received` is derived
 
@@ -2016,7 +2066,8 @@ Recorded here because it is the single most load-bearing arithmetic in
 the tool and the one no downstream guard can check.
 
 `ReceivedAmount` is 0 or null on EVERY schedule row on this pod — ~4,500
-rows checked 2026-07-28. The received leg exists only as a QUANTITY, so:
+rows checked 2026-07-28, re-verified on 701337 2026-07-29. The received
+leg exists only as a QUANTITY, so:
 
 ```
 received = Amount * (ReceivedQuantity / Quantity)
@@ -2034,31 +2085,30 @@ bitten by.
 
 ## L7. Phase table
 
-One branch per logical change. The contract change is separated from the
-supplier join because it is small, independently testable, and it alone
-blocks KG rows.
-
 | Phase | Branch | Scope | Status |
 |---|---|---|---|
-| LC-3 | `lifecycle-phase-3-lifecycle-contract` | D1 tri-state + D2 `totalResults` | in progress |
-| LC-4 | `lifecycle-phase-4-supplier-setup` | Supplier-master join for A.2, A.3 | not started — curl first |
-| LC-5 | `lifecycle-phase-5-kg-rows` | KG entity + tool + filter rows, tripwire bumps | blocked on LC-3, LC-4 |
-| LC-6 | `lifecycle-phase-6-planner-parser` | Routing, entity synonyms, refusal guards | not started |
-| LC-7 | `lifecycle-phase-7-server-wrapper` | FastMCP registration. **Restart the server** | not started |
-| LC-8 | `lifecycle-phase-8-synthesizer` | Three shapes: C, B, D. Five-place rule | not started |
-| LC-9 | `lifecycle-phase-9-display` | Run display formatter | not started |
-| LC-10 | `lifecycle-phase-10-prompts-tests` | Prompt set + tests + end-to-end verify | not started |
+| 1 | — | Curl discovery: header, schedules, invoices | merged (docs) |
+| 2 | — | Standalone `po_lifecycle` tool | merged |
+| 3+4 | `lifecycle-phase-3-4-tool-layer` | Tri-state paid leg, `totalResults`, `AmountPaid`, `CanceledFlag`, installments/holds, supplier + site setup, computed risk and action, per-schedule detail | **merged 2026-07-29** |
+| 5 | `lifecycle-phase-5-kg-rows` | KG entity + tool + filter rows, tripwire bumps | **next** |
+| 6 | `lifecycle-phase-6-planner-parser` | Routing, entity synonyms, refusal guards | not started |
+| 7 | `lifecycle-phase-7-server-wrapper` | FastMCP registration. **Restart the server** | not started |
+| 8 | `lifecycle-phase-8-synthesizer` | Three shapes: C, B, D. Five-place rule | not started |
+| 9 | `lifecycle-phase-9-display` | Run display formatter | not started |
+| 10 | `lifecycle-phase-10-prompts-tests` | Prompt set + tests + end-to-end verify | not started |
 
-LC-8 is the largest and the one most likely to be underestimated: three
-output shapes, not one.
+Phases 3 and 4 were planned as separate branches and merged as one
+commit: both changed the same return dict, and splitting them would have
+produced an intermediate state nothing consumed.
+
+Phase 8 is the largest and the one most likely to be underestimated:
+three output shapes, not one.
 
 ## L8. Definition of done
 
 Module 5 is complete when all five prompts run from
 `scripts/run_prompt_set.py` and each answer is **read and judged
 correct** — not merely non-erroring.
-
-Classification, per the four-bucket rule:
 
 | Bucket | Counts as done? |
 |---|---|
@@ -2082,32 +2132,57 @@ To be merged into the Live status table above when this work lands.
 
 | Module | Phase | Goal | Branch | Status |
 |---|---|---|---|---|
-| **Lifecycle** | **LC-1** | **Curl discovery — headers, schedules, invoices by PO number** | — | **merged (docs-only)** |
-| Lifecycle | LC-2 | Standalone `po_lifecycle` tool | — | merged, contract open |
-| Lifecycle | LC-3 | Tool contract: tri-state paid leg + `totalResults` | `lifecycle-phase-3-lifecycle-contract` | in progress |
-| Lifecycle | LC-4 | Supplier setup join (A.2, A.3) | `lifecycle-phase-4-supplier-setup` | not started |
-| Lifecycle | LC-5 | KG rows | `lifecycle-phase-5-kg-rows` | blocked |
-| Lifecycle | LC-6 | Planner + parser | `lifecycle-phase-6-planner-parser` | not started |
-| Lifecycle | LC-7 | Server wrapper | `lifecycle-phase-7-server-wrapper` | not started |
-| Lifecycle | LC-8 | Synthesizer — shapes C, B, D | `lifecycle-phase-8-synthesizer` | not started |
-| Lifecycle | LC-9 | Run display | `lifecycle-phase-9-display` | not started |
-| Lifecycle | LC-10 | Prompt set, tests, end-to-end verify | `lifecycle-phase-10-prompts-tests` | not started |
+| Lifecycle | 1 | Curl discovery — six resources | — | merged (docs-only) |
+| Lifecycle | 2 | Standalone `po_lifecycle` tool | — | merged |
+| Lifecycle | 3+4 | Tool layer: contract, setup, risk, per-line detail | `lifecycle-phase-3-4-tool-layer` | **merged** |
+| Lifecycle | 5 | KG rows | `lifecycle-phase-5-kg-rows` | next |
+| Lifecycle | 6 | Planner + parser | `lifecycle-phase-6-planner-parser` | not started |
+| Lifecycle | 7 | Server wrapper | `lifecycle-phase-7-server-wrapper` | not started |
+| Lifecycle | 8 | Synthesizer — shapes C, B, D | `lifecycle-phase-8-synthesizer` | not started |
+| Lifecycle | 9 | Run display | `lifecycle-phase-9-display` | not started |
+| Lifecycle | 10 | Prompt set, tests, end-to-end verify | `lifecycle-phase-10-prompts-tests` | not started |
+
+Suite at merge: **602 passed, 17 deselected, 1 xfailed.**
 
 ## L10. Carried risks
 
-- **Supplier setup fields are UNCURLED.** LC-4 is sized on nothing. It
-  may be one `expand=` or it may be a fourth endpoint with its own
-  quirks. Curl before estimating.
-- **PO communication status (A.3) is UNCURLED.** If the field does not
-  exist on this pod, A.3 answers partially or drops out of the five, and
-  a replacement must be chosen. This is the single biggest threat to the
-  five-prompt commitment.
-- **`_is_complete` treats an expected of zero as complete.** Correct for
-  a zero-amount PO, but it interacts with D1: once the paid leg can be
-  unknown, verify the zero case still reads honestly.
+Ordered by how much damage each can do.
+
 - **The tri-state must not leak as a boolean.** JSON has no tri-state
   bool. `None` serializes to `null`, and any downstream `if fully_paid:`
-  silently treats unknown as false — restoring the exact bug D1 fixes.
-  Check the synthesizer and the display formatter, not just the tool.
-- **The "Complete" lifecycle stage is untested.** Neither test PO reaches
-  it. See L5.
+  silently treats unknown as False — restoring the exact bug D1 fixes.
+  The tool and its runner both assert the invariant; the synthesizer and
+  display formatter do NOT yet exist and are where it will be reintroduced
+  if anywhere. Branch on `paid_state`.
+- **`risk` and `recommended_action` must be COPIED, not regenerated.**
+  The synthesizer prompt must forbid re-deriving either. A model asked to
+  summarise a PO will happily invent its own rating, and it will usually
+  look plausible.
+- **No payment document exists on this pod.** Not "uncurled" — checked.
+  Neither `/invoices` nor `invoiceInstallments` carries a payment number
+  or payment date, and there is no payments child. A.5 and A.10 can
+  report payment STATUS and amount; "which payment settled this" is
+  unanswerable. Do not promise it in a demo.
+- **Setup blockers do not affect `responsible_team`.** A sanctioned
+  supplier on a partially received PO reports *Supplier / Receiving* while
+  `risk` reports High and the action says stop. Arguably setup should
+  outrank the leg ordering entirely. Deliberately not changed in phase 4
+  — it reorders every stage test — but it is a real inconsistency.
+- **`OnOFACListFlag: null` is not `False`.** Null is treated as
+  not-a-blocker, which is right, but "not screened" and "screened clean"
+  are different states and the field cannot distinguish them.
+- **`ack=Document` on 162034 with `PendingResponseRole: null`** *might*
+  mean acknowledged and might mean not tracked. Unconfirmed. A.3 must not
+  turn it into a claim.
+- **Both test suppliers show withholding group `1099-PRG-10-PCT`.**
+  Probably a shared demo group; worth one glance before it appears in a
+  demo as if supplier-specific.
+- **Ages are useless on this pod.** PO 701337 was created 2014-08-12,
+  invoice 162034inv is dated 2013-12-16. `days_overdue` fires only where
+  an unpaid balance exists, so settled invoices produce no absurd age —
+  but any non-null value will be ~4,500 days. The section 6 mockups' "41
+  days overdue" is not achievable here.
+- **`_is_complete` treats an expected of zero as complete.** Correct for
+  a zero-amount PO, and verified to interact correctly with the
+  `nothing_due` state, but worth re-checking if the zero case ever gains
+  a new branch.
