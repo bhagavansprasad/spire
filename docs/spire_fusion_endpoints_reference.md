@@ -58,6 +58,11 @@ Findings observed during POC work that updated or corrected this document.
 | 2026-07-22 | (AR account children) | **The account-child receipt count (1559) EXCEEDS the account-number-filtered top-level count (1386).** Same anchor account (`AccountId=300000047368512` / `CustomerAccountNumber=26360`), same nominal concept, 173-row gap. Unexplained — the child collection appears more broadly scoped than the `CustomerAccountNumber` filter. **OPEN QUESTION:** do not treat the two as interchangeable sources for a receipt count, and settle this before any prompt reports a receipt total. |
 | 2026-07-22 | /standardReceipts | **`?fields=` is UNUSABLE on this endpoint — it 500s even when every named field is valid.** Confirmed twice: a projection of `StandardReceiptId,ReceiptDate,Amount,CustomerName,CustomerAccountNumber,CustomerSite` — every one of which appears in a live unprojected response from this same resource — returned HTTP 500 when combined with `q=`. Dropping `fields=` and changing nothing else returned 200. This is STRONGER than quirk 7 (which is about invalid names): here even valid names fail. Do not project on `/standardReceipts`; fetch the full row and discard fields client-side. Cost six misdiagnosed calls across this session, twice read as a dead endpoint. |
 | 2026-07-22 | /standardReceipts | **`CustomerSite` IS queryable here** (unlike on the `standardReceipts` child, where it 400s): `q=CustomerSite='Santa Clara'` returns HTTP 200, `totalResults: 1735`. `orderBy=CustomerAccountNumber` also works. **BUT the site spans multiple customer accounts** — ascending sort returns account 26360 (ABC Application Software), descending returns 26370 (ABC Corporation Americas), both at site "Santa Clara". So a site-only filter is NOT customer-scoped: 1,735 site-wide vs 1,386 for account 26360 alone. A prompt asking for "receipts at Santa Clara" for a named customer MUST constrain both. |
+| 2026-07-28 | /purchaseOrderSchedules | **A FLAT top-level collection, and the only place all three PO reconciliation legs sit on one row.** Carries `Quantity`/`Amount` (ordered), `ReceivedQuantity`/`ReceivedAmount`, `BilledQuantity`/`BilledAmount`, plus `POHeaderId`, `OrderNumber`, `LineNumber`, `ScheduleNumber`, `ScheduleStatus`. **`q=OrderNumber='<n>'` filters server-side** — previously only `POHeaderId` was documented for this resource. Scannable with `limit`+`offset` for cross-PO discovery. |
+| 2026-07-28 | /purchaseOrderSchedules | **`ReceivedAmount` is 0 or null on EVERY row on this pod** — checked across ~4,500 rows (offsets 0–4500). The received leg exists only as a QUANTITY. Any reconciliation reporting a received AMOUNT must DERIVE it: `Amount * (ReceivedQuantity / Quantity)`. This is not a guess — Oracle's own `BilledAmount` follows the same proration (see 13.2). Label derived figures; do not present them as fetched fields. |
+| 2026-07-28 | /invoices | **`q=PurchaseOrderNumber='<n>'` filters server-side and works** — but the link is sparse. PO 162034 returns one Paid invoice of 830.01; PO 701337 returns ZERO despite its schedules recording 398.00 billed. A PO can carry `BilledAmount` with no invoice bearing its number, so an empty result is NOT proof that nothing was billed. |
+| 2026-07-28 | /purchaseOrders | **`q=OrderNumber='<n>'` filters server-side.** Header carries `Ordered` (Oracle's own total, ex-tax), `Total` (inc-tax), `Supplier`, `SupplierSite`, `Buyer`/`BuyerDisplayName`, `CurrencyCode`, `PaymentTerms`, `ProcurementBU`, `Status`, `FundsStatus`, `PayOnReceiptFlag`. Header `Ordered` matched the sum of schedule `Amount` exactly on both test POs — use the header as authoritative and the schedule sum as a cross-check. |
+| 2026-07-29 | (AR list endpoints) | **`totalResults=true` works on `/receivablesCreditMemos` and both account children** (`creditMemos`, `standardReceipts`). Three tools were setting `total_available` to the RETURNED row count instead, so every capped result claimed to be complete. Requesting the pod's own count is the fix; fall back to the row count when the endpoint omits it. |
 | 2026-07-22 | /standardReceipts | **Composite `q=` fails SILENTLY here — HTTP 200 with `totalResults: 0`.** `q=CustomerSite='Santa Clara' AND CustomerAccountNumber=26360` returns zero rows, although each clause alone returns thousands (1,735 and 1,386 respectively) and their true intersection is non-empty. Confirms quirk 1 applies to this endpoint. **This is the dangerous failure mode**: a tool built on composite `q=` would report "no receipts at that site for this customer" — a plausible-looking, wholly wrong answer, with no error to catch. Prompt 13's design follows from this: filter `q=CustomerAccountNumber` server-side (the more selective clause), then match `CustomerSite` client-side, handling nulls. |
 ---
 
@@ -1321,3 +1326,181 @@ Three specific traps:
   orders both turned out to be fetch caps presented as totals.
 - **An identical count across two runs does not mean identical rows.**
   See 12.2.
+
+---
+
+## 13. PO lifecycle exploration (2026-07-28)
+
+Curl discovery for the lifecycle PoC — "Has PO X been fully received,
+fully invoiced, and fully paid?" Every finding below was observed against
+the live pod before any code was written. Two test POs came out of it,
+and one design decision (deriving the received amount) rests entirely on
+13.2.
+
+### 13.1 `/purchaseOrderSchedules` is flat, and carries all three legs
+
+The reconciliation needs ordered, received and invoiced amounts. All
+three sit on one schedule row, and the resource is a flat top-level
+collection — no drilling through `purchaseOrders/{id}/child/lines/{id}/child/schedules`.
+
+```bash
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "fields=POHeaderId,OrderNumber,LineNumber,ScheduleNumber,Quantity,Amount,ReceivedQuantity,ReceivedAmount,BilledQuantity,BilledAmount,ScheduleStatus" \
+  --data-urlencode "limit=500" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules"
+```
+
+Deliberately no `q=` — composite clauses fail silently on this pod
+(quirk 1) and an amount-comparison filter is unproven here, so the scan
+over-fetches and filters client-side.
+
+**`q=OrderNumber='<n>'` also filters server-side on this resource.** Only
+`POHeaderId` was documented before; both work.
+
+### 13.2 `ReceivedAmount` is empty on this pod — the received leg is a QUANTITY
+
+Every row returned by the scan above had `ReceivedAmount: 0` while
+`ReceivedQuantity` was populated. Checked across offsets 0–4500 (~4,500
+rows): no exceptions.
+
+So a received AMOUNT does not exist on this pod and must be derived:
+
+```
+received = Amount * (ReceivedQuantity / Quantity)
+```
+
+**Oracle's own arithmetic confirms the proration.** PO 701337 line 1:
+
+```json
+{ "Quantity": 4, "Amount": 1116,
+  "ReceivedQuantity": 1, "ReceivedAmount": 0,
+  "BilledQuantity": 1, "BilledAmount": 279 }
+```
+
+`1116 × ¼ = 279`, exactly the `BilledAmount` the pod reports for one unit
+of four. The derivation matches how Fusion itself prorates a partial
+line. Flag it as derived in any output — the underlying field is empty,
+and a reader should know the number was computed.
+
+### 13.3 Finding a PO with a partial chain
+
+Most POs on this pod are fully closed — ordered, received and billed all
+equal — which makes them useless as a reconciliation test: every
+remaining is zero, so a correct answer and a broken one look identical.
+
+Partials are found by scanning and filtering client-side:
+
+```bash
+for off in 500 1000 1500 2000 2500 3000 3500 4000; do
+  curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+    --data-urlencode "fields=POHeaderId,OrderNumber,Quantity,Amount,ReceivedQuantity,ReceivedAmount,BilledQuantity,BilledAmount,ScheduleStatus" \
+    --data-urlencode "limit=500" \
+    --data-urlencode "offset=$off" \
+    "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules" \
+  | jq -c '.items[] | select(.BilledQuantity != .Quantity or .ReceivedQuantity != .Quantity or .BilledAmount != .Amount)'
+done
+```
+
+### 13.4 Test PO 701337 — the partial chain
+
+`POHeaderId=300000081255594`, supplier JGA, Status **Open**,
+`FundsStatus: "Partially Liquidated"`, `PayOnReceiptFlag: true`.
+
+```bash
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "q=POHeaderId=300000081255594" \
+  --data-urlencode "limit=100" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules"
+```
+
+| Line | Qty | Amount | RecdQty | BilledQty | BilledAmt | Status |
+|---|---|---|---|---|---|---|
+| 1 | 4 | 1116 | 1 | 1 | 279 | Open |
+| 2 | 1 | 119 | 1 | 1 | 119 | Closed |
+
+Rollup: ordered **1235.00**, derived received **398.00** (2 of 5 units),
+invoiced **398.00**, remaining to receive/invoice **837.00**. Header
+`Ordered` is 1235.00 — matching the schedule sum exactly.
+
+Useful because it mixes line statuses (one Open, one Closed) and forces
+the header rollup to handle both.
+
+### 13.5 The billed-but-uninvoiced gap
+
+PO 701337's schedules record 398.00 billed, but no invoice carries its
+number:
+
+```bash
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "q=PurchaseOrderNumber='701337'" \
+  --data-urlencode "limit=50" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
+# -> "items": [], "count": 0
+```
+
+**Verified this is data, not a broken filter** — the same query against
+PO 162034 returns a row (13.6). Concluding "no invoices exist" from a
+single empty response would have been a theory; one extra curl made it a
+fact.
+
+`PayOnReceiptFlag: true` on this PO makes self-billing a plausible
+explanation — pay-on-receipt invoices may not carry the PO number on the
+header. **UNCONFIRMED.**
+
+**Consequence for any lifecycle answer:** an empty invoice result is not
+proof of an unpaid balance. It means the AP document could not be
+matched, and the paid leg is unknown rather than zero.
+
+### 13.6 Test PO 162034 — the complete chain, with an exception
+
+```bash
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "q=OrderNumber='162034'" \
+  --data-urlencode "limit=100" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules"
+# -> 1 row: POHeaderId 1, Qty 2, Amount 758, RecdQty 2, BilledQty 2,
+#    BilledAmount 758, ScheduleStatus "Closed"
+```
+
+```bash
+curl -sS --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" -G \
+  --data-urlencode "q=PurchaseOrderNumber='162034'" \
+  --data-urlencode "limit=50" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices"
+# -> 1 invoice, 830.01, PaidStatus "Paid"
+```
+
+Fully matched on the PO side — but the invoice is **72.01 ABOVE** the
+758.00 ordered. Probably tax; **unconfirmed**. Recorded because it is a
+genuine exception case, and because `compare_orders_to_invoices` already
+documents this same PO as its example of legitimate over-invoicing: tax,
+freight and price variances all push an invoice above the order. Do not
+treat invoiced > ordered as an error.
+
+### 13.7 Together the two POs cover all four legs
+
+| PO | Ordered | Received | Invoiced | Paid |
+|---|---|---|---|---|
+| 701337 | 1235.00 | partial (2 of 5 units) | 398.00 | none matched |
+| 162034 | 758.00 | full | 758.00 | 830.01 ✓ |
+
+Neither alone exercises everything. 701337 proves partial reconciliation
+and mixed line statuses; 162034 proves the invoice join and carries the
+over-invoice exception.
+
+### 13.8 Method notes
+
+**Two curls settled what a theory would have got wrong.** The empty
+invoice result for 701337 read like a broken filter; checking a
+known-good PO proved the filter works and the data is genuinely absent.
+Without that, the design would have "fixed" a filter that was fine.
+
+**A fully-closed PO is a weak test case.** Every remaining is zero, so a
+correct reconciliation and a broken one produce the same output. Choose
+anchors where the numbers disagree.
+
+**Field names come from an unprojected fetch.** The PO header was
+curled with no `fields=` specifically to see what it actually carries
+under its real names — `Buyer` vs `BuyerDisplayName`, `Ordered` vs
+`Total` — rather than guessing and debugging later.
+
