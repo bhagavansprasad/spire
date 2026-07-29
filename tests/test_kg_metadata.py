@@ -218,6 +218,35 @@ async def test_kg_table_row_counts_match_v1_1():
     so two near-identical prompts can return different numbers. That is a
     modelling hazard rather than a test concern, but this row count is
     where it becomes visible, so it is recorded here.
+
+    Module 5 phase 5 (PO lifecycle) added the lifecycle reconciliation as
+    a FILTER on the existing PurchaseOrder entity, not as an entity of its
+    own: +1 entity tool (PurchaseOrder/lifecycle_status ->
+    get_purchase_order_lifecycle_status, 9->10) and +1 filter row
+    (kg_entity_filter 23->24). Nothing else moved.
+
+    No new entity, because the vocabulary already binds 'purchase order',
+    'PO' and 'order' to PurchaseOrder — a POLifecycle entity would compete
+    with those for the same words and lose. The lifecycle view is not a
+    different thing, it is a different QUESTION about the same PO, which
+    is what filter_type expresses. PurchaseOrder/by_id is the precedent.
+
+    No new kg_entity_field rows either. The tool returns paid_state, risk,
+    recommended_action, setup and schedules, none of which is a field on
+    /purchaseOrders — they are the tool's return contract (pinned by
+    tests/test_po_lifecycle_tool.py::test_result_shape_is_stable) and are
+    consumed by the synthesizer. kg_entity_field catalogs what the
+    ENDPOINT exposes; a computed field there would misdescribe it.
+
+    One filter, not three, although five catalog prompts (A.2, A.3, A.4,
+    A.7, A.10) route here across three output shapes. They ask for the
+    same DATA and differ only in rendering, which is the synthesizer's
+    choice, not the planner's.
+
+    NOTE the counts in this test are one of FOUR places that must move
+    together, not two as earlier notes implied: this dict,
+    scripts/print_kg.py's expected_rows, and the two
+    "PROMPT Seeded ... (N rows)" banners inside the seed file itself.
     """
     persona = load_persona("default_dev")
     expected = {
@@ -227,8 +256,8 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 97,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 9,
-        "kg_entity_filter": 23,
+        "kg_entity_tool": 10,
+        "kg_entity_filter": 24,
         "kg_edge_tool": 16,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted

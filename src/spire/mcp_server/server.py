@@ -1,5 +1,3 @@
-
-
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
@@ -16,6 +14,7 @@ Tools currently exposed:
 - search_suppliers_by_classification
 - get_buyer
 - get_purchase_order_by_id
+- get_purchase_order_lifecycle_status
 - get_purchase_order_lines
 - get_purchase_order_schedules
 - get_supplier_contacts
@@ -55,6 +54,9 @@ from spire.mcp_server.tools.supplier_classifications import (
 )
 from spire.mcp_server.tools.purchase_order_by_id import (
     get_purchase_order_by_id as _get_purchase_order_by_id,
+)
+from spire.mcp_server.tools.po_lifecycle import (
+    get_purchase_order_lifecycle_status as _get_purchase_order_lifecycle_status,
 )
 from spire.mcp_server.tools.purchase_order_lines import (
     get_purchase_order_lines as _get_purchase_order_lines,
@@ -454,6 +456,50 @@ async def get_purchase_order_by_id(po_header_id: int) -> dict | None:
     async with FusionClient(_persona) as client:
         return await _get_purchase_order_by_id(
             client, po_header_id=po_header_id
+        )
+
+
+@mcp.tool()
+async def get_purchase_order_lifecycle_status(po_number: str) -> dict:
+    """Reconcile ONE purchase order end to end: ordered vs received vs
+    invoiced vs paid.
+
+    Use this for questions about a single PO's progress through receiving,
+    invoicing and payment — "has PO 701337 been fully received, fully
+    invoiced and fully paid", "why is PO 701337 still open", "who owns the
+    next action on PO 701337", "end-to-end summary of PO 701337".
+
+    Distinct from get_purchase_order_by_id, which returns the header alone.
+    Distinct from search_invoices with a purchase_order filter, which lists
+    the invoices raised against a PO rather than reconciling the order.
+
+    Takes the PO NUMBER (OrderNumber, the number printed on the order),
+    NOT the POHeaderId. Assembles six resources: PO header, schedules,
+    invoices, invoice installments, supplier and supplier site.
+
+    Args:
+        po_number: The PO's OrderNumber, e.g. "701337".
+
+    Returns:
+        One po_lifecycle_status dict — NOT a list. Carries the four amounts
+        (received is DERIVED from quantities; ReceivedAmount is empty on
+        this pod), the three remainders, the completion flags, per-schedule
+        detail, supplier and site setup, invoice holds, lifecycle_stage,
+        responsible_team, risk with risk_reasons, recommended_action, and a
+        notes list carrying every gap found. found=False if no such PO.
+
+        TWO FIELDS CAN BE null AND MUST NOT BE READ AS false OR 0:
+        fully_paid and remaining_to_pay, both null when paid_state is
+        "unknown" — the case where the schedules record billing but no AP
+        invoice carries this PO number. Branch on paid_state, never on the
+        truthiness of fully_paid.
+
+        risk and recommended_action are COMPUTED here and must be copied
+        verbatim, never re-derived downstream.
+    """
+    async with FusionClient(_persona) as client:
+        return await _get_purchase_order_lifecycle_status(
+            client, po_number=po_number
         )
 
 
@@ -1196,12 +1242,4 @@ async def aggregate_standard_receipts_by_method(
         
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
-
-
-
-
-
-
-
-
 
