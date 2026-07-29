@@ -1,150 +1,295 @@
-# Spire — Window Handoff (2026-07-28)
+# Spire — Session Handoff (2026-07-29)
 
-Paste this into the new window to continue. It captures what this session
-did and where the next one picks up.
+Paste into the new window to continue. Supersedes the 2026-07-28 handoff.
 
 ---
 
 ## Who / what
 
-Continuing **Spire** — the AI-native NL query system over Oracle Fusion
-Cloud (P2P + AR). Deterministic KG pipeline: parse → plan → execute →
-synthesize. Repo `github.com/bhagavansprasad/spire`, working dir
-`~/pocs/spire`, pod `fa-esll-dev37-...`, creds in `personas.yaml`.
+Continuing **Spire** — AI-native NL query over Oracle Fusion Cloud (P2P +
+AR). Deterministic KG pipeline: parse → plan → execute → synthesize, two
+LLM boundaries only (parser, synthesizer). Tool selection is a KG lookup,
+not an LLM judgement. Not an agent architecture.
 
-## Working style (enforce these)
+Repo `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`, pod
+`fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`, creds in
+`personas.yaml` (gitignored).
 
-- Short responses, one step at a time, interactive.
-- Ask permission before generating code or significant content.
-- Offer numbered options with a recommendation and why.
-- Re-share the current full file before editing — never work from a stale
-  copy; never deliver a patch/diff, always the COMPLETE updated file.
-- One command at a time, verified before the next.
-- Output to `t.txt` (`>` overwrite, `>>` append).
-- Git: one branch per change, PR-based, named `git add` (never `-A`
-  except bulk doc moves), heredoc commit messages. Docs-only → straight to
-  master.
-- **Curl the pod before changing code.** Every fix that stuck this session
-  started with a curl; every theory-first attempt got reverted.
-
-## Build sequence for a new phase
-
-curl discovery → standalone tool → KG rows → planner → parser → server
-wrapper → synthesizer → run display → prompt set → tests → verify E2E →
-branch/PR/merge. The two most-skipped steps that keep biting: the server
-wrapper and the display formatter.
+**Currently on branch `lifecycle-poc`**, freshly merged with master, 504
+tests passing.
 
 ---
 
-## What this session shipped (all merged to master)
+## What the last session did
 
-1. **Column-output feature.** When a prompt names columns, the output is
-   an aligned table of exactly those columns, in order, with the
-   synthesizer summary above it. `intent.fields` non-empty → table; empty
-   → old typed path unchanged. Aggregation unaffected (its `fields` is
-   empty). Tag `v1.3` marks this.
+An SME (Venu) ran 25 prompts and reported 21 failures. The session
+started by analysing that report and ended nine merged phases later.
 
-2. **Address column.** Nested `addresses` flatten to a one-line Address
-   column when present (keys are PascalCase: `FormattedAddress`, `City`,
-   `State`, `Country`). Self-gating — only fires when address data is on
-   the rows.
+**The report was wrong in both directions.** Twelve of the 21 "failures"
+were one stale KG — parse input was ~6,845 tokens against a known-good
+~8,119, which is the KG menu arriving short. Seven more were correct
+refusals of genuinely unanswerable prompts. Meanwhile FOUR real defects
+sat inside prompts marked `[ok]`, including a credit-memo total that
+summed USD, CAD, GBP and EUR into one number and printed it as fact.
 
-3. **Graceful degradation.** When the synthesizer overruns the token cap
-   (`DegenerateOutputError`) on a column query, the run no longer aborts:
-   it's caught in `synthesize_node` (returns `synth_failed`, not `error`),
-   the summary is skipped, and the table prints alone.
+Score went from **11/25 to 25/25 behaving correctly.**
 
-4. **`run_plan.py` retired.** Formatters moved to
-   `scripts/display_formatters.py`; `run_graph.py` and `run_prompt_set.py`
-   both import from there. `run_plan.py` deleted.
+### Merged to master (nine phases)
 
-5. **Prompt sets updated.** `04_columns.txt` flipped from failure-capture
-   to verification; `07_alacarte.txt` added as the column-feature
-   regression set (12 prompts, verified 12/12 clean). README updated.
+| # | What | Why it mattered |
+|---|---|---|
+| 0 | Test-suite realignment | Suite could not COLLECT. 32 failures: 31 stale tests, 1 real bug |
+| 1 | Planner refusal quality | Filter dumps → guards with typeable examples |
+| 2 | Credit-memo currency | `Total credit value: -17232.52` across 4 currencies |
+| 3a | Tools report `totalResults` | 3 tools could never report truncation |
+| 3b | Synthesizer narrates truncation | "25 credit memos" where 2,111 exist |
+| 4 | Deterministic supplier records | 2 prompts burned 48,750 tokens producing NOTHING |
+| 5 | `plan_refusal` flag | Refusal-vs-crash was decided by grepping the message |
+| 6 | StandardReceipt KG alignment | KG advertised a tool the server does not have |
+| 7 | Column display | Record block + table printed the same data twice |
 
-6. **Docs consolidated.** `feature_roadmap` + `spire_expansion_plan` +
-   `spire_lifecycle_goal` merged into `docs/spire_plan.md` (forward-looking;
-   done phases compressed to tables, all pod quirks / parser-runaway
-   findings / lifecycle goal / endpoints catalog kept verbatim). Six
-   superseded docs moved to `docs/archive/`. `context_bundles.yaml`
-   updated (new `prompts` bundle; `root` lists only live docs; scripts
-   cleaned).
+### The finding that outranks the fixes
 
-## Branches / tags right now
+**The KG was not reproducible.** A `lag_query` filter and a
+`get_receipts_with_lag` entity tool were live in the Oracle KG but in
+NEITHER the seed nor master — the code is on
+`feature/ar-prompt-18-parking`. The KG was advertising a tool the running
+server does not have. Anyone running `rebuild_kg.sh` got a different
+system from the one being tested against.
 
-- `master` — clean, all the above merged.
-- `v1.3` — tag: column feature baseline.
-- `v1.2` — tag: KG expansion complete.
-- `pre-lifecycle` — branch: permanent bookmark of master before lifecycle
-  work.
-- `lifecycle-poc` — branch: **currently checked out, empty, where
-  lifecycle work begins.**
+Both rows were removed; they belong with prompt 18 when it lands.
+Seed and database now agree. Counts: `kg_entity_tool` 9,
+`kg_entity_filter` 23.
 
 ---
 
-## The next task: lifecycle PoC
+## Where the lifecycle work stands
 
-The goal (full detail in `docs/spire_plan.md`, "The lifecycle goal"
-section): Spire answers **the state of a business object across its full
-lifecycle** — assembling documents across systems, reconciling amounts,
-detecting exceptions, naming who must act. P2P first; O2C is the same
-shape later.
+Target prompt (SME catalog A.4 + A.2, agreed):
 
-**Why a PoC first:** it's the architecture test. If Spire can produce even
-ONE lifecycle prompt as anticipated, the design holds and the rest is more
-of the same. If it can't, that's worth knowing before building more.
+> "Has PO [number] been fully received, fully invoiced, and fully paid?
+> Show ordered, received, invoiced, paid, and remaining amounts with
+> supplier details, and identify the current lifecycle stage and
+> responsible team."
 
-**Recommended PoC target: Shape C (status matrix).** Per the gap analysis
-it's the closest to reachable (~70%) — PO, lines, schedules, and
-received/billed quantities are already wired. It proves the
-assembly-and-reconcile capability WITHOUT waiting on the endpoints Spire
-has never confirmed (holds, payments, approvals — all "needs curl").
+**Build sequence position: steps 1–2 done, step 3 next.**
 
-**First steps, in order (NO code yet):**
-1. **Pick the test PO.** ~1% of invoices on this pod carry a PO number, so
-   most POs have no linked invoices. The PoC needs a deliberately chosen PO
-   with a full chain (received + invoiced, ideally paid) — not an arbitrary
-   one. PO 2144 is Closed with 2 lines and may not exercise the
-   interesting cases.
-2. **Curl that PO's chain** — header, lines, schedules with
-   `ReceivedQuantity`/`ReceivedAmount`/`BilledQuantity`/`BilledAmount`.
-   Confirm the reconciliation fields are actually populated.
-3. Then design the PoC scope (which reconciliation it proves) and build.
+| Step | Status |
+|---|---|
+| curl discovery | ✅ done |
+| standalone tool | ✅ `src/spire/mcp_server/tools/po_lifecycle.py` |
+| KG rows | ⬅ **NEXT** |
+| planner / parser / server wrapper | pending |
+| synthesizer / display / prompts / tests | pending |
 
-**Known constraint from the gap analysis:** the three receiving resources
-(`receivingTransactions`, `receivingReceipts`, `receivingReceiptRequests`)
-all failed on 2026-07-17 (403 / 400 / staging). Received qty+amount survive
-via `purchaseOrderSchedules`, so reconciliation works, but receipt
-NUMBERS and DATES aren't obtainable. The 403 is a role permission — worth
-re-testing with a different persona before accepting it as permanent.
+### Curl findings (all verified 2026-07-28)
+
+- `/purchaseOrders`, `/purchaseOrderSchedules` both filter server-side on
+  `q=OrderNumber='<n>'` — the schedules one was previously undocumented
+  (only `POHeaderId` was known).
+- **`ReceivedAmount` is 0 or null on EVERY schedule row on this pod**
+  (~4,500 rows checked). The received leg exists only as a QUANTITY, so
+  the amount is DERIVED: `Amount * (ReceivedQuantity / Quantity)`.
+  Oracle's own arithmetic agrees — PO 701337 line 1 is Amount 1116,
+  Quantity 4, ReceivedQuantity 1, and the pod's BilledAmount is 279,
+  exactly 1116 × ¼.
+- Header `Ordered` is Oracle's own total; the schedule sum cross-checks it.
+
+### The two test POs
+
+| PO | Ordered | Received | Invoiced | Paid |
+|---|---|---|---|---|
+| **701337** (JGA, Open) | 1235.00 | 398.00 derived (2 of 5 units) | 398.00 | none |
+| **162034** (Lee Supplies, Closed) | 758.00 | 758.00 | 758.00 | 830.01 ✓ |
+
+Neither has all four legs; together they cover everything. 701337 proves
+partial reconciliation and mixed line statuses (one Open, one Closed);
+162034 proves the invoice join and carries a genuine exception — an
+invoice **72.01 ABOVE** the order, probably tax, unconfirmed.
+
+701337 has `PayOnReceiptFlag: true`, which may explain why it has billing
+with no PO-linked invoice (self-billing). **Unconfirmed hypothesis.**
+
+### Two decisions still open on `po_lifecycle.py`
+
+**1. The paid leg for a PO with no matched invoice.** 701337 reports
+`remaining_to_pay: 398.00`, computed as invoiced − paid where "invoiced"
+comes from SCHEDULES. But no AP invoice exists, so it asserts 398 is owed
+when the truth is "the bill cannot be found."
+
+Options were: leave it; base the paid leg on matched invoices (gives 0.00
+but then `fully_paid: true` on a PO where nothing was paid); or
+**tri-state it** — paid / partially paid / **unknown**. The third was
+recommended and NOT yet decided: it is the only one that doesn't assert
+something false, and "the chain breaks here" is what a lifecycle view
+should say.
+
+**2. The tool predates this session's patterns.** Its `_page_all` does
+not request `totalResults` — the same gap fixed in three AR tools in
+phase 3a. Low impact (both fetches are scoped to one PO) but the
+`MAX_PAGES` cap can still be hit silently. Worth aligning before KG rows
+lock the interface.
 
 ---
 
-## Open issues carried forward (not lifecycle, still real)
+## Open issues, carried forward
 
-From the executive summary's 103-prompt run — the synthesizer-narration
-defects are separate from the column work and mostly untouched:
-- Page size stated as total ("25 suppliers" where 421 exist).
-- Narration asserts fields not in the displayed output (paid/unpaid,
-  open/closed) — several prompts.
-- `count_only` and `open_only` parsed but not applied by the planner.
-- Credit-memo total mixes currencies and includes a positive row.
-- `pytest` NOT run since the executor signature changed (2→3 returns) —
-  highest-risk unknown. **Bhagavan deferred this to after lifecycle work**,
-  but it's still outstanding; `test_executor.py` likely asserts the old
-  shape.
-- KG tripwire drift: `kg_entity_tool` 10 vs 9, `kg_entity_filter` 25 vs 23
-  — bump in both `print_kg.py` and `tests/test_kg_metadata.py`.
+Ordered by how much damage each can do.
 
-## Coupled optimisation (noted, not urgent)
+### Can put a wrong number in front of someone
 
-Column-only supplier queries still run the synthesizer just to discard an
-overrun result (~25K wasted tokens on the address query). Once
-reconciliation/lifecycle settles, consider skipping the synthesize node
-for column-only queries.
+- **Invoice total over a sample.** "invoices for Lee Supplies" says "The
+  total amount for these invoices is 36646.61 USD" — a sum over 25 of
+  1,343 rows, stated flat. Same family as the credit-memo total already
+  fixed, different mechanism.
+- **"country" returns a full address.** "Supplier number and country for
+  active suppliers" produces an `Address` column holding
+  `7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM`. An analyst asking for
+  country wants "United Kingdom".
+- **Only the FIRST address is shown**, silently, for suppliers with 25.
+- **`StandardReceipt` and `AccountReceipt` model the same receipts** with
+  different projections and — per the KG's own notes — DISAGREEING
+  COUNTS. Both are routable by the planner, so two near-identical prompts
+  can return different numbers.
 
-## Files to share when the new window starts a task
+### Known bugs, pinned
 
-`docs/spire_plan.md`, `docs/spire_fusion_endpoints_reference.md`, this
-handoff, plus whichever of the code files the task touches (planner,
-synthesizer, server, the relevant tool). Always re-share before editing.
+- **`search_standard_receipts` can never report `truncated=True`.** It
+  computes truncation then passes `total_available=None`, and
+  `ToolResult.build` derives truncated FROM that None. Pinned by a
+  `strict=True` xfail in `tests/test_standard_receipts_tool.py`, so it
+  cannot be fixed silently. Needs `ToolResult` to express "truncated,
+  total unknown".
+- **W7 — "supplier sites" mis-parses as addresses.** Root cause found:
+  `Address` and `Site` have ZERO `entity_synonym` vocab rows while ten
+  other entities have them, so the parser guesses. But this is a full
+  phase, not a data fix: the synthesizer has NO concept of a site (no
+  `SiteInfo`, no `SupplierRecord.sites`, no prompt clause, no display).
+  Five of ten build steps outstanding.
+
+### Housekeeping
+
+- **17 tests are DESELECTED** by a marker filter nobody has examined. A
+  green suite that silently skips 17 tests is a weaker guarantee than it
+  looks. One command to find out.
+- `print_kg.py` counts may disagree with the tests again after phase 6.
+- Address flattening exists TWICE: `_format_projected_table` for the
+  table, `_address_info` in the synthesizer. One behaviour, two places.
+- "Answer:" prints twice on column queries — once for the summary, once
+  above the table.
+- 31 branches on the remote, most looking merged. Worth a prune.
+
+---
+
+## Token profile (measured, 25-prompt run, post-fixes)
+
+```
+parse       25 calls  in=202,980  out= 7,990  total=210,970   (75%)
+synthesize  10 calls  in= 53,110  out=15,562  total= 68,672   (25%)
+GRAND                                          total=279,642
+```
+
+**Parse input is constant at ~8,119 per call** — the KG menu (22
+entities, 23 filters, 97 vocab terms) rebuilt and re-sent every time. The
+question itself is 10–20 tokens of that.
+
+Parse rose from 65% to **75% of consumption** this session — not because
+parse grew, but because synthesize shrank. The prompt-caching argument is
+now stronger, and its target is unchanged: 202,980 input tokens
+re-sending the same menu 25 times.
+
+**Diagnostic:** if `parse in=` is much below ~8,119, the KG did not
+rebuild. Everything downstream is then meaningless. Check this before
+reading anything into a run.
+
+---
+
+## How to test (give this to QA)
+
+```
+1. git pull
+2. python scripts/rebuild_kg.py          # don't skip — the seed changed
+3. Terminal 1:  python -m spire.mcp_server.server
+   (already running? restart it, or you test old code)
+4. Terminal 2:  python scripts/run_prompt_set.py \
+                  --prompt-file scripts/prompts/qa_testcases.txt
+```
+
+**Classify results in four buckets, not pass/fail:**
+
+| Bucket | Meaning | Bug? |
+|---|---|---|
+| Passed | Answered, and the answer is right | no |
+| Not a valid prompt | Can't be answered as written | no — fix the prompt |
+| Refused | Fair question, not supported yet | no — feature request |
+| Failed | Crashed, or answered WRONGLY | **yes** |
+
+A refusal is not a failure. The dangerous outcome is a confident wrong
+answer — it is the only one that passes a quick read, and it is exactly
+what the SME's original report missed.
+
+**Every prompt runs on its own.** No memory of the prompt before or
+after. "For that PO, how much was received?" cannot work; write "For PO
+2144, how much was received versus ordered?" instead.
+
+---
+
+## Hard-won lessons (carried + new)
+
+**Curl before code.** Every fix that stuck started with a curl; every
+theory-first attempt got reverted.
+
+**A diagnosis from a previous session is a claim, not a fact.**
+Re-observe before acting.
+
+**Read the answers, not the tally.** "21/25 ran cleanly" was true of a
+run where 4 answers were silently wrong. The runner prints this warning
+itself.
+
+**Check the environment before believing a failure report.** One token
+count would have invalidated 12 of the SME's 21 findings before anyone
+read them.
+
+**Fixing a bug can expose a rule the bug was enforcing.** Making the
+synthesizer succeed on address queries removed the failure that had been
+keeping the record block off column output. Nothing else enforced it.
+
+**Don't classify on message text.** Refusal-vs-crash was decided by
+`"require" in err`. Rewording a guard silently reclassified it — and did.
+
+**Compute in the tool, not the prompt.** Every numeric bug fixed has been
+fixed by having the tool compute and the synthesizer copy.
+
+**Ask what already exists before building.** The deterministic-record fix
+was built parallel to the column feature, which had already established
+the same principle and even the same address flattening. Cost: duplicated
+logic and a display regression.
+
+---
+
+## Reference
+
+- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch.
+- **Restart the MCP server after ANY change under
+  `src/spire/mcp_server/`.** Tool definitions are built at import. This
+  has cost false diagnoses more than once. Planner, parser and
+  synthesizer changes do NOT need a restart.
+- Synthesizer five-place rule: adding an entity touches the registry,
+  `_SYSTEM_PROMPT_BY_ENTITY`, `_collect_valid_ids`, the validator
+  function, and the validator dispatch — plus the empty-array guard,
+  whose bucket name must match `_OUTPUT_NAME_BY_ENTITY` exactly.
+- KG tripwires: bump `print_kg.py` AND `tests/test_kg_metadata.py`
+  together.
+- Pod quirks (confirmed): composite `q=` fails silently with HTTP 200 /
+  `totalResults: 0` — use SINGLE clauses only; `expand=sites` ignored on
+  bulk fetches; `/standardReceipts` rejects `fields=` (500);
+  `Supplier.Status` must be matched client-side; child bodies omit the
+  parent id (join key is the URL path); addresses use `expand=addresses`
+  with PascalCase keys and `SupplierAddressId`;
+  `TransacationBusinessCategory` is misspelled by Oracle — use the typo;
+  `curl --compressed` required.
+
+**Files to share when starting a task:** `docs/spire_plan.md`,
+`docs/spire_fusion_endpoints_reference.md`, this handoff, plus the code
+files the task touches. Always re-share before editing — never work from
+a copy pasted earlier in the session.
