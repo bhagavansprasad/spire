@@ -27,8 +27,8 @@ from spire.synthesizer.synthesizer import (
     AddressInfo,
     SupplierRecord,
     SupplierResponse,
+    POLifecycleResponse,
 )
-
 
 @pytest.fixture
 def response_with_addresses():
@@ -99,3 +99,34 @@ def test_none_response_is_unchanged():
     assert _format_synthesized(None, summary_only=True) == (
         "Synthesized response: (none)"
     )
+
+def test_lifecycle_not_found_display_asserts_nothing():
+    """Defect 2, display half: an absent PO gets a header and a sentence.
+
+    The verdict row and the stage line are the damage. The row reads
+    "cannot be determined" per leg, which implies the order exists; the
+    stage line prints an empty owner and an empty risk as if they were
+    values. Emptiness of `legs` is the signal — a found record always
+    carries all four.
+    """
+    response = POLifecycleResponse(
+        summary="No purchase order 999999 exists.",
+        order_number="999999",
+        legs=[],
+        lifecycle_stage="Not found",
+        responsible_team="",
+        risk="",
+        recommended_action="",
+        exceptions=["no purchase order found with OrderNumber '999999'"],
+    )
+
+    rendered = _format_synthesized(response)
+
+    assert "999999" in rendered
+    assert "No purchase order 999999 exists." in rendered
+    assert "cannot be determined" not in rendered
+    assert "Stage:" not in rendered
+    assert "Owner:" not in rendered
+    assert "Amounts" not in rendered
+    assert "no purchase order found with OrderNumber" not in rendered
+    assert response.exceptions  # kept on the response, just not printed    
