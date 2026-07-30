@@ -16,3 +16,26 @@ markers = [
     "integration: marks tests requiring external services (MCP server, Gemini, Fusion pod)",
 ]
 addopts = "-m 'not integration'"
+
+# Diagnostic output, the committed team default (OBS-02).
+#
+# Everything off is UX-05: a plain run prints the answer on stdout, and
+# progress plus the counts footer on stderr. Uncomment a key here and it
+# applies to everyone; override per machine with SPIRE_SHOW_PLANNER=1,
+# or for a single run with --show-planner / --no-show-planner.
+#
+# Set ONLY the keys you want to change. A key written here counts as
+# explicitly set, which is what makes "--show-all --no-show-planner"
+# mean "everything except the planner" — so spelling every key out would
+# leave show_all with nothing to switch on.
+#
+# The section may be deleted entirely; absent means all off. An
+# unrecognised key is an error naming the key, not a silent no-op.
+[tool.spire.diagnostics]
+# show_parser = true
+# show_planner = true
+# show_raw_output = true
+# show_synthesizer = true
+# show_tokens = true
+# show_timings = true
+# show_all = true
