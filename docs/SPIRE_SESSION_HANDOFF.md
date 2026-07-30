@@ -1,7 +1,7 @@
-# Spire — Session Handoff (2026-07-30)
+# Spire — Session Handoff (2026-07-30, evening)
 
 Paste the companion text into the new window to continue. Supersedes the
-2026-07-29 handoff.
+2026-07-30 morning handoff.
 
 ---
 
@@ -16,426 +16,289 @@ Repo `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`, pod
 `fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`, creds in
 `personas.yaml` (gitignored).
 
-**On `master`, clean, 602 tests passing.** Nothing outstanding in the
-working tree.
+**On `master`, clean, 607 tests passing.** Three branches merged this
+session (details below); all three deleted locally after merge.
 
 ---
 
 ## What this session did
 
-**Module 5 (PO Lifecycle) went from a standalone tool to five catalog
-prompts answering end to end.** Phases 3 through 9 of the build sequence,
-merged to master in two commits.
-
-### Merged
-
-| Branch | Phases | Scope |
-|---|---|---|
-| `lifecycle-phase-3-4-tool-layer` | 3, 4 | Tool contract, supplier setup, computed risk, per-line detail |
-| `lifecycle-phase-5-9-pipeline` | 5–9 | KG rows, parser, planner, server wrapper, synthesizer, display |
-
-### The five prompts now answering
-
-Catalog section 4.A: **A.2, A.3, A.4, A.7, A.10.** One tool, one KG filter,
-three output shapes (status matrix, executive summary, diagnostic).
-
-`scripts/prompts/08_lifecycle.txt` — 31 prompts, **30 routed as intended.**
-Zero regressions on the five neighbouring routes that share vocabulary.
-
-### Measured, post-merge
-
-| Metric | Value |
-|---|---|
-| Full suite | 602 passed, 17 deselected, 1 xfailed |
-| Lifecycle tool tests | 98 (`tests/test_po_lifecycle_tool.py`) |
-| Mean wall-clock, answered prompt | 16.0 s (range 4.8–21.4) |
-| Mean tokens per prompt | 12,230 (median 12,288) |
-| **Parse input baseline** | **~8,671** — see the diagnostic note below |
-| Parse share of all input | 78% |
-| KG counts | `kg_entity_tool` 10, `kg_entity_filter` 24 |
-
-**THE STALE-KG DIAGNOSTIC HAS MOVED.** The old rule was "if `parse in=` is
-materially below ~8,119, the KG did not rebuild." Phase 6 added ~546 tokens
-to the parse prompt. **The new baseline is ~8,671.** A run at 8,119 now
-means something is wrong, not right.
-
----
-
-## Contract decisions closed this session
-
-Recorded because they constrain everything downstream.
-
-**D1 — the paid leg is TRI-STATE.** A PO can carry `BilledAmount` on its
-schedules with no AP invoice bearing its number (701337 does). The tool used
-to report `remaining_to_pay: 398.00`, asserting a debt when the truth is the
-bill cannot be found. Now `paid_state: "unknown"`, `fully_paid: None`,
-`remaining_to_pay: None`.
-
-**Branch on `paid_state`, never on the truthiness of `fully_paid`.** JSON
-has no tri-state bool; `None` serializes to `null` and `if fully_paid:`
-reads null as False, which restores the exact defect.
-
-**D2 — `totalResults=true` on every paged fetch**, read from the FIRST page.
-Reading it from the last loses it when the cap is hit, which is the case the
-count is needed for.
-
-**D3 — `risk` and `recommended_action` are computed in the tool**, never in
-the synthesizer, with `risk_reasons` always accompanying the rating. A
-rating an LLM invents is unreproducible and unauditable.
-
-**D4 — money from invoice headers, context from installments.** Installments
-are one call per invoice and therefore capped; headers never are. Sourcing
-money from a capped fetch gives a silently short total. `UnpaidAmount` is a
-cross-check that lands in `notes`, never a source. A bitten cap costs hold
-visibility, never a number.
-
-**D5 — a FILTER on PurchaseOrder, not a new entity.** The vocabulary already
-binds "purchase order", "PO" and "order" to `PurchaseOrder`; a `POLifecycle`
-entity would compete for those words and lose. No `kg_entity_field` rows
-either — the tool's fields are computed, not endpoint fields.
-
-**D6 — ONE filter, not three**, though five prompts route through three
-shapes. They want the same data and differ only in emphasis; rendering is
-the synthesizer's choice, not the planner's.
-
-**D7 — the synthesizer writes the summary ONLY.** Legs, stage, team, risk,
-action, setup notes, exceptions and tables are all built in code by
-`build_lifecycle_response`. See "the paid-leg lesson" below.
-
----
-
-## Three known defects, carried forward
-
-All three found by reading actual output. None produces a wrong number.
-
-**1. A risk-only question is refused.**
-*"What is the risk rating on PO 701337 and why?"* → *"The system does not
-track 'risk rating' for purchase orders."* It does — risk appears with full
-reasoning whenever a broader question is asked. The parser's PO LIFECYCLE
-section covers risk only inside the summary case. **One line of parser
-instruction.**
-
-**2. A non-existent PO renders as "cannot be determined".**
-`found: False` produces *Received: cannot be determined · Invoiced: cannot
-be determined · Paid: cannot be determined*, which implies the order exists
-and is unknowable. The summary sentence is correct and the verdict line
-contradicts it. `build_lifecycle_response` does not branch on
-`found=False`.
-
-**3. Internal ids leak into user-facing prose.**
-The summary says *"supplier JGA (ID 300000047414635)"*. Real, but no finance
-user wants it. One line in the synthesizer prompt.
-
-**Also spotted, not yet fixed:** when the supplier site cannot be read,
-`_build_lifecycle_setup_notes` still prints *"differ from the site default
-(None)"* — comparing against a value it does not have. Same species as
-defect 2: a null rendered as a statement. Gate it on `site_read`.
-
----
-
-## Curl findings added to the reference (section 14)
-
-All verified 2026-07-29. Eleven rows for the quirk table are in §14.0,
-**still to be pasted into the table at the top of the file** — the section
-was appended but the table rows are a manual step.
-
-- `totalResults=true` honoured on `/purchaseOrderSchedules` and `/invoices`
-- **Invoice holds live on `invoiceInstallments`**, not the invoice header.
-  There is no `holds` child. `HoldFlag`, `HoldReason`, `HoldType`, `HeldBy`,
-  `HoldDate`, plus a real `DueDate` and `UnpaidAmount`
-- **NO payment document exists anywhere on the AP path** — no payment
-  number, no payment date, on either the invoice or the installment. This is
-  an absence, not an undiscovered endpoint
-- `AmountPaid` and `CanceledFlag` are on the invoice header. Summing
-  `InvoiceAmount` gated on `PaidStatus == "Paid"` drops partial payments
-  entirely
-- `expand=sites` **works on a single-supplier GET** — the existing "silently
-  ignored" quirk is about BULK fetches only. It returned 22 sites for JGA
-- `suppliers/{id}/child/sites/{siteId}` accepts `fields=` and carries five
-  hold flags plus `MatchApprovalLevel` and `InvoiceMatchOption`
-- Fetch the supplier **by SupplierId** (on the PO header) to sidestep the
-  client-side `Status` matching quirk
-- PO header has supplier-communication fields but **no approval date and no
-  approver**
-- `TotalTax: 0` on 701337 — so PO-side tax does NOT explain 162034's 72.01,
-  which the previous session had guessed
-- `FundsStatus` is null on closed POs
-
----
-
-## Test data
-
-| PO | Supplier | Status | Ordered | Received | Invoiced | Paid | Stage |
-|---|---|---|---|---|---|---|---|
-| **701337** | JGA | Open | 1235.00 | 398.00 derived | 398.00 | **unknown** | Awaiting receipt |
-| **162034** | Lee Supplies | Closed | 758.00 | 758.00 | 758.00 | 830.01 | **Complete** |
-
-701337 proves partial reconciliation, mixed line statuses (line 1 Open with
-837.00 outstanding, line 2 Closed), the unknown paid state, and the
-payment-terms override (PO Net 30 vs site default 2/10 Net 30).
-`PayOnReceiptFlag: true` **may** explain the unmatched billing via
-self-billing — **unconfirmed, and labelled as such in output.**
-
-162034 proves the invoice join, the installment join and the Complete stage.
-Carries an unexplained **72.01** over-invoice.
-
-**What these two do NOT cover:** a partly paid invoice, an invoice on hold,
-a supplier setup blocker, a truncated fetch. All four exist in code and are
-covered by synthetic test cases only. **Finding real POs for the first two
-is worth an hour before any SME demo.**
-
----
-
-## Corrections made this session
-
-Recorded because the pattern matters more than the individual errors.
-
-**"`responsible_team` returns Payments on 701337" — WRONG.** 701337 is only
-partially received, so it stops at *Awaiting receipt* / *Supplier /
-Receiving*, both legs before the paid leg. The wrong-team bug was real but
-reachable only on a PO fully received AND fully invoiced with unmatched
-billing — neither test PO. Confirmed synthetically instead.
-
-**"Neither test PO reaches the Complete stage" — WRONG.** 162034 does, under
-both old and new code.
-
-**"The planner may need zero changes" — WRONG.** It needed two, and one was
-a hard blocker: the `PurchaseOrder` rooting guard accepted only `by_id`,
-`created_before` and `created_since`, so a correctly parsed lifecycle intent
-would still have been refused.
-
-**Invented a helper that did not exist.** Wrote a synthesizer branch calling
-`_synthesize_with_schema`, inferred from the shape of surrounding code.
-Caught by grep before it shipped.
-
-**All four came from reading code rather than running it.** The plan
-document now carries the first two as explicit corrections rather than
-quietly fixing them.
-
----
-
-## Hard-won lessons (carried + new)
-
-**Curl before code.** Every fix that stuck started with a curl; every
-theory-first attempt got reverted.
-
-**A claim from inspection is not a finding.** Four times this session. Cheap
-when caught before the doc lands; expensive in a demo.
-
-**Measure rather than infer, when measurement is one command.** Two KG rows
-with ~150-word `notes` moved parse input by **8 tokens** — which proved the
-notes never reach the parser at all. `KGMenu` carries `filter_types` as bare
-strings: entities get descriptions, filters get nothing. That one number
-settled a question two rounds of code reading had not.
-
-**An absent child rules out a PATH, not a capability.** Invoice holds were
-briefly written off because `/invoices` has no `holds` child. They were one
-level down, on `invoiceInstallments`. Check the children of the children
-before declaring absence.
-
-**A `.links[]` listing beats guessing paths.** One call named every child of
-`/invoices` and ruled out two guesses at once.
-
-**A control curl is what makes an empty result trustworthy.** 701337's zero
-invoices only became a finding once 162034 proved the filter works. Second
-session running where a control changed the diagnosis.
-
-**Parser instruction placement is load-bearing — confirmed again.** The
-refusal cost `out=1412`; the routed answer costs `out=231`. Six times
-smaller, from putting the instruction in a standalone labeled section rather
-than a bullet inside `COMPLETENESS`.
-
-**THE PAID-LEG LESSON — code-built beats prompt-instructed.** The first
-working run reported `Paid: amount=0.0` beside the note *"cannot be
-determined"*. The model copied the tool's `paid: 0.0` faithfully and
-destroyed its meaning: a reader sees 0.00 and concludes nothing was paid.
-The prompt already said not to. Moving leg construction into code removed
-the failure mode instead of guarding against it — and cut synthesize output
-1,824 → 924 for a better answer. **Generalise this pattern.**
-
-**Verify `fields=` per endpoint.** `/standardReceipts` 500s on any
-projection; the supplier-site child accepts it. Neither is inferable from
-the other.
-
----
-
-## Documents produced this session
-
-| Document | Purpose |
-|---|---|
-| `docs/spire_plan.md` §Module 5 | Rewritten with two corrections marked as corrections, phases 3–9 status, seven carried risks |
-| `docs/spire_fusion_endpoints_reference.md` §14 | The 2026-07-29 curl findings. §14.0 rows still to be pasted into the top table |
-| `spire_lifecycle_sme_update.md` | SME-facing: all 31 prompts with results, every refusal explained, known limitations up front |
-| `spire_enhancement_roadmap.md` | 16 raw enhancement items grouped into six themes, resequenced |
-| `spire_enhancement_requirements.md` | Formal spec: 27 requirements, 3 decisions, 12 phases, full traceability to the original 16 |
-
-**The last two are not in the repo yet, and the requirements document is now
-the governing plan for the next phase of work** — see THE NEXT GOAL below.
-Filing them is the first action of the next session.
-
----
-
-## THE NEXT GOAL
-
-**Deliver the enhancement requirements document, and clear the open defects
-along the way.**
-
-That is the whole of the next phase of work. Module 5's five prompts are
-delivered; new catalog coverage (A.1, A.5, A.6, A.8, A.9) is explicitly
-NOT the next goal and should not be started without a decision to change
-direction.
-
-### The governing document
-
-`spire_enhancement_requirements.md` — **27 requirements, 3 decisions, 12
-phases.** It is the plan. It supersedes any ad-hoc feature list, including
-the raw 16-item list it was derived from, and including the roadmap draft
-that preceded it.
-
-**IT IS NOT IN THE REPO YET.** First action of the next session: file both
-planning documents deliberately — `docs/spire_enhancement_requirements.md`
-and, if kept, `docs/spire_enhancement_roadmap.md`. A governing plan that
-lives only in an attachment will be lost.
-
-Requirement IDs are stable and should be quoted in branch names, commit
-messages and test names: `UX-01`, `OBS-03`, `TST-02`, `PRF-05`, `API-01`,
-`DEC-01`.
-
-### Phase 0 — the open defects
-
-Not in the requirements document, because they predate it. Clear them first:
-they are small, they are in front of an SME right now, and two of them are
-instances of the very class `UX-01` addresses.
+Two separate strands of work: the four Phase 0 defects the previous
+handoff carried forward, and a maintainability refactor of the two
+largest source files that was not part of any requirements phase —
+initiated mid-session as its own goal, and treated with the same rigor
+as feature work.
+
+### Strand 1 — Phase 0: the four open defects, cleared
+
+All four found by reading actual output last session; none produced a
+wrong number.
 
 | # | Defect | Fix |
 |---|---|---|
-| 1 | Risk-only question refused | One line in the parser's PO LIFECYCLE section |
-| 2 | Non-existent PO renders "cannot be determined" | `found=False` branch in `build_lifecycle_response` + a display case |
-| 3 | Internal `SupplierId` in user-facing prose | One line in the synthesizer prompt |
-| 4 | Terms note prints "(None)" when the site is unread | Gate on `site_read` in `_build_lifecycle_setup_notes` |
+| 1 | Risk-only question refused | One line + a standalone `RISK ON A PO IS SUPPORTED` block in the parser's PO LIFECYCLE section, mirroring the existing payment block |
+| 2 | Non-existent PO rendered "cannot be determined" per leg | `build_lifecycle_response` branches on `found=False`: no legs, no setup notes, no stage. Display branches on empty `legs`, not on a stage string |
+| 3 | Internal `SupplierId` leaked into prose | `NO INTERNAL IDENTIFIERS IN THE SUMMARY` standalone block added to the synthesizer's POLifecycle prompt |
+| 4 | Terms note printed "differ from the site default (None)" | Gated on `setup.site_read`; an honest alternative sentence when the site couldn't be read |
 
-Roughly half a day. Defects 2 and 4 are the same species — a null rendered
-as a statement — and should be fixed together.
+Defects 2 and 4 are the same species — a null rendered as a statement —
+and were fixed together in one branch, `phase-0-lifecycle-defects`.
 
-### Then the requirements phases, in order
+**Five new tests**, all deterministic (no LLM, no pod): the `found=True`
+case is tested alongside `found=False`, guarding the D1 tri-state trap
+where branching on a leg's truthiness (rather than on `found`) would
+silently empty a valid answer.
 
-Sequence is per §10 of the requirements document. Dependency-ordered, not
-priority-ordered.
+**Verified live, 31-prompt lifecycle set: 31/31, up from 30/31.** No
+regressions on neighbouring routes or the three expected refusals.
 
-| Phase | Requirements | What it is |
+**The stale-KG diagnostic baseline moved.** Defect 1 added ~140 tokens to
+every lifecycle parse call. Old baseline ~8,671. **New baseline is a
+range, ~8,805–8,819**, varying with question length — treat it as a
+range, not a constant.
+
+Merged to master as commit `b160104`'s successor (see `git log`).
+
+### Strand 2 — maintainability refactor (not a requirements phase)
+
+Initiated by explicit request mid-session: "any file beyond 600 lines,
+split into two" — corrected during the work from a hard line-count rule
+to a maintainability goal once it became clear a single file could need
+five or six splits, not two. Two files done this session; two more
+identified and parked.
+
+**`synthesizer.py`: 3,056 → 491 lines**, split into nine sibling files,
+branch `refactor-synthesizer-modules`:
+
+| File | Lines | Contents |
 |---|---|---|
-| **1** | `UX-05`, `OBS-01`, `OBS-02` | Quiet default output; independent per-component debug flags; config file with CLI override |
-| **2** | `UX-01`, `UX-02`, `UX-03` | Structured refusals; narrowing guidance for over-broad queries; truncation disclosure |
-| **3** | `OBS-03`, `OBS-04`, `OBS-05` | Per-stage timing; per-Fusion-call timing; machine-readable run record |
-| **4** | `TST-02`, `TST-03`, `TST-01` | Plan tests (no LLM, no pod — do first); synthesizer tests on fixed records; routing tests |
-| **5** | `PRF-01` | Deterministic response construction across all shapes |
-| **6** | `PRF-02`, `PRF-03` | Prompt caching for the KG menu; exact-match intent cache |
-| **7** | `PRF-05` | Concurrent Fusion calls |
-| **8** | `UX-04`, `PRF-07`, `PRF-08` | Aggregate fallback; verify against the latency and token targets |
-| **9** | `API-01`, `API-02` | REST interface; structured response contract |
-| **10** | `API-03` | Spire as one MCP tool — requires `DEC-02` |
-| **11** | `PRF-06`, `PRF-04` | Vocabulary into the KG; evaluate the semantic intent cache |
-| **12** | `API-04`, `API-05` | Configuration UI; query console — constrained by `DEC-03` |
+| `constants.py` | 30 | `LIFECYCLE_SHAPE`, model config |
+| `errors.py` | 31 | the three error types |
+| `models_common.py` | 84 | shared sub-models, the two shared Field defs |
+| `p2p.py` | 402 | Supplier/Invoice/PurchaseOrder/Address schemas + supplier-record builders |
+| `ar.py` | 497 | ReceivablesInvoice/CustomerAccount/CreditMemo/StandardReceipt schemas |
+| `aggregation.py` | 422 | ranking/count/comparison schemas + their deterministic builders |
+| `prompts.py` | 418 | system-prompt preamble, per-entity blocks, prompt assembly |
+| `validation.py` | 554 | `_collect_valid_ids` (the id fingerprint) + every validator + dispatch |
+| `lifecycle.py` | 451 | Module 5 whole — models, builders, shape detector, validator, prompt text, all in one file |
 
-**Phases 1 to 4 produce no new capability**, and that is the point. They are
-the reason every later phase is faster and safer: without phase 3 no
-optimisation can be proven to have helped, and without phase 4 none can be
-shown not to have broken something.
+`synthesizer.py` itself now holds only the two registries, two backward-
+compat aliases, the two shared shape detectors, and `synthesize_response`.
 
-**Resist starting at phase 5 or 6.** The gains there are visible and the
-temptation is real. It is also how an unmeasured optimisation becomes an
-unnoticed regression.
+**`planner.py`: 1,764 → 439 lines**, split into six sibling files,
+branch `refactor-planner-modules`:
 
-### The baseline the targets are measured against
-
-From this session, on the 31-prompt run. `PRF-07` and `PRF-08` are stated
-relative to these numbers, so they must not be re-derived from a different
-run without saying so.
-
-| Metric | Baseline | Target |
+| File | Lines | Contents |
 |---|---|---|
-| Mean wall-clock, answered prompt | 16.0 s | under 8 s (`PRF-07`) |
-| Mean tokens per prompt | 12,230 | under 4,000 (`PRF-08`) |
-| Parse share of all input tokens | 78% | — |
-| Fusion calls per lifecycle prompt | 6, sequential | concurrent (`PRF-05`) |
+| `registries.py` | 222 | the nine v1 mapping tables |
+| `kg_db.py` | 187 | Oracle connection + lazy-loaded, cached filter definitions |
+| `models.py` | 159 | `Intent`, `Step`, the `Plan` alias |
+| `lookup.py` | 288 | `find_entity`, `find_edge`, `find_pattern_for_filter`, `resolve_vocab` |
+| `date_utils.py` | 50 | `_compute_date_n_months_ago` and its two helpers |
+| `plan_builders.py` | 577 | everything `generate_plan` delegates to |
 
-## Open questions awaiting a decision
+`planner.py` itself now holds only `generate_plan` and re-exports.
 
-From the requirements document §9. **Decisions, not tasks.**
+**Both refactors are organisation only — no behavioural change.**
+Verified by:
+- Byte-diffing extracted content (prompt text, registries, schema field
+  sets) against the pre-refactor file.
+- Real import tests against actual sibling modules, not stubs.
+- Full test suite after each move: 607 passed both times.
+- Live pod runs before and after each refactor, same prompt
+  (`"What is the risk rating on PO 701337 and why?"`) — **token counts
+  and the rendered answer were byte-identical** across both refactors.
+  The refactor moved zero tokens.
+- The synthesizer split additionally verified with the 31-prompt
+  lifecycle set: 31/31, matching the post-Phase-0 baseline, Phase 0's
+  fixes (no leaked ids, no "site default (None)") spot-checked intact.
+- The planner split additionally re-ran the same 31-prompt set after
+  merge: 31/31 again, including the planner-guard refusal on "Open POs
+  for supplier JGA" — the exact case a prior session found as a hard
+  blocker in this code, still routing correctly.
 
-**DEC-01 — planner architecture.** Should the KG planner be supplemented or
-replaced by an LLM planner, single-agent or multi-agent? **This is a
-reversal of Design 3, not an enhancement.** Proposed resolution: keep the KG
-planner primary, add an LLM fallback for currently-refused questions only —
-additive, evaluable, no rewrite.
+**Two near-misses during the synthesizer split, both caught by pytest,
+not by inspection:**
+1. `_direction_phrase` — used directly by `tests/test_compare_orders_to_invoices.py`
+   but missed by a grep that only covered uploaded files, not the whole
+   repo. Fixed by re-running the grep against the actual `tests/` tree.
+2. `validation.py` used `LIFECYCLE_SHAPE` inside `_collect_valid_ids`
+   without importing it. The standalone import test exercised that
+   function with a supplier-shaped record only, never a lifecycle-shaped
+   one — so the module imported cleanly and still failed at runtime on a
+   branch nobody had hit. Caught by the full pytest run.
 
-**DEC-02 — copilot exposure.** Expose the MCP tools directly (discards KG
-planning and every guard), expose Spire as ONE MCP tool running the full
-pipeline (preserves everything), or expose REST? Proposed: the second, with
-REST for breadth.
+**Lesson applied successfully on the very next split (planner):**
+enumerated the complete external contract *before* extracting anything —
+grepped `from spire.planner.planner import` across `tests/`, `src/`, and
+`scripts/`, then paged through every multi-name import block by hand
+(`test_planner.py` alone names 21 distinct symbols). Zero import failures
+resulted. Direct cause-and-effect from the synthesizer near-misses.
 
-**DEC-03 — multi-backend.** "Connect to any HCM" is a programme, not a
-configuration screen. Every documented pod quirk is Fusion-specific. Must
-not block the UI work.
+### Not started this session
+
+**`src/spire/mcp_server/tools/po_lifecycle.py`** (993 code lines) —
+mapped into four layers (constants, async I/O fetchers, pure
+data-shaping/reconciliation functions, judgement functions for
+stage/team/risk/action) plus the orchestrator. The full external contract
+was gathered (`tests/test_po_lifecycle_tool.py` and
+`test_tools/try_po_lifecycle.py` between them import 25 names). Not yet
+extracted — parked when the session's priority shifted.
+
+**`src/spire/mcp_server/server.py`** (1,052 code lines) — mapped: 33
+registered `@mcp.tool()` wrappers (its own module docstring is stale and
+only lists 19 — a small, unfixed documentation gap, noted not chased).
+They group cleanly into the same P2P/AR/aggregation/comparison/lifecycle
+lines `synthesizer.py` already split on (12/11/6/3/1). **This one is not
+a pure file-move**: every tool is registered against one shared
+`mcp = FastMCP("spire")` instance created in this file. Splitting
+registration into domain files requires pulling `mcp` and `_persona` into
+a small `core.py`, then having each domain file import it and register
+its own tools — `server.py` then imports every domain file *for the side
+effect of registration*, nothing calls them directly. Proposed layout
+(`core.py`, `register_p2p.py`, `register_ar.py`, `register_aggregation.py`,
+`register_comparison.py`, `register_lifecycle.py`, slimmed `server.py`)
+was presented and not yet approved. **Needs a decision on the
+registration pattern before any code is written**, not just a mechanical
+split.
 
 ---
 
-## Carried forward from the previous handoff — still open
+## Numbers to carry forward
 
-Not touched this session.
+| Metric | Before this session | After this session |
+|---|---|---|
+| Tests passing | 602 | **607** |
+| Lifecycle 31-prompt set | 30/31 | **31/31** |
+| Parse tokens (lifecycle path) | ~8,671 | **~8,805–8,819** (range, from Phase 0 defect 1 only — unaffected by either refactor) |
+| `synthesizer.py` | 3,056 lines | **491 lines** (+ 9 sibling files) |
+| `planner.py` | 1,764 lines | **439 lines** (+ 6 sibling files) |
+
+The requirements document's §3 baseline table (16.0s mean wall-clock,
+12,230 mean tokens, measured 2026-07-29) is **unchanged by anything in
+this session** — both refactors were proven token-identical, and Phase 0
+only moved the parse-side figure, not the measured performance baseline
+PRF-07/PRF-08 target against. No re-derivation needed yet.
+
+---
+
+## Status against `docs/spire_enhancement_requirements.md`
+
+**Phase 0 (the four defects, not in the requirements doc): done, merged.**
+
+**Phase 1 (UX-05, OBS-01, OBS-02— quiet default output, per-component
+debug flags, config precedence): NOT STARTED.** This is the actual next
+step in the governing plan. Nothing this session touched it.
+
+**Phases 2–12: not started**, unchanged from the plan's own sequencing.
+
+**The synthesizer and planner refactors are orthogonal to this document**
+— not a requirement, not a phase, and should not be read as partial
+progress on any specific item. Worth naming one adjacency directly:
+**PRF-01 ("deterministic response construction across all shapes")**
+will now be easier to implement precisely because response-building code
+already lives in per-domain modules (`p2p.py`, `ar.py`, `aggregation.py`,
+`lifecycle.py`) rather than scattered across one 2,452-line file. That is
+a side effect, not a claim that PRF-01 is underway.
+
+**DEC-01, DEC-02, DEC-03 — untouched, no new information.**
+
+**One new pending decision, same shape as DEC-01–03:** how `server.py`'s
+tool registration should be organised (see "Not started this session"
+above). Proposed resolution: `core.py` + domain-grouped `register_*.py`
+files, imported by `server.py` for side effect. Not yet decided.
+
+---
+
+## Carried forward — still open
+
+Unchanged from the previous handoff unless noted.
 
 **Can put a wrong number in front of someone**
 
 - **Invoice total over a sample.** "invoices for Lee Supplies" states a
-  total summed over 25 of 1,343 rows as fact. Same family as the
-  credit-memo defect already fixed, different mechanism.
-- **"Country" returns a full address.** Asking for country yields
-  `7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM`.
+  total summed over 25 of 1,343 rows as fact.
+- **"Country" returns a full address.**
 - **Only the FIRST address is shown**, silently, for suppliers with many.
 - **`StandardReceipt` and `AccountReceipt` model the same receipts** with
   disagreeing counts, and both are routable.
 
 **Pinned bugs**
 
-- **`search_standard_receipts` can never report `truncated=True`.** Pinned
-  by a `strict=True` xfail. Needs `ToolResult` to express "truncated, total
-  unknown".
-- **W7 — "supplier sites" mis-parses as addresses.** Root cause: `Address`
-  and `Site` have ZERO `entity_synonym` rows. But the synthesizer has no
-  concept of a site at all, so this is a full phase, not a data fix.
+- **`search_standard_receipts` can never report `truncated=True`.**
+- **W7 — "supplier sites" mis-parses as addresses.**
 
 **Housekeeping**
 
 - **17 tests are DESELECTED** by a marker filter nobody has examined.
-- Address flattening exists twice.
-- ~31 branches on the remote, most looking merged. Worth a prune.
+- Address flattening exists twice. (Note: `_address_info` moved from
+  `synthesizer.py` to `p2p.py` this session — same duplication, new
+  location, not fixed.)
+- **Remote branch prune still pending.** Three feature branches were
+  deleted *locally* after merging this session
+  (`phase-0-lifecycle-defects`, `refactor-synthesizer-modules`,
+  `refactor-planner-modules`); the remote copies on GitHub have not been
+  deleted. ~31 remote branches total, most merged — worth a prune pass.
+
+---
+
+## Hard-won lessons (carried + new)
+
+**Curl before code.** Unchanged, not exercised this session (no pod-side
+work).
+
+**A grep across uploaded files is not a grep across the repo.** Both
+synthesizer near-misses came from checking only the files that had been
+shared, not the actual `tests/` directory. The fix each time was running
+the grep against the real tree and reading every multi-name import block
+in full — not summarising it.
+
+**Enumerate the full external contract before extracting, not after.**
+Confirmed as a working practice on the planner split: zero import
+failures, versus two on the synthesizer split where this step was done
+incompletely.
+
+**A module importing cleanly does not mean every branch inside it is
+correct.** The `LIFECYCLE_SHAPE` miss survived a real (non-stub) import
+test because that test happened to exercise `_collect_valid_ids` with a
+supplier-shaped record, never a lifecycle-shaped one. The generalised
+version of "a claim from inspection is not a finding": a claim from *one
+successful import* is not a finding either, if the code path that matters
+wasn't the one exercised.
+
+**Byte-diff extracted content, don't just re-import it.** Applied to
+prompt text, registries, and schema field-sets on both refactors. Found
+nothing wrong this time, but is now the standard bar for any future
+split — an import test proves the names resolve; a byte-diff proves the
+content wasn't altered in transcription.
+
+**A stated rule should be corrected the moment it stops fitting, in the
+open.** "Split any file over 600 lines into two" was corrected mid-session
+to "split for maintainability, aiming under ~600" once `synthesizer.py`
+turned out to need five splits, not two. Said so directly rather than
+quietly doing five splits under a rule that promised two.
 
 ---
 
 ## Reference
 
-- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch. Seed is
-  `scripts/sql/kg_schema.sql` (schema AND data, 384 inserts).
+- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch.
 - **Restart the MCP server after ANY change under `src/spire/mcp_server/`.**
-  Tool definitions are built at import. Planner, parser and synthesizer
-  changes do NOT need a restart.
-- **KG counts live in FOUR places, not two:** `scripts/print_kg.py`,
-  `tests/test_kg_metadata.py`, and the two `PROMPT Seeded ... (N rows)`
-  banners inside the seed file itself.
-- Synthesizer five-place rule: registry, `_SYSTEM_PROMPT_BY_ENTITY`,
-  `_collect_valid_ids`, the validator function, the validator dispatch —
-  plus the empty-array guard, whose bucket name must match
-  `_OUTPUT_NAME_BY_ENTITY` exactly. **Module 5 needed two more:** a shape
-  detector, and a branch in the schema-selection chain.
+  This applies with extra force to a future `server.py` split, which
+  touches the whole directory's shape.
 - Standalone tool runner: `python test_tools/try_po_lifecycle.py 701337
-  162034`. No MCP, no KG, no LLM — a failure is the tool's or the pod's and
-  can be nothing else. It asserts the contract and exits non-zero on a
-  violation.
-- Pod quirks: see `docs/spire_fusion_endpoints_reference.md`. Composite `q=`
-  fails silently with HTTP 200 / `totalResults: 0` — SINGLE clauses only.
+  162034`.
+- Full suite: `python -m pytest -q` — 607 passed, 17 deselected, 1
+  xfailed is the current clean baseline.
+- Lifecycle regression: `python scripts/run_prompt_set.py --prompt-file
+  scripts/prompts/08_lifecycle.txt` — 31/31 is the current clean baseline.
+- Pod quirks: see `docs/spire_fusion_endpoints_reference.md` — nothing
+  new added this session.
 
-**Files to share when starting a task:** `docs/spire_plan.md`,
-`docs/spire_fusion_endpoints_reference.md`, this handoff, plus the code
-files the task touches. **Always re-share before editing — never work from a
-copy pasted earlier in the session.** Three files were edited from bundle
-copies this session; all three needed a "diff before copying in" warning.
+**Files to share when starting the next task:** this handoff,
+`docs/spire_enhancement_requirements.md` (the governing plan — Phase 1 is
+next), plus the code files the task touches. If resuming the `server.py`
+question specifically, share `src/spire/mcp_server/server.py` fresh
+rather than working from anything pasted earlier in a prior session —
+every file in this project drifts between sessions and re-sharing is the
+standing rule, not an exception.
