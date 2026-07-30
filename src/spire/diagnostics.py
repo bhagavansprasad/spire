@@ -419,13 +419,20 @@ def get_logger(component: str) -> logging.Logger:
 def answer(text: str) -> None:
     """Write the answer to stdout.
 
-    A one-line wrapper over ``print``, worth having for two reasons:
-    it names the stdout half of this module's contract explicitly, and
-    it makes every legitimate stdout write greppable — so a stray
-    ``print()`` reappearing in the answer path is visible rather than
-    camouflaged among the intended ones.
+    A one-line wrapper over ``print``, worth having for three reasons.
+    It names the stdout half of this module's contract explicitly. It
+    makes every legitimate stdout write greppable, so a stray ``print()``
+    reappearing in the answer path is visible rather than camouflaged
+    among the intended ones. And it flushes.
+
+    **The flush is not cosmetic.** Python block-buffers stdout when it is
+    a pipe but leaves stderr unbuffered, so `run ... | tee` showed every
+    diagnostic BEFORE the answer it belonged to — the counts footer for
+    one prompt landing above that prompt's own output. Answers and
+    diagnostics travel on different streams by design; without this they
+    also arrive in the wrong order.
     """
-    print(text, file=sys.stdout)
+    print(text, file=sys.stdout, flush=True)
 
 
 # ─────────────────────────────────────────────────────────────────────

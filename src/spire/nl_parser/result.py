@@ -35,8 +35,8 @@ from spire.planner.planner import Intent
 class RefusalFlavor(str, Enum):
     """Why a prompt could not be turned into a valid Intent.
 
-    The three flavors map to the three points at which KG validation can fail
-    (Q3). They are distinguished because the KG comparison already reveals
+    The flavors map to the points at which a prompt can fail to become an
+    Intent. They are distinguished because the KG comparison already reveals
     which check tripped — so naming the flavor is nearly free and makes the
     eventual user message far more useful.
 
@@ -48,16 +48,29 @@ class RefusalFlavor(str, Enum):
     - UNSUPPORTED_OPERATION: the entity is known but the operation is not
       (e.g. aggregation / target_entity=Buyer). Mirrors the synthesizer's
       existing UnsupportedEntityError case.
+    - MISSING_IDENTIFIER: the entity and the operation are both supported;
+      the prompt simply never says WHICH record. Either it carries an
+      unresolvable pronoun ("tax lines for that invoice line") or names no
+      identifier at all ("verify a newly created AR invoice"). Spire is
+      one-shot and has no conversation memory, so refusing is correct — but
+      this is emphatically NOT the same as not supporting the record, and
+      conflating the two is what made refusals read as breakage.
     - UNPARSEABLE: the prompt could not be turned into any structured Intent
       at all (e.g. "who's our best supplier?" — too vague to pin to an
-      entity/metric). Distinct from the three KG-mismatch flavors: here the
+      entity/metric). Distinct from the KG-mismatch flavors: here the
       LLM could not produce a candidate, rather than producing one the KG
       rejected.
+
+    MISSING_IDENTIFIER was added in Phase 2 (UX-01). Before it, every one of
+    these landed on UNKNOWN_ENTITY, so a supported record with a missing id
+    was reported as a record type Spire "doesn't track yet" — while the
+    capability sentence immediately above named that very type as supported.
     """
 
     UNKNOWN_ENTITY = "unknown_entity"
     UNSUPPORTED_FILTER = "unsupported_filter"
     UNSUPPORTED_OPERATION = "unsupported_operation"
+    MISSING_IDENTIFIER = "missing_identifier"
     UNPARSEABLE = "unparseable"
 
 

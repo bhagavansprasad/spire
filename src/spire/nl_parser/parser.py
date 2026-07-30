@@ -644,24 +644,46 @@ def parse(
         )
 
     # The model explicitly declared the prompt out of scope (the structural
-    # half of the silent-rewrite fix). Trust the REFUSAL, but don't trust the
-    # model to know WHICH kind of refusal it is — feature 1 tagged every
-    # self-declared refusal UNPARSEABLE. Feature 8 re-derives the flavor from
-    # the draft + KG menu (UNKNOWN_ENTITY for contracts, UNSUPPORTED_OPERATION
-    # for aggregation), falling back to UNPARSEABLE only when nothing more
-    # specific fits.
+    # half of the silent-rewrite fix).
+    #
+    # Phase 2 (UX-01) changed WHO decides the kind. Feature 1 tagged every
+    # self-declared refusal UNPARSEABLE; feature 8 re-derived the flavor by
+    # scanning the model's reason prose for capitalized words, which matched
+    # "To", "ID", "Filtering" and "Receipt" and so returned UNKNOWN_ENTITY
+    # for four of four measured refusals. The model now states the kind
+    # outright in `unanswerable_kind`, and derive_flavor trusts it — see
+    # capability.derive_flavor for the order of trust and why the prose scan
+    # is gone rather than repaired.
     if response.unanswerable:
         reason = response.unanswerable_reason or "The prompt is out of scope."
-        flavor = derive_flavor(reason, response.target_entity, menu)
-        offending = (
-            response.target_entity
-            if flavor is RefusalFlavor.UNKNOWN_ENTITY and response.target_entity
-            else None
+        flavor = derive_flavor(
+            reason,
+            response.target_entity,
+            menu,
+            draft_kind=response.unanswerable_kind,
+            draft_entity=response.unanswerable_entity,
         )
+        # Carry the entity through for EVERY flavor, not just
+        # UNKNOWN_ENTITY. The renderer needs it to say "I can look up AR
+        # invoices, but this doesn't say which one" rather than falling back
+        # to "I'm not sure which record you mean". It means different things
+        # per flavor — the missing type for UNKNOWN_ENTITY, the supported
+        # type everywhere else — which is fine: the renderer branches on
+        # flavor anyway, and validate_intent has always populated it this way.
+        #
+        # `unanswerable_entity` first: `target_entity` is required to stay
+        # EMPTY on a self-declared refusal (the instruction that stops the
+        # model mangling an out-of-scope prompt into the nearest supported
+        # entity — the silent-rewrite fix). So a second, purely descriptive
+        # field carries the record type for wording, leaving that guard
+        # untouched. target_entity remains the fallback for the paths where
+        # it is legitimately set.
         return ParseResult.refuse(
             flavor=flavor,
             detail=reason,
-            offending_entity=offending,
+            offending_entity=(
+                response.unanswerable_entity or response.target_entity or None
+            ),
         )
 
     # Shape-level conversion. A malformed filter value (non-JSON) is an

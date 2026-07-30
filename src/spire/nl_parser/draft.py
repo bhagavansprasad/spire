@@ -164,6 +164,14 @@ class DraftIntent(BaseModel):
     Supplier query). Giving the model an explicit ``unanswerable`` flag lets
     it CHOOSE refusal rather than mangle the request. When set, the parser
     turns it into a Refusal directly, without consulting target_entity/filters.
+
+    ``unanswerable_kind`` was added in Phase 2 (UX-01). The model was always
+    producing an accurate ``unanswerable_reason``; the parser then threw it
+    away and re-derived the flavor by scanning that prose for capitalized
+    words — which matched "To", "ID", "Filtering" and "Receipt" and so
+    returned UNKNOWN_ENTITY for essentially every refusal. Asking the model
+    for the kind directly replaces a heuristic that was wrong four times out
+    of four with the judgement it had already made.
     """
 
     unanswerable: bool = Field(
@@ -185,6 +193,49 @@ class DraftIntent(BaseModel):
             "entity, which is not supported' or 'needs spend aggregation')."
         ),
     )
+
+    unanswerable_kind: str = Field(
+        default="",
+        description=(
+            "When unanswerable is true, WHICH KIND of unanswerable. Exactly "
+            "one of these five values. "
+            "'missing_identifier': the record type is listed above and the "
+            "question is fine, but the prompt never says WHICH record — a "
+            "pronoun with nothing to refer back to ('tax lines for that "
+            "invoice line'), or no identifier at all ('verify a newly "
+            "created AR invoice'). "
+            "'unsupported_filter': the entity IS listed above, but the "
+            "prompt narrows it by something outside the allowed filter list "
+            "('suppliers with more than 50 employees' — headcount is not a "
+            "supplier filter). Do NOT map an unsupported value onto a "
+            "different filter to make the question answerable. "
+            "'unsupported_operation': needs totals, averages, grouping, "
+            "ranking or trends ('receipt volume by month', 'cash collection "
+            "trends over the period'). "
+            "'unknown_entity': the record type itself is absent from the "
+            "allowed entity list ('show me our contracts'). "
+            "'unparseable': none of the above fit — too vague to pin to any "
+            "record type at all ('what is going on with our vendors'). "
+            "Choose the most specific kind that fits. If the record type is "
+            "listed above, NEVER answer 'unknown_entity'."
+        ),
+    )
+
+    unanswerable_entity: str = Field(
+        default="",
+        description=(
+            "When unanswerable is true, the record type the question is "
+            "ABOUT, when one is clear — 'ReceivablesInvoice' for 'verify a "
+            "newly created AR invoice', 'StandardReceipt' for 'the most "
+            "recent receipts'. Use a name from the allowed entity list, or "
+            "leave empty if no record type is clear. "
+            "This is used ONLY to word the reply, so it can name the record "
+            "type while explaining what is missing. It does NOT make the "
+            "question answerable, and it does NOT change target_entity — "
+            "that still stays empty when unanswerable is true."
+        ),
+    )
+
     target_entity: str = Field(
         default="",
         description=(

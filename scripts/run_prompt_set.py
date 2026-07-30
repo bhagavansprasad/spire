@@ -2,7 +2,7 @@
 """
 Run one or more sets of prompts through the live Spire pipeline, in-process.
 
-No subprocesses. The harness imports the same pipeline pieces run_plan.py
+No subprocesses. The harness imports the same pipeline pieces run_graph.py
 uses (parser, planner, executor, synthesizer) and runs each prompt
 sequentially in a single loop, reusing run_plan's own formatters so the
 output matches a manual run. The MCP session is opened ONCE and shared
@@ -17,6 +17,26 @@ This replaces the bash for-loop that used to wrap the script. The loop
 worked, but it opened a fresh connection per set and produced seven
 disconnected summaries with no indication of which set a failure came
 from.
+
+OUTPUT CONTROL — the same flags as run_graph.py.
+
+Phase 1 left this harness deliberately ungated, on the argument that "its
+output is its purpose". Reading an actual 31-prompt run settled that: the
+ANSWERS are the purpose, and the Intent/Plan/Outputs blocks between them
+are noise you scroll past. That decision is reversed here.
+
+Diagnostics are off by default and switched on per component, exactly as
+in run_graph.py — same flag names, same pyproject.toml section, same
+environment variables::
+
+    python scripts/run_prompt_set.py --prompt-file X.txt --show-planner
+    python scripts/run_prompt_set.py --prompt-file X.txt --show-all
+
+What stays visible regardless: the prompt header, each prompt's result and
+timing, progress lines, and the run summary. That is the harness reporting
+on ITSELF, not pipeline diagnostics — a hundred answers with no indication
+which prompt each belongs to would be useless. Answers go to stdout, so
+`2>/dev/null` yields a clean answers-only transcript of a whole set.
 
 CRASH ISOLATION. Each prompt runs inside a try/except so one failure
 cannot abort the set. This was not always so: on 2026-07-24 an
@@ -51,7 +71,13 @@ from pathlib import Path
 
 from fastmcp import Client
 
-from spire.diagnostics import setup_diagnostics
+from spire.diagnostics import (
+    add_diagnostic_arguments,
+    answer,
+    flags_from_args,
+    get_logger,
+    setup_diagnostics,
+)
 from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
@@ -66,6 +92,25 @@ from display_formatters import (
     _format_summary,
     _format_synthesized,
 )
+
+
+# One logger per component, matching the flag that controls it — the same
+# set run_graph.py uses, so a flag behaves identically in both runners.
+_parser_log = get_logger("parser")
+_planner_log = get_logger("planner")
+_executor_log = get_logger("executor")
+_progress_log = get_logger("progress")
+_summary_log = get_logger("summary")
+
+
+def _block(log, text: str) -> None:
+    """Log a pre-formatted block, followed by a blank line.
+
+    The formatters return aligned multi-line tables. The trailing newline
+    reproduces the spacing the old unconditional prints had, without each
+    caller having to remember it.
+    """
+    log.debug("%s\n", text)
 
 
 def load_prompts(path: Path) -> list[str]:
@@ -104,9 +149,9 @@ async def _run_one(prompt: str, menu, client) -> str:
     async def _on_progress(progress, total, message=None):
         shown = message or ""
         if total:
-            print(f"  … progress {progress}/{total} {shown}", flush=True)
+            _progress_log.info("  … progress %s/%s %s", progress, total, shown)
         else:
-            print(f"  … progress {shown}", flush=True)
+            _progress_log.info("  … progress %s", shown)
 
     state = await GRAPH.ainvoke(
         {
@@ -117,10 +162,13 @@ async def _run_one(prompt: str, menu, client) -> str:
         }
     )
 
+    # A refusal IS an answer — the message names what is missing and gives
+    # a prompt to type. It goes to stdout with every other answer. The
+    # flavor/detail pair beside it is parser internals.
     if state.get("refusal"):
         r = state["refusal"]
-        print(capability_message(r, menu))
-        print(f"  (refusal: {r.flavor.value} — {r.detail})")
+        answer(capability_message(r, menu))
+        _parser_log.debug("  (refusal: %s — %s)", r.flavor.value, r.detail)
         return "refused (expected for out-of-scope)"
 
     if state.get("error"):
@@ -138,18 +186,16 @@ async def _run_one(prompt: str, menu, client) -> str:
         # and a good refusal was reported as a crash. plan_node now
         # sets plan_refusal from the exception type instead.
         if state.get("plan_refusal"):
-            print(f"REFUSED (planner guard): {err}")
+            answer(f"REFUSED (planner guard): {err}")
             return "refused (expected — planner guard)"
         print(f"ERROR: {err}", file=sys.stderr)
         return f"error: {err}"
 
     _outputs = state.get("outputs") or {}
-    print(_format_intent(state["intent"]))
-    print()
-    print(_format_plan(state["plan"]))
-    print()
-    print(_format_outputs(_outputs))
-    print()
+    _block(_parser_log, _format_intent(state["intent"]))
+    _block(_planner_log, _format_plan(state["plan"]))
+    _block(_executor_log, _format_outputs(_outputs))
+
     _fields = state["intent"].fields
     _synth_failed = state.get("synth_failed")
     if _fields:
@@ -162,18 +208,20 @@ async def _run_one(prompt: str, menu, client) -> str:
         # The table reads RAW outputs (it trims to the requested columns
         # itself and flattens nested addresses).
         if _synth_failed:
-            print(
+            answer(
                 "Answer summary: (skipped — result too large to summarize; "
                 "showing the table only)"
             )
         else:
-            print(_format_synthesized(state.get("response"), summary_only=True))
-        print()
-        print(_format_projected_table(_outputs, _fields))
+            answer(_format_synthesized(state.get("response"), summary_only=True))
+        answer("")
+        answer(_format_projected_table(_outputs, _fields))
     else:
-        print(_format_synthesized(state.get("response")))
-    print()
-    print(_format_summary(state["plan"], _outputs, state.get("response")))
+        answer(_format_synthesized(state.get("response")))
+
+    _summary_log.info(
+        "%s", _format_summary(state["plan"], _outputs, state.get("response"))
+    )
     return "ok"
 
 
@@ -294,19 +342,14 @@ def main() -> int:
             "the scripts dir. Mutually exclusive with --prompt-file."
         ),
     )
+    add_diagnostic_arguments(parser)
     args = parser.parse_args()
 
-    # This harness is deliberately NOT quieted by UX-05 — its output is
-    # its whole purpose, and its own prints are untouched. The call is
-    # here for one reason: without it nothing installs a handler on the
-    # `spire.*` loggers, so the always-on progress lines would vanish
-    # and a slow 31-prompt run would look like a hang.
-    #
-    # No flags: progress and summary come through, per-component
-    # diagnostics stay off. The per-call `[llm] stage=...` token echo
-    # that used to appear here is gone by design; the end-of-run totals
-    # are unaffected.
-    setup_diagnostics()
+    # Same flags, same precedence chain, same behaviour as run_graph.py.
+    # Before anything else runs: module-level get_logger() calls only fetch
+    # logger objects, and nothing can emit until the handler and levels are
+    # in place here.
+    setup_diagnostics(flags_from_args(args))
 
     if args.all and args.prompt_file is not None:
         parser.error("--all and --prompt-file are mutually exclusive.")
