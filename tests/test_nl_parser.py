@@ -274,10 +274,19 @@ def test_bad_entity_gates_before_bad_filter(menu):
 
 def test_explicit_unanswerable_refused(menu):
     """When the model sets unanswerable=true, the parser refuses with its
-    reason and never inspects target_entity/filters."""
+    reason and never inspects target_entity/filters.
+
+    Phase 2 (UX-01) changed WHO decides the flavor. The model now states
+    it in ``unanswerable_kind`` and names the record type in
+    ``unanswerable_entity`` — this draft mirrors what a real parse
+    produces. ``target_entity`` stays empty, as the silent-rewrite guard
+    requires.
+    """
     draft = DraftIntent(
         unanswerable=True,
         unanswerable_reason="needs a Contract entity, which is not supported",
+        unanswerable_kind="unknown_entity",
+        unanswerable_entity="Contract",
         target_entity="",
         filters=[],
         include=[],
@@ -285,10 +294,57 @@ def test_explicit_unanswerable_refused(menu):
     result = parse("Show contract renewals", llm=MockLLM(draft), menu=menu)
 
     assert result.is_refusal
-    # Feature 8: a self-declared refusal naming an entity the KG doesn't
-    # know is now UNKNOWN_ENTITY, not the old catch-all UNPARSEABLE.
     assert result.refusal.flavor == RefusalFlavor.UNKNOWN_ENTITY
     assert "Contract" in result.refusal.detail
+    # The entity is carried through for wording, from the descriptive
+    # field rather than from target_entity.
+    assert result.refusal.offending_entity == "Contract"
+
+
+def test_unanswerable_without_a_kind_falls_back_to_unparseable(menu):
+    """A draft that declares itself unanswerable and nothing else.
+
+    Before Phase 2 this returned UNKNOWN_ENTITY, because derive_flavor
+    scanned the reason prose for capitalized words and "Contract" matched.
+    That scan is gone: it matched "To", "ID", "Filtering" and "Receipt"
+    just as readily, and returned UNKNOWN_ENTITY for four of four
+    refusals measured against the pod.
+
+    UNPARSEABLE is now the honest answer here — the model said it could
+    not answer and gave no classification, so we do not invent one. This
+    test exists so that behaviour is deliberate rather than incidental,
+    and so reintroducing a prose heuristic breaks something.
+    """
+    draft = DraftIntent(
+        unanswerable=True,
+        unanswerable_reason="needs a Contract entity, which is not supported",
+        target_entity="",
+    )
+    result = parse("Show contract renewals", llm=MockLLM(draft), menu=menu)
+
+    assert result.is_refusal
+    assert result.refusal.flavor == RefusalFlavor.UNPARSEABLE
+    assert "Contract" in result.refusal.detail
+
+
+def test_unanswerable_kind_survives_an_empty_target_entity(menu):
+    """The distinction the second new field exists for.
+
+    ``target_entity`` is REQUIRED to be empty on a self-declared refusal,
+    so a message needing the record type had nowhere to get it and fell
+    back to "I'm not sure which record you mean" for a record Spire has.
+    """
+    draft = DraftIntent(
+        unanswerable=True,
+        unanswerable_reason="no invoice id given",
+        unanswerable_kind="missing_identifier",
+        unanswerable_entity="Supplier",
+        target_entity="",
+    )
+    result = parse("verify the invoice", llm=MockLLM(draft), menu=menu)
+
+    assert result.refusal.flavor == RefusalFlavor.MISSING_IDENTIFIER
+    assert result.refusal.offending_entity == "Supplier"
 
 
 def test_unanswerable_takes_precedence_over_empty_entity(menu):
