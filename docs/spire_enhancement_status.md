@@ -11,7 +11,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-30 (late evening — Phase 1 branch 1 merged)
+**Last updated:** 2026-07-30 (late evening — **Phase 1 complete**)
 
 ---
 
@@ -20,8 +20,8 @@ phases of design detail bury the status table above them.
 | Phase | Requirements | Status | Notes |
 |---|---|---|---|
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
-| 1 | UX-05, OBS-01, OBS-02 | 🟨 Part merged | **In progress.** UX-05 + OBS-01 merged (`phase-1-diagnostic-flags`). OBS-02 not started. Design and results below. |
-| 2 | UX-01, UX-02, UX-03 | ⬜ Not started | |
+| 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
+| 2 | UX-01, UX-02, UX-03 | ⬜ Not started | **Next up.** |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -90,7 +90,7 @@ until a phase touches performance directly.
 
 # Phase 1 design — UX-05, OBS-01, OBS-02
 
-**Status: branch 1 merged. OBS-02 outstanding.**
+**Status: complete. Both branches merged.**
 
 Requirements covered: UX-05 (quiet default output), OBS-01 (independent
 per-component verbosity flags), OBS-02 (configuration precedence).
@@ -362,7 +362,7 @@ Setup:
 
 | Package | Status |
 |---|---|
-| `pydantic-settings` | **New.** Separate distribution from pydantic v2. Add to `requirements.txt`. |
+| `pydantic-settings` | **Added** (2.14.1). Separate distribution from pydantic v2. In `requirements.txt`. Pulls in `python-dotenv`. |
 | `tomllib` | stdlib on 3.11+. Confirmed by `requires-python = ">=3.11"`. |
 
 ## D7. Files touched
@@ -428,13 +428,13 @@ unreachable and the repo in a worse state than it started.
 | Branch | Covers | Status |
 |---|---|---|
 | `phase-1-diagnostic-flags` | UX-05 + OBS-01 | ✅ **Merged.** `diagnostics.py`, logger setup, 5 library prints converted, `run_graph.py` wired, CLI flags. Settable via CLI only at this point, which fully satisfies both requirements. |
-| *(branch 2, not yet created)* | OBS-02 | ⬜ `[tool.spire.diagnostics]`, `pydantic-settings`, env scan, precedence chain below the CLI layer. |
+| `phase-1-config-precedence` | OBS-02 | ✅ **Merged.** `[tool.spire.diagnostics]`, `pydantic-settings`, the environment layer, the env-name scan. Nothing above `flags_from_args` changed — the new layers slotted in underneath it, and `run_graph.py` needed no edit at all. |
 
 Per-branch sequence follows the standing build order: targeted tests
 during work, full suite before any commit touching source, PR-based
 merge.
 
-## D9. Verification — branch 1, as run
+## D9. Verification — as run
 
 All of the below is what actually happened, not what was planned.
 
@@ -468,23 +468,56 @@ the conversion nor the logger wiring moved them.
 
 **MCP server restarted** before the live runs; `src/spire/` changed.
 
+### Branch 2 (OBS-02)
+
+**Full suite: 672 passed, 17 deselected, 1 xfailed.** Up from 645. The
+27 net new tests bring `tests/test_diagnostics.py` to 65.
+
+**All four precedence layers verified live against the pod**, not just
+in a constructor:
+
+| Check | Result |
+|---|---|
+| defaults only | quiet — `Summary:` block alone |
+| `[tool.spire.diagnostics]` `show_tokens = true` | token report appears, no flag, no env var |
+| `SPIRE_SHOW_PLANNER=1` | plan block appears, nothing on the command line |
+| file `true` + `--no-show-tokens` | token report gone — **OBS-02 criterion 1** |
+
+**Both invalid-name paths verified.** A typo'd key in `pyproject.toml`
+raises naming `show_planer`; a typo'd `SPIRE_SHOW_PLANER` raises naming
+the variable *and* listing the valid ones.
+
+**Tests are hermetic.** An autouse fixture clears every `SPIRE_SHOW_*`
+variable and repoints `PYPROJECT_FILE` at a nonexistent path. Without
+it a green run would prove something about the developer's shell rather
+than about the code.
+
+**Not re-run: `scripts/flag_matrix.sh`.** §D11 says branch 2 is exactly
+when to re-run it. Skipped on the argument that the 65 unit tests cover
+precedence directly and the four live checks above cover the wiring —
+17 minutes and 67 LLM calls for confirmation of something already
+demonstrated. Recorded as a judgement call, not an oversight.
+
 **Not run:** the 31-prompt lifecycle set. `run_prompt_set.py` is
 substantively unchanged (one line, no output changes), and the flag
 matrix exercised the same pipeline 67 times against the pod. Worth
 running before branch 2 merges if anything touches the runner again.
 
-## D10. Open questions
+## D10. Decisions, resolved
 
-None outstanding for branch 1. The three design questions were resolved
-2026-07-30:
+None outstanding. Phase 1 is closed.
 
 1. Extra flags for progress and summary — **rejected.** Both are always
    required, so neither is gated. OBS-01 stays at six flags.
-2. `show_all` — **accepted.**
+2. `show_all` — **accepted**, and later widened: it is a real field
+   settable in every layer, not a command-line convenience. A switch
+   that worked in one layer but not another would be a surprise needing
+   a footnote, and would need special-casing in each layer to enforce.
+   This reversed an earlier decision to keep it out of the file.
 3. `run_prompt_set.py` — **left ungated.** Quiet default applies to
    `run_graph.py` only (`ask.py` was deprecated and has been deleted).
 
-**Next action: branch 2, OBS-02.** Nothing blocks it.
+**Next action: Phase 2 — UX-01, UX-02, UX-03.** Nothing blocks it.
 
 ## D11. `scripts/flag_matrix.sh`
 
@@ -513,3 +546,45 @@ species as the carried-forward "invoice total over a sample" defect.
 **Unconfirmed.** Nobody has checked whether the pod actually has more
 than 25,000 invoices for that supplier. Recorded so it is not lost, not
 because it has been established.
+
+---
+
+## D13. Two things found late, both worth keeping
+
+### `show_all` in a fully-spelled-out file is a no-op
+
+Found by trying a configuration nobody had tested: every key present,
+`show_tokens = true` and `show_all = true` together.
+
+`_expand_show_all` only fills flags nobody set explicitly, which is what
+makes `--show-all --no-show-planner` mean "everything except the
+planner". A file listing all seven keys therefore leaves `show_all`
+nothing to fill — it silently does nothing.
+
+**The code is right; the template was wrong.** The first committed
+`[tool.spire.diagnostics]` spelled out every key set to `false`, "so the
+available flags are discoverable" — and that comment was precisely what
+broke it. The template now comments its keys out instead. Two tests pin
+the behaviour, because someone reading `_expand_show_all` in isolation
+would be tempted to "fix" it.
+
+The existing `test_show_all_from_the_file` passed throughout: it wrote a
+file containing *only* `show_all = true`, so it could never have caught
+this. A test that exercises the clean case is not a test of the case
+people actually write.
+
+### A fragment instead of a whole file cost 11 minutes
+
+Mid-branch, the `[tool.spire.diagnostics]` section was handed over as a
+fragment with "replace the section you have". The whole file got
+replaced instead, losing `[project]`, `[build-system]`, and
+`[tool.pytest.ini_options]`.
+
+The next full suite reported **33 failures in 676 seconds**. None were
+real: without `asyncio_mode` the async tests failed wholesale, and
+without `addopts` the integration tests ran against services that were
+not up.
+
+The tell was `17 deselected` disappearing from the summary line. The
+standing rule — always deliver the complete file, never a patch or a
+fragment — exists for exactly this, and was not followed.

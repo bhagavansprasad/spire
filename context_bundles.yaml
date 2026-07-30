@@ -5,6 +5,7 @@ bundles:
   - how-to-run-02.md
   - build_context.py
   - context_bundles.yaml
+  - pyproject.toml
   - src/spire/config.py
   - src/spire/diagnostics.py
   - pyproject.toml
