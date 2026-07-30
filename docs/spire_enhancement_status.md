@@ -11,7 +11,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-30 (late evening — **Phase 1 complete**)
+**Last updated:** 2026-07-30 (late evening — Phase 1 complete; Phase 2 discovery done)
 
 ---
 
@@ -21,7 +21,7 @@ phases of design detail bury the status table above them.
 |---|---|---|---|
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
-| 2 | UX-01, UX-02, UX-03 | ⬜ Not started | **Next up.** |
+| 2 | UX-01, UX-02, UX-03 | 🟨 Discovery done | **In progress.** Twelve real refusals collected against the pod — see the Phase 2 section. No design yet, no code. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -588,3 +588,159 @@ not up.
 The tell was `17 deselected` disappearing from the summary line. The
 standing rule — always deliver the complete file, never a patch or a
 fragment — exists for exactly this, and was not followed.
+
+---
+---
+
+# Phase 2 discovery — UX-01, UX-02, UX-03
+
+**Status: discovery done. No design, no code.**
+
+Requirements: UX-01 (structured refusal messages), UX-02 (narrowing
+guidance for over-broad queries), UX-03 (truncation disclosure).
+
+## E1. Where the evidence came from
+
+An SME test report (`AR_invoice_Prompt_test.docx`, 2026-07-30) ran 15 AR
+prompts and reported "9 passed, 6 failed" — though its own per-prompt
+labels list **eight** non-successes, not six. Worth raising with the
+tester.
+
+**The report's screenshots are almost certainly not Spire output.** All
+five endpoint names in them match no registered Spire tool:
+
+| Report says | Spire has |
+|---|---|
+| `get_invoice_lines` | `get_receivables_invoice_lines` |
+| `get_invoice_line_tax_lines` | `get_receivables_invoice_tax_lines` |
+| `list_customer_account_activities` | `get_customer_transactions` |
+| `get_account_standard_receipt_applications` | `get_account_receipt_applications` |
+| `list_credit_memos` | `list_receivables_credit_memos` |
+
+The format has no `Answer:` header and no `Summary:` block either, and
+carries prose ("a strong signature of lockbox batch processing", DSO
+commentary) that the synthesizer does not produce. Most likely a chat
+client pointed straight at the MCP server, bypassing parser, planner and
+synthesizer.
+
+So the report's *outputs* were set aside and its *prompts* were re-run
+through `run_graph.py` against the pod: the eight flagged prompts
+verbatim, plus four resolved variants supplying the referents the
+originals lacked.
+
+**Result: twelve runs, zero errors.** Three answered (exit 0), nine
+declined (exit 4). Exit 2, the actual failure code, never appeared.
+
+## E2. The finding that matters most
+
+The loop printed each run's exit code. Reading nine `exit=4` lines in
+sequence, the project's own developer — who knows exactly what exit 4
+means — reported it as *"too many errors while running"* and *"the
+messaging is very very poor"*.
+
+That is the whole of UX-01 in one observation. If the person who wrote
+the refusal path reads a screen of refusals as a screen of crashes, an
+SME has no chance. The requirements doc argues this from principle; this
+is the same conclusion from evidence, and it is the stronger form.
+
+Corollary for the harnesses: **printing a raw exit code next to a
+refusal actively causes the misreading.** Worth avoiding in any future
+test loop.
+
+## E3. Three distinct defects in the refusal text
+
+All nine refusals came from one of two paths. Eight from the parser's
+`capability_message`; one from a planner guard.
+
+### Defect 1 — the message contradicts itself
+
+For *"Get the most recent standard receipts for account 25750"*:
+
+> Spire can look up Address, CreditMemo, CustomerAccount, Invoice,
+> PurchaseOrder, ReceivablesInvoice, **StandardReceipt** and Supplier
+> [...] This question is about **that kind of record, which Spire
+> doesn't track yet.**
+
+`StandardReceipt` is named as supported and then declared untracked, in
+the same paragraph. A reader concludes the system is broken, and is
+being reasonable.
+
+### Defect 2 — the message misdiagnoses
+
+*"Get tax lines for that invoice line"* refuses with "doesn't track
+yet". Spire tracks it perfectly well — the resolved variant *"Get tax
+lines for invoice 300000248096352"* answers correctly. The real problem
+is the unresolved pronoun.
+
+Same for *"Verify a newly created AR invoice"*: `ReceivablesInvoice` is
+supported; what is missing is an identifier, not the capability.
+
+Spire has no conversation memory, so a pronoun cannot resolve. Refusing
+is correct. **Saying the wrong reason is not.**
+
+### Defect 3 — the useful sentence is last
+
+Every parser refusal opens with ~90 words listing eight entities and
+twenty-one filters, then closes with the one sentence that says what is
+actually wrong. Readers skim, hit the wall, and stop before reaching it.
+
+## E4. The template already exists in the codebase
+
+One of the nine refusals reads completely differently. The planner guard
+for *"Get the most recent standard receipts"*:
+
+> REFUSED (planner guard): Receipt queries require a customer or a site.
+> For example 'receipts for ABC Application Software', or 'receipts at
+> Santa Clara'. The top-level receipts collection is too large to list
+> unscoped.
+
+Three parts, in the right order: **what is missing**, **two examples to
+type**, **why the limit exists**. No entity dump, no filter list.
+
+That is the UX-01 target format, already written, already working, and
+already in the repo. Phase 2 is largely a matter of bringing the parser
+path up to it rather than inventing anything.
+
+## E5. Three new bugs found by the re-run
+
+Unconfirmed beyond the single observation each, recorded so they are not
+lost.
+
+1. **`get_account_receipt_applications` is unreachable from natural
+   language.** The tool exists and is registered. Both *"Trace receipt
+   applications for this account"* and the resolved *"...for account
+   25750"* refuse with "doesn't track yet". Either no KG route exists or
+   it does not match this phrasing.
+2. **"Show invoice lines for invoice X" answers the wrong question.** It
+   returns the invoice header plus `lines: 1` — a count, not the line
+   detail asked for. The report's expected result was the line itself.
+3. **"Account activity summary for top accounts" silently re-routes.**
+   It answered with an exposure ranking of the top 10 of 435 accounts —
+   a different question, answered confidently, with no indication the
+   question changed. Same species as the carried-forward defects that
+   can put a wrong number in front of someone.
+
+## E6. One reported failure that was not a failure
+
+The report flagged *"Get tax lines for that invoice line"* returning
+**"0 tax lines found"** as a defect. Spire returns the same result for
+the resolved prompt, and the invoice genuinely has no tax lines.
+
+**Correct answer, correctly stated.** Worth telling the tester, along
+with the two other flagged prompts — invoice lines and account activity
+— which returned answers rather than failing.
+
+The lesson is not that the tester was careless. It is that a correct
+answer and a refusal and a crash are currently hard to tell apart, which
+is the same problem from a third direction.
+
+## E7. Next action
+
+Design the refusal format against these nine real examples, using §E4's
+planner guard as the template. No code before that design is agreed.
+
+**Not yet started:** UX-02 and UX-03. UX-03 connects to two
+carried-forward defects (invoice total over a 25-row sample; the 50-page
+stop recorded in §D12) and to the SME report's own cash-trends
+screenshot, which built a month-over-month trend narrative on a
+25-receipt sample and stated it as fact.

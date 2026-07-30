@@ -2,10 +2,12 @@
 #
 # Source: 01_Spire_v3_Invoice_PO_Suppliers.docx (12 prompts)
 #         02_Spire_v3_Invoice_PO_Suppliers.docx (13 prompts)
-# Captured: 2026-07-28
+#         AR_invoice_Prompt_test.docx (9 further prompts, added below)
+# Captured: 2026-07-28, extended 2026-07-30
 #
-# All 25 prompts verbatim, including the malformed one (D1-11). Do not
-# tidy them: the wording IS the test.
+# All prompts verbatim, including the malformed one (D1-11) and the ones
+# carrying unresolvable pronouns. Do not tidy them: the wording IS the
+# test.
 #
 # BASELINE RUN (2026-07-28) — 4 real successes, 21 failures.
 # Every refusal reported: "Known target entities: ['Address', 'Invoice',
@@ -15,6 +17,13 @@
 # Run scripts/rebuild_kg.py and re-run this set before reading anything
 # else into the results.
 #
+# PARTIAL RE-RUN (2026-07-30) — twelve AR prompts, KG current.
+# The 2026-07-28 statuses are STALE for anything marked FAIL-KG. Three
+# prompts were re-run and two of them now answer; their lines below carry
+# a dated update. Everything else still holds the 07-28 status and has
+# NOT been re-verified. Re-run the whole set before trusting any FAIL-KG
+# label.
+#
 # Legend on each prompt's comment line:
 #   PASS      answered correctly
 #   FAIL-KG   refused only because the KG is missing the entity
@@ -22,6 +31,11 @@
 #   REFUSE-OK correct refusal; the prompt is genuinely underspecified
 #             (several assume a prior conversational turn and cannot pass
 #             one-shot through run_graph.py)
+#   REFUSE-BAD-MSG
+#             refusing is correct, but the message states the wrong
+#             reason or contradicts itself. Added 2026-07-30 — this is
+#             the bulk of what Phase 2 (UX-01) has to fix, and the file
+#             previously had no way to say it.
 
 
 # ===================================================================
@@ -31,10 +45,17 @@
 # D1-01 FAIL-KG / REFUSE-OK — no customer named; also AR entity absent
 List all open invoices for the customer, top 5
 
-# D1-02 FAIL-KG — refused: ReceivablesInvoice not a known entity
+# D1-02 FAIL-KG (07-28) -> PASS (07-30). Answers now the KG is current.
+# Answers the wrong question though: returns the invoice header plus
+# "lines: 1", a count, not the line detail asked for. Reclassify as FAIL
+# on the next full re-run.
 Show invoice lines for invoice 300000248096352
 
-# D1-03 REFUSE-OK — "that invoice line" needs a prior turn
+# D1-03 REFUSE-OK — "that invoice line" needs a prior turn.
+# 07-30: still refuses, correctly. But REFUSE-BAD-MSG — the message says
+# Spire "doesn't track" this kind of record, which is false: D3-06 below
+# is the same question with the id supplied and it answers. The problem
+# is the pronoun, not the capability.
 Get tax lines for that invoice line
 
 # D1-04 REFUSE-OK — "this invoice" needs a prior turn
@@ -43,7 +64,10 @@ Fetch descriptive flexfield (DFF) values for this invoice.
 # D1-05 FAIL-KG — refused: CreditMemo not a known entity
 List recent credit memos, top 5
 
-# D1-06 REFUSE-OK — "top accounts" undefined; message cited aggregation
+# D1-06 REFUSE-OK (07-28) -> FAIL (07-30). It no longer refuses; it
+# answers a DIFFERENT question. Returns an exposure ranking of the top 10
+# of 435 accounts, confidently, with nothing to indicate the question was
+# re-routed. Worse than the refusal it replaced.
 Show account activity summary for top accounts
 
 # D1-07 FAIL-KG — credit memos by account
@@ -121,3 +145,77 @@ Get supplier sites for suppliers
 
 # D2-13 FAIL-KG — standard receipts; refusal asked for customer + site
 Get standardReceipts
+
+
+# ===================================================================
+# Doc 3 — AR receipts and analytics (added 2026-07-30)
+#
+# From AR_invoice_Prompt_test.docx, which flagged these as failed or
+# refused. Its screenshots are almost certainly NOT Spire output — all
+# five endpoint names in them match no registered Spire tool, and the
+# format carries no Answer:/Summary: block. Prompts kept; outputs
+# discarded.
+#
+# Re-run through run_graph.py against the pod, 2026-07-30, KG current.
+# Twelve runs, ZERO errors: three answered, nine declined. Exit code 2 —
+# the actual failure code — never appeared. Every "failure" in the report
+# was a refusal or a correct answer.
+#
+# D1-02, D1-03 and D1-06 were in that run too; their statuses above carry
+# the 07-30 update rather than being duplicated here.
+# ===================================================================
+
+# D3-01 REFUSE-BAD-MSG — "this account" needs a prior turn, so refusing
+# is right. The message blames capability instead, and D3-07 below shows
+# the resolved form refuses too — so there are two faults stacked here.
+Trace receipt applications for this account
+
+# D3-02 REFUSE-BAD-MSG — no identifier of any kind, so refusing is right.
+# Message says Spire "doesn't track that kind of record"; it is a
+# ReceivablesInvoice, which IS tracked. Wrong reason.
+Verify a newly created AR invoice
+
+# D3-03 REFUSE-OK — and the ONLY well-formed refusal in the whole set.
+# This one hits a PLANNER guard rather than the parser:
+#   "Receipt queries require a customer or a site. For example 'receipts
+#    for ABC Application Software', or 'receipts at Santa Clara'. The
+#    top-level receipts collection is too large to list unscoped."
+# What is missing, two examples to type, why the limit exists. This is
+# the UX-01 target format — it already exists in the codebase.
+Get the most recent standard receipts
+
+# D3-04 REFUSE-OK — aggregation over a period; genuinely not supported
+# yet. Message correctly cites aggregation. Compare with the report's own
+# screenshot, which answered this by computing a month-over-month trend
+# over a 25-receipt SAMPLE and stating it as fact.
+Identify cash collection trends over the period - volume, average receipt size, and month-over-month movement
+
+# D3-05 REFUSE-OK — same aggregation gap, simpler phrasing
+Summarise receipt volume and value by month
+
+# ── Resolved variants: same intent, referent supplied ───────────────
+# Identifiers taken from the report itself. If a prompt above refuses and
+# its twin here answers, the refusal was a missing referent and nothing
+# is broken. If BOTH refuse, the capability is genuinely absent.
+
+# D3-06 PASS — resolves D1-03. Returns "no tax lines" for this invoice,
+# which is CORRECT: the report flagged that as a failure and it was not
+# one. Proves the D1-03 refusal message states the wrong reason.
+Get tax lines for invoice 300000248096352
+
+# D3-07 FAIL — resolves D3-01, and still refuses with "doesn't track that
+# kind of record". But get_account_receipt_applications EXISTS and is
+# registered. Either no KG route reaches it or the route does not match
+# this phrasing. A real gap, not a wording problem.
+Trace receipt applications for account 25750
+
+# D3-08 FAIL — the refusal contradicts itself in a single paragraph:
+# lists StandardReceipt among the entities Spire can look up, then says
+# "this question is about that kind of record, which Spire doesn't track
+# yet". Note D3-03, the same intent unscoped, produces the GOOD planner
+# message — so adding the account makes the answer worse.
+Get the most recent standard receipts for account 25750
+
+# D3-09 REFUSE-OK — aggregation gap again, unchanged by scoping to an
+# account. Correct refusal, correct reason.
+Summarise receipt volume and value by month for account 25750
