@@ -482,6 +482,23 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             head += f" — {response.supplier}"
         lines.append(head)
 
+        # Phase 0 defect 2: no legs means the PO was not found. Print the
+        # header, the summary and whatever the tool said — and nothing
+        # else. Everything below asserts something about an order that
+        # does not exist: the verdict row reads "cannot be determined",
+        # implying the PO exists and is unknowable, and the stage line
+        # prints an empty owner and an empty risk as though they were
+        # values. Emptiness is the signal, not the stage string — a found
+        # record always carries all four legs.
+        # The tool's note stays on the response for API-02 consumers, but
+        # printing it here just repeats the summary sentence to a human —
+        # and an unlabelled bullet under a sentence reads as a second,
+        # separate finding rather than the same one twice.
+        if not response.legs:
+            lines.append("")
+            lines.append(response.summary)
+            return "\n".join(lines)
+
         verdicts = []
         for name in ("Received", "Invoiced", "Paid"):
             leg = by_name.get(name)
@@ -498,18 +515,17 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         lines.append("")
         lines.append(response.summary)
 
-        if response.legs:
-            currency = f" ({response.currency})" if response.currency else ""
-            lines.append(f"\nAmounts{currency}:")
-            lines.append(f"  {'Leg':<10} {'Amount':>12} {'Remaining':>12}")
-            for leg in response.legs:
-                lines.append(
-                    f"  {leg.name:<10} {_money(leg.amount):>12} "
-                    f"{_money(leg.remaining):>12}"
-                )
-            for leg in response.legs:
-                if leg.note:
-                    lines.append(f"    {leg.name}: {leg.note}")
+        currency = f" ({response.currency})" if response.currency else ""
+        lines.append(f"\nAmounts{currency}:")
+        lines.append(f"  {'Leg':<10} {'Amount':>12} {'Remaining':>12}")
+        for leg in response.legs:
+            lines.append(
+                f"  {leg.name:<10} {_money(leg.amount):>12} "
+                f"{_money(leg.remaining):>12}"
+            )
+        for leg in response.legs:
+            if leg.note:
+                lines.append(f"    {leg.name}: {leg.note}")
 
         if response.risk_reasons:
             lines.append(f"\nRisk ({response.risk}):")
@@ -552,7 +568,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             lines.extend(f"  - {note}" for note in response.truncation_notes)
 
         return "\n".join(lines)
-
+    
     return f"(Unrecognized response shape.)\n{response}"
 
 

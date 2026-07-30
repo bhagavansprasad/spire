@@ -50,6 +50,8 @@ from spire.synthesizer.synthesizer import (
     _collect_valid_ids,
     _validate_no_hallucinated_ids,
     synthesize_response,
+    _build_lifecycle_setup_notes,
+    build_lifecycle_response,
 )
 
 
@@ -1246,3 +1248,132 @@ def test_receipts_default_empty_for_non_receipt_queries():
     )
     assert record.receipts == []
 
+
+# ─────────────────────────────────────────────────────────────────────
+# Phase 0 defects — a null must never render as a statement
+# ─────────────────────────────────────────────────────────────────────
+#
+# Defect 2: a non-existent PO built four null legs, which the display
+# renders as "Received: cannot be determined · Invoiced: cannot be
+# determined" — implying the order exists and its state is unknowable.
+# Defect 4: the payment-terms note compared against a site default it had
+# not read, printing "differ from the site default (None)".
+#
+# Both are the same error: asserting something about a value that was
+# never obtained. No LLM and no pod — the builders are deterministic.
+
+
+def _found_lifecycle_record() -> dict:
+    """A minimal record on the success path. Mirrors the tool's shape."""
+    return {
+        "shape": "po_lifecycle_status",
+        "found": True,
+        "order_number": "701337",
+        "supplier": "JGA",
+        "currency": "USD",
+        "ordered": 1235.00,
+        "received": 398.00,
+        "invoiced": 398.00,
+        "paid": 0.0,
+        "paid_state": "unknown",
+        "received_is_derived": True,
+        "remaining_to_receive": 837.00,
+        "remaining_to_invoice": 837.00,
+        "remaining_to_pay": None,
+        "fully_received": False,
+        "fully_invoiced": False,
+        "fully_paid": None,
+        "lifecycle_stage": "Awaiting receipt",
+        "responsible_team": "Supplier / Receiving",
+        "risk": "Medium",
+        "risk_reasons": ["partially received"],
+        "recommended_action": "Chase the supplier for the balance.",
+        "payment_terms": "Net 30",
+        "payment_terms_overridden": True,
+        "supplier_site": "JGA-SITE",
+        "setup": {
+            "supplier_read": True,
+            "supplier_number": "1001",
+            "supplier_status": "active",
+            "site_read": True,
+            "site_status": "active",
+            "site_purchasing_enabled": True,
+            "site_pay_enabled": True,
+            "site_payment_terms": "2/10 Net 30",
+        },
+        "notes": [],
+        "schedules": [],
+    }
+
+
+def _not_found_lifecycle_record() -> dict:
+    """Exactly what the tool returns when the PO does not exist."""
+    return {
+        "shape": "po_lifecycle_status",
+        "found": False,
+        "order_number": "999999",
+        "notes": ["no purchase order found with OrderNumber '999999'"],
+    }
+
+
+def test_lifecycle_not_found_builds_no_legs():
+    """Defect 2: no PO means no legs, no stage, no setup notes.
+
+    Four null legs are not 'unknown state' — there is no order to have a
+    state. The tool's own note is the only thing worth carrying forward.
+    """
+    response = build_lifecycle_response(
+        _not_found_lifecycle_record(),
+        summary="No purchase order 999999 exists.",
+        truncation_notes=[],
+    )
+    assert response.legs == []
+    assert response.setup_notes == []
+    assert response.risk_reasons == []
+    assert response.recommended_action == ""
+    assert response.supplier is None
+    assert response.order_number == "999999"
+    assert any("999999" in note for note in response.exceptions)
+
+
+def test_lifecycle_found_record_still_builds_four_legs():
+    """The found=False branch must not fire on a good record.
+
+    Guards the tri-state trap from D1: branching on the truthiness of a
+    leg rather than on `found` would silently empty a valid answer.
+    """
+    response = build_lifecycle_response(
+        _found_lifecycle_record(),
+        summary="PO 701337 is partially received.",
+        truncation_notes=[],
+    )
+    assert [leg.name for leg in response.legs] == [
+        "Ordered",
+        "Received",
+        "Invoiced",
+        "Paid",
+    ]
+    assert response.lifecycle_stage == "Awaiting receipt"
+    assert response.risk == "Medium"
+    assert response.setup_notes
+
+
+def test_setup_notes_do_not_compare_against_an_unread_site():
+    """Defect 4: no site read means no site default to differ from."""
+    record = _found_lifecycle_record()
+    record["setup"]["site_read"] = False
+    record["setup"].pop("site_payment_terms")
+
+    notes = _build_lifecycle_setup_notes(record)
+
+    assert not any("None" in note for note in notes)
+    assert not any("site default (" in note for note in notes)
+
+def test_setup_notes_compare_terms_when_the_site_was_read():
+    """The comparison is still made when there is something to compare."""
+    notes = _build_lifecycle_setup_notes(_found_lifecycle_record())
+
+    assert any(
+        "Net 30" in note and "2/10 Net 30" in note and "site default" in note
+        for note in notes
+    )

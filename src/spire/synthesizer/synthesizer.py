@@ -1331,6 +1331,12 @@ def _build_lifecycle_setup_notes(record: dict) -> list[str]:
 
     Reports what could not be read as unread, never as clean: an absent
     supplier record is unknown setup, not an active supplier.
+
+    Phase 0 defect 4: the payment-terms note used to sit outside the
+    site_read gate, so when the site could not be read it printed
+    "differ from the site default (None)" — comparing against a value it
+    does not have. Same species as defect 2: a null rendered as a
+    statement. The comparison is only meaningful when the site was read.
     """
     setup = record.get("setup") or {}
     notes: list[str] = []
@@ -1364,17 +1370,57 @@ def _build_lifecycle_setup_notes(record: dict) -> list[str]:
             )
 
     if record.get("payment_terms_overridden"):
-        notes.append(
-            f"PO payment terms ({record.get('payment_terms')}) differ from the "
-            f"site default ({setup.get('site_payment_terms')})."
-        )
+        if setup.get("site_read"):
+            notes.append(
+                f"PO payment terms ({record.get('payment_terms')}) differ from the "
+                f"site default ({setup.get('site_payment_terms')})."
+            )
+        else:
+            notes.append(
+                f"PO payment terms are {record.get('payment_terms')}; the site "
+                f"default could not be read to compare."
+            )
     return notes
-
 
 def build_lifecycle_response(
     record: dict, summary: str, truncation_notes: list[str]
 ) -> POLifecycleResponse:
-    """Assemble the full lifecycle answer. Only `summary` comes from the LLM."""
+    """Assemble the full lifecycle answer. Only `summary` comes from the LLM.
+
+    Phase 0 defect 2: when the PO does not exist there are no legs to
+    report. Building them anyway yields four nulls, which render as
+    "Received: cannot be determined · Invoiced: cannot be determined" —
+    implying the order exists and its state is unknowable. The summary
+    says correctly that it was not found and the verdict line then
+    contradicts it.
+
+    The setup notes are the same error a second time: on a not-found
+    record the setup block is absent, so they read "Supplier master could
+    not be read", asserting a failed read when there was no PO to carry a
+    supplier.
+
+    Both branches of the tool set `found` explicitly — True on success,
+    False on the not-found return — so the flag can be trusted. Branch on
+    it, never on the truthiness of a leg.
+    """
+    if not record.get("found"):
+        return POLifecycleResponse(
+            summary=summary,
+            order_number=str(record.get("order_number") or ""),
+            supplier=None,
+            currency=None,
+            legs=[],
+            lifecycle_stage="Not found",
+            responsible_team="",
+            risk="",
+            risk_reasons=[],
+            recommended_action="",
+            setup_notes=[],
+            exceptions=list(record.get("notes") or []),
+            schedules=[],
+            truncation_notes=truncation_notes,
+        )
+
     schedules = [
         POLifecycleScheduleRow(
             line_number=row.get("line_number"),
@@ -1401,7 +1447,6 @@ def build_lifecycle_response(
         schedules=schedules,
         truncation_notes=truncation_notes,
     )
-
 
 AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     "supplier_spend_ranking": (
@@ -1789,7 +1834,7 @@ _SYSTEM_PROMPT_PREAMBLE = (
 
 # Per-entity instruction block, appended to the preamble.
 _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
-    "POLifecycle": (
+"POLifecycle": (
         "You are answering a question about ONE purchase order's journey "
         "from order to payment. The data is a single reconciliation record "
         "assembled from six Oracle Fusion resources.\n\n"
@@ -1815,6 +1860,13 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "the record by code, so you cannot get a number wrong here — but "
         "you can get one wrong in the prose. Quote figures exactly as they "
         "appear.\n\n"
+        "NO INTERNAL IDENTIFIERS IN THE SUMMARY. Name the supplier, never "
+        "its SupplierId, SupplierSiteId, PersonId or any other numeric "
+        "key. Write 'supplier JGA', not 'supplier JGA (ID "
+        "300000047414635)'. A finance reader has no use for a primary key "
+        "and it makes a correct answer look like a system dump. The PO's "
+        "own OrderNumber, invoice numbers and supplier NUMBER are business "
+        "identifiers, not internal ones — those are fine.\n\n"
         "ANSWER THE QUESTION ASKED. The data is always the same; the "
         "emphasis is not.\n"
         "- 'has it been received / invoiced / paid', 'is it complete' — "
