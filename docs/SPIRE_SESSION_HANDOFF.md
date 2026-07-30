@@ -1,6 +1,7 @@
-# Spire — Session Handoff (2026-07-29)
+# Spire — Session Handoff (2026-07-30)
 
-Paste into the new window to continue. Supersedes the 2026-07-28 handoff.
+Paste the companion text into the new window to continue. Supersedes the
+2026-07-29 handoff.
 
 ---
 
@@ -15,222 +16,201 @@ Repo `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`, pod
 `fa-esll-dev37-saasfademo1.ds-fa.oraclepdemos.com`, creds in
 `personas.yaml` (gitignored).
 
-**Currently on branch `lifecycle-poc`**, freshly merged with master, 504
-tests passing.
+**On `master`, clean, 602 tests passing.** Nothing outstanding in the
+working tree.
 
 ---
 
-## What the last session did
+## What this session did
 
-An SME (Venu) ran 25 prompts and reported 21 failures. The session
-started by analysing that report and ended nine merged phases later.
+**Module 5 (PO Lifecycle) went from a standalone tool to five catalog
+prompts answering end to end.** Phases 3 through 9 of the build sequence,
+merged to master in two commits.
 
-**The report was wrong in both directions.** Twelve of the 21 "failures"
-were one stale KG — parse input was ~6,845 tokens against a known-good
-~8,119, which is the KG menu arriving short. Seven more were correct
-refusals of genuinely unanswerable prompts. Meanwhile FOUR real defects
-sat inside prompts marked `[ok]`, including a credit-memo total that
-summed USD, CAD, GBP and EUR into one number and printed it as fact.
+### Merged
 
-Score went from **11/25 to 25/25 behaving correctly.**
-
-### Merged to master (nine phases)
-
-| # | What | Why it mattered |
+| Branch | Phases | Scope |
 |---|---|---|
-| 0 | Test-suite realignment | Suite could not COLLECT. 32 failures: 31 stale tests, 1 real bug |
-| 1 | Planner refusal quality | Filter dumps → guards with typeable examples |
-| 2 | Credit-memo currency | `Total credit value: -17232.52` across 4 currencies |
-| 3a | Tools report `totalResults` | 3 tools could never report truncation |
-| 3b | Synthesizer narrates truncation | "25 credit memos" where 2,111 exist |
-| 4 | Deterministic supplier records | 2 prompts burned 48,750 tokens producing NOTHING |
-| 5 | `plan_refusal` flag | Refusal-vs-crash was decided by grepping the message |
-| 6 | StandardReceipt KG alignment | KG advertised a tool the server does not have |
-| 7 | Column display | Record block + table printed the same data twice |
+| `lifecycle-phase-3-4-tool-layer` | 3, 4 | Tool contract, supplier setup, computed risk, per-line detail |
+| `lifecycle-phase-5-9-pipeline` | 5–9 | KG rows, parser, planner, server wrapper, synthesizer, display |
 
-### The finding that outranks the fixes
+### The five prompts now answering
 
-**The KG was not reproducible.** A `lag_query` filter and a
-`get_receipts_with_lag` entity tool were live in the Oracle KG but in
-NEITHER the seed nor master — the code is on
-`feature/ar-prompt-18-parking`. The KG was advertising a tool the running
-server does not have. Anyone running `rebuild_kg.sh` got a different
-system from the one being tested against.
+Catalog section 4.A: **A.2, A.3, A.4, A.7, A.10.** One tool, one KG filter,
+three output shapes (status matrix, executive summary, diagnostic).
 
-Both rows were removed; they belong with prompt 18 when it lands.
-Seed and database now agree. Counts: `kg_entity_tool` 9,
-`kg_entity_filter` 23.
+`scripts/prompts/08_lifecycle.txt` — 31 prompts, **30 routed as intended.**
+Zero regressions on the five neighbouring routes that share vocabulary.
 
----
+### Measured, post-merge
 
-## Where the lifecycle work stands
-
-Target prompt (SME catalog A.4 + A.2, agreed):
-
-> "Has PO [number] been fully received, fully invoiced, and fully paid?
-> Show ordered, received, invoiced, paid, and remaining amounts with
-> supplier details, and identify the current lifecycle stage and
-> responsible team."
-
-**Build sequence position: steps 1–2 done, step 3 next.**
-
-| Step | Status |
+| Metric | Value |
 |---|---|
-| curl discovery | ✅ done |
-| standalone tool | ✅ `src/spire/mcp_server/tools/po_lifecycle.py` |
-| KG rows | ⬅ **NEXT** |
-| planner / parser / server wrapper | pending |
-| synthesizer / display / prompts / tests | pending |
+| Full suite | 602 passed, 17 deselected, 1 xfailed |
+| Lifecycle tool tests | 98 (`tests/test_po_lifecycle_tool.py`) |
+| Mean wall-clock, answered prompt | 16.0 s (range 4.8–21.4) |
+| Mean tokens per prompt | 12,230 (median 12,288) |
+| **Parse input baseline** | **~8,671** — see the diagnostic note below |
+| Parse share of all input | 78% |
+| KG counts | `kg_entity_tool` 10, `kg_entity_filter` 24 |
 
-### Curl findings (all verified 2026-07-28)
-
-- `/purchaseOrders`, `/purchaseOrderSchedules` both filter server-side on
-  `q=OrderNumber='<n>'` — the schedules one was previously undocumented
-  (only `POHeaderId` was known).
-- **`ReceivedAmount` is 0 or null on EVERY schedule row on this pod**
-  (~4,500 rows checked). The received leg exists only as a QUANTITY, so
-  the amount is DERIVED: `Amount * (ReceivedQuantity / Quantity)`.
-  Oracle's own arithmetic agrees — PO 701337 line 1 is Amount 1116,
-  Quantity 4, ReceivedQuantity 1, and the pod's BilledAmount is 279,
-  exactly 1116 × ¼.
-- Header `Ordered` is Oracle's own total; the schedule sum cross-checks it.
-
-### The two test POs
-
-| PO | Ordered | Received | Invoiced | Paid |
-|---|---|---|---|---|
-| **701337** (JGA, Open) | 1235.00 | 398.00 derived (2 of 5 units) | 398.00 | none |
-| **162034** (Lee Supplies, Closed) | 758.00 | 758.00 | 758.00 | 830.01 ✓ |
-
-Neither has all four legs; together they cover everything. 701337 proves
-partial reconciliation and mixed line statuses (one Open, one Closed);
-162034 proves the invoice join and carries a genuine exception — an
-invoice **72.01 ABOVE** the order, probably tax, unconfirmed.
-
-701337 has `PayOnReceiptFlag: true`, which may explain why it has billing
-with no PO-linked invoice (self-billing). **Unconfirmed hypothesis.**
-
-### Two decisions still open on `po_lifecycle.py`
-
-**1. The paid leg for a PO with no matched invoice.** 701337 reports
-`remaining_to_pay: 398.00`, computed as invoiced − paid where "invoiced"
-comes from SCHEDULES. But no AP invoice exists, so it asserts 398 is owed
-when the truth is "the bill cannot be found."
-
-Options were: leave it; base the paid leg on matched invoices (gives 0.00
-but then `fully_paid: true` on a PO where nothing was paid); or
-**tri-state it** — paid / partially paid / **unknown**. The third was
-recommended and NOT yet decided: it is the only one that doesn't assert
-something false, and "the chain breaks here" is what a lifecycle view
-should say.
-
-**2. The tool predates this session's patterns.** Its `_page_all` does
-not request `totalResults` — the same gap fixed in three AR tools in
-phase 3a. Low impact (both fetches are scoped to one PO) but the
-`MAX_PAGES` cap can still be hit silently. Worth aligning before KG rows
-lock the interface.
+**THE STALE-KG DIAGNOSTIC HAS MOVED.** The old rule was "if `parse in=` is
+materially below ~8,119, the KG did not rebuild." Phase 6 added ~546 tokens
+to the parse prompt. **The new baseline is ~8,671.** A run at 8,119 now
+means something is wrong, not right.
 
 ---
 
-## Open issues, carried forward
+## Contract decisions closed this session
 
-Ordered by how much damage each can do.
+Recorded because they constrain everything downstream.
 
-### Can put a wrong number in front of someone
+**D1 — the paid leg is TRI-STATE.** A PO can carry `BilledAmount` on its
+schedules with no AP invoice bearing its number (701337 does). The tool used
+to report `remaining_to_pay: 398.00`, asserting a debt when the truth is the
+bill cannot be found. Now `paid_state: "unknown"`, `fully_paid: None`,
+`remaining_to_pay: None`.
 
-- **Invoice total over a sample.** "invoices for Lee Supplies" says "The
-  total amount for these invoices is 36646.61 USD" — a sum over 25 of
-  1,343 rows, stated flat. Same family as the credit-memo total already
-  fixed, different mechanism.
-- **"country" returns a full address.** "Supplier number and country for
-  active suppliers" produces an `Address` column holding
-  `7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM`. An analyst asking for
-  country wants "United Kingdom".
-- **Only the FIRST address is shown**, silently, for suppliers with 25.
-- **`StandardReceipt` and `AccountReceipt` model the same receipts** with
-  different projections and — per the KG's own notes — DISAGREEING
-  COUNTS. Both are routable by the planner, so two near-identical prompts
-  can return different numbers.
+**Branch on `paid_state`, never on the truthiness of `fully_paid`.** JSON
+has no tri-state bool; `None` serializes to `null` and `if fully_paid:`
+reads null as False, which restores the exact defect.
 
-### Known bugs, pinned
+**D2 — `totalResults=true` on every paged fetch**, read from the FIRST page.
+Reading it from the last loses it when the cap is hit, which is the case the
+count is needed for.
 
-- **`search_standard_receipts` can never report `truncated=True`.** It
-  computes truncation then passes `total_available=None`, and
-  `ToolResult.build` derives truncated FROM that None. Pinned by a
-  `strict=True` xfail in `tests/test_standard_receipts_tool.py`, so it
-  cannot be fixed silently. Needs `ToolResult` to express "truncated,
-  total unknown".
-- **W7 — "supplier sites" mis-parses as addresses.** Root cause found:
-  `Address` and `Site` have ZERO `entity_synonym` vocab rows while ten
-  other entities have them, so the parser guesses. But this is a full
-  phase, not a data fix: the synthesizer has NO concept of a site (no
-  `SiteInfo`, no `SupplierRecord.sites`, no prompt clause, no display).
-  Five of ten build steps outstanding.
+**D3 — `risk` and `recommended_action` are computed in the tool**, never in
+the synthesizer, with `risk_reasons` always accompanying the rating. A
+rating an LLM invents is unreproducible and unauditable.
 
-### Housekeeping
+**D4 — money from invoice headers, context from installments.** Installments
+are one call per invoice and therefore capped; headers never are. Sourcing
+money from a capped fetch gives a silently short total. `UnpaidAmount` is a
+cross-check that lands in `notes`, never a source. A bitten cap costs hold
+visibility, never a number.
 
-- **17 tests are DESELECTED** by a marker filter nobody has examined. A
-  green suite that silently skips 17 tests is a weaker guarantee than it
-  looks. One command to find out.
-- `print_kg.py` counts may disagree with the tests again after phase 6.
-- Address flattening exists TWICE: `_format_projected_table` for the
-  table, `_address_info` in the synthesizer. One behaviour, two places.
-- "Answer:" prints twice on column queries — once for the summary, once
-  above the table.
-- 31 branches on the remote, most looking merged. Worth a prune.
+**D5 — a FILTER on PurchaseOrder, not a new entity.** The vocabulary already
+binds "purchase order", "PO" and "order" to `PurchaseOrder`; a `POLifecycle`
+entity would compete for those words and lose. No `kg_entity_field` rows
+either — the tool's fields are computed, not endpoint fields.
+
+**D6 — ONE filter, not three**, though five prompts route through three
+shapes. They want the same data and differ only in emphasis; rendering is
+the synthesizer's choice, not the planner's.
+
+**D7 — the synthesizer writes the summary ONLY.** Legs, stage, team, risk,
+action, setup notes, exceptions and tables are all built in code by
+`build_lifecycle_response`. See "the paid-leg lesson" below.
 
 ---
 
-## Token profile (measured, 25-prompt run, post-fixes)
+## Three known defects, carried forward
 
-```
-parse       25 calls  in=202,980  out= 7,990  total=210,970   (75%)
-synthesize  10 calls  in= 53,110  out=15,562  total= 68,672   (25%)
-GRAND                                          total=279,642
-```
+All three found by reading actual output. None produces a wrong number.
 
-**Parse input is constant at ~8,119 per call** — the KG menu (22
-entities, 23 filters, 97 vocab terms) rebuilt and re-sent every time. The
-question itself is 10–20 tokens of that.
+**1. A risk-only question is refused.**
+*"What is the risk rating on PO 701337 and why?"* → *"The system does not
+track 'risk rating' for purchase orders."* It does — risk appears with full
+reasoning whenever a broader question is asked. The parser's PO LIFECYCLE
+section covers risk only inside the summary case. **One line of parser
+instruction.**
 
-Parse rose from 65% to **75% of consumption** this session — not because
-parse grew, but because synthesize shrank. The prompt-caching argument is
-now stronger, and its target is unchanged: 202,980 input tokens
-re-sending the same menu 25 times.
+**2. A non-existent PO renders as "cannot be determined".**
+`found: False` produces *Received: cannot be determined · Invoiced: cannot
+be determined · Paid: cannot be determined*, which implies the order exists
+and is unknowable. The summary sentence is correct and the verdict line
+contradicts it. `build_lifecycle_response` does not branch on
+`found=False`.
 
-**Diagnostic:** if `parse in=` is much below ~8,119, the KG did not
-rebuild. Everything downstream is then meaningless. Check this before
-reading anything into a run.
+**3. Internal ids leak into user-facing prose.**
+The summary says *"supplier JGA (ID 300000047414635)"*. Real, but no finance
+user wants it. One line in the synthesizer prompt.
+
+**Also spotted, not yet fixed:** when the supplier site cannot be read,
+`_build_lifecycle_setup_notes` still prints *"differ from the site default
+(None)"* — comparing against a value it does not have. Same species as
+defect 2: a null rendered as a statement. Gate it on `site_read`.
 
 ---
 
-## How to test (give this to QA)
+## Curl findings added to the reference (section 14)
 
-```
-1. git pull
-2. python scripts/rebuild_kg.py          # don't skip — the seed changed
-3. Terminal 1:  python -m spire.mcp_server.server
-   (already running? restart it, or you test old code)
-4. Terminal 2:  python scripts/run_prompt_set.py \
-                  --prompt-file scripts/prompts/qa_testcases.txt
-```
+All verified 2026-07-29. Eleven rows for the quirk table are in §14.0,
+**still to be pasted into the table at the top of the file** — the section
+was appended but the table rows are a manual step.
 
-**Classify results in four buckets, not pass/fail:**
+- `totalResults=true` honoured on `/purchaseOrderSchedules` and `/invoices`
+- **Invoice holds live on `invoiceInstallments`**, not the invoice header.
+  There is no `holds` child. `HoldFlag`, `HoldReason`, `HoldType`, `HeldBy`,
+  `HoldDate`, plus a real `DueDate` and `UnpaidAmount`
+- **NO payment document exists anywhere on the AP path** — no payment
+  number, no payment date, on either the invoice or the installment. This is
+  an absence, not an undiscovered endpoint
+- `AmountPaid` and `CanceledFlag` are on the invoice header. Summing
+  `InvoiceAmount` gated on `PaidStatus == "Paid"` drops partial payments
+  entirely
+- `expand=sites` **works on a single-supplier GET** — the existing "silently
+  ignored" quirk is about BULK fetches only. It returned 22 sites for JGA
+- `suppliers/{id}/child/sites/{siteId}` accepts `fields=` and carries five
+  hold flags plus `MatchApprovalLevel` and `InvoiceMatchOption`
+- Fetch the supplier **by SupplierId** (on the PO header) to sidestep the
+  client-side `Status` matching quirk
+- PO header has supplier-communication fields but **no approval date and no
+  approver**
+- `TotalTax: 0` on 701337 — so PO-side tax does NOT explain 162034's 72.01,
+  which the previous session had guessed
+- `FundsStatus` is null on closed POs
 
-| Bucket | Meaning | Bug? |
-|---|---|---|
-| Passed | Answered, and the answer is right | no |
-| Not a valid prompt | Can't be answered as written | no — fix the prompt |
-| Refused | Fair question, not supported yet | no — feature request |
-| Failed | Crashed, or answered WRONGLY | **yes** |
+---
 
-A refusal is not a failure. The dangerous outcome is a confident wrong
-answer — it is the only one that passes a quick read, and it is exactly
-what the SME's original report missed.
+## Test data
 
-**Every prompt runs on its own.** No memory of the prompt before or
-after. "For that PO, how much was received?" cannot work; write "For PO
-2144, how much was received versus ordered?" instead.
+| PO | Supplier | Status | Ordered | Received | Invoiced | Paid | Stage |
+|---|---|---|---|---|---|---|---|
+| **701337** | JGA | Open | 1235.00 | 398.00 derived | 398.00 | **unknown** | Awaiting receipt |
+| **162034** | Lee Supplies | Closed | 758.00 | 758.00 | 758.00 | 830.01 | **Complete** |
+
+701337 proves partial reconciliation, mixed line statuses (line 1 Open with
+837.00 outstanding, line 2 Closed), the unknown paid state, and the
+payment-terms override (PO Net 30 vs site default 2/10 Net 30).
+`PayOnReceiptFlag: true` **may** explain the unmatched billing via
+self-billing — **unconfirmed, and labelled as such in output.**
+
+162034 proves the invoice join, the installment join and the Complete stage.
+Carries an unexplained **72.01** over-invoice.
+
+**What these two do NOT cover:** a partly paid invoice, an invoice on hold,
+a supplier setup blocker, a truncated fetch. All four exist in code and are
+covered by synthetic test cases only. **Finding real POs for the first two
+is worth an hour before any SME demo.**
+
+---
+
+## Corrections made this session
+
+Recorded because the pattern matters more than the individual errors.
+
+**"`responsible_team` returns Payments on 701337" — WRONG.** 701337 is only
+partially received, so it stops at *Awaiting receipt* / *Supplier /
+Receiving*, both legs before the paid leg. The wrong-team bug was real but
+reachable only on a PO fully received AND fully invoiced with unmatched
+billing — neither test PO. Confirmed synthetically instead.
+
+**"Neither test PO reaches the Complete stage" — WRONG.** 162034 does, under
+both old and new code.
+
+**"The planner may need zero changes" — WRONG.** It needed two, and one was
+a hard blocker: the `PurchaseOrder` rooting guard accepted only `by_id`,
+`created_before` and `created_since`, so a correctly parsed lifecycle intent
+would still have been refused.
+
+**Invented a helper that did not exist.** Wrote a synthesizer branch calling
+`_synthesize_with_schema`, inferred from the shape of surrounding code.
+Caught by grep before it shipped.
+
+**All four came from reading code rather than running it.** The plan
+document now carries the first two as explicit corrections rather than
+quietly fixing them.
 
 ---
 
@@ -239,57 +219,223 @@ after. "For that PO, how much was received?" cannot work; write "For PO
 **Curl before code.** Every fix that stuck started with a curl; every
 theory-first attempt got reverted.
 
-**A diagnosis from a previous session is a claim, not a fact.**
-Re-observe before acting.
+**A claim from inspection is not a finding.** Four times this session. Cheap
+when caught before the doc lands; expensive in a demo.
 
-**Read the answers, not the tally.** "21/25 ran cleanly" was true of a
-run where 4 answers were silently wrong. The runner prints this warning
-itself.
+**Measure rather than infer, when measurement is one command.** Two KG rows
+with ~150-word `notes` moved parse input by **8 tokens** — which proved the
+notes never reach the parser at all. `KGMenu` carries `filter_types` as bare
+strings: entities get descriptions, filters get nothing. That one number
+settled a question two rounds of code reading had not.
 
-**Check the environment before believing a failure report.** One token
-count would have invalidated 12 of the SME's 21 findings before anyone
-read them.
+**An absent child rules out a PATH, not a capability.** Invoice holds were
+briefly written off because `/invoices` has no `holds` child. They were one
+level down, on `invoiceInstallments`. Check the children of the children
+before declaring absence.
 
-**Fixing a bug can expose a rule the bug was enforcing.** Making the
-synthesizer succeed on address queries removed the failure that had been
-keeping the record block off column output. Nothing else enforced it.
+**A `.links[]` listing beats guessing paths.** One call named every child of
+`/invoices` and ruled out two guesses at once.
 
-**Don't classify on message text.** Refusal-vs-crash was decided by
-`"require" in err`. Rewording a guard silently reclassified it — and did.
+**A control curl is what makes an empty result trustworthy.** 701337's zero
+invoices only became a finding once 162034 proved the filter works. Second
+session running where a control changed the diagnosis.
 
-**Compute in the tool, not the prompt.** Every numeric bug fixed has been
-fixed by having the tool compute and the synthesizer copy.
+**Parser instruction placement is load-bearing — confirmed again.** The
+refusal cost `out=1412`; the routed answer costs `out=231`. Six times
+smaller, from putting the instruction in a standalone labeled section rather
+than a bullet inside `COMPLETENESS`.
 
-**Ask what already exists before building.** The deterministic-record fix
-was built parallel to the column feature, which had already established
-the same principle and even the same address flattening. Cost: duplicated
-logic and a display regression.
+**THE PAID-LEG LESSON — code-built beats prompt-instructed.** The first
+working run reported `Paid: amount=0.0` beside the note *"cannot be
+determined"*. The model copied the tool's `paid: 0.0` faithfully and
+destroyed its meaning: a reader sees 0.00 and concludes nothing was paid.
+The prompt already said not to. Moving leg construction into code removed
+the failure mode instead of guarding against it — and cut synthesize output
+1,824 → 924 for a better answer. **Generalise this pattern.**
+
+**Verify `fields=` per endpoint.** `/standardReceipts` 500s on any
+projection; the supplier-site child accepts it. Neither is inferable from
+the other.
+
+---
+
+## Documents produced this session
+
+| Document | Purpose |
+|---|---|
+| `docs/spire_plan.md` §Module 5 | Rewritten with two corrections marked as corrections, phases 3–9 status, seven carried risks |
+| `docs/spire_fusion_endpoints_reference.md` §14 | The 2026-07-29 curl findings. §14.0 rows still to be pasted into the top table |
+| `spire_lifecycle_sme_update.md` | SME-facing: all 31 prompts with results, every refusal explained, known limitations up front |
+| `spire_enhancement_roadmap.md` | 16 raw enhancement items grouped into six themes, resequenced |
+| `spire_enhancement_requirements.md` | Formal spec: 27 requirements, 3 decisions, 12 phases, full traceability to the original 16 |
+
+**The last two are not in the repo yet, and the requirements document is now
+the governing plan for the next phase of work** — see THE NEXT GOAL below.
+Filing them is the first action of the next session.
+
+---
+
+## THE NEXT GOAL
+
+**Deliver the enhancement requirements document, and clear the open defects
+along the way.**
+
+That is the whole of the next phase of work. Module 5's five prompts are
+delivered; new catalog coverage (A.1, A.5, A.6, A.8, A.9) is explicitly
+NOT the next goal and should not be started without a decision to change
+direction.
+
+### The governing document
+
+`spire_enhancement_requirements.md` — **27 requirements, 3 decisions, 12
+phases.** It is the plan. It supersedes any ad-hoc feature list, including
+the raw 16-item list it was derived from, and including the roadmap draft
+that preceded it.
+
+**IT IS NOT IN THE REPO YET.** First action of the next session: file both
+planning documents deliberately — `docs/spire_enhancement_requirements.md`
+and, if kept, `docs/spire_enhancement_roadmap.md`. A governing plan that
+lives only in an attachment will be lost.
+
+Requirement IDs are stable and should be quoted in branch names, commit
+messages and test names: `UX-01`, `OBS-03`, `TST-02`, `PRF-05`, `API-01`,
+`DEC-01`.
+
+### Phase 0 — the open defects
+
+Not in the requirements document, because they predate it. Clear them first:
+they are small, they are in front of an SME right now, and two of them are
+instances of the very class `UX-01` addresses.
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | Risk-only question refused | One line in the parser's PO LIFECYCLE section |
+| 2 | Non-existent PO renders "cannot be determined" | `found=False` branch in `build_lifecycle_response` + a display case |
+| 3 | Internal `SupplierId` in user-facing prose | One line in the synthesizer prompt |
+| 4 | Terms note prints "(None)" when the site is unread | Gate on `site_read` in `_build_lifecycle_setup_notes` |
+
+Roughly half a day. Defects 2 and 4 are the same species — a null rendered
+as a statement — and should be fixed together.
+
+### Then the requirements phases, in order
+
+Sequence is per §10 of the requirements document. Dependency-ordered, not
+priority-ordered.
+
+| Phase | Requirements | What it is |
+|---|---|---|
+| **1** | `UX-05`, `OBS-01`, `OBS-02` | Quiet default output; independent per-component debug flags; config file with CLI override |
+| **2** | `UX-01`, `UX-02`, `UX-03` | Structured refusals; narrowing guidance for over-broad queries; truncation disclosure |
+| **3** | `OBS-03`, `OBS-04`, `OBS-05` | Per-stage timing; per-Fusion-call timing; machine-readable run record |
+| **4** | `TST-02`, `TST-03`, `TST-01` | Plan tests (no LLM, no pod — do first); synthesizer tests on fixed records; routing tests |
+| **5** | `PRF-01` | Deterministic response construction across all shapes |
+| **6** | `PRF-02`, `PRF-03` | Prompt caching for the KG menu; exact-match intent cache |
+| **7** | `PRF-05` | Concurrent Fusion calls |
+| **8** | `UX-04`, `PRF-07`, `PRF-08` | Aggregate fallback; verify against the latency and token targets |
+| **9** | `API-01`, `API-02` | REST interface; structured response contract |
+| **10** | `API-03` | Spire as one MCP tool — requires `DEC-02` |
+| **11** | `PRF-06`, `PRF-04` | Vocabulary into the KG; evaluate the semantic intent cache |
+| **12** | `API-04`, `API-05` | Configuration UI; query console — constrained by `DEC-03` |
+
+**Phases 1 to 4 produce no new capability**, and that is the point. They are
+the reason every later phase is faster and safer: without phase 3 no
+optimisation can be proven to have helped, and without phase 4 none can be
+shown not to have broken something.
+
+**Resist starting at phase 5 or 6.** The gains there are visible and the
+temptation is real. It is also how an unmeasured optimisation becomes an
+unnoticed regression.
+
+### The baseline the targets are measured against
+
+From this session, on the 31-prompt run. `PRF-07` and `PRF-08` are stated
+relative to these numbers, so they must not be re-derived from a different
+run without saying so.
+
+| Metric | Baseline | Target |
+|---|---|---|
+| Mean wall-clock, answered prompt | 16.0 s | under 8 s (`PRF-07`) |
+| Mean tokens per prompt | 12,230 | under 4,000 (`PRF-08`) |
+| Parse share of all input tokens | 78% | — |
+| Fusion calls per lifecycle prompt | 6, sequential | concurrent (`PRF-05`) |
+
+## Open questions awaiting a decision
+
+From the requirements document §9. **Decisions, not tasks.**
+
+**DEC-01 — planner architecture.** Should the KG planner be supplemented or
+replaced by an LLM planner, single-agent or multi-agent? **This is a
+reversal of Design 3, not an enhancement.** Proposed resolution: keep the KG
+planner primary, add an LLM fallback for currently-refused questions only —
+additive, evaluable, no rewrite.
+
+**DEC-02 — copilot exposure.** Expose the MCP tools directly (discards KG
+planning and every guard), expose Spire as ONE MCP tool running the full
+pipeline (preserves everything), or expose REST? Proposed: the second, with
+REST for breadth.
+
+**DEC-03 — multi-backend.** "Connect to any HCM" is a programme, not a
+configuration screen. Every documented pod quirk is Fusion-specific. Must
+not block the UI work.
+
+---
+
+## Carried forward from the previous handoff — still open
+
+Not touched this session.
+
+**Can put a wrong number in front of someone**
+
+- **Invoice total over a sample.** "invoices for Lee Supplies" states a
+  total summed over 25 of 1,343 rows as fact. Same family as the
+  credit-memo defect already fixed, different mechanism.
+- **"Country" returns a full address.** Asking for country yields
+  `7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM`.
+- **Only the FIRST address is shown**, silently, for suppliers with many.
+- **`StandardReceipt` and `AccountReceipt` model the same receipts** with
+  disagreeing counts, and both are routable.
+
+**Pinned bugs**
+
+- **`search_standard_receipts` can never report `truncated=True`.** Pinned
+  by a `strict=True` xfail. Needs `ToolResult` to express "truncated, total
+  unknown".
+- **W7 — "supplier sites" mis-parses as addresses.** Root cause: `Address`
+  and `Site` have ZERO `entity_synonym` rows. But the synthesizer has no
+  concept of a site at all, so this is a full phase, not a data fix.
+
+**Housekeeping**
+
+- **17 tests are DESELECTED** by a marker filter nobody has examined.
+- Address flattening exists twice.
+- ~31 branches on the remote, most looking merged. Worth a prune.
 
 ---
 
 ## Reference
 
-- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch.
-- **Restart the MCP server after ANY change under
-  `src/spire/mcp_server/`.** Tool definitions are built at import. This
-  has cost false diagnoses more than once. Planner, parser and
-  synthesizer changes do NOT need a restart.
-- Synthesizer five-place rule: adding an entity touches the registry,
-  `_SYSTEM_PROMPT_BY_ENTITY`, `_collect_valid_ids`, the validator
-  function, and the validator dispatch — plus the empty-array guard,
-  whose bucket name must match `_OUTPUT_NAME_BY_ENTITY` exactly.
-- KG tripwires: bump `print_kg.py` AND `tests/test_kg_metadata.py`
-  together.
-- Pod quirks (confirmed): composite `q=` fails silently with HTTP 200 /
-  `totalResults: 0` — use SINGLE clauses only; `expand=sites` ignored on
-  bulk fetches; `/standardReceipts` rejects `fields=` (500);
-  `Supplier.Status` must be matched client-side; child bodies omit the
-  parent id (join key is the URL path); addresses use `expand=addresses`
-  with PascalCase keys and `SupplierAddressId`;
-  `TransacationBusinessCategory` is misspelled by Oracle — use the typo;
-  `curl --compressed` required.
+- KG rebuild: `python scripts/rebuild_kg.py` — always from scratch. Seed is
+  `scripts/sql/kg_schema.sql` (schema AND data, 384 inserts).
+- **Restart the MCP server after ANY change under `src/spire/mcp_server/`.**
+  Tool definitions are built at import. Planner, parser and synthesizer
+  changes do NOT need a restart.
+- **KG counts live in FOUR places, not two:** `scripts/print_kg.py`,
+  `tests/test_kg_metadata.py`, and the two `PROMPT Seeded ... (N rows)`
+  banners inside the seed file itself.
+- Synthesizer five-place rule: registry, `_SYSTEM_PROMPT_BY_ENTITY`,
+  `_collect_valid_ids`, the validator function, the validator dispatch —
+  plus the empty-array guard, whose bucket name must match
+  `_OUTPUT_NAME_BY_ENTITY` exactly. **Module 5 needed two more:** a shape
+  detector, and a branch in the schema-selection chain.
+- Standalone tool runner: `python test_tools/try_po_lifecycle.py 701337
+  162034`. No MCP, no KG, no LLM — a failure is the tool's or the pod's and
+  can be nothing else. It asserts the contract and exits non-zero on a
+  violation.
+- Pod quirks: see `docs/spire_fusion_endpoints_reference.md`. Composite `q=`
+  fails silently with HTTP 200 / `totalResults: 0` — SINGLE clauses only.
 
 **Files to share when starting a task:** `docs/spire_plan.md`,
 `docs/spire_fusion_endpoints_reference.md`, this handoff, plus the code
-files the task touches. Always re-share before editing — never work from
-a copy pasted earlier in the session.
+files the task touches. **Always re-share before editing — never work from a
+copy pasted earlier in the session.** Three files were edited from bundle
+copies this session; all three needed a "diff before copying in" warning.
