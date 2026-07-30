@@ -3,16 +3,16 @@ bundles:
   root:
   - README.md
   - how-to-run-02.md
-  - how-to-run-after-pull.md
-  - prompt_coverage.md
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
   - docs/spire_plan.md
-  - docs/SPIRE_SESSION_HANDOFF.md
-  - docs/spire_architecture.md
   - docs/spire_fusion_endpoints_reference.md
   - docs/spire_pipeline_playbook.md
+  - docs/spire_enhancement_requirements.md
+  - docs/spire_enhancement_status.md
+  - docs/spire_lifecycle_sme_update.md
+  - tests/spire_sme_validation_checklist.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -23,6 +23,7 @@ bundles:
   - scripts/prompts/05_refusals.txt
   - scripts/prompts/06_slow.txt
   - scripts/prompts/07_alacarte.txt
+  - scripts/prompts/08_lifecycle.txt
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/README.md
   - scripts/prompts/scorer/parser_stress.txt
@@ -42,6 +43,7 @@ bundles:
   - scripts/verify_business_relationship.py
   - scripts/verify_nested_addresses.py
   - scripts/score_parser_prompts.py
+  - test_tools/try_po_lifecycle.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -97,7 +99,22 @@ bundles:
   - src/spire/nl_parser/vocabulary.py
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
+  - src/spire/planner/registries.py
+  - src/spire/planner/kg_db.py
+  - src/spire/planner/models.py
+  - src/spire/planner/lookup.py
+  - src/spire/planner/date_utils.py
+  - src/spire/planner/plan_builders.py
   - src/spire/synthesizer/synthesizer.py
+  - src/spire/synthesizer/constants.py
+  - src/spire/synthesizer/errors.py
+  - src/spire/synthesizer/models_common.py
+  - src/spire/synthesizer/p2p.py
+  - src/spire/synthesizer/ar.py
+  - src/spire/synthesizer/aggregation.py
+  - src/spire/synthesizer/prompts.py
+  - src/spire/synthesizer/validation.py
+  - src/spire/synthesizer/lifecycle.py
   - src/spire/graph/pipeline.py
 
   tests:
@@ -122,6 +139,7 @@ bundles:
   - tests/test_nl_parser_integration.py
   - tests/test_oracle_client.py
   - tests/test_planner.py
+  - tests/test_po_lifecycle_tool.py
   - tests/test_prompts.py
   - tests/test_purchase_orders_tool.py
   - tests/test_receivables_credit_memos_tool.py
