@@ -11,7 +11,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-30 (late evening — Phase 1 complete; Phase 2 discovery done)
+**Last updated:** 2026-07-30 (late evening — Phase 1 complete; **UX-01 done**)
 
 ---
 
@@ -21,7 +21,7 @@ phases of design detail bury the status table above them.
 |---|---|---|---|
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
-| 2 | UX-01, UX-02, UX-03 | 🟨 Discovery done | **In progress.** Twelve real refusals collected against the pod — see the Phase 2 section. No design yet, no code. |
+| 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | **In progress.** UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 and UX-03 not started. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -736,11 +736,248 @@ is the same problem from a third direction.
 
 ## E7. Next action
 
-Design the refusal format against these nine real examples, using §E4's
-planner guard as the template. No code before that design is agreed.
+**UX-01 is done** — see §F below for what was built and what it cost.
 
 **Not yet started:** UX-02 and UX-03. UX-03 connects to two
 carried-forward defects (invoice total over a 25-row sample; the 50-page
 stop recorded in §D12) and to the SME report's own cash-trends
 screenshot, which built a month-over-month trend narrative on a
 25-receipt sample and stated it as fact.
+
+One thing UX-03 will find already half-built: `invoices for Lee Supplies`
+does disclose its truncation, both in the narration ("25 of 1348") and in
+a `Truncation:` block. The carried-forward defect is about TOTALS
+computed over the sample, which is a different shape and still open.
+
+---
+---
+
+# Phase 2 build — UX-01 (structured refusal messages)
+
+**Status: done, merged.** Branches `phase-2-refusal-messages` and
+`phase-2-refusal-tests`.
+
+UX-02 and UX-03 not started.
+
+## F1. Root cause — one bug, three visible faults
+
+`capability.derive_flavor` scanned the model's free-text
+`unanswerable_reason` for capitalized words and treated any that was not
+an exact KG entity name as an unknown entity. Sentences start with
+capitals. Reproduced against the four reasons measured from the pod:
+
+| Detected as an "unknown entity" | Actually |
+|---|---|
+| `ID` | an abbreviation |
+| `To` | the first word of the sentence |
+| `Receipt` | a bare noun; `StandardReceipt` is the entity |
+| `Filtering` | a gerund |
+
+Four for four. It was also **unstable**: the same prompt flipped from
+`unknown_entity` to `unparseable` when the model wrote "The request"
+instead of "The question", because `The` is a stopword and `A` is one
+letter. Same meaning, different flavor, purely from incidental wording.
+
+That single bug produced both user-visible faults recorded in §E3.
+`offending_entity` was never set, so the message fell back to "that kind
+of record, which Spire doesn't track yet" — the self-contradiction. And
+the model's accurate reason was discarded — the misdiagnosis.
+
+**The model's diagnosis was correct all along.** Three of the four
+reasons even named the fix ("I need an identifier such as the
+CustomerTransactionId", "can only be retrieved by customer name"). The
+work was not to generate better diagnoses; it was to stop throwing the
+good ones away.
+
+## F2. What was built
+
+**The prose scan is deleted, not repaired.** `derive_flavor` now trusts
+the model, falls back to checking `target_entity` against the KG, then to
+UNPARSEABLE. Its docstring says explicitly not to reintroduce a heuristic
+over model prose.
+
+**Two new schema fields** (`draft.py`):
+
+| Field | Purpose |
+|---|---|
+| `unanswerable_kind` | one of five values; the model classifies its own refusal |
+| `unanswerable_entity` | the record type, **for wording the reply only** |
+
+The second exists because `target_entity` is REQUIRED to stay empty on a
+self-declared refusal — that instruction is the silent-rewrite guard,
+stopping the model mangling an out-of-scope prompt into the nearest
+supported entity. A separate descriptive field leaves that guard
+untouched.
+
+**One new flavor** (`result.py`): `MISSING_IDENTIFIER` — entity and
+operation both supported, the prompt simply never says which record.
+Previously indistinguishable from "we don't have that record type",
+which is what made a supported record read as an unsupported one.
+
+**`UNKNOWN_ENTITY` now splits three ways** in the renderer:
+
+| Case | Message |
+|---|---|
+| not a KG entity at all | "Contract isn't something I know about" + what I do have |
+| KG entity, not a valid query root | "I can look up purchase order lines, but only as part of the record they belong to" + ask for the parent |
+| no entity identified | the capability list |
+
+The middle case is new and was a real false statement: `PurchaseOrderLine`
+is a KG entity, and the old message denied it.
+
+**The message is three labelled lines**, adapted from the planner guard
+that was already the best refusal in the codebase (§E4):
+
+```
+Reason:   I can look up receipts, but not by customer account number.
+Solution: Scope them by customer or site instead — those I can do.
+Example:  receipts for ABC Application Software
+```
+
+The ~90-word entity and filter dump survives in exactly one flavor —
+genuinely-absent entity — where "here is what does exist" is the answer.
+
+**The renderer prefers structured facts over prose.** Refusals arrive by
+two paths with different information quality: self-declared (good model
+prose, previously-wrong flavor) and KG validation (correct flavor, raw
+dump of 21 filter names). Preferring `offending_filters` /
+`offending_entity` when present means the dump never reaches a user and
+the model's prose is used only where it is the best thing available.
+
+## F3. A regression caused and undone, worth recording
+
+Adding `unanswerable_kind` included this example in its description:
+
+> 'standard receipts for account 25750' — account number is not a receipt
+> filter
+
+Three runs later, that prompt **stopped refusing**. It parsed to
+`StandardReceipt` with `customer_name = '25750'`, executed, and returned
+zero records. Deterministic, three for three — not model variance.
+
+A refusal had become a silent empty result, which is strictly worse: the
+user gets "no receipts found" for a query that was never valid.
+
+The example named a real filter-shaped value, so the model learned a
+mapping instead of a refusal. Replaced with one that has nothing to map
+onto ("suppliers with more than 50 employees — headcount is not a
+supplier filter") plus an explicit prohibition: *do not map an
+unsupported value onto a different filter to make the question
+answerable*.
+
+**Lesson: an example in a prompt is an instruction.** A field description
+teaching the model what NOT to do can teach it what to do instead, if the
+counter-example is close enough to something real.
+
+## F4. Verification — as run
+
+Everything below is measured, not argued.
+
+**Full suite: 762 passed, 18 deselected, 1 xfailed.** Up from 672. The
+extra deselection is the new integration-marked KG check.
+
+**`05_refusals` 9/9, every message read.** Four defects found this way,
+none by inspection: a class name leaked into prose, an internal filter
+key leaked, `PurchaseOrderLine` denied, and supplier questions given
+receipt examples.
+
+**`08_lifecycle` 31/31, answers unchanged.** Its three refusals also
+surfaced two defects — a suggestion that pointed back at the failure, and
+a comparison told it needed totals.
+
+**All 18 promised examples answer.** See §F5.
+
+**Two prompts run genuinely in parallel** from separate processes, no
+bleed. Analysis of the server agreed: `_persona` is read-only and each
+tool opens its own `httpx.AsyncClient`. Caveat on record — two fast
+single-step reads is the easy case, not a load test.
+
+## F5. The examples were promises nobody had checked
+
+A refusal's `Example:` line is offered to someone who has just been told
+no. If it fails when typed, the refusal has made things worse than
+silence.
+
+They were written from what looked plausible and never run. Verifying all
+19 against the pod found one failure:
+
+> `open purchase orders for supplier EIP Inc` — **refuses.** Filtering
+> POs by supplier name is not supported, which is the very refusal that
+> example was offered to resolve.
+
+It appeared in **three** tables. A user following the advice landed
+straight back where they started.
+
+Now: `scripts/prompts/10_refusal_examples.txt` holds every promised
+example as a runnable set, and a test asserts the tables and the file
+cannot drift apart. An example cannot ship without someone having typed
+it.
+
+## F6. The entity label table, and its tripwire
+
+Plain nouns beat class names — "AR invoices", not `ReceivablesInvoice`.
+This is the one part of the message that does NOT self-update from the
+KG, and it was wrong immediately: filled from the **8 target entities**
+when a refusal can name any of the **22**. Every related type — tax
+lines, invoice lines, buyers, sites, contacts — fell through and printed
+its class name.
+
+Found when "tax lines for that invoice line" answered
+`I can look up ReceivablesTaxLine, but...`.
+
+Worse, the first fix was wrong too: suppressing unlabelled entities made
+the message vaguer for a record Spire genuinely has. `ReceivablesTaxLine`
+IS a KG entity — just not a query root. The right fix was the label, not
+the suppression.
+
+`tests/test_nl_parser_capability.py` now fails if any KG entity lacks a
+label, with an integration-marked twin checking the static list against
+the live KG.
+
+## F7. `run_prompt_set.py` — a Phase 1 decision reversed
+
+Phase 1 left the harness ungated, arguing "its output is its purpose"
+(§D3, deviation 2). Reading an actual 31-prompt run settled it: the
+ANSWERS are the purpose; the Intent/Plan/Outputs blocks are what you
+scroll past.
+
+It now takes the same seven flags as `run_graph.py`, with the same file
+and environment layers. Its own scaffolding — prompt banners, per-prompt
+timing, the roll-up — stays unconditional, because a hundred answers with
+no indication which prompt each belongs to would be useless.
+
+Also fixed: `diagnostics.answer()` now flushes. Python block-buffers
+stdout when it is a pipe but leaves stderr unbuffered, so every piped run
+showed each prompt's diagnostics ABOVE its own answer.
+
+## F8. New bugs found, not fixed
+
+1. **`get_account_receipt_applications` is unreachable from natural
+   language.** Tool exists, registered, both phrasings refuse. Confirmed
+   again this session — "Trace receipt applications for account 25750"
+   now routes to `CustomerAccount` instead.
+2. **"Show invoice lines for invoice X" answers the wrong question** —
+   returns the header plus `lines: 1`, a count, not the line detail.
+3. **"Account activity summary for top accounts" silently re-routes** to
+   an exposure ranking of the top 10 of 435 accounts.
+4. **Two `Answer:` headers on column queries** —
+   `_format_synthesized(summary_only=True)` and
+   `_format_projected_table` each emit one. Pre-existing, in
+   `display_formatters.py`.
+
+## F9. What it cost, honestly
+
+The design was "one new field". It took four fields across three files,
+plus a regression caused and undone, plus a wrong first fix to the label
+table, plus a guard that tested the wrong predicate and had to be
+corrected.
+
+**Every one of those was found by running something and reading the
+output. None was found by reading code.** The prose scan, the mapping
+regression, the 14 missing labels, the guard testing `is_known_entity`
+instead of `target_entities`, the broken example in three tables — five
+defects, five discovered by measurement.
+
+That is the same pattern as the rest of this project's history, and it is
+the argument for the tripwires added alongside the fix rather than after
+it.

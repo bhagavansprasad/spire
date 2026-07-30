@@ -29,6 +29,7 @@ bundles:
   - scripts/prompts/06_slow.txt
   - scripts/prompts/07_alacarte.txt
   - scripts/prompts/08_lifecycle.txt
+  - scripts/prompts/10_refusal_examples.txt
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/README.md
   - scripts/prompts/scorer/parser_stress.txt
