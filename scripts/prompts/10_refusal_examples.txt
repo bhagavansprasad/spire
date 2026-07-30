@@ -1,0 +1,64 @@
+# Refusal examples — every prompt Spire suggests when it declines.
+#
+# WHAT THIS IS
+#
+# When Spire refuses, it answers in three lines:
+#
+#     Reason:   I can look up receipts, but not by customer account number.
+#     Solution: Scope them by customer or site instead — those I can do.
+#     Example:  receipts for ABC Application Software
+#
+# That Example is a PROMISE, offered to someone who has just been told no
+# and is at their least patient. If it fails when typed, the refusal has
+# made things worse than saying nothing.
+#
+# This file is every distinct Example in the guidance tables of
+# src/spire/nl_parser/capability.py. Each one must ANSWER — exit 0.
+#
+# WHY IT EXISTS
+#
+# 2026-07-30: the examples were written from what looked plausible and
+# never run. Verifying them against the pod found
+# "open purchase orders for supplier EIP Inc" refuses — filtering POs by
+# supplier name is not supported, which is the very refusal that example
+# was offered to resolve. It appeared in THREE tables. A user following
+# the advice landed straight back in the same refusal.
+#
+# tests/test_nl_parser_capability.py asserts every example in those tables
+# appears in this file. Add an example without adding it here and the
+# suite fails — so no example can ship unverified again.
+#
+# HOW TO RUN
+#
+#   python scripts/run_prompt_set.py --prompt-file scripts/prompts/10_refusal_examples.txt
+#
+# Every prompt must answer. A refusal here is a BUG in capability.py, not
+# in this file: fix the example, do not delete the line.
+#
+# Faster, if you only want the verdicts:
+#
+#   while read -r p; do case "$p" in ''|\#*) continue;; esac; \
+#     python scripts/run_graph.py --prompt "$p" >/dev/null 2>&1 \
+#     && echo "OK       $p" || echo "REFUSED  $p"; \
+#   done < scripts/prompts/10_refusal_examples.txt
+#
+# Baseline 2026-07-30: 18/18 answered.
+
+Get supplier contacts for Lee Supplies
+Get tax lines for invoice 300000248096352
+Get the AR invoice with CustomerTransactionId 300000248096352
+Show PO 2144 and its buyer
+Show PO 2144 and its distributions
+Show PO 2144 and its lines
+Show PO 2144 and its schedules
+Show invoice lines for invoice 300000248096352
+Suppliers with their addresses
+What is the risk rating on PO 701337 and why?
+account balance for ABC Corporation Americas
+active suppliers in US
+credit memos for ABC Application Software
+invoices for Lee Supplies
+open invoices for ABC Corporation Americas
+receipts for ABC Application Software
+supplier sites for Lee Supplies
+suppliers with classification Minority Owned
