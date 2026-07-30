@@ -33,12 +33,12 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-import sys
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from spire.config import LLM_MAX_OUTPUT_TOKENS
+from spire.diagnostics import get_logger
 
 # Re-exported so that every existing import of these names from
 # spire.synthesizer.synthesizer keeps working unchanged. Five test
@@ -153,6 +153,12 @@ from spire.synthesizer.validation import (  # noqa: F401
     _validate_supplier_spend_ranking,
     _VALIDATORS,
 )
+
+
+# Shape detection is the one diagnostic this module emits. It answers
+# "which schema did the router pick?", which is the first question when
+# a synthesized answer looks wrong. Gated by --show-synthesizer.
+_log = get_logger("synthesizer")
 
 
 # SynthesizedResponse. Keeping the name means supplier-path code and
@@ -301,7 +307,7 @@ def synthesize_response(
     lifecycle_record = _lifecycle_shape(outputs)
 
     shape = _aggregation_shape(outputs)
-    print(f"[debug] shape = {shape}", file=sys.stderr)
+    _log.debug("[debug] shape = %s", shape)
     if lifecycle_record is not None:
         # Summary-only, like the supplier-record path: the model writes
         # the prose and code assembles every value. See

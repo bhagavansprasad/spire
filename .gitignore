@@ -18,6 +18,8 @@ test_results/
 how-to-run.md
 traces/
 temp/
+flag_matrix/
+all_sets.txt
 
 # OS / editor noise
 .DS_Store

@@ -51,6 +51,7 @@ from pathlib import Path
 
 from fastmcp import Client
 
+from spire.diagnostics import setup_diagnostics
 from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
@@ -294,6 +295,18 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+
+    # This harness is deliberately NOT quieted by UX-05 — its output is
+    # its whole purpose, and its own prints are untouched. The call is
+    # here for one reason: without it nothing installs a handler on the
+    # `spire.*` loggers, so the always-on progress lines would vanish
+    # and a slow 31-prompt run would look like a hang.
+    #
+    # No flags: progress and summary come through, per-component
+    # diagnostics stay off. The per-call `[llm] stage=...` token echo
+    # that used to appear here is gone by design; the end-of-run totals
+    # are unaffected.
+    setup_diagnostics()
 
     if args.all and args.prompt_file is not None:
         parser.error("--all and --prompt-file are mutually exclusive.")

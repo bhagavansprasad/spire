@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """
-Run the Design 3 pipeline via the LangGraph graph (parallel to
-scripts/run_plan.py, which runs the same pipeline imperatively).
+Run the Design 3 pipeline via the LangGraph graph.
 
-Kept alongside run_plan.py during the transition so the two can be
-compared on the same prompts. Same prerequisites: MCP server up, pod
-reachable, Gemini configured.
+Prerequisites: MCP server up, pod reachable, Gemini configured.
+
+Output contract (Phase 1, UX-05):
+
+    stdout carries the answer.  stderr carries everything else.
+
+Redirect stdout and you get the answer alone, with nothing to strip::
+
+    python scripts/run_graph.py --prompt "..." 2>/dev/null
+
+Diagnostics are off by default and switched on per component::
+
+    python scripts/run_graph.py --prompt "..." --show-planner
+    python scripts/run_graph.py --prompt "..." --show-all
+    python scripts/run_graph.py --prompt "..." --show-all --no-show-raw-output
+
+Two things are never gated, because a ~16 second run needs them:
+progress lines while a tool pages through the pod, and the counts
+footer at the end. Both go to stderr, so stdout is unaffected.
 
 Usage:
     python scripts/run_graph.py --prompt "Show me suppliers in US"
@@ -21,6 +36,13 @@ from fastmcp import Client
 
 from spire.graph.pipeline import GRAPH
 from spire.config import reset_usage, usage_report
+from spire.diagnostics import (
+    add_diagnostic_arguments,
+    answer,
+    flags_from_args,
+    get_logger,
+    setup_diagnostics,
+)
 from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
@@ -34,6 +56,28 @@ from display_formatters import (
     _format_synthesized,
 )
 
+
+# One logger per component, matching the flag that controls it. Every
+# one of these is silent unless its flag is set — except `progress` and
+# `summary`, which are always on.
+_parser_log = get_logger("parser")
+_planner_log = get_logger("planner")
+_executor_log = get_logger("executor")
+_tokens_log = get_logger("tokens")
+_progress_log = get_logger("progress")
+_summary_log = get_logger("summary")
+
+
+def _block(log, text: str) -> None:
+    """Log a pre-formatted block, followed by a blank line.
+
+    The formatters return aligned multi-line tables. The trailing
+    newline reproduces the blank-line spacing the old unconditional
+    prints had, without each caller having to remember it.
+    """
+    log.debug("%s\n", text)
+
+
 async def _run(prompt: str) -> int:
     reset_usage()
     menu = load_kg_menu()
@@ -43,9 +87,9 @@ async def _run(prompt: str) -> int:
         async def _on_progress(progress, total, message=None):
             shown = message or ""
             if total:
-                print(f"  … progress {progress}/{total} {shown}", flush=True)
+                _progress_log.info("  … progress %s/%s %s", progress, total, shown)
             else:
-                print(f"  … progress {shown}", flush=True)
+                _progress_log.info("  … progress %s", shown)
 
         state = await GRAPH.ainvoke(
             {
@@ -56,13 +100,14 @@ async def _run(prompt: str) -> int:
             }
         )
 
-    # Refusal short-circuit.
+    # Refusal short-circuit. The capability message IS the answer — it
+    # names what Spire can do instead — so it goes to stdout. The
+    # flavor/detail pair beside it is parser internals, not an answer.
     if state.get("refusal"):
         r = state["refusal"]
-        print(capability_message(r, menu))
-        print(f"  (refusal: {r.flavor.value} — {r.detail})")
-        print()
-        print(usage_report())
+        answer(capability_message(r, menu))
+        _parser_log.debug("  (refusal: %s — %s)", r.flavor.value, r.detail)
+        _block(_tokens_log, usage_report())
         return 4
 
     # A planner REFUSAL is Spire declining, not Spire breaking: the
@@ -70,28 +115,28 @@ async def _run(prompt: str) -> int:
     # Printing it as "ERROR:" on stderr made a good answer look like a
     # crash — and made this runner disagree with run_prompt_set.py
     # about the very same prompt. Exit 4, the same code as a parser
-    # refusal, because it is the same kind of outcome.
+    # refusal, because it is the same kind of outcome. It is an answer,
+    # so it belongs on stdout.
     if state.get("error") and state.get("plan_refusal"):
-        print(f"REFUSED (planner guard): {state['error']}")
-        print()
-        print(usage_report())
+        answer(f"REFUSED (planner guard): {state['error']}")
+        _block(_tokens_log, usage_report())
         return 4
 
-    # Error in any node.
+    # A genuine failure produces no answer, so stdout stays empty.
     if state.get("error"):
         print(f"ERROR: {state['error']}", file=sys.stderr)
         return 2
 
-    print(_format_intent(state["intent"]))
-    print()
-    print(_format_plan(state["plan"]))
-    print()
+    _block(_parser_log, _format_intent(state["intent"]))
+    _block(_planner_log, _format_plan(state["plan"]))
+
     _outputs = state.get("outputs") or {}
     _display_outputs = state.get("projected_outputs") or _outputs
-    print(_format_outputs(_display_outputs))
-    print()
+    _block(_executor_log, _format_outputs(_display_outputs))
+
     _fields = state["intent"].fields
     _synth_failed = state.get("synth_failed")
+
     if _fields:
         # Column query: summary on top (when it succeeded), table below.
         # SUMMARY ONLY — not the typed record block. The table below
@@ -102,32 +147,39 @@ async def _run(prompt: str) -> int:
         # nested addresses, so it takes the RAW outputs (projected_outputs
         # has already stripped the addresses key).
         if _synth_failed:
-            print(
+            answer(
                 "Answer summary: (skipped — result too large to summarize; "
                 "showing the table only)"
             )
         else:
-            print(_format_synthesized(state.get("response"), summary_only=True))
-        print()
-        print(_format_projected_table(_outputs, _fields))
+            answer(_format_synthesized(state.get("response"), summary_only=True))
+        answer("")
+        answer(_format_projected_table(_outputs, _fields))
     else:
-        print(_format_synthesized(state.get("response")))
-    print()
-    print(_format_summary(state["plan"], _outputs, state.get("response")))
-    print()
-    print(usage_report())
+        answer(_format_synthesized(state.get("response")))
+
+    _summary_log.info(
+        "%s", _format_summary(state["plan"], _outputs, state.get("response"))
+    )
+    _block(_tokens_log, usage_report())
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run the Spire pipeline via the LangGraph graph."
+        description="Run the Spire pipeline via the LangGraph graph.",
     )
     parser.add_argument("--prompt", required=True, help="Natural-language prompt.")
+    add_diagnostic_arguments(parser)
     args = parser.parse_args()
+
+    # Before anything else runs. Module-level get_logger() calls only
+    # fetch logger objects; nothing can emit until the handler and
+    # levels are in place here.
+    setup_diagnostics(flags_from_args(args))
+
     return asyncio.run(_run(args.prompt))
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

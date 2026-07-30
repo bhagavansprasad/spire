@@ -22,8 +22,17 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
+from spire.diagnostics import get_logger
+
 
 PERSONAS_FILE = Path(__file__).resolve().parents[2] / "personas.yaml"
+
+
+# LLM provider and per-call token counts both ride on `spire.tokens`,
+# gated by --show-tokens. They belong together: when you switch token
+# reporting on, which model produced those numbers is exactly the
+# context you want beside them. Silent unless the flag is set.
+_log = get_logger("tokens")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -52,7 +61,6 @@ LLM_MAX_OUTPUT_TOKENS = 8000
 #   SPIRE_LLM_PROVIDER = gemini | anthropic | openai
 #   SPIRE_LLM_MODEL    = optional model-name override
 import os as _os
-import sys as _sys
 
 LLM_PROVIDER = _os.environ.get("SPIRE_LLM_PROVIDER", "gemini")
 LLM_MODEL = _os.environ.get("SPIRE_LLM_MODEL", "")
@@ -77,7 +85,7 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         model = LLM_MODEL or GEMINI_MODEL
-        print(f"[llm] provider=gemini model={model}", file=_sys.stderr)
+        _log.debug("[llm] provider=gemini model=%s", model)
         return ChatGoogleGenerativeAI(
             model=model,
             temperature=temperature,
@@ -88,7 +96,7 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
         from langchain_anthropic import ChatAnthropic
 
         model = LLM_MODEL or ANTHROPIC_MODEL
-        print(f"[llm] provider=anthropic model={model}", file=_sys.stderr)
+        _log.debug("[llm] provider=anthropic model=%s", model)
         return ChatAnthropic(
             model=model,
             temperature=temperature,
@@ -99,21 +107,21 @@ def build_llm(temperature: float = GEMINI_TEMPERATURE):
         from langchain_openai import ChatOpenAI
 
         model = LLM_MODEL or OPENAI_MODEL
-        print(f"[llm] provider=openai model={model}", file=_sys.stderr)
+        _log.debug("[llm] provider=openai model=%s", model)
         return ChatOpenAI(
             model=model,
             temperature=temperature,
             max_tokens=LLM_MAX_OUTPUT_TOKENS,
         )
 
-    raise ValueError( 
+    raise ValueError(
         f"Unknown SPIRE_LLM_PROVIDER={LLM_PROVIDER!r}. "
         "Supported: gemini, anthropic, openai."
     )
 
 
 def log_usage(raw_message, stage: str) -> None:
-    """Record and print token usage for one LLM call, in the [llm] style.
+    """Record token usage for one LLM call, and log it.
 
     ``raw_message`` is the LangChain ``AIMessage`` returned under the
     ``"raw"`` key when a structured LLM is built with
@@ -121,25 +129,30 @@ def log_usage(raw_message, stage: str) -> None:
     ``usage_metadata`` is normalized by LangChain across the gemini,
     anthropic, and openai providers, so the same field works for all.
 
-    The per-call numbers are also accumulated in ``_USAGE_LOG`` so the
-    entry script can print a combined end-of-run report via
-    ``usage_report()``. Call ``reset_usage()`` at the start of a run.
+    Two jobs, and they are deliberately independent. **Recording** into
+    ``_USAGE_LOG`` happens unconditionally — ``usage_report()`` must be
+    complete at the end of a run whether or not anyone was watching the
+    per-call lines. **Logging** goes to ``spire.tokens`` and is silent
+    unless ``--show-tokens`` is set.
+
+    Before Phase 1 these were one statement, so the only way to get the
+    running total was to accept a line of stderr per LLM call. Keep them
+    separate: a future caller may want the numbers without the noise.
 
     Safe to call with None or an object lacking usage_metadata: it just
-    records and prints zeros.
+    records and logs zeros.
     """
     um = getattr(raw_message, "usage_metadata", None) or {}
     inp = um.get("input_tokens", 0)
     out = um.get("output_tokens", 0)
     _USAGE_LOG.append({"stage": stage, "in": inp, "out": out})
-    print(
-        f"[llm] stage={stage} in={inp} out={out} total={inp + out}",
-        file=_sys.stderr,
+    _log.debug(
+        "[llm] stage=%s in=%s out=%s total=%s", stage, inp, out, inp + out
     )
 
 
 # Per-run token accumulator. The entry script clears it with
-# reset_usage() at the start of a run and prints usage_report() at the end.
+# reset_usage() at the start of a run and logs usage_report() at the end.
 _USAGE_LOG: list[dict] = []
 
 
@@ -149,7 +162,12 @@ def reset_usage() -> None:
 
 
 def usage_report() -> str:
-    """Return a small end-of-run token report from accumulated usage."""
+    """Return a small end-of-run token report from accumulated usage.
+
+    Pure: returns the text, prints nothing. The caller decides where it
+    goes — which is why this function needed no change in Phase 1, and
+    is the pattern the rest of the codebase is moving toward.
+    """
     if not _USAGE_LOG:
         return "Token usage:\n  (no LLM calls recorded)"
     lines = ["Token usage:"]
