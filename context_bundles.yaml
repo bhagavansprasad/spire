@@ -6,6 +6,10 @@ bundles:
   - build_context.py
   - context_bundles.yaml
   - src/spire/config.py
+  - src/spire/diagnostics.py
+  - pyproject.toml
+  - requirements.txt
+  - docs/spire_architecture.md
   - docs/spire_plan.md
   - docs/spire_fusion_endpoints_reference.md
   - docs/spire_pipeline_playbook.md
@@ -30,7 +34,6 @@ bundles:
 
   scripts:
   - scripts/draw_graph.py
-  - scripts/ask.py
   - scripts/inspect_trace.py
   - scripts/print_kg.py
   - scripts/rebuild_kg.py
@@ -38,6 +41,7 @@ bundles:
   - scripts/run_graph.py
   - scripts/run_prompt_set.py
   - scripts/display_formatters.py
+  - scripts/flag_matrix.sh
   - scripts/test_kg_connection.py
   - scripts/verify_invoices.py
   - scripts/verify_business_relationship.py
@@ -126,6 +130,7 @@ bundles:
   - tests/test_compare_orders_to_invoices.py
   - tests/test_config.py
   - tests/test_customer_invoices_tool.py
+  - tests/test_diagnostics.py
   - tests/test_display_summary_only.py
   - tests/test_executor.py
   - tests/test_fusion_client.py

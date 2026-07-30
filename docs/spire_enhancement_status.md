@@ -11,7 +11,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-30 (evening session)
+**Last updated:** 2026-07-30 (late evening — Phase 1 branch 1 merged)
 
 ---
 
@@ -20,7 +20,7 @@ phases of design detail bury the status table above them.
 | Phase | Requirements | Status | Notes |
 |---|---|---|---|
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
-| 1 | UX-05, OBS-01, OBS-02 | 🟨 Design approved | **In progress.** Design below. All open questions resolved; no code written yet. |
+| 1 | UX-05, OBS-01, OBS-02 | 🟨 Part merged | **In progress.** UX-05 + OBS-01 merged (`phase-1-diagnostic-flags`). OBS-02 not started. Design and results below. |
 | 2 | UX-01, UX-02, UX-03 | ⬜ Not started | |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
@@ -90,7 +90,7 @@ until a phase touches performance directly.
 
 # Phase 1 design — UX-05, OBS-01, OBS-02
 
-**Status: approved. No code written yet.**
+**Status: branch 1 merged. OBS-02 outstanding.**
 
 Requirements covered: UX-05 (quiet default output), OBS-01 (independent
 per-component verbosity flags), OBS-02 (configuration precedence).
@@ -137,12 +137,12 @@ count is by `print(` occurrence.
    (`[llm]`, `[graph]`, `[po_lifecycle]`, `[compare_orders_to_invoices]`).
    The design formalises it rather than replacing it.
 
-**Incidental finding, unrelated to Phase 1:** the handoff's open item
-"17 tests are DESELECTED by a marker filter nobody has examined" is
-explained by `pyproject.toml`'s `addopts = "-m 'not integration'"` plus
-the `integration` marker. They are the tests requiring MCP server,
-Gemini, or the pod — deselected deliberately. Not a gap; can be struck
-off the carried-forward list.
+**Incidental finding, unrelated to Phase 1 — now closed.** The handoff
+carried "17 tests are DESELECTED by a marker filter nobody has examined"
+as an open housekeeping item. It is explained by `pyproject.toml`'s
+`addopts = "-m 'not integration'"` plus the `integration` marker: they
+are the tests requiring MCP server, Gemini, or the pod, deselected
+deliberately. Not a gap. **Struck off the carried-forward list.**
 
 ## D2. Mechanism
 
@@ -379,13 +379,36 @@ Setup:
 - `requirements.txt` — add `pydantic-settings`
 - `src/spire/config.py` — 4 prints → loggers
 - `src/spire/synthesizer/synthesizer.py` — 1 print → logger
-- `src/spire/mcp_server/tools/{aggregate_purchase_orders,aggregate_invoices,compare_orders_to_invoices,po_lifecycle}.py` — 7 prints → loggers
 - `scripts/run_graph.py` — answer to stdout; everything else to loggers
-- `scripts/ask.py` — 2 prints
+- `scripts/run_prompt_set.py` — **one line**, see the correction below
+- `scripts/flag_matrix.sh` — new, see §D11
+- `.gitignore` — `t.txt`, `flag_matrix/`
+
+**Removed**
+
+- `scripts/ask.py` — already deprecated. Unrelated to Phase 1, surfaced
+  while enumerating entry points, carried on this branch rather than
+  given its own: a deletion of dead code cannot regress anything.
+
+**Two corrections to this list, found during the build**
+
+*The 7 tool prints are out of scope.* Every one is a pagination line
+emitted beside a `report_progress` call — progress, not component
+diagnostics. More decisively, they run in the **MCP server process**,
+not the client, so they cannot reach `run_graph.py`'s stdout at all.
+In-scope library prints were therefore **5, not 11**: `config.py` ×4 and
+`synthesizer.py` ×1.
+
+*`run_prompt_set.py` needed one line after all.* It is not quieted — its
+output is its purpose — but without a `setup_diagnostics()` call nothing
+installs a handler on the `spire.*` loggers, so the always-on progress
+lines would vanish and a slow 31-prompt run would look like a hang. One
+call, no flags. The per-call `[llm] stage=...` token echo it used to
+show is gone by design; end-of-run totals are unaffected.
 
 **Deliberately not touched**
 
-- `scripts/run_prompt_set.py` — regression harness, see §D3
+- `src/spire/mcp_server/tools/*` — the 7 pagination prints, per above
 - `personas.yaml` — credentials only, unchanged
 - `scripts/display_formatters.py` — already pure, returns strings, prints
   nothing
@@ -402,43 +425,91 @@ acceptance criterion is "diagnostics restorable in full via the flags in
 OBS-01", so a branch that only silences output leaves diagnostics
 unreachable and the repo in a worse state than it started.
 
-| Branch | Covers | Contents |
+| Branch | Covers | Status |
 |---|---|---|
-| `phase-1-quiet-output` | UX-05 + OBS-01 | `diagnostics.py`, logger setup, 11 library prints converted, `run_graph.py` and `ask.py` wired, CLI flags. Flags settable via CLI only at this point — which fully satisfies both requirements. |
-| `phase-1-config-precedence` | OBS-02 | `[tool.spire.diagnostics]`, `pydantic-settings`, env scan, precedence chain below the CLI layer. |
+| `phase-1-diagnostic-flags` | UX-05 + OBS-01 | ✅ **Merged.** `diagnostics.py`, logger setup, 5 library prints converted, `run_graph.py` wired, CLI flags. Settable via CLI only at this point, which fully satisfies both requirements. |
+| *(branch 2, not yet created)* | OBS-02 | ⬜ `[tool.spire.diagnostics]`, `pydantic-settings`, env scan, precedence chain below the CLI layer. |
 
 Per-branch sequence follows the standing build order: targeted tests
 during work, full suite before any commit touching source, PR-based
 merge.
 
-## D9. Verification
+## D9. Verification — branch 1, as run
 
-- **Full `pytest`** before each commit. Baseline: 607 passed, 17
-  deselected, 1 xfailed.
-- **Answer-text byte-comparison** on a known prompt before and after —
-  same technique that proved both refactors token-identical. The text on
-  stdout must be *byte-identical* to today's answer block; only its
-  surroundings move. Suggested prompt:
-  `"What is the risk rating on PO 701337 and why?"`, already the
-  reference case.
-- **Stream check**, new to this phase: `python scripts/run_graph.py
-  --prompt "…" 2>/dev/null` must emit the answer and nothing else. This
-  is the direct test of §D3's resolution and the single most important
-  check in the phase.
-- **Lifecycle 31-prompt set**, expecting 31/31. `run_prompt_set.py` is
-  untouched, so this number stays directly comparable to the current
-  baseline — no harness adjustment needed. Per the standing rule, "31/31
-  clean" means nothing errored, not that the answers are right.
-- **Restart the MCP server** — `src/spire/mcp_server/` is touched.
+All of the below is what actually happened, not what was planned.
+
+**Full suite: 645 passed, 17 deselected, 1 xfailed.** Up from 607; the
+38 new ones are `tests/test_diagnostics.py`. That is the new baseline.
+
+**Flag matrix — 67 live runs against the pod.** `scripts/flag_matrix.sh`
+ran all 64 combinations of the six flags on
+`"What is the risk rating on PO 701337 and why?"`, plus 3 control runs
+with no flags.
+
+- **All 67 stdout hashes identical.** No flag alters the answer.
+- **The 3 controls agree with each other**, which is what makes that
+  meaningful — Gemini is not perfectly deterministic at temperature 0,
+  so without a matching control set a single hash would prove nothing.
+- **Every flag lit its own component and no other** — OBS-01's core
+  acceptance criterion, verified across the whole matrix rather than
+  argued from the code.
+
+**Default stderr is exactly the 5-line `Summary:` block.** Nothing
+leaked. Confirmed by reading the whole file, not by grepping for known
+markers — the marker table alone proves each expected block appeared,
+not that nothing unexpected did.
+
+**`--show-timings` is inert, not merely untested.** All 32 pairs of runs
+differing only by that flag are byte-identical. The logger exists and is
+correctly silent until OBS-03.
+
+**Parse tokens 8,812** — within the ~8,805–8,819 baseline range. Neither
+the conversion nor the logger wiring moved them.
+
+**MCP server restarted** before the live runs; `src/spire/` changed.
+
+**Not run:** the 31-prompt lifecycle set. `run_prompt_set.py` is
+substantively unchanged (one line, no output changes), and the flag
+matrix exercised the same pipeline 67 times against the pod. Worth
+running before branch 2 merges if anything touches the runner again.
 
 ## D10. Open questions
 
-None. All three resolved 2026-07-30:
+None outstanding for branch 1. The three design questions were resolved
+2026-07-30:
 
 1. Extra flags for progress and summary — **rejected.** Both are always
    required, so neither is gated. OBS-01 stays at six flags.
 2. `show_all` — **accepted.**
 3. `run_prompt_set.py` — **left ungated.** Quiet default applies to
-   `run_graph.py` and `ask.py` only.
+   `run_graph.py` only (`ask.py` was deprecated and has been deleted).
 
-Ready to build. Next action: branch `phase-1-quiet-output`.
+**Next action: branch 2, OBS-02.** Nothing blocks it.
+
+## D11. `scripts/flag_matrix.sh`
+
+Committed rather than discarded. It runs one prompt under every flag
+combination and reports two things: whether any flag changed the answer,
+and whether each flag lit only its own component.
+
+Branch 2 adds the file and environment layers *underneath* these same
+flags, so this script is how you prove the precedence chain did not
+break the CLI behaviour branch 1 established. Re-run it after OBS-02.
+
+Note it takes ~17 minutes and makes 67 LLM calls. Not a suite member —
+run it deliberately, when the flag surface changes.
+
+---
+
+## D12. Noted in passing — not Phase 1 work
+
+While verifying progress output, `"Total invoice amount for Lee
+Supplies"` paged to exactly 50 pages / 25,000 rows, stopped, and
+reported `Synthesized answer: 0 record(s)`. That looks like `MAX_PAGES`
+being reached rather than the pod running out of rows — meaning the
+aggregate would be computed over a truncated scan, silently. Same
+species as the carried-forward "invoice total over a sample" defect.
+
+**Unconfirmed.** Nobody has checked whether the pod actually has more
+than 25,000 invoices for that supplier. Recorded so it is not lost, not
+because it has been established.
