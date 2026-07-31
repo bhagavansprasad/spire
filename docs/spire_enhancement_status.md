@@ -1169,6 +1169,10 @@ had nothing better to offer in its place until now.
    `input_tokens` — vocabulary added to the KG menu *will* show in
    `input_tokens`. The parse-token baseline is usable for this change,
    unlike for `draft.py`.
+5. **Why does `who columns` alone drop silently?** Eleven prompts, ten
+   refuse loudly, one vanishes. Plurality and jargon-as-a-collective were
+   both tested and excluded — see §G9. No explanation. Do not design
+   around it; find out.
 
 ## G8. Next action
 
@@ -1183,3 +1187,121 @@ Not yet done, and needed before any code:
   (must refuse), and the multi-field expansions.
 - Curl verification of WHO columns on the pod before authoring any
   `kg_entity_field` row. Standing rule: curl before code.
+
+---
+
+## G9. Second measurement round — the first reading was wrong
+
+**2026-07-31, same day, eleven further prompts.** This section corrects
+§G3 Finding 3 and the first draft of COL-03. Recorded in full because the
+error is instructive and because the requirement was already written when
+it was found.
+
+### What was believed after round one
+
+Five prompts, two of which silently dropped a term. COL-03 was specced
+around silent dropping: *never discard a requested column without saying
+so.* The stated rationale was that silent failure is the dangerous case
+because it cannot be distinguished from success.
+
+### What eleven prompts actually show
+
+| Behaviour | Count | Terms |
+|---|---|---|
+| **Wholesale refusal** | 5 | `quantum flux`, `quantum fluxes`, `flurbles`, `audit columns`, `created by` |
+| **Silent drop** | 1 | `who columns` |
+
+Silent dropping is the **rare** case. The dominant failure is a total
+refusal that discards the whole query — including columns that resolved
+perfectly well.
+
+```
+List active suppliers with supplier name and created by
+  → Reason: I can look up suppliers, but not the way this question narrows them.
+  → no rows at all
+```
+
+`supplier name` is valid. It resolved in every other prompt in the round.
+It was thrown away because `created by` was not recognised. **A user who
+names five columns and mistypes one gets zero rows.**
+
+### Hypotheses tested and excluded
+
+Two explanations for why `who columns` alone vanished were proposed and
+both were measured, not argued:
+
+- **Plurality** — excluded. `quantum fluxes` refuses.
+- **Jargon-as-a-collective** — excluded. `audit columns` refuses, and does
+  so while explicitly acknowledging it is not "a specific field".
+
+The mechanism remains **unexplained**. A plausible reading is that "who"
+does not register as a field noun at all, but that is one data point and
+an untested explanation. Recorded as open question §G7.5 rather than
+designed around.
+
+### The finding that was hiding under the wrong one
+
+Where the refusal fires, **the accurate diagnosis already exists and is
+thrown away.** Every loud refusal carried a correct, specific reason on
+the diagnostic line and showed the user generic filter advice instead:
+
+```
+user sees:   I can look up suppliers, but not the way this question narrows them.
+             Solution: Narrow by country, status or name instead.
+diagnostic:  The 'created by' field is not available for suppliers.
+```
+
+Three more, all discarded:
+
+- `The requested "audit columns" are not available as a specific field.`
+- `The field 'quantum flux' is not supported for the Supplier entity.`
+- `The requested field 'flurbles' is not supported.`
+
+**This is the UX-01 root cause, in a second place.** The Phase 2 finding
+was "the model's diagnosis was correct all along" — the prose scan
+discarded it. Here the presentation layer discards it again, for a
+different reason, in a different code path. Worth checking whether there
+is a third.
+
+### Also confirmed
+
+- **Wrong flavor.** Column requests refuse as `unsupported_filter`, with a
+  Solution line offering "narrow by country, status or name" — filter
+  advice for a column problem.
+- **The channel bug reproduces cleanly.** Same term, `with` vs `include`:
+  `quantum flux` gives `unsupported_filter` under "with" and "entity is
+  not supported" under "include". The preposition alone changes the
+  refusal category.
+- **Normalization already works.** `supplier_name` → `Supplier`,
+  `supplier_number` → `SupplierNumber`, unaided. Group B of the prompt
+  set is largely redundant. Consistent with §G4: the mapping capability is
+  present, the vocabulary is not.
+- **The narration defect reproduces a third time.** Two runs cited
+  "Taxpayer Country Code", which is not among Supplier's four fields and
+  was not in the displayed columns.
+
+### What changed in the requirements
+
+COL-03 rewritten and renamed — *Unresolved column disclosure* became
+*Partial column resolution and disclosure*. Partial resolution is now the
+primary clause; disclosure is secondary; two further clauses added for
+using the existing diagnosis and correcting the flavor.
+
+COL-03 is **larger** than first specced, not smaller.
+
+### The process note
+
+The assessment moved twice in one session: silent-drop-is-the-danger, then
+detection-already-exists-so-this-is-just-plumbing, then the above. The
+second was an overcorrection off a single observation — one prompt showing
+a discarded diagnostic was read as characterising all cases.
+
+The rule that held: each reversal came from running more prompts, and each
+was cheap. Eleven prompts across three rounds, perhaps four minutes of pod
+time, caught a requirement that was written around the rare case.
+
+**The specific trap:** round one's five prompts were chosen to cover
+*categories* of vocabulary, not to vary one thing at a time. The
+disambiguation rounds — which held the entity constant and varied only
+plurality, or only the preposition — were what produced usable findings.
+Coverage first, then controlled variation.

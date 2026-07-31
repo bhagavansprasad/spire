@@ -291,10 +291,47 @@ had nothing to land on and became `Address`. **Coverage precedes mapping.**
 Reversing that order produces terms that resolve to fields that cannot be
 projected, which looks like progress and delivers nothing.
 
-**Finding 3 — the silent drop is the safety defect.** Prompts 3 and 5
-returned confident, well-formed tables. Neither is distinguishable from
-success by reading the output. Until unresolved terms are reported, no
-resolver's hit rate can be measured.
+**Finding 3 — there are two opposite failure modes, and the dominant one
+is wholesale refusal.** Revised 2026-07-31 after a second round of eleven
+prompts. The first round saw two silent drops and the requirement was
+initially written around that. It was wrong.
+
+Measured across eleven prompts naming an unresolvable column:
+
+| Behaviour | Count | What the user gets |
+|---|---|---|
+| **Wholesale refusal** | 5 of 6 controlled cases | **No data at all.** One bad term destroys the query, discarding every valid column named alongside it |
+| **Silent drop** | 1 (`who columns`) | A clean table with the term absent and no indication |
+
+`List active suppliers with supplier name and created by` returns nothing.
+`supplier name` is valid, resolvable, and thrown away because `created by`
+was not. A user who names five columns and mistypes one gets zero rows.
+
+Terms confirmed to refuse loudly: `quantum flux`, `quantum fluxes`,
+`flurbles`, `audit columns`, `created by`. Only `who columns` vanished.
+Plurality was tested and excluded; jargon-as-a-collective was tested and
+excluded — `audit columns` refuses while acknowledging it is not "a
+specific field". The mechanism behind the single silent case is **not
+explained** and is recorded as an open question rather than designed
+around.
+
+**Where the refusal fires, the accurate diagnosis already exists and is
+discarded.** The user sees a generic filter message; the diagnostic line
+carries the real reason:
+
+```
+user sees:   I can look up suppliers, but not the way this question narrows them.
+             Solution: Narrow by country, status or name instead.
+diagnostic:  The 'created by' field is not available for suppliers.
+```
+
+This is the UX-01 root cause repeating in a second place: the model's
+diagnosis is correct and the presentation layer replaces it with something
+worse.
+
+**The refusal flavor is also wrong.** A *field* request is refused as
+`unsupported_filter`, and the Solution line offers advice about narrowing —
+filter guidance for a column problem.
 
 **On the choice of mechanism.** A second LLM call and a vector store were
 both considered and rejected. The field vocabulary is bounded (194 rows) —
@@ -389,36 +426,69 @@ already resolves synonyms deterministically for eight other categories.
 
 ---
 
-### COL-03 — Unresolved column disclosure · P0
+### COL-03 — Partial column resolution and disclosure · P0
 
-Where a requested column cannot be resolved, Spire **shall** name the term
-back to the user and state that it was not included.
+*Revised 2026-07-31 after measurement. The first draft was written around
+silent dropping; the dominant defect is wholesale refusal. The requirement
+below leads with that.*
 
-Spire **shall not** silently discard a requested column.
+**Primary requirement — partial resolution.** Where a request names several
+columns and only some resolve, Spire **shall** return the query using the
+columns that resolved, and **shall** name those that did not.
+
+Spire **shall not** refuse an entire query because one requested column is
+unresolvable. A valid, answerable question **shall not** be discarded
+because of an unrecognised term alongside it.
+
+**Secondary requirement — disclosure.** Where a requested column cannot be
+resolved, Spire **shall** name the term back to the user and state that it
+was not included. Spire **shall not** silently discard a requested column.
 
 Spire **shall not** substitute a near match without saying so. Where a term
 resolves to something other than its literal reading — `supplier-site` to
 `Address` — the substitution **shall** be stated.
 
-Disclosure **shall** follow the UX-01 refusal shape (Reason / Solution /
-Example) where the whole request fails, and **shall** appear as a labelled
-note above the table where the request partly succeeds.
+**Third requirement — use the diagnosis that already exists.** Where the
+parser has produced a specific reason, that reason **shall** reach the
+user. Spire **shall not** replace a specific, accurate diagnosis with
+generic guidance. Measured examples of what is currently discarded:
 
-**Rationale.** This is the highest-value requirement in the section and the
-smallest. It converts two silent wrong answers into visible ones, and it is
-the instrument by which COL-01 and COL-02 are measured — a resolver whose
-misses are invisible cannot be shown to work. It should be built **first**,
-before either.
+- `The 'created by' field is not available for suppliers.`
+- `The requested "audit columns" are not available as a specific field.`
+- `The field 'quantum flux' is not supported for the Supplier entity.`
+
+**Fourth requirement — correct flavor.** A request for a column **shall
+not** be refused as an unsupported *filter* or an unsupported *entity*.
+Where the whole request fails, the guidance offered **shall** concern
+columns, not narrowing.
+
+**Rationale.** Two opposite failure modes, neither acceptable. Wholesale
+refusal loses data the user was entitled to — five of six measured cases
+returned nothing while naming a valid column. Silent dropping returns a
+clean table that cannot be distinguished from success. The correct
+behaviour is neither: answer with what resolved, name what did not.
+
+This remains the requirement to build **first**. COL-01 and COL-02 cannot
+be evaluated while their misses are either invisible or indistinguishable
+from a total refusal.
 
 **Acceptance criteria**
 
+- A request naming one valid and one invalid column returns rows for the
+  valid column, and names the invalid one.
 - A dropped column produces a named, visible note.
 - A substituted column produces a named, visible note.
+- The specific reason produced by the parser appears in the user-facing
+  message; no case where a specific diagnosis is replaced by generic
+  filter guidance.
+- A column request is never refused with `unsupported_filter` or an
+  entity-not-supported flavor.
 - Running the column prompt sets yields a miss list that can be read
   directly as the authoring backlog for COL-01 and COL-02.
 - No prompt returns a clean table while having discarded a requested term.
 
 **Depends on:** none. **Blocks:** measurement of COL-01, COL-02.
+**Related:** UX-01 — same root cause, second occurrence.
 
 ---
 

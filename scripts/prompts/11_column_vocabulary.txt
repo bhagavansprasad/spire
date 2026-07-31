@@ -1,0 +1,303 @@
+# Spire prompt set — 11 COLUMN VOCABULARY. Read by scripts/run_prompt_set.py.
+#
+# PURPOSE: the Phase 2A instrument. Measures whether a column named in a
+# prompt reaches the output — across canonical names, formatting variants,
+# plain-English synonyms, Oracle jargon, EBS-era vocabulary, and terms that
+# should NOT resolve.
+#
+# This is NOT 04_columns (does the projection feature work) or 07_alacarte
+# (does the projected table regress). Both of those name columns the KG
+# already holds. This set names columns the way users actually do.
+#
+# ─────────────────────────────────────────────────────────────────────
+# EXPECTED-OUTCOME LABELS — every prompt carries one
+#
+#   BASELINE   works today; must never regress
+#   ANSWER     must return the named columns, populated, in order
+#   DISCLOSE   must NAME the unresolved or substituted term back to the
+#              user. A clean table with the term silently missing is a
+#              FAIL, not a pass
+#   REFUSE     must refuse; a silent near-miss answer is the worst outcome
+#
+# A second marker records what happens TODAY where it has been measured:
+#
+#   [MEASURED 07-31: ...]   observed, in t_fields.txt
+#   [UNMEASURED]            expectation only — do not report as a finding
+#
+# ─────────────────────────────────────────────────────────────────────
+# HOW TO SCORE — the summary line proves nothing
+#
+# For every prompt, three questions:
+#   1. Does the Intent carry the term in `fields`, in `include`, or
+#      nowhere at all? (--show-parser)
+#   2. Does the printed table show it?
+#   3. If not — DOES THE OUTPUT SAY SO? That is COL-03, and it is the
+#      whole point of this set. Score it separately from 1 and 2.
+#
+# A prompt can "run cleanly", print a well-formed table, and still be a
+# total failure of this set. Two of the five measured prompts on 07-31
+# did exactly that.
+#
+# Run with:
+#   python scripts/run_prompt_set.py --prompt-file \
+#     scripts/prompts/11_column_vocabulary.txt --show-parser 2>&1 | tee t.txt
+#
+# ─────────────────────────────────────────────────────────────────────
+# ANCHORS
+#   Supplier 1252 = Lee Supplies (US, ACTIVE, 25 addresses)
+#   Supplier 1262 = EIP Inc
+#   PO 2144 = OrderNumber 162352, EIP Inc, 2 lines
+#   PO 162034 = Lee Supplies, Closed, has invoices
+#   Customer "ABC Application Software" = AccountNumber 26360
+#   AR invoice CustomerTransactionId 300000248096352
+#
+# THE FIELD CATALOG IS SMALL. Read this before scoring:
+#   Supplier has FOUR fields — Supplier, Status, SupplierId, SupplierNumber
+#   Site has ZERO field rows
+#   CreatedBy exists NOWHERE in kg_entity_field
+#   CreationDate is a FILTER only, never projectable
+# Several prompts below therefore cannot pass until COL-01 lands. They
+# are here to be DISCLOSED, not answered.
+
+
+# ═══════════════════════════════════════════════════════════════════
+# A. BASELINE — canonical names. If these fail, stop and fix that first
+# ═══════════════════════════════════════════════════════════════════
+
+# BASELINE — the exact case from 07_alacarte. [MEASURED 07-31: passes]
+List active suppliers with supplier name, supplier number, and status
+
+# BASELINE — Invoice root, three same-entity fields
+Show me invoices for EIP Inc with invoice number, amount, and date
+
+# BASELINE — PO root
+Order number and status for purchase orders created before 2015
+
+
+# ═══════════════════════════════════════════════════════════════════
+# B. NORMALIZATION (COL-02 layer 1) — same field, different typing
+#    Every one of these targets a field that EXISTS. Pure format test.
+# ═══════════════════════════════════════════════════════════════════
+
+# ANSWER — underscores [UNMEASURED]
+List active suppliers with supplier_name and supplier_number
+
+# ANSWER — camelCase as typed by a developer [UNMEASURED]
+List active suppliers with SupplierName and SupplierNumber
+
+# ANSWER — exact KG spelling, no spaces [UNMEASURED]
+List active suppliers with Supplier, Status, SupplierNumber
+
+# ANSWER — hyphenated [UNMEASURED]
+Show me invoices for EIP Inc with invoice-number and invoice-date
+
+# ANSWER — ALL CAPS [UNMEASURED]
+List active suppliers with SUPPLIER NAME and STATUS
+
+# ANSWER — trailing plural [UNMEASURED]
+Show me invoices for EIP Inc with invoice numbers and amounts
+
+
+# ═══════════════════════════════════════════════════════════════════
+# C. PLAIN-ENGLISH SYNONYMS — field exists, user's word differs
+# ═══════════════════════════════════════════════════════════════════
+
+# ANSWER — "value" for InvoiceAmount [UNMEASURED]
+Show me invoices for EIP Inc with invoice number and value
+
+# ANSWER — "vendor name" for Supplier (vendor IS an entity_synonym
+# already; test whether that carries to the FIELD channel) [UNMEASURED]
+List active suppliers with vendor name and vendor number
+
+# ANSWER — "qty" and "price" on PO lines [UNMEASURED]
+Show PO 2144 and its lines with qty and price
+
+# ANSWER — "description" for the line Description [UNMEASURED]
+Show PO 2144 and its lines with line number and description
+
+# ANSWER — "amount" where the field is Ordered [UNMEASURED]
+Show PO 2144 and its lines with line number and amount
+
+# ANSWER — "state" for Status [UNMEASURED]
+List active suppliers with supplier name and state
+
+# ANSWER — "currency" — CurrencyCode on PO, InvoiceCurrency on Invoice.
+# Same word, two field names. Tests per-entity resolution [UNMEASURED]
+Show me invoices for EIP Inc with invoice number and currency
+
+
+# ═══════════════════════════════════════════════════════════════════
+# D. ORACLE JARGON — the SME's actual vocabulary
+#    Most of these target fields that DO NOT EXIST yet (COL-01).
+#    Correct outcome today is DISCLOSE, not ANSWER.
+# ═══════════════════════════════════════════════════════════════════
+
+# DISCLOSE — 1→many. Four fields, none of which exist in the KG.
+# [MEASURED 07-31: silently dropped. Clean 25-row table, no indication]
+Show only supplier name and status for active suppliers, include who columns
+
+# DISCLOSE — same expansion, different phrasing [UNMEASURED]
+List active suppliers with supplier name and who details
+
+# DISCLOSE — same expansion, third phrasing [UNMEASURED]
+List active suppliers with supplier name and audit columns
+
+# DISCLOSE — CreatedBy does not exist anywhere in kg_entity_field.
+# [MEASURED 07-31: routed to the ENTITY channel, refused as
+# "not a supported entity". That is the COL-02 channel bug]
+Show only supplier name and status for active suppliers, include 'created by'
+
+# DISCLOSE — CreationDate is a FILTER, not projectable [UNMEASURED]
+List active suppliers with supplier name and creation date
+
+# DISCLOSE — same field, everyday wording [UNMEASURED]
+List active suppliers with supplier name and date created
+
+# DISCLOSE — LastUpdateDate, nowhere in the catalog [UNMEASURED]
+List active suppliers with supplier name and last updated
+
+# ANSWER — DFF genuinely exists as an entity
+# (ReceivablesInvoiceTransactionDFF). Tests jargon that CAN resolve
+Show the AR invoice with CustomerTransactionId 300000248096352 and its DFF values
+
+# DISCLOSE — "flexfield" as a column rather than an include [UNMEASURED]
+Show the AR invoice with CustomerTransactionId 300000248096352 with transaction number and flexfield
+
+
+# ═══════════════════════════════════════════════════════════════════
+# E. EBS-ERA VOCABULARY — users trained before Fusion
+# ═══════════════════════════════════════════════════════════════════
+
+# DISCLOSE — Site has ZERO field rows.
+# [MEASURED 07-31: silently became include:['Address'] and returned 25
+# ADDRESSES presented as sites. Wrong data, stated confidently.
+# This is the single worst outcome in the whole measurement]
+Show only supplier name and status for active suppliers, include supplier-site
+
+# DISCLOSE — same gap, EBS wording [UNMEASURED]
+List active suppliers with vendor site
+
+# REFUSE — BusinessUnit is not on Supplier. It IS on ReceivablesInvoice
+# and AccountReceipt. Cross-entity, needs a join.
+# [MEASURED 07-31: refused correctly, and named the allowed includes.
+# CONTROL CASE — the mechanism works when the entity is known]
+Show only supplier name and status for active suppliers, include 'business unit'
+
+# DISCLOSE or REFUSE — "operating unit" is EBS for business unit.
+# Must not silently resolve to something else [UNMEASURED]
+List active suppliers with supplier name and operating unit
+
+# ANSWER — "agent" is already an entity_synonym for Buyer [UNMEASURED]
+Show PO 2144 with order number and agent
+
+# ANSWER — "shipment" is already an entity_synonym for POSchedule
+Show PO 2144 and its shipments
+
+# DISCLOSE — "part number" / ItemNumber exists on
+# ReceivablesInvoiceLine but NOT on PurchaseOrderLine [UNMEASURED]
+Show PO 2144 and its lines with line number and part number
+
+
+# ═══════════════════════════════════════════════════════════════════
+# F. THE COUNT-INSTEAD-OF-DETAIL DEFECT
+#    Carried forward, and prompt 1 of the 07-31 measurement.
+# ═══════════════════════════════════════════════════════════════════
+
+# DISCLOSE/ANSWER — the item data IS fetched (Description present in raw
+# output) but display prints "lines: 1".
+# [MEASURED 07-31: no `fields` parsed at all. ALSO: the narration cited
+# quantity, category and 758.00, none of which appeared in the raw row.
+# Determine whether the diagnostic abbreviates or the synthesizer
+# invents — see status doc §G7.1]
+Get me PO 162034 details with item details?
+
+# ANSWER — the same request with explicit columns. If this answers and
+# the one above does not, the gap is parsing, not fetching
+Show PO 162034 and its lines with line number, description, quantity and price
+
+# DISCLOSE — known carried-forward defect, same shape
+Show invoice lines for invoice 300000248096352
+
+
+# ═══════════════════════════════════════════════════════════════════
+# G. AMBIGUOUS ACROSS ENTITIES — status doc §G7.3, no design yet
+#    These have no agreed right answer. Capture behaviour; do not
+#    score pass/fail until the ambiguity rule is decided.
+# ═══════════════════════════════════════════════════════════════════
+
+# Status exists on NINE entities. Which one wins on a PO query?
+Show PO 2144 and its lines with line number and status
+
+# "Ordered" collides across PurchaseOrder / PurchaseOrderLine /
+# PODistribution
+Show PO 2144 and its lines with ordered and total
+
+# "receipt" = cash received in AR, goods received in P2P
+Show receipts for ABC Application Software with receipt number and amount
+
+# "total" — Total, TotalTax, TotalBalanceAmount, TotalOriginalAmount
+Show PO 2144 with order number and total
+
+
+# ═══════════════════════════════════════════════════════════════════
+# H. MUST NOT RESOLVE — the false-positive guard
+#    If COL-02 makes any of these resolve to something, the resolver is
+#    over-matching and has become the supplier-site failure at scale.
+# ═══════════════════════════════════════════════════════════════════
+
+# DISCLOSE — not a Supplier field, not any field. Known from 04_columns
+Show supplier name and credit rating for active suppliers
+
+# DISCLOSE — plausible-sounding, entirely absent
+List active suppliers with supplier name and risk score
+
+# DISCLOSE — a real Oracle concept Spire does not model
+List active suppliers with supplier name and payment terms
+
+# DISCLOSE — cross-entity join, not a projection. From 07_alacarte
+Show me invoices for EIP Inc with invoice number, PO number, and PO line number
+
+# DISCLOSE — nonsense control. Must NOT map to anything
+List active suppliers with supplier name and quantum flux
+
+
+# ═══════════════════════════════════════════════════════════════════
+# I. MIXED VALID + INVALID — the partial-success case
+#    The hardest case for COL-03: some columns resolve, some do not.
+#    A table showing the survivors with NO note is a FAIL.
+# ═══════════════════════════════════════════════════════════════════
+
+# DISCLOSE — two valid, one absent. Table must print AND name the miss
+List active suppliers with supplier name, status, and created by
+
+# DISCLOSE — one valid, three absent
+List active suppliers with supplier name, credit rating, risk score, and payment terms
+
+# DISCLOSE — valid + jargon expansion that cannot resolve
+List active suppliers with supplier number and who columns
+
+# DISCLOSE — the original SME prompt, all three unresolvable terms
+# together. [MEASURED 07-31: refused with "not the way this question
+# narrows them" — which names none of the three terms]
+Show only supplier name and status for active suppliers, include supplier-site and country, 'created by'
+
+
+# ═══════════════════════════════════════════════════════════════════
+# J. MUST NOT REGRESS — paths that share vocabulary
+#    If any of these changes behaviour, COL-02 has stolen traffic.
+# ═══════════════════════════════════════════════════════════════════
+
+# No columns named — normal synthesizer path, no table
+List active suppliers
+
+# Aggregation with a column-sounding phrase — must stay an aggregation
+Top 5 suppliers by invoice spend last year with supplier name and total
+
+# Plain by-id fetch, unchanged
+Show PO 2144 and its lines
+
+# Address as a column — the headline 07_alacarte case, must still work
+List active suppliers with supplier name, supplier number, and address
+
+# "country" — resolves via the addresses child. Must not break
+Supplier number and country for active suppliers
