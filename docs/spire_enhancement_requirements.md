@@ -2,11 +2,12 @@
 
 | | |
 |---|---|
-| **Document** | Spire Enhancement Requirements, v1.0 |
-| **Date** | 2026-07-30 |
+| **Document** | Spire Enhancement Requirements, v1.1 |
+| **Date** | 2026-07-31 |
 | **Status** | Draft for review |
 | **Author** | Bhagavan |
 | **Supersedes** | Raw enhancement list (16 items, 2026-07-30) |
+| **v1.1 adds** | COL-01 to COL-03 (column resolution) and CSV-01 (result export), from SME feedback 2026-07-31. Not derived from the original 16-item list — see §12. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -19,13 +20,22 @@ optimisation, decisions before the work that depends on them.
 
 | # | Category | What falls into it | Requirements | Priority | Phase |
 |---|---|---|---|---|---|
+| 0 | **Column resolution** — the user names a column and does not get it | Requested columns silently dropped · no field synonyms · fields absent from the KG · no way to export a full result | COL-01 to COL-03, CSV-01 | **P0** | 2A |
 | 1 | **Defects** — shipped behaviour that misleads the user | Unreadable refusals · no guidance on over-broad queries · silent 25-row truncation | UX-01 to UX-04 | P1–P2 | 2, 8 |
 | 2 | **Plumbing** — infrastructure that makes later work possible | Quiet default output · per-component debug flags · per-stage instrumentation · test layers | UX-05, OBS-01 to OBS-05, TST-01 to TST-04 | P1–P2 | 1, 3, 4 |
 | 3 | **Optimisation** — known cost, unproven remedy | Token cost · 20-second latency · code-built responses · caching · vocabulary in the KG | PRF-01 to PRF-08 | P1–P3 | 5, 6, 7, 8, 11 |
 | 4 | **Open questions** — no right answer yet | LLM planner vs KG planner · single vs multi-agent · how to expose tools to copilots · multi-backend scope | DEC-01 to DEC-03 | Decision | — |
 | 5 | **New surfaces** — new front doors onto the same engine | REST interface · copilot interface · configuration and query UI | API-01 to API-05 | P2–P3 | 9, 10, 12 |
 
-**Totals:** 27 requirements and 3 decisions, sequenced across 12 phases.
+**Totals:** 31 requirements and 3 decisions, sequenced across 13 phases.
+
+**Category 0 was added 2026-07-31 and takes precedence over everything
+below it.** It is the only category raised directly by the SME against
+working software rather than derived from the original list. Its defining
+symptom: a user names columns, receives a clean-looking table, and is never
+told that some of what they asked for was discarded. Two of the five
+measured cases returned wrong or incomplete data with no indication that
+anything had been dropped.
 
 **The one thing to take from this table.** Category 2 produces no new
 capability and is where the first four phases go. It is the reason every
@@ -87,8 +97,13 @@ Development, QA, and the Oracle SME reviewing user-facing behaviour.
 - **should** — recommended; deviation requires justification
 - **may** — optional
 
-**Priority:** `P1` required for the next release · `P2` required but
-schedulable · `P3` desirable · `D` decision required before specification.
+**Priority:** `P0` blocking — takes precedence over scheduled P1 work ·
+`P1` required for the next release · `P2` required but schedulable · `P3`
+desirable · `D` decision required before specification.
+
+`P0` was introduced in v1.1. It is reserved for defects where Spire
+presents an answer that the user cannot distinguish from a correct one.
+Ordinary breakage is P1: it is visible, and the user knows not to trust it.
 
 ---
 
@@ -234,6 +249,235 @@ non-technical users impractical.
   diagnostics use a separate stream or logger.
 
 **Depends on:** none. **Blocks:** OBS-01, API-01, API-04.
+
+---
+
+## 4A. Column resolution and export requirements
+
+Added v1.1, 2026-07-31, from SME feedback. **This section is P0 and
+precedes section 5 in the implementation sequence.**
+
+### Origin
+
+Five prompts were run with `--show-parser --show-raw-output` on 2026-07-31.
+Each named columns using vocabulary the KG does not hold. The results:
+
+| Prompt fragment | Parsed as | Outcome |
+|---|---|---|
+| `item details` | no `fields` at all | Data **was fetched** (`Description: 'Printer M32240'`), display printed `lines: 1` |
+| `'created by'` | an **entity** to include | Refused — "not a supported entity" |
+| `supplier-site` | `include: ['Address']` | **Answered with the wrong child**, silently |
+| `'business unit'` | an entity to include | Refused, correctly. Control case |
+| `who columns` | dropped from `fields` | **Silently discarded.** Clean 25-row table, no indication |
+
+Three distinct root causes, and only one is synonym matching.
+
+**Finding 1 — the mechanism exists, for everything except fields.**
+`kg_vocabulary` holds 97 rows across eight `vocab_kind` values: `country`,
+`entity_synonym`, `po_status`, `relationship_phrase`,
+`supplier_classification`, `supplier_site_bu`, `supplier_status`,
+`supplier_business_relationship`. Synonym resolution is already
+first-class, deterministic and KG-authored — `vendor`→`Supplier`,
+`agent`→`Buyer`, `draft`→`INCOMPLETE`. There is no `field_synonym`. Fields
+are the one dimension for which nobody authored one.
+
+**Finding 2 — synonyms alone would have fixed none of the five.** The
+target fields do not exist. `Supplier` has exactly four field rows:
+`Supplier`, `Status`, `SupplierId`, `SupplierNumber`. `CreatedBy` appears
+nowhere in all 194 rows of `kg_entity_field`. `CreationDate` exists only as
+a *filter* in `kg_entity_filter`, never as a projectable field. `Site` is a
+registered entity with **zero** field rows — which is why `supplier-site`
+had nothing to land on and became `Address`. **Coverage precedes mapping.**
+Reversing that order produces terms that resolve to fields that cannot be
+projected, which looks like progress and delivers nothing.
+
+**Finding 3 — the silent drop is the safety defect.** Prompts 3 and 5
+returned confident, well-formed tables. Neither is distinguishable from
+success by reading the output. Until unresolved terms are reported, no
+resolver's hit rate can be measured.
+
+**On the choice of mechanism.** A second LLM call and a vector store were
+both considered and rejected. The field vocabulary is bounded (194 rows) —
+a lookup problem, not a search problem. Nearest-neighbour matching is what
+produced the `supplier-site`→`Address` failure: semantically close,
+factually wrong, silently confident. Embeddings would make that class of
+failure more common and harder to debug. The parse call already performs
+this mapping successfully when the vocabulary is present — `supplier name
+and status` resolved to `['Supplier', 'Status']` in the same run. The task
+is therefore to widen the vocabulary that call already receives, not to add
+a second inference step.
+
+---
+
+### COL-01 — Projectable field coverage · P0
+
+Every field a user can reasonably request **shall** exist in
+`kg_entity_field` with a `field_role` permitting projection.
+
+Coverage **shall** include, at minimum:
+
+- **WHO columns** on every entity that exposes them: `CreatedBy`,
+  `CreationDate`, `LastUpdatedBy`, `LastUpdateDate`.
+- **`Site`** entity fields. Currently registered with zero field rows.
+- Any field currently reachable only as a filter — `CreationDate` on
+  `Supplier` and `PurchaseOrder` — **shall** also be projectable.
+
+A field **shall not** be added to `kg_entity_field` without a curl against
+the pod confirming the endpoint returns it. Authoring a field the endpoint
+does not carry produces an em-dash column, which is a silent failure of the
+same class this section exists to remove.
+
+**Rationale.** Mapping a user's term onto a field that does not exist moves
+the failure rather than fixing it.
+
+**Acceptance criteria**
+
+- WHO columns projectable on Supplier, PurchaseOrder, Invoice and the AR
+  entities that expose them.
+- `Site` has field rows and `supplier sites for X` returns site data, not
+  addresses.
+- Every added field verified by curl before the KG row is authored.
+- `scripts/print_kg.py` and `tests/test_kg_metadata.py` expected counts
+  bumped together.
+
+**Depends on:** none. **Blocks:** COL-02.
+
+---
+
+### COL-02 — Field synonym resolution · P0
+
+`kg_vocabulary` **shall** gain a `field_synonym` vocab_kind mapping
+business and Oracle-jargon terms to canonical field names.
+
+Resolution **shall** proceed in layers, cheapest first:
+
+1. **Normalize** — case, hyphens, underscores, quotation marks,
+   possessives, plurals. `supplier-site` → `suppliersite`;
+   `'created by'` → `createdby` → `CreatedBy`. Local, deterministic, free.
+2. **Look up** `field_synonym` rows in the KG.
+3. **Carry** the resolved vocabulary in the KG menu the parser already
+   receives.
+4. **Report** anything still unresolved — see COL-03.
+
+A synonym **shall** be permitted to expand to multiple fields. `who
+columns` resolves to four. A one-to-one map is insufficient.
+
+Resolution **shall** be channel-aware. The preposition in the question
+**shall not** decide whether a term is a column or a child entity; what the
+term resolves to decides. `address` is legitimately both, and `include
+'created by'` was refused as an unsupported *entity* because the word
+"include" routed a field request to the entity channel.
+
+Spire **shall not** add a second LLM call for field resolution. Spire
+**shall not** introduce a vector store or embedding-similarity matching for
+this purpose. See "On the choice of mechanism" above.
+
+**Rationale.** Fixing prompts individually does not converge. The KG
+already resolves synonyms deterministically for eight other categories.
+
+**Acceptance criteria**
+
+- `field_synonym` rows present; seed vocabulary per Appendix A.
+- One term may resolve to many fields.
+- Adding a synonym requires a KG row and no parser code change.
+- Parse **input** tokens measured before and after. Unlike schema growth,
+  menu growth is visible in `input_tokens` and **shall** be reported.
+- Latency unchanged: no additional round-trip.
+- The `06_slow` and `08_lifecycle` sets show no routing regression.
+
+**Depends on:** COL-01. **Related:** PRF-06, PRF-02.
+
+---
+
+### COL-03 — Unresolved column disclosure · P0
+
+Where a requested column cannot be resolved, Spire **shall** name the term
+back to the user and state that it was not included.
+
+Spire **shall not** silently discard a requested column.
+
+Spire **shall not** substitute a near match without saying so. Where a term
+resolves to something other than its literal reading — `supplier-site` to
+`Address` — the substitution **shall** be stated.
+
+Disclosure **shall** follow the UX-01 refusal shape (Reason / Solution /
+Example) where the whole request fails, and **shall** appear as a labelled
+note above the table where the request partly succeeds.
+
+**Rationale.** This is the highest-value requirement in the section and the
+smallest. It converts two silent wrong answers into visible ones, and it is
+the instrument by which COL-01 and COL-02 are measured — a resolver whose
+misses are invisible cannot be shown to work. It should be built **first**,
+before either.
+
+**Acceptance criteria**
+
+- A dropped column produces a named, visible note.
+- A substituted column produces a named, visible note.
+- Running the column prompt sets yields a miss list that can be read
+  directly as the authoring backlog for COL-01 and COL-02.
+- No prompt returns a clean table while having discarded a requested term.
+
+**Depends on:** none. **Blocks:** measurement of COL-01, COL-02.
+
+---
+
+### CSV-01 — Result export to CSV · P0
+
+Spire **shall** be able to write each result set to a CSV file in an output
+directory, and **shall** tell the user the path.
+
+**Scope of the file.** By default the CSV **shall** contain exactly the
+rows fetched — no more and no fewer than the pipeline actually retrieved.
+Where the fetched set is smaller than the total available, the file
+**shall** carry a machine-readable partial marker recording both counts.
+Spire **may** offer a flag that paginates to exhaustion before export; that
+mode **shall** be opt-in, and the user **shall** be warned it is slow.
+
+Spire **shall not** write a CSV that appears complete when it is not.
+
+**Granularity.** One file per output **step**, not per prompt. A single
+prompt commonly produces several result sets — `Get me PO 162034 details
+with item details` produced `po` and `purchaseorderline`. A prompt-level
+file would have to discard one or flatten both.
+
+**Layout.** A run writes a directory:
+
+```
+output/2026-07-31_143022_get-me-po-162034/
+    01_po.csv
+    02_purchaseorderline.csv
+    manifest.csv
+```
+
+For a prompt set: one directory per run, one subdirectory per prompt, one
+manifest at the top level.
+
+**The manifest** answers the summary question. It **shall** record, per
+step: prompt text, step name, rows written, rows available at source,
+truncated yes/no, and exit code. It is the summary, in a form that can be
+sorted and diffed.
+
+**Rationale.** Console output is capped at 25 rows and the cap is invisible
+once the screen scrolls. A file is worse than a screen in this respect: it
+is saved, mailed and cited long after any "25 of 426" note has gone. This
+requirement therefore depends on UX-03 rather than preceding it.
+
+A secondary benefit: the manifest gives `run_prompt_set.py` a scoreable
+artifact. The standing rule that a tally is not a verdict currently has
+nothing better to offer in its place.
+
+**Acceptance criteria**
+
+- Every result set is exportable; the path is reported.
+- Row count in the file equals rows fetched, exactly.
+- A partial export is marked as partial in the file itself, not only on
+  screen.
+- Multi-step prompts produce one file per step.
+- A prompt-set run produces one manifest covering every prompt.
+- Opt-in full pagination produces a complete file and no partial marker.
+
+**Depends on:** UX-03 (truncation disclosure). **Related:** OBS-05.
 
 ---
 
@@ -774,6 +1018,7 @@ Sequenced by dependency, not by priority.
 |---|---|---|
 | **1** | UX-05, OBS-01, OBS-02 | Blocks every interface. Small, low risk. |
 | **2** | UX-01, UX-02, UX-03 | User-visible defects. Cheap, immediate credibility gain. |
+| **2A** | COL-03, COL-01, COL-02, CSV-01 | **P0, SME-raised.** Runs ahead of the remainder of phase 2. COL-03 first: it is small, and it makes the other two measurable. CSV-01 last — it depends on UX-03. |
 | **3** | OBS-03, OBS-04, OBS-05 | Must precede optimisation; nothing in phase 5+ is provable without it. |
 | **4** | TST-02, TST-03, TST-01 | Makes later phases safe to attempt. TST-02 first: no LLM, no pod. |
 | **5** | PRF-01 | Proven pattern, known gain, no new components. |
@@ -785,6 +1030,23 @@ Sequenced by dependency, not by priority.
 | **11** | PRF-06, PRF-04 | Higher risk. Requires phases 4 and 6 to evaluate honestly. |
 | **12** | API-04, API-05 | Requires phase 9. Constrained by DEC-03. |
 | **—** | DEC-01 | Decision only. No phase assigned. |
+
+**Phase 2A interrupts phase 2 deliberately.** UX-01 (structured refusal
+messages) is complete; UX-02 (narrowing guidance) and UX-03 (truncation
+disclosure) are not. Phase 2A is inserted between them because its defects
+are of a worse kind: UX-02 and UX-03 concern answers the user can see are
+incomplete, whereas COL-03 concerns answers the user cannot tell are
+incomplete at all.
+
+The ordering **within** 2A is not by priority but by measurability.
+COL-03 (disclosure) is built first — not because it is the largest, but
+because COL-01 (coverage) and COL-02 (synonyms) cannot be evaluated while
+their misses are invisible. Building the resolver first would mean shipping
+it with an unknown hit rate.
+
+CSV-01 sits last in 2A and after UX-03 for a reason recorded in the
+requirement: exporting a truncated result to a file that does not say so is
+strictly worse than displaying it on a screen that does.
 
 **Phases 1 to 4 are infrastructure and defect work.** They produce no new
 capability and are the reason every subsequent phase is faster and safer.
@@ -833,3 +1095,86 @@ Every requirement in this document derives from the original 16-item list.
 | 14 — 20 seconds per prompt | PRF-05, PRF-07, OBS-03 |
 | 15 — REST and copilot interfaces | API-01, API-02, API-03 |
 | 16 — UI with backend configuration | API-04, API-05, DEC-03 |
+
+**Added in v1.1.** These do not derive from the original list. They were
+raised by the SME on 2026-07-31 against working software and confirmed by
+measurement the same day.
+
+| Origin | Requirements |
+|---|---|
+| SME — requested columns not returned; fixing prompt-by-prompt does not converge | COL-01, COL-02, COL-03 |
+| SME — console caps at 25 rows; need the full result as a file | CSV-01 |
+
+---
+
+## 13. Appendix A — Oracle jargon seed vocabulary
+
+Seed list for the `field_synonym` rows required by COL-02. This is
+**candidate vocabulary, not verified mappings** — each term must be
+resolved against a field that COL-01 has confirmed exists on the pod before
+a KG row is authored. Terms whose target field does not exist are COL-01
+work, not COL-02 work.
+
+Sourced from general Oracle EBS and Fusion convention. It is a starting
+point, not a closed set; the miss list produced by COL-03 is the
+authoritative backlog.
+
+### Multi-field expansions
+
+| Term | Expands to |
+|---|---|
+| WHO columns, who details, audit columns, audit fields | CreatedBy, CreationDate, LastUpdatedBy, LastUpdateDate |
+| creator details, created details | CreatedBy, CreationDate |
+| DFF, flexfield, descriptive flexfield, attribute columns | DFF segment fields |
+| KFF, key flexfield, segments | key flexfield segments |
+
+### Legacy EBS vocabulary
+
+Users trained on E-Business Suite carry this vocabulary into Fusion.
+
+| Term | Fusion equivalent |
+|---|---|
+| vendor, vendor name, vendor number, vendor site | Supplier, SupplierNumber, Site |
+| OU, operating unit | business unit |
+| LE, legal entity | legal entity |
+| agent | Buyer *(already an `entity_synonym`)* |
+| shipment | POSchedule |
+| dist, distribution | PODistribution |
+| req, requisition | requisition |
+| party, party site, TCA | customer master |
+| trx, trx number | TransactionNumber |
+| SLA, sub-ledger | subledger accounting |
+
+### Field-level synonyms
+
+| Term | Likely target |
+|---|---|
+| created date, creation date, date created, entered on | CreationDate |
+| last updated, modified, changed on, update date | LastUpdateDate |
+| item, item number, part number, SKU | ItemNumber / Description |
+| commodity | Category |
+| terms | payment terms |
+| UOM, unit of measure | UnitOfMeasure / UOM |
+| price, unit price, selling price | Price / UnitSellingPrice |
+| qty | Quantity |
+| amount, extended amount, line amount | Ordered / LineAmount |
+| tax | TotalTax / TaxAmount |
+| bill-to, ship-to, sold-to, remit-to | the corresponding party fields |
+| CM, DM | credit memo, debit memo |
+| 2-way, 3-way, 4-way match | matching level |
+| holds | invoice / PO holds |
+| aging, aging buckets | AR aging |
+| applied, unapplied, on-account | receipt application state |
+| DSO, chargeback, dunning, collector, salesperson | AR analytics fields |
+
+### Notes for the author of these rows
+
+- **Ambiguity is real and must be resolved explicitly.** `receipt` already
+  means AR cash received; in P2P it means goods received. `status` exists
+  on nine entities. A synonym that resolves differently by root entity
+  needs a row per entity, not one global row.
+- **`Ordered` and `Total` already collide** across PurchaseOrder,
+  PurchaseOrderLine and PODistribution.
+- **Do not author a synonym for a field COL-01 has not confirmed.** That
+  produces an em-dash column, which is the silent failure this section
+  exists to eliminate.

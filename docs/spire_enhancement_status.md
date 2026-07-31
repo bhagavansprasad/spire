@@ -1,17 +1,22 @@
 # Spire Enhancement — Status Tracker
 
-Tracks progress against `docs/spire_enhancement_requirements.md` v1.0.
-That document is the frozen spec; this file is the living record of what
+Tracks progress against `docs/spire_enhancement_requirements.md` v1.1.
+That document is the specification; this file is the living record of what
 has actually been done. Update this file at the end of any session that
 touches a phase — do not edit the requirements doc itself to reflect
 progress.
+
+The requirements doc is **not frozen**. New requirements may be added when
+they are genuinely new — v1.1 added COL-01 to COL-03 and CSV-01 from SME
+feedback. What must not happen is editing it to record progress; that is
+this file's job.
 
 This file also holds the **design** for whichever phase is currently
 open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-30 (late evening — Phase 1 complete; **UX-01 done**)
+**Last updated:** 2026-07-31 (Phase 2A opened — column resolution, P0, SME-raised)
 
 ---
 
@@ -21,7 +26,8 @@ phases of design detail bury the status table above them.
 |---|---|---|---|
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
-| 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | **In progress.** UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 and UX-03 not started. |
+| 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 (narrowing guidance) and UX-03 (truncation disclosure) not started — **deferred behind 2A**. |
+| **2A** | **COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | **SME-raised 2026-07-31, measured same day.** Requested columns silently dropped. Discovery in §G. Nothing built yet. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -981,3 +987,199 @@ defects, five discovered by measurement.
 That is the same pattern as the rest of this project's history, and it is
 the argument for the tripwires added alongside the fix rather than after
 it.
+
+---
+
+# Phase 2A discovery — COL-01, COL-02, COL-03, CSV-01
+
+**Opened 2026-07-31. P0, ahead of the remainder of Phase 2. Nothing built
+yet — this section is discovery only.**
+
+Requirements added to `spire_enhancement_requirements.md` v1.1 §4A.
+
+## G1. How it was raised
+
+Not from the requirements list. The SME reported that naming columns in a
+prompt did not return those columns, and — the important part — that
+adjusting the prompt wording made it work. The complaint was explicitly
+about the *shape* of the fix, not the individual prompts:
+
+> *"I don't want to fix by adjusting the prompt the way that you are
+> expecting... How many times do I need to fix? I need a broader solution."*
+
+That is the correct instinct, and it is why this is a requirement rather
+than five bug fixes.
+
+## G2. The measurement
+
+Five prompts, run with `--show-parser --show-raw-output`, output in
+`t_fields.txt`. Not inspection — every finding below came from reading
+output.
+
+| # | Term | Parsed as | Outcome |
+|---|---|---|---|
+| 1 | `item details` | no `fields` at all | Data **was fetched** — `Description: 'Printer M32240'` present in raw output. Display printed `lines: 1` |
+| 2 | `'created by'` | an **entity** to include | Refused: "not a supported entity" |
+| 3 | `supplier-site` | `include: ['Address']` | **Wrong child returned, silently.** 25 addresses presented as sites |
+| 4 | `'business unit'` | an entity to include | Refused correctly. Control case — the mechanism works |
+| 5 | `who columns` | dropped from `fields` | **Silently discarded.** Clean 25-row table, no indication anything was lost |
+
+Five prompts, four distinct root causes. Only one is synonym matching.
+
+## G3. Three findings
+
+### Finding 1 — the resolver already exists, for everything except fields
+
+`kg_vocabulary`, 97 rows, eight `vocab_kind` values:
+
+```
+country                          entity_synonym
+po_status                        relationship_phrase
+supplier_classification          supplier_site_bu
+supplier_status                  supplier_business_relationship
+```
+
+`vendor`→`Supplier`. `agent`→`Buyer`. `draft`→`INCOMPLETE`. Deterministic,
+KG-authored, no LLM call, no similarity search. Exactly the mechanism the
+SME asked for.
+
+**There is no `field_synonym`.** Fields are the one dimension for which
+nobody authored one. The fix is a ninth `vocab_kind` in an existing table
+— not a new subsystem.
+
+### Finding 2 — synonyms alone would have fixed none of the five
+
+The target fields do not exist.
+
+- `Supplier` has **four** field rows: `Supplier`, `Status`, `SupplierId`,
+  `SupplierNumber`.
+- `CreatedBy` appears **nowhere** in all 194 rows of `kg_entity_field`.
+- `CreationDate` exists only in `kg_entity_filter` — filterable, never
+  projectable.
+- `Site` is a registered entity in `kg_entity` with **zero** rows in
+  `kg_entity_field`. That is why `supplier-site` had nothing to land on
+  and fell through to `Address`.
+
+**Coverage precedes mapping.** COL-01 before COL-02. Reversing that order
+maps terms onto fields that cannot be projected — which looks like
+progress and delivers em dashes.
+
+### Finding 3 — the silent drop is the safety defect
+
+Prompts 3 and 5 both returned confident, well-formed, correctly-formatted
+tables. Neither is distinguishable from success by reading the output.
+Prompt 3 is worse than a refusal: it answered with the wrong data.
+
+This is why COL-03 is built **first** despite being the smallest. Until
+misses are visible, no resolver's hit rate can be measured — we would be
+shipping COL-02 with an unknown miss rate and no way to find out.
+
+## G4. Why not an LLM call, and why not a vector store
+
+Both were raised and both were rejected. Recording the reasoning so it is
+not relitigated.
+
+**A second LLM call** — rejected on latency, and unnecessary. The parse
+call *already performs this mapping correctly when the vocabulary is
+present*: in the same run, `supplier name and status` resolved cleanly to
+`fields: ['Supplier', 'Status']`. The mapping capability is not missing.
+The vocabulary is. Widening the menu that call already receives costs input
+tokens, not a round-trip.
+
+**A vector store / embedding similarity** — rejected on accuracy, which is
+the opposite of the usual expectation. Prompt 3 *is* what nearest-neighbour
+matching looks like when it goes wrong: `supplier-site` → `Address` is
+semantically close, factually wrong, and silently confident. Embeddings
+would make that failure class more common and considerably harder to
+debug. Additionally the field vocabulary is bounded at 194 rows — a lookup
+problem, not a search problem. Vector search earns its cost over unbounded
+corpora.
+
+**Third-order point:** a deterministic KG lookup keeps Design 3 intact.
+Field resolution becomes a KG lookup exactly as tool selection is. Two LLM
+boundaries, unchanged.
+
+## G5. The channel bug
+
+Distinct from coverage and from synonyms, and easy to miss.
+
+The word **"include" is doing routing work it should not do.** The user
+means "also show this column". The parser reads it as "join this child
+entity". That is why `include 'created by'` — a request for a *field* —
+was refused as an unsupported *entity*.
+
+A perfect synonym table does not fix prompt 2, because the term never
+reaches the field channel at all.
+
+Resolution must be decided by **what the term resolves to**, not by the
+preposition that introduced it. Note `address` is legitimately both a child
+entity and a flattened column, so the same word must resolve two ways
+depending on intent — the channel cannot be decided lexically.
+
+## G6. CSV export (CSV-01) — the trap in the request
+
+The request as stated: *"if the output says 400 records but only 25 are
+displayed, the CSV should contain all 400."*
+
+**Spire does not have the 400.** The run states it plainly:
+`suppliers: 426 total in source; 25 examined for filtering`. Twenty-five
+rows were fetched; 401 were never retrieved. There is nothing in memory to
+write.
+
+So CSV export is not a formatting feature. It is a **data-acquisition**
+feature, and the full-set version is what makes `06_slow.txt` take minutes.
+
+Resolved (SME, 2026-07-31): **default to exporting what was fetched, with
+a partial marker in the file; offer opt-in full pagination.** The marker is
+non-negotiable.
+
+The reason it is non-negotiable, recorded: a truncated CSV is worse than a
+truncated screen. A file is saved, mailed and cited long after the "25 of
+426" note has scrolled away. Shipping CSV before UX-03 (truncation
+disclosure) would industrialise the wrong-number problem rather than fix
+it. Hence CSV-01 depends on UX-03.
+
+**Granularity, resolved:** one file per output *step*, not per prompt.
+Prompt 1 produced two result sets (`po` and `purchaseorderline`). A
+prompt-level file would have to discard one or flatten both.
+
+**The summary question, resolved:** a run writes a directory with a
+`manifest.csv` recording per step — prompt, step name, rows written, rows
+available, truncated y/n, exit code. Side benefit: this finally gives
+`run_prompt_set.py` a scoreable artifact. "The tally is not a verdict" has
+had nothing better to offer in its place until now.
+
+## G7. Open questions
+
+1. **The prompt 1 narration cites data not in the raw output.** The answer
+   states quantity 2, category "Printers", and 758.00 — none of which
+   appear in the row `--show-raw-output` printed. Either that diagnostic
+   abbreviates, or the synthesizer is inventing. **Different fixes.** Not
+   yet determined which.
+2. **Prompt 1 is also the known "invoice lines returns a count" defect** —
+   `lines: 1` where line detail was asked for. Same shape, already carried
+   forward. May be one fix, not two.
+3. **Ambiguity across entities is unresolved.** `status` exists on nine
+   entities; `Ordered` and `Total` collide across PurchaseOrder,
+   PurchaseOrderLine and PODistribution; `receipt` means goods-received in
+   P2P and cash-received in AR. A synonym that resolves differently by root
+   entity needs a row per entity, not one global row. No design yet.
+4. **Menu growth is measurable and must be measured.** Unlike the schema
+   growth recorded in the Phase 2 numbers — which Gemini does not count in
+   `input_tokens` — vocabulary added to the KG menu *will* show in
+   `input_tokens`. The parse-token baseline is usable for this change,
+   unlike for `draft.py`.
+
+## G8. Next action
+
+Build order is COL-03, COL-01, COL-02, CSV-01 — disclosure first, then
+coverage, then synonyms, then export.
+
+Not yet done, and needed before any code:
+
+- A labelled prompt set for column requests, indexed against the real 194
+  fields rather than invented names. Should cover: valid single and
+  multiple columns, jargon terms, near-miss wording, cross-entity terms
+  (must refuse), and the multi-field expansions.
+- Curl verification of WHO columns on the pod before authoring any
+  `kg_entity_field` row. Standing rule: curl before code.
