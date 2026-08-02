@@ -64,6 +64,35 @@ WHY EXAMPLES COME FROM CODE, NOT THE MODEL
 A model-invented example could name a customer or supplier that does not
 exist. A suggestion that fails when typed is worse than no suggestion. The
 model classifies; code supplies a known-good example.
+
+WHAT PHASE 2A ADDED (COL-03, clauses 3 and 4)
+
+A sixth flavor, UNSUPPORTED_FIELD, for a prompt that asks for a COLUMN the
+entity does not have. Before it there were five kinds and none of them fit
+a column problem, so the model chose the nearest — unsupported_filter —
+which was the correct choice from a bad menu. The defect was the missing
+option, not the model's judgement.
+
+The visible consequence: a request for a 'created by' column was answered
+"I can look up suppliers, but not the way this question narrows them. /
+Narrow by country, status or name instead." Narrowing advice for a problem
+about what to SHOW. A filter decides WHICH records come back; a field
+decides WHAT IS SHOWN about them. The message layer had no way to tell
+them apart.
+
+Underneath that sat the same fault Phase 2 removed once already. Every one
+of those refusals carried an accurate reason in ``detail`` — "The 'created
+by' field is not available for suppliers." — and the renderer replaced it
+with the generic sentence. The model's diagnosis was correct and was
+discarded, exactly as the prose scan discarded it before. Two occurrences,
+different code paths, same shape: if a third turns up, treat it as a
+pattern rather than a coincidence.
+
+This flavor should become RARE once COL-03's partial-resolution clause
+lands. A prompt naming one good column and one bad one currently returns
+nothing; it should return the good column and name the bad one. At that
+point a total column refusal means every requested column failed, which is
+the only case where refusing is the right answer.
 """
 
 from __future__ import annotations
@@ -192,6 +221,35 @@ _FILTER_GUIDANCE: dict[str, tuple[str, str]] = {
     "CreditMemo": (
         "Narrow by customer name instead.",
         "credit memos for ABC Application Software",
+    ),
+}
+
+# Per-entity guidance for COLUMN refusals: a prompt that names columns the
+# entity actually has. Separate from _FILTER_GUIDANCE because the advice is
+# a different shape — a filter refusal sends the user to a different way of
+# NARROWING, a column refusal sends them to a different set of things to
+# SHOW. Reusing the filter table here produced the measured defect: a
+# request for a 'created by' column answered with "narrow by country,
+# status or name instead".
+#
+# Every example below was RUN against the pod on 2026-07-31 and answered.
+# They are also in scripts/prompts/10_refusal_examples.txt, which
+# test_every_promised_example_is_verifiable enforces. Do not add an entry
+# here without adding it there and running it — an example that refuses is
+# worse than no example, because it is offered to someone who has just been
+# told no.
+_FIELD_GUIDANCE: dict[str, tuple[str, str]] = {
+    "Supplier": (
+        "Ask for the columns I do have — name, number, status.",
+        "List active suppliers with supplier name, supplier number, and status",
+    ),
+    "Invoice": (
+        "Ask for the columns I do have — invoice number, amount, date.",
+        "Show me invoices for EIP Inc with invoice number, amount, and date",
+    ),
+    "PurchaseOrder": (
+        "Ask for the columns I do have — order number, status, supplier.",
+        "Order number and status for purchase orders created before 2015",
     ),
 }
 
@@ -348,6 +406,10 @@ _FALLBACK: dict[RefusalFlavor, tuple[str, str]] = {
         "Narrow it by something I do have — a name, a country, a status.",
         "active suppliers in US",
     ),
+    RefusalFlavor.UNSUPPORTED_FIELD: (
+        "Ask for columns the record actually has.",
+        "List active suppliers with supplier name, supplier number, and status",
+    ),
     RefusalFlavor.UNSUPPORTED_OPERATION: (
         "Ask me for the records themselves and do the rest your side.",
         "receipts for ABC Application Software",
@@ -374,6 +436,7 @@ _FALLBACK: dict[RefusalFlavor, tuple[str, str]] = {
 _KIND_TO_FLAVOR: dict[str, RefusalFlavor] = {
     "missing_identifier": RefusalFlavor.MISSING_IDENTIFIER,
     "unsupported_filter": RefusalFlavor.UNSUPPORTED_FILTER,
+    "unsupported_field": RefusalFlavor.UNSUPPORTED_FIELD,
     "unsupported_operation": RefusalFlavor.UNSUPPORTED_OPERATION,
     "unknown_entity": RefusalFlavor.UNKNOWN_ENTITY,
     "unparseable": RefusalFlavor.UNPARSEABLE,
@@ -502,6 +565,45 @@ def _reason_line(refusal: Refusal, menu: KGMenu) -> str:
             )
         return "I can't narrow records that way."
 
+    if flavor is RefusalFlavor.UNSUPPORTED_FIELD:
+        # Structured facts first, as everywhere else.
+        if refusal.offending_fields:
+            bad = _join_human(
+                [f"'{_humanize(f)}'" for f in refusal.offending_fields]
+            )
+            if entity:
+                return f"I can look up {entity_label}, but I don't have {bad}."
+            return f"I don't have {bad} on that record."
+        # No structured columns — fall back to the model's own words.
+        #
+        # A DELIBERATE departure from "structured facts win over prose", and
+        # the reason is measured rather than assumed. On the KG-validation
+        # path `detail` is a raw dump and must never reach a user; on the
+        # SELF-DECLARED path, which is the only one that produces this
+        # flavor, it was accurate in all five cases measured 2026-07-31:
+        #
+        #   "The 'created by' field is not available for suppliers."
+        #   "The requested \"audit columns\" are not available as a
+        #    specific field."
+        #   "The field 'quantum flux' is not supported for the Supplier
+        #    entity."
+        #   "The requested field 'flurbles' is not supported."
+        #
+        # Every one of those was discarded in favour of "not the way this
+        # question narrows them". Throwing away a correct diagnosis to print
+        # a wrong one is the UX-01 defect in a second location; this branch
+        # is that fix. If a dump ever does appear here, prefer widening
+        # `offending_fields` upstream over deleting this fallback — the
+        # words are good, they were simply never used.
+        if refusal.detail:
+            return refusal.detail
+        if entity:
+            return (
+                f"I can look up {entity_label}, but not the columns this "
+                "asks for."
+            )
+        return "I don't have the columns this asks for."
+
     if flavor is RefusalFlavor.UNKNOWN_ENTITY:
         # Two very different situations wear this flavor, and conflating them
         # produced a message that was flatly false. "show me purchase order
@@ -552,6 +654,9 @@ def _solution_and_example(refusal: Refusal, menu: KGMenu) -> tuple[str, str]:
 
     if flavor is RefusalFlavor.UNSUPPORTED_FILTER and entity in _FILTER_GUIDANCE:
         return _FILTER_GUIDANCE[entity]
+
+    if flavor is RefusalFlavor.UNSUPPORTED_FIELD and entity in _FIELD_GUIDANCE:
+        return _FIELD_GUIDANCE[entity]
 
     if flavor is RefusalFlavor.MISSING_IDENTIFIER and entity in _IDENTIFIER_GUIDANCE:
         return _IDENTIFIER_GUIDANCE[entity]

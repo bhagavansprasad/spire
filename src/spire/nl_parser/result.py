@@ -45,6 +45,14 @@ class RefusalFlavor(str, Enum):
     - UNSUPPORTED_FILTER: the entity is known but a requested filter is not in
       the KG's filter set (e.g. amount_over on POs). Mirrors the planner's
       existing _validate_intent_filters check.
+    - UNSUPPORTED_FIELD: the entity and any filters are fine; the prompt asks
+      for a COLUMN the entity does not have (e.g. "credit rating" on
+      Supplier, "created by" anywhere). Distinct from UNSUPPORTED_FILTER: a
+      filter narrows WHICH records come back, a field decides WHAT IS SHOWN
+      about them. Conflating the two produced the measured defect where a
+      column request was refused with "not the way this question narrows
+      them" and advice to narrow by country — filter guidance for a column
+      problem.
     - UNSUPPORTED_OPERATION: the entity is known but the operation is not
       (e.g. aggregation / target_entity=Buyer). Mirrors the synthesizer's
       existing UnsupportedEntityError case.
@@ -65,10 +73,20 @@ class RefusalFlavor(str, Enum):
     these landed on UNKNOWN_ENTITY, so a supported record with a missing id
     was reported as a record type Spire "doesn't track yet" — while the
     capability sentence immediately above named that very type as supported.
+
+    UNSUPPORTED_FIELD was added in Phase 2A (COL-03). Before it, the five
+    kinds offered no home for a column problem, so the model picked the
+    nearest fit — UNSUPPORTED_FILTER — and did so correctly, given the
+    choices. The defect was the missing option, not the model's judgement.
+    Measured 2026-07-31: `created by`, `audit columns`, `quantum flux`,
+    `quantum fluxes` and `flurbles` all refused as UNSUPPORTED_FILTER, each
+    carrying an accurate field-specific reason in ``detail`` that the
+    message layer then discarded in favour of narrowing advice.
     """
 
     UNKNOWN_ENTITY = "unknown_entity"
     UNSUPPORTED_FILTER = "unsupported_filter"
+    UNSUPPORTED_FIELD = "unsupported_field"
     UNSUPPORTED_OPERATION = "unsupported_operation"
     MISSING_IDENTIFIER = "missing_identifier"
     UNPARSEABLE = "unparseable"
@@ -92,12 +110,25 @@ class Refusal:
             identified (None when the prompt was wholly unparseable).
         offending_filters: Any filter types the prompt referenced that the KG
             does not declare. Empty unless flavor is UNSUPPORTED_FILTER.
+        offending_fields: Any COLUMNS the prompt requested that the entity
+            does not have. Empty unless flavor is UNSUPPORTED_FIELD.
+
+            Deliberately a structured list rather than leaving the message
+            layer to mine ``detail`` for a column name. ``_reason_line``
+            prefers structured facts over prose for a recorded reason: on the
+            KG-validation path ``detail`` is a raw dump of every supported
+            name, so a message built from it leaked internals to the user.
+            Carrying the columns as data means the field branch can be built
+            the same way as the filter branch, rather than making an
+            exception for prose that is only trustworthy on one of the two
+            paths that produce it.
     """
 
     flavor: RefusalFlavor
     detail: str
     offending_entity: Optional[str] = None
     offending_filters: list[str] = field(default_factory=list)
+    offending_fields: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -144,6 +175,7 @@ class ParseResult:
         detail: str,
         offending_entity: Optional[str] = None,
         offending_filters: Optional[list[str]] = None,
+        offending_fields: Optional[list[str]] = None,
     ) -> "ParseResult":
         """Construct a refusal result."""
         return cls(
@@ -152,5 +184,7 @@ class ParseResult:
                 detail=detail,
                 offending_entity=offending_entity,
                 offending_filters=list(offending_filters or []),
+                offending_fields=list(offending_fields or []),
             )
         )
+
