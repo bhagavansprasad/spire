@@ -1,6 +1,6 @@
 # Spire Enhancement — Status Tracker
 
-Tracks progress against `docs/spire_enhancement_requirements.md` v1.1.
+Tracks progress against `docs/spire_enhancement_requirements.md` v1.2.
 That document is the specification; this file is the living record of what
 has actually been done. Update this file at the end of any session that
 touches a phase — do not edit the requirements doc itself to reflect
@@ -16,7 +16,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-07-31 (Phase 2A opened — column resolution, P0, SME-raised)
+**Last updated:** 2026-08-02 (output contract agreed — supersedes part of the column work)
 
 ---
 
@@ -27,7 +27,7 @@ phases of design detail bury the status table above them.
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
 | 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 (narrowing guidance) and UX-03 (truncation disclosure) not started — **deferred behind 2A**. |
-| **2A** | **COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | **SME-raised 2026-07-31, measured same day.** Requested columns silently dropped. Discovery in §G. Nothing built yet. |
+| **2A** | **OUT-01 to OUT-03, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | **SME-raised 2026-07-31, measured same day; output contract agreed 2026-08-02.** Discovery in §G, contract in §G10. Two files written then partly superseded. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -1305,3 +1305,153 @@ time, caught a requirement that was written around the rare case.
 disambiguation rounds — which held the entity constant and varied only
 plurality, or only the preposition — were what produced usable findings.
 Coverage first, then controlled variation.
+
+---
+
+## G10. The output contract — agreed 2026-08-02
+
+Requirements OUT-01 to OUT-03 in `spire_enhancement_requirements.md` v1.2
+§4B. Agreed in discussion, not measured. Nothing built.
+
+### How it came up
+
+Mid-build. `result.py` and `capability.py` had been written for COL-03's
+refusal-flavor clauses. Reviewing the rendered messages, the SME rejected
+not the wording but the premise:
+
+> *"If I issue a query in a normal database, either you get your data or
+> you don't get the data. There is nothing like refused."*
+
+And on the answer format:
+
+> *"So far, I don't like the paragraph answer. It's too lengthy to
+> understand."*
+
+Both invalidate work already in progress. Recorded rather than absorbed.
+
+### What was agreed
+
+**Two outcomes, not three.** Refusal stops being a user-facing category.
+An answer, or an inability to answer. Nothing else.
+
+**Zero rows is an answer.** A query that runs and matches nothing has
+succeeded. It gets stated, never silence:
+
+```
+No suppliers matched.
+Read 426 · filtered to 0
+```
+
+**A query that can run, runs.** This is the load-bearing consequence. Under
+three outcomes, "list active suppliers with supplier name and created by"
+refuses. Under two, it cannot — the question is answerable, so it gets
+answered with a note. The two-state model does not just rename the third
+category, it *deletes most of its members*.
+
+**Inability is reserved for "there is nothing to ask".** Contract renewals
+are not zero rows; Spire holds no such thing. Distinct from an empty
+result, and the distinction must survive into the wording.
+
+**Columns, three cases:**
+
+| Case | Behaviour |
+|---|---|
+| Column exists | project it |
+| No column, close match exists | project the match, **state the substitution** |
+| No column, nothing close | don't project, name it, offer ~5 available columns |
+
+The available-column list is **capped and authored** — roughly five per
+entity, chosen deliberately, held in code. Thirty names printed to someone
+who asked for one is not help.
+
+Curated mappings read as fact; model-inferred matches read as inferences.
+The user must be able to tell which they are looking at.
+
+**Answer format** — counts line, structured summary, data:
+
+```
+Read 426 · showing 25
+
+- All 25 are active, Spend Authorized
+- Includes Lee Supplies, JGA, US Gas and Electric
+
+[table]
+```
+
+**The summary may cite only displayed fields.** This is the fix for the
+narration defect, which reproduced three times on 2026-07-31, every time
+asserting "Taxpayer Country Code" on a query displaying no such column. A
+summary that can only describe what is on screen cannot invent what is
+not — construction rather than instruction.
+
+**Inability message** — labelled first line, Fusion vocabulary:
+
+```
+Can't answer: Contract renewals aren't part of what Spire covers.
+Solution: I cover suppliers, purchase orders, invoices and receipts.
+Example:  invoices for Lee Supplies
+```
+
+No table, endpoint, entity, record type, query, KG or schema-sense field
+in user-facing text. The user's nouns are suppliers, purchase orders,
+invoices, receipts, customers.
+
+### What this supersedes
+
+**Part of UX-01.** The three-line format survives; its opening does not.
+`Reason:` as a first line answers a question nobody asked — the SME's
+point was that the reader needs to know what they are looking at before
+being told why.
+
+**Part of COL-03 as written on 2026-07-31.** That version specified a
+sixth refusal flavor, `UNSUPPORTED_FIELD`, to make column refusals read
+correctly. OUT-01 removes the premise. It survives only for the case where
+no query can be formed, which is rare.
+
+### Code written and now partly superseded
+
+Two files were completed before this discussion. Both verified in
+isolation; **neither is in the repo.**
+
+| File | State |
+|---|---|
+| `src/spire/nl_parser/result.py` | `UNSUPPORTED_FIELD` flavor, `Refusal.offending_fields`, `refuse()` parameter. Verified: six flavors, back-compatible, XOR guard intact |
+| `src/spire/nl_parser/capability.py` | `_FIELD_GUIDANCE` table, `_FALLBACK` entry, `_KIND_TO_FLAVOR` entry, `_reason_line` branch, `_solution_and_example` routing. All paths render three lines, no class-name leaks, filter path unchanged |
+
+**What remains usable:** the three guidance examples, each RUN against the
+pod on 2026-07-31 and confirmed to answer:
+
+- `List active suppliers with supplier name, supplier number, and status`
+- `Show me invoices for EIP Inc with invoice number, amount, and date`
+- `Order number and status for purchase orders created before 2015`
+
+**What is superseded:** the flavor as the main path for column problems.
+
+**Decision pending:** whether to land these two files as-is before building
+the contract, or revise them first. Landing them improves the message in
+the rare total-failure case and costs nothing; revising first avoids
+touching the same files twice.
+
+### Not yet measured
+
+Everything in §G10 is **agreed, not verified**. No prompt has been run
+against any of it. The distinction matters: §G9's findings came from
+output, this section came from discussion. Treat accordingly until the
+prompts confirm it.
+
+### The lesson, stated plainly
+
+Two source files were written to a requirement that was superseded four
+days after it was specified — by a conversation about premises, not about
+defects.
+
+The requirement was not wrong about the defect. Wholesale refusal is real,
+was measured, and still needs fixing. It was wrong about the *frame*: it
+specified a better refusal where the answer was fewer refusals.
+
+Worth noticing that no amount of measurement would have caught this. §G9's
+eleven prompts were correct and produced correct findings; they could not
+have revealed that the third outcome should not exist, because they were
+all run inside the assumption that it should. **Measurement tests whether a
+thing works, not whether it should be there.** The SME question — "why is
+there a third category at all" — did what no prompt could.
