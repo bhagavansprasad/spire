@@ -8,6 +8,7 @@
 | **Author** | Bhagavan |
 | **Supersedes** | Raw enhancement list (16 items, 2026-07-30) |
 | **v1.1 adds** | COL-01 to COL-03 (column resolution) and CSV-01 (result export), from SME feedback 2026-07-31. Not derived from the original 16-item list — see §12. |
+| **v1.2 adds** | OUT-01 to OUT-03 (the output contract), from SME discussion 2026-08-02. Supersedes part of COL-03 and part of UX-01 — see §4B. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -20,6 +21,7 @@ optimisation, decisions before the work that depends on them.
 
 | # | Category | What falls into it | Requirements | Priority | Phase |
 |---|---|---|---|---|---|
+| 0 | **Output contract** — what an answer looks like and how many kinds there are | Three outcomes where there should be two · prose where facts are wanted · claims about fields not shown | OUT-01 to OUT-03 | **P0** | 2A |
 | 0 | **Column resolution** — the user names a column and does not get it | Requested columns silently dropped · no field synonyms · fields absent from the KG · no way to export a full result | COL-01 to COL-03, CSV-01 | **P0** | 2A |
 | 1 | **Defects** — shipped behaviour that misleads the user | Unreadable refusals · no guidance on over-broad queries · silent 25-row truncation | UX-01 to UX-04 | P1–P2 | 2, 8 |
 | 2 | **Plumbing** — infrastructure that makes later work possible | Quiet default output · per-component debug flags · per-stage instrumentation · test layers | UX-05, OBS-01 to OBS-05, TST-01 to TST-04 | P1–P2 | 1, 3, 4 |
@@ -27,7 +29,7 @@ optimisation, decisions before the work that depends on them.
 | 4 | **Open questions** — no right answer yet | LLM planner vs KG planner · single vs multi-agent · how to expose tools to copilots · multi-backend scope | DEC-01 to DEC-03 | Decision | — |
 | 5 | **New surfaces** — new front doors onto the same engine | REST interface · copilot interface · configuration and query UI | API-01 to API-05 | P2–P3 | 9, 10, 12 |
 
-**Totals:** 31 requirements and 3 decisions, sequenced across 13 phases.
+**Totals:** 34 requirements and 3 decisions, sequenced across 13 phases.
 
 **Category 0 was added 2026-07-31 and takes precedence over everything
 below it.** It is the only category raised directly by the SME against
@@ -252,6 +254,157 @@ non-technical users impractical.
 
 ---
 
+## 4B. Output contract requirements
+
+Added v1.2, 2026-08-02, from SME discussion. **P0. These govern the
+requirements in §4A rather than sitting beside them** — COL-03 in
+particular was specified before this contract existed and is partly
+superseded by it.
+
+### Origin
+
+Reviewing the refusal work in progress, the SME rejected the premise
+rather than the wording:
+
+> *"If I issue a query in a normal database, either you get your data or
+> you don't get the data. There is nothing like refused."*
+
+And separately, on the answer itself:
+
+> *"So far, I don't like the paragraph answer. It's too lengthy to
+> understand."*
+
+Both are about the shape of the output, not about any individual defect,
+and both invalidate work that was already underway. Recorded here rather
+than absorbed silently.
+
+---
+
+### OUT-01 — Two outcomes, not three · P0
+
+Spire **shall** present exactly two outcomes to the user: an answer, or an
+inability to answer.
+
+"Refusal" **shall not** be a user-facing category. It is an internal
+classification and **shall** remain one.
+
+A query that runs and matches nothing **is an answer**. Spire **shall**
+say so plainly rather than printing nothing:
+
+```
+No suppliers matched.
+Read 426 · filtered to 0
+```
+
+A query that can run **shall** run. Spire **shall not** decline to answer a
+question it is capable of answering because part of the request was
+unrecognised. Specifically, a request naming several columns of which some
+do not exist **shall** return rows — see COL-03.
+
+The inability-to-answer case **shall** be reserved for requests where no
+query can be formed at all: the subject is not something Spire covers.
+Asking for contract renewals is not a query returning zero rows; there is
+nothing to ask.
+
+**Rationale.** Three outcomes where the user recognises two. A database
+returns rows or an error; it does not announce that it declined. The third
+category reads as the system refusing to cooperate, and — measured
+2026-07-31 — it was firing on questions Spire could have answered.
+
+**Acceptance criteria**
+
+- No user-facing output uses the word "refused" or equivalent.
+- Zero rows produces a stated answer, never empty output.
+- A query capable of running is never declined.
+- The inability case appears only where no query can be formed.
+
+**Depends on:** none. **Supersedes:** part of UX-01 (which specified a
+refusal format), part of COL-03 (which specified a refusal flavor for
+columns). **Blocks:** OUT-02, OUT-03, COL-03.
+
+---
+
+### OUT-02 — Answer format · P0
+
+Where Spire answers, the output **shall** open with a single line of
+counts, followed by a short structured summary, followed by the data.
+
+```
+Read 426 · showing 25
+
+- All 25 are active, Spend Authorized
+- Includes Lee Supplies, JGA, US Gas and Electric
+
+[table]
+```
+
+The summary **shall** be structured — short statements or bullets — not a
+prose paragraph. The information is wanted; the paragraph is not.
+
+**The summary shall cite only fields present in the displayed output.**
+Spire **shall not** make claims about columns the user cannot see.
+
+**Rationale.** The prose form is unreadable at a glance and repeats what
+the table already shows. It is also the source of a recurring defect: the
+narration asserts facts about fields absent from the projection. Measured
+three times on 2026-07-31, all three citing "Taxpayer Country Code" on
+queries where no such column was displayed. Restricting the summary to
+displayed fields removes the defect by construction rather than by
+instruction — a summary that can only describe what is on screen cannot
+invent what is not.
+
+This carries a cost worth stating: some genuinely useful context is lost.
+That is accepted. A claim the user cannot check against the rows in front
+of them is not context, it is an assertion.
+
+**Acceptance criteria**
+
+- Every answer opens with a counts line.
+- Summaries are structured, not paragraphs.
+- No summary references a field absent from the displayed output.
+- Truncation continues to be disclosed — see UX-03.
+
+**Depends on:** OUT-01. **Related:** UX-03, and the carried-forward
+narration defects.
+
+---
+
+### OUT-03 — Inability message shape and vocabulary · P0
+
+Where no query can be formed, Spire **shall** say so with a labelled first
+line, then guidance:
+
+```
+Can't answer: Contract renewals aren't part of what Spire covers.
+Solution: I cover suppliers, purchase orders, invoices and receipts.
+Example:  invoices for Lee Supplies
+```
+
+The message **shall** use Fusion business vocabulary. Spire **shall not**
+use implementation vocabulary in user-facing text — no table, endpoint,
+entity, record type, query, KG, filter or field-in-the-schema sense.
+
+The user's terms are suppliers, purchase orders, invoices, receipts,
+customers. The message **shall** speak in those terms.
+
+**Rationale.** The three-line format from UX-01 was sound; what it lacked
+was a label saying what the reader is looking at. `Reason:` as an opening
+line answers a question the user has not been asked. The vocabulary
+requirement is separate and equally load-bearing: a finance user does not
+recognise "that record type is not a known entity" as a statement about
+their question.
+
+**Acceptance criteria**
+
+- The inability case carries a labelled first line.
+- No user-facing message contains implementation vocabulary.
+- Guidance names covered subjects in business terms.
+- Every example remains verified per the existing tripwire.
+
+**Depends on:** OUT-01. **Supersedes:** the UX-01 message opening.
+
+---
+
 ## 4A. Column resolution and export requirements
 
 Added v1.1, 2026-07-31, from SME feedback. **This section is P0 and
@@ -432,41 +585,53 @@ already resolves synonyms deterministically for eight other categories.
 silent dropping; the dominant defect is wholesale refusal. The requirement
 below leads with that.*
 
-**Primary requirement — partial resolution.** Where a request names several
-columns and only some resolve, Spire **shall** return the query using the
-columns that resolved, and **shall** name those that did not.
+**Primary requirement — always return data.** Where a request names several
+columns and at least one resolves, Spire **shall** return rows. Spire
+**shall not** decline a query because part of the column list was
+unrecognised.
 
-Spire **shall not** refuse an entire query because one requested column is
-unresolvable. A valid, answerable question **shall not** be discarded
-because of an unrecognised term alongside it.
+**The three cases.** For each column named:
 
-**Secondary requirement — disclosure.** Where a requested column cannot be
-resolved, Spire **shall** name the term back to the user and state that it
-was not included. Spire **shall not** silently discard a requested column.
+1. **The column exists** — project it.
+2. **The column does not exist but a close match does** — project the
+   match, and **state the substitution**. Silent substitution is
+   prohibited: `supplier-site` resolving to `Address` returned 25
+   addresses presented as sites, confidently and without warning.
+3. **The column does not exist and nothing close does** — do not project
+   anything for it, name it, and offer a short list of columns that are
+   available.
 
-Spire **shall not** substitute a near match without saying so. Where a term
-resolves to something other than its literal reading — `supplier-site` to
-`Address` — the substitution **shall** be stated.
+**The available-column list shall be capped and authored.** Roughly five
+per entity, chosen deliberately and held in code, not the entity's full
+column list. Thirty column names printed to a user who asked for one is
+not help.
 
-**Third requirement — use the diagnosis that already exists.** Where the
-parser has produced a specific reason, that reason **shall** reach the
-user. Spire **shall not** replace a specific, accurate diagnosis with
-generic guidance. Measured examples of what is currently discarded:
+**Substituted and guessed shall read differently.** A curated mapping is
+stated as fact; a match the model inferred is stated as an inference. The
+user **shall** be able to tell which they are looking at.
 
-- `The 'created by' field is not available for suppliers.`
-- `The requested "audit columns" are not available as a specific field.`
-- `The field 'quantum flux' is not supported for the Supplier entity.`
+**Notes appear above the data**, so they are read before the table rather
+than after it.
 
-**Fourth requirement — correct flavor.** A request for a column **shall
-not** be refused as an unsupported *filter* or an unsupported *entity*.
-Where the whole request fails, the guidance offered **shall** concern
-columns, not narrowing.
+**Where every requested column fails** and the query can still run, the
+query **shall** still run — the answer is the rows with a note. This is not
+an inability case under OUT-01.
 
-**Rationale.** Two opposite failure modes, neither acceptable. Wholesale
-refusal loses data the user was entitled to — five of six measured cases
-returned nothing while naming a valid column. Silent dropping returns a
-clean table that cannot be distinguished from success. The correct
-behaviour is neither: answer with what resolved, name what did not.
+**Rationale.** Two opposite failure modes were measured, neither
+acceptable. Wholesale refusal loses data the user was entitled to — five of
+six measured cases returned nothing while naming a valid column. Silent
+dropping returns a clean table that cannot be distinguished from success.
+The correct behaviour is neither: answer with what resolved, state what was
+substituted, name what was dropped.
+
+*Revision note, 2026-08-02.* The version of this requirement written on
+2026-07-31 specified a sixth refusal flavor, `UNSUPPORTED_FIELD`, so that
+column refusals would read correctly. OUT-01 removes the premise: column
+requests should not produce refusals at all. That flavor is **superseded as
+the main path** and retained only for the case where no query can be formed
+at all. Implementation had begun — `result.py` and `capability.py` were
+written — and is recorded in the status doc as partly superseded rather
+than deleted, since the verified guidance examples remain usable.
 
 This remains the requirement to build **first**. COL-01 and COL-02 cannot
 be evaluated while their misses are either invisible or indistinguishable
@@ -476,13 +641,12 @@ from a total refusal.
 
 - A request naming one valid and one invalid column returns rows for the
   valid column, and names the invalid one.
-- A dropped column produces a named, visible note.
-- A substituted column produces a named, visible note.
-- The specific reason produced by the parser appears in the user-facing
-  message; no case where a specific diagnosis is replaced by generic
-  filter guidance.
-- A column request is never refused with `unsupported_filter` or an
-  entity-not-supported flavor.
+- A substituted column produces a visible note naming both terms.
+- A dropped column produces a visible note naming the term and offering a
+  capped list of available columns.
+- Curated mappings and inferred matches are distinguishable in the output.
+- No column request produces an inability-to-answer outcome while a query
+  could still have run.
 - Running the column prompt sets yields a miss list that can be read
   directly as the authoring backlog for COL-01 and COL-02.
 - No prompt returns a clean table while having discarded a requested term.
@@ -1088,7 +1252,7 @@ Sequenced by dependency, not by priority.
 |---|---|---|
 | **1** | UX-05, OBS-01, OBS-02 | Blocks every interface. Small, low risk. |
 | **2** | UX-01, UX-02, UX-03 | User-visible defects. Cheap, immediate credibility gain. |
-| **2A** | COL-03, COL-01, COL-02, CSV-01 | **P0, SME-raised.** Runs ahead of the remainder of phase 2. COL-03 first: it is small, and it makes the other two measurable. CSV-01 last — it depends on UX-03. |
+| **2A** | OUT-01, OUT-02, OUT-03, COL-03, COL-01, COL-02, CSV-01 | **P0, SME-raised.** Runs ahead of the remainder of phase 2. The output contract (OUT) comes first — it defines what the others produce. Then COL-03, which makes COL-01 and COL-02 measurable. CSV-01 last — it depends on UX-03. |
 | **3** | OBS-03, OBS-04, OBS-05 | Must precede optimisation; nothing in phase 5+ is provable without it. |
 | **4** | TST-02, TST-03, TST-01 | Makes later phases safe to attempt. TST-02 first: no LLM, no pod. |
 | **5** | PRF-01 | Proven pattern, known gain, no new components. |
@@ -1174,6 +1338,7 @@ measurement the same day.
 |---|---|
 | SME — requested columns not returned; fixing prompt-by-prompt does not converge | COL-01, COL-02, COL-03 |
 | SME — console caps at 25 rows; need the full result as a file | CSV-01 |
+| SME — "there is nothing like refused"; the paragraph answer is unreadable (2026-08-02) | OUT-01, OUT-02, OUT-03 |
 
 ---
 
