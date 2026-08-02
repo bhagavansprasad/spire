@@ -44,6 +44,7 @@
 #
 # Baseline 2026-07-30: 18/18 answered.
 
+List active suppliers with supplier name, supplier number, and status
 Get supplier contacts for Lee Supplies
 Get tax lines for invoice 300000248096352
 Get the AR invoice with CustomerTransactionId 300000248096352
