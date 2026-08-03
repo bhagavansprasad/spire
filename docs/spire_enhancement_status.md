@@ -1,6 +1,6 @@
 # Spire Enhancement — Status Tracker
 
-Tracks progress against `docs/spire_enhancement_requirements.md` v1.2.
+Tracks progress against `docs/spire_enhancement_requirements.md` v1.3.
 That document is the specification; this file is the living record of what
 has actually been done. Update this file at the end of any session that
 touches a phase — do not edit the requirements doc itself to reflect
@@ -16,7 +16,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-08-02 (output contract agreed — supersedes part of the column work)
+**Last updated:** 2026-08-03 (local synthesis proven and merged on two entities)
 
 ---
 
@@ -27,7 +27,7 @@ phases of design detail bury the status table above them.
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
 | 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 (narrowing guidance) and UX-03 (truncation disclosure) not started — **deferred behind 2A**. |
-| **2A** | **OUT-01 to OUT-03, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | **SME-raised 2026-07-31, measured same day; output contract agreed 2026-08-02.** Discovery in §G, contract in §G10. Two files written then partly superseded. |
+| **2A** | **OUT-01 to OUT-05, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | OUT-04 and OUT-05 **merged** for Supplier and CreditMemo. OUT-01 to OUT-03 partly delivered by them. COL-* and CSV-01 not started. §G, §G10, §G11. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -1455,3 +1455,164 @@ have revealed that the third outcome should not exist, because they were
 all run inside the assumption that it should. **Measurement tests whether a
 thing works, not whether it should be there.** The SME question — "why is
 there a third category at all" — did what no prompt could.
+
+---
+
+## G11. Local synthesis — built, measured, merged (2026-08-03)
+
+Requirements OUT-04 and OUT-05, written up AFTER the fact. §G10 recorded
+the output contract as agreed-not-measured; this section is the
+opposite, and the sequence was deliberate: prototype one entity, measure
+it, generalise only if it worked.
+
+It worked. Two entities are merged.
+
+### G11.1 What was built
+
+| Entity | LLM call before | LLM call now |
+|---|---|---|
+| Supplier list | summary prose only (records were already local) | **none** |
+| Credit memo list | summary prose AND all 25 records | **none** |
+
+Token logs show `parse` alone on both paths.
+
+The AR case was the larger change and the reason is worth recording:
+`p2p.py` had `build_supplier_records`, so on the supplier path the model
+was only ever writing prose. `ar.py` had no builders at all, so the
+model was re-emitting 25 rows field by field from data it had already
+been handed. That is the expensive half, and the one that fails
+quietly — a record the model retypes can lose a field, and nothing
+downstream knows.
+
+### G11.2 The summaries, before and after
+
+Suppliers:
+
+```
+model:  Showing 25 of 426 suppliers. All suppliers are ACTIVE. All have
+        a 'Spend Authorized' business relationship. Some suppliers have
+        a Taxpayer Country Code, like Lee Supplies (US) and Masson Inc
+        (FR).
+
+local:  Showing 25 of 426 suppliers.
+        All 25 have Status ACTIVE.
+```
+
+Credit memos:
+
+```
+model:  There are 25 credit memos listed, showing a partial view of
+        2,111 available credit memos. These memos span multiple
+        currencies (CAD, EUR, GBP, USD), so a single total credit value
+        cannot be provided. The listed memos include transactions for
+        customers such as DMART, HP_USA, and Digital Customer 1, with
+        various statuses including 'Complete' and 'Incomplete'.
+
+local:  Showing 25 of 2,111 credit memos.
+        Currency: 16 USD, 4 CAD, 4 GBP, 1 EUR.
+        Status: 21 Complete, 4 Incomplete.
+```
+
+The credit-memo comparison is the stronger case and it is not only about
+brevity. "Multiple currencies" and "various statuses" are true and
+useless; 16/4/4/1 and 21/4 are the actual distribution, in fewer words,
+and every number is checkable against the column below. The model's
+version also name-drops three customers, which is reciting three rows of
+a table printed immediately underneath.
+
+### G11.3 The correction that matters most
+
+**The model was NOT inventing fields. That claim was made twice in this
+session and it was wrong both times.**
+
+`--show-raw-output` printed `list(item.items())[:6]` — the first six
+fields of each row, silently. A credit-memo row showed six fields; the
+table below showed a populated Customer column; the obvious reading was
+fabrication. `BillToCustomerName` sits at position SEVEN and the tool
+had been fetching it all along, in `_PROJECTED_FIELDS`, which a single
+read of the tool file would have shown before the claim was made.
+
+**This resolves §G7.1**, the open question from the PO prompt where the
+narration cited quantity, category and 758.00 absent from the raw row.
+Same six-field cutoff, same explanation. It is not a synthesizer defect.
+
+**The real defect was the diagnostic.** A flag named
+`--show-raw-output` that drops fields without saying so is worse than
+one that shows nothing, because the reader believes they are looking at
+the row. Fixed: it now names what it holds back. The cap itself is right
+— some rows carry forty fields.
+
+The fix paid for itself on the first run. It revealed `total_credit` and
+`total_credit_note`, stamped on every row by the server wrapper so the
+scalar survives the executor unwrap. Nobody knew they were there; the
+first draft of the credit-memo branch recomputed the total for no better
+reason than that.
+
+**The pattern, since this is the second time.** Both wrong conclusions
+this session came from reading an abbreviated view and treating it as
+the thing itself: the six-field row here, and one measured prompt read
+as characterising all cases in §G9. The project rule says a claim from
+inspection is not a finding. The sharper version: *a claim from a VIEW
+of the data is not a finding either, and a view that does not announce
+its own limits will produce confident wrong answers indefinitely.*
+
+### G11.4 What OUT-05 (rendering) cost to get right
+
+Every defect was found by running a prompt and reading the screen. None
+by reading code. The suite was green throughout.
+
+| Defect | How it read |
+|---|---|
+| `1 suppliers.` | plural label, number never checked |
+| `All 1 have Supplier Dell Inc..` | generalising over one row; doubled period from a value that ends in one |
+| `None examined for filtering` | read `entry["examined"]`; the key does not exist on the executor entry |
+| `Answer:` + two blank lines | empty summary still appended |
+| `Kim, John, Rossier, Bruce, ...` | ten contacts joined with commas, where the names contain commas |
+| `Transaction` right-aligned | id treated as a quantity |
+| `Invoices` left-aligned | quantity not recognised as one |
+
+The `examined` one is instructive on its own. The key was inferred from
+`_build_count_response`'s `entry.get("examined", examined)` — and the
+DEFAULT in that call was the clue that the key is not always present. It
+was read as evidence that it usually is.
+
+### G11.5 Tests
+
+The suite went **771 → 771** when two LLM calls were removed. Nothing
+mocked them, so nothing noticed they were gone — and nothing would
+notice if they came back.
+
+Fifteen tests added: seven for rendering, eight for the credit-memo
+builder and bucket detector. The field-count test is the point of the
+latter: a builder's likely failure is not a crash but one field quietly
+unmapped, which renders as an empty column and reads as missing DATA
+rather than a bug — which is exactly what was misread in §G11.3.
+
+Suite now **779 passed, 18 deselected, 1 xfailed.**
+
+### G11.6 Pod findings
+
+- **`fields=` works on `/receivablesCreditMemos`** (HTTP 200). Unlike
+  `/standardReceipts`, which 500s.
+- **WHO columns exist on `/receivablesCreditMemos`** — `CreatedBy`,
+  `CreationDate`, `LastUpdatedBy`, `LastUpdateDate`, confirmed by curl.
+  Direct evidence for COL-01, which lists them as missing from the KG.
+- **`/suppliers` returns stable rows across runs; `/invoices` does
+  not.** Byte-diffing eight prompts twice: seven identical, invoices
+  returned entirely different rows minutes apart. Same structure, same
+  count, different data. Confirms on a second endpoint the ordering
+  hypothesis previously open for `/standardReceipts`, and sharpens the
+  truncation problem: an aggregate over a 25-row sample is not merely
+  wrong, it is DIFFERENTLY wrong each run.
+
+### G11.7 Still on the model
+
+Supplier and credit memo are done. Not yet converted:
+
+- AR invoice, customer account, standard receipt
+- Invoice lists
+- Rankings — every ranking summary still recites its own table
+
+Each needs a deterministic builder, a conservative bucket detector, a
+displayed-fields list and a label map. `ar.py`'s remaining three are the
+obvious next batch; they share a module and a shape.

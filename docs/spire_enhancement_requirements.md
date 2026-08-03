@@ -9,6 +9,7 @@
 | **Supersedes** | Raw enhancement list (16 items, 2026-07-30) |
 | **v1.1 adds** | COL-01 to COL-03 (column resolution) and CSV-01 (result export), from SME feedback 2026-07-31. Not derived from the original 16-item list — see §12. |
 | **v1.2 adds** | OUT-01 to OUT-03 (the output contract), from SME discussion 2026-08-02. Supersedes part of COL-03 and part of UX-01 — see §4B. |
+| **v1.3 adds** | OUT-04 (local synthesis) and OUT-05 (record rendering), 2026-08-03. Both were BUILT before being written down — prototype first was the deliberate choice. Recorded here now that two entities are merged. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -21,7 +22,7 @@ optimisation, decisions before the work that depends on them.
 
 | # | Category | What falls into it | Requirements | Priority | Phase |
 |---|---|---|---|---|---|
-| 0 | **Output contract** — what an answer looks like and how many kinds there are | Three outcomes where there should be two · prose where facts are wanted · claims about fields not shown | OUT-01 to OUT-03 | **P0** | 2A |
+| 0 | **Output contract** — what an answer looks like and how many kinds there are | Three outcomes where there should be two · prose where facts are wanted · claims about fields not shown · a model asked to do arithmetic | OUT-01 to OUT-05 | **P0** | 2A |
 | 0 | **Column resolution** — the user names a column and does not get it | Requested columns silently dropped · no field synonyms · fields absent from the KG · no way to export a full result | COL-01 to COL-03, CSV-01 | **P0** | 2A |
 | 1 | **Defects** — shipped behaviour that misleads the user | Unreadable refusals · no guidance on over-broad queries · silent 25-row truncation | UX-01 to UX-04 | P1–P2 | 2, 8 |
 | 2 | **Plumbing** — infrastructure that makes later work possible | Quiet default output · per-component debug flags · per-stage instrumentation · test layers | UX-05, OBS-01 to OBS-05, TST-01 to TST-04 | P1–P2 | 1, 3, 4 |
@@ -29,7 +30,7 @@ optimisation, decisions before the work that depends on them.
 | 4 | **Open questions** — no right answer yet | LLM planner vs KG planner · single vs multi-agent · how to expose tools to copilots · multi-backend scope | DEC-01 to DEC-03 | Decision | — |
 | 5 | **New surfaces** — new front doors onto the same engine | REST interface · copilot interface · configuration and query UI | API-01 to API-05 | P2–P3 | 9, 10, 12 |
 
-**Totals:** 34 requirements and 3 decisions, sequenced across 13 phases.
+**Totals:** 36 requirements and 3 decisions, sequenced across 13 phases.
 
 **Category 0 was added 2026-07-31 and takes precedence over everything
 below it.** It is the only category raised directly by the SME against
@@ -402,6 +403,120 @@ their question.
 - Every example remains verified per the existing tripwire.
 
 **Depends on:** OUT-01. **Supersedes:** the UX-01 message opening.
+
+---
+
+### OUT-04 — Synthesize locally; go to the model only where required · P0
+
+*Added v1.3, 2026-08-03. Proven on two entities before being written
+down. Supersedes part of OUT-02.*
+
+Where an answer is determined by the data, Spire **shall** build it in
+code. The model **shall not** be asked to produce a number, a count, a
+total, or a description of a field the reader cannot see.
+
+The model is called for what remains: prose over data whose shape code
+cannot anticipate, and joins across buckets.
+
+**The rule is not new to the codebase.** `synthesize_response` already
+returned before any LLM setup on three paths — `count_only`, comparison
+and lifecycle — and `_build_count_response` has stated the principle in
+its own docstring since Phase 10. Entity lists were the one path that
+still handed everything to the model. OUT-04 extends an established
+pattern rather than introducing one.
+
+**What the model was measurably getting wrong.** Eight prompts,
+2026-08-02, three runs each, byte identical every run:
+
+- `Showing 20 of 426 suppliers` while 25 rows printed below it
+- `total original amount of 254585.25` summed over a 25-row sample
+- `Some suppliers have a Taxpayer Country Code` — a column not rendered
+
+`len()` cannot miscount 25 rows.
+
+**On the third item, a correction worth keeping.** It was recorded as
+invention and it was not. `TaxpayerCountryCode` is genuinely on the
+rows — simply not rendered, and null on 17 of 25. The model receives
+whole records and has no way to know which fields the renderer prints,
+so instructing it to describe only displayed fields could not work. It
+failed four times. Handing a builder an explicit field list makes the
+rule structural: it cannot describe what it was not given.
+
+**What is lost, stated plainly.** The model wrote "All invoices are
+from EIP Inc" — a real observation that local rules would make only if
+a supplier column happened to be uniform. Local rules are cruder:
+uniformity, splits, counts. The trade is accepted on the grounds that a
+crude true statement beats a fluent one the reader cannot check against
+the rows in front of them.
+
+**Where it does not apply.** Anything requiring a join across buckets
+stays with the model. The bucket detectors are deliberately
+conservative — returning None too often costs tokens, returning a wrong
+bucket costs correctness.
+
+**Acceptance criteria**
+
+- No number in a summary originates from the model.
+- A summary names only fields the reader can see or asked for.
+- Field names in a summary match the labels used in the output below
+  it.
+- Every entity converted has a deterministic builder with tests. The
+  suite went 771 to 771 when two LLM calls were removed, because
+  nothing mocked them — a green suite is not evidence here.
+- Token log shows no synthesize call on a converted path.
+
+**Depends on:** none. **Supersedes:** part of OUT-02, which specified
+the answer format as a prompt-engineering problem. It is a rendering
+problem.
+
+---
+
+### OUT-05 — One record renderer · P0
+
+*Added v1.3, 2026-08-03.*
+
+Records **shall** render one way, chosen by the data and never by which
+code path produced them.
+
+- **Several records** — a table, columns aligned.
+- **One record** — field per line. A one-row table is as wide as its
+  widest value and forces the reader across the screen to read a single
+  thing.
+- **Child records** — contacts, tax lines — a table indented under
+  their parent.
+
+Columns holding quantities **shall** be right-aligned so magnitudes
+line up and a column can be read down at a glance. Identifiers **shall
+not** be: an id is a label that happens to be spelled in digits.
+
+**Rationale.** Eight entity branches printed records as bullets with
+the field names repeated inline; column queries had printed tables
+since projection shipped. Same data, two layouts, decided by which
+branch built it.
+
+The alignment rule has been wrong in both directions and the history is
+worth keeping. First as a denylist — right-align anything numeric,
+minus id-ish names — which right-aligned a transaction NUMBER as though
+it were an amount while leaving `AccountNumber` alone. Then as an
+allowlist of quantity names, whose predicted miss appeared on its first
+run: a ranking's `Invoices` column (261, 122, 78) is a count with no
+quantity word in its name. The allowlist is curated and extended when a
+miss is SEEN; it is not expected to be complete, and it fails safe.
+
+**A one-to-many belongs below the table, not in a cell.** Contacts were
+briefly joined with commas into one cell; the values themselves contain
+commas, so ten contacts rendered as a line no reader could parse —
+`Kim, John` is one person. Strictly worse than the bullets it replaced.
+
+**Acceptance criteria**
+
+- No entity renders records as bullets.
+- Single records render vertically; several render as a table.
+- Quantities right-align; identifiers do not.
+- Nested children render as indented tables.
+- Rankings carry rank as a column.
+
+**Depends on:** OUT-04 for the summary above it. **Related:** OUT-02.
 
 ---
 
