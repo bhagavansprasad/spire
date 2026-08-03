@@ -103,9 +103,30 @@ def _format_outputs(outputs: dict[str, list[dict]]) -> str:
     for name, items in outputs.items():
         lines.append(f"  {name}: {len(items)} record(s)")
         for i, item in enumerate(items[:5], 1):
-            # Show a compact representation: first few fields.
-            preview = {k: v for k, v in list(item.items())[:6]}
-            lines.append(f"    [{i}] {preview}")
+            # Compact preview: the first few fields, and a COUNT of the
+            # ones held back.
+            #
+            # The count is the whole point of this comment. The cap was
+            # silent, and on 2026-08-03 it cost two turns and a wrong
+            # conclusion: a credit-memo row showed six fields, the
+            # display printed a populated Customer column, and the
+            # obvious reading was that the model had invented customer
+            # names. It had not. BillToCustomerName sits at position
+            # SEVEN and the tool had been fetching it all along.
+            #
+            # A flag called --show-raw-output that quietly drops fields
+            # is worse than one that shows nothing, because the reader
+            # believes they are looking at the row. The cap itself is
+            # right — some rows carry forty fields and printing them all
+            # buries everything else — so it stays, and now says so.
+            shown = dict(list(item.items())[:6]) if isinstance(item, dict) else item
+            lines.append(f"    [{i}] {shown}")
+            if isinstance(item, dict) and len(item) > 6:
+                hidden = sorted(list(item.keys())[6:])
+                lines.append(
+                    f"        ... +{len(item) - 6} more field(s): "
+                    f"{', '.join(hidden)}"
+                )
         if len(items) > 5:
             lines.append(f"    ... ({len(items) - 5} more)")
     return "\n".join(lines)

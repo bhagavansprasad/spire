@@ -495,3 +495,76 @@ class CreditMemoListResponse(BaseModel):
         "value. Exactly one of the two is ever set.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Deterministic builders
+#
+# p2p.py has had build_supplier_records since the supplier list path
+# went local; AR had no equivalent, so the model built both the prose
+# AND every record on these routes. That is the expensive half: prose is
+# one paragraph, records are 25 rows the model has to re-emit field by
+# field from data it was already given.
+#
+# A builder is a field rename. It cannot invent a customer name, cannot
+# miscount, cannot round 1179915.3225 to its binary expansion, and
+# cannot drop the eighth field of a row. Those are not hypotheticals —
+# each one has happened on this pod.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def build_credit_memo_records(rows: list[dict]) -> list["CreditMemoRecord"]:
+    """Executor credit-memo rows -> CreditMemoRecord list, verbatim.
+
+    Pure: no LLM, no I/O. Every field the response needs is already on
+    the row — list_receivables_credit_memos projects all eight.
+
+    That projection is worth a note, because reading it wrong cost a
+    session. A row rendered by --show-raw-output shows six fields and
+    stops, silently; BillToCustomerName is the seventh. The obvious
+    reading of a populated Customer column above a six-field row is that
+    the model invented it. It did not. The diagnostic was abbreviating
+    and the tool had been fetching the field all along.
+
+    EnteredAmount is normally negative and the pod carries at least one
+    POSITIVE, Incomplete memo. No sign correction here: the value is
+    copied as it stands, because "normally negative" is an observation
+    about the data and not a rule the renderer may enforce.
+    """
+    records: list[CreditMemoRecord] = []
+    for row in rows:
+        records.append(
+            CreditMemoRecord(
+                customer_transaction_id=row.get("CustomerTransactionId") or 0,
+                transaction_number=str(row.get("TransactionNumber") or ""),
+                transaction_date=str(row.get("TransactionDate") or ""),
+                entered_amount=float(row.get("EnteredAmount") or 0),
+                currency=str(row.get("CreditMemoCurrency") or ""),
+                status=str(row.get("CreditMemoStatus") or ""),
+                customer_name=str(row.get("BillToCustomerName") or ""),
+                customer_number=str(row.get("BillToCustomerNumber") or ""),
+            )
+        )
+    return records
+
+
+def plain_credit_memo_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the credit-memo bucket when this is a PLAIN memo list.
+
+    "Plain" means one bucket of credit-memo rows and nothing else, so
+    every field the response needs is on those rows.
+
+    Deliberately conservative, for the same reason as
+    plain_supplier_bucket: returning None too often costs tokens,
+    returning a wrong bucket costs correctness. Anything that would need
+    a join across buckets stays with the LLM.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "CustomerTransactionId" in first and "CreditMemoCurrency" in first:
+        return name
+    return None

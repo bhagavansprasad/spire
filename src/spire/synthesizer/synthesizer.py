@@ -122,6 +122,10 @@ from spire.synthesizer.aggregation import (  # noqa: F401
     _build_count_response,
     _direction_phrase,
 )
+from spire.synthesizer.ar import (  # noqa: F401
+    build_credit_memo_records,
+    plain_credit_memo_bucket,
+)
 from spire.synthesizer.local_summary import local_list_summary
 from spire.synthesizer.p2p import (  # noqa: F401
     build_supplier_records,
@@ -488,6 +492,74 @@ def synthesize_response(
                 )
             ),
             suppliers=build_supplier_records(rows),
+            truncation_notes=notes,
+        )
+
+    # Plain credit-memo list: no LLM, same reasoning as the supplier
+    # branch above, with one difference worth stating.
+    #
+    # On the supplier path the model was only ever writing prose —
+    # build_supplier_records already existed. Here it was building the
+    # RECORDS too: 25 rows re-emitted field by field from data it had
+    # been handed. That is the expensive half and the one that can go
+    # wrong quietly, since a record the model retypes can lose a field
+    # and nothing downstream knows.
+    #
+    # compute_total_credit is already deterministic and already refuses
+    # to sum across currencies. Its note is copied, never recomputed.
+    memo_bucket = (
+        plain_credit_memo_bucket(outputs) if target_entity == "CreditMemo" else None
+    )
+    if memo_bucket is not None:
+        rows = outputs[memo_bucket]
+        total_available, notes = _local_truncation(
+            memo_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        # The tool STAMPS total_credit and total_credit_note onto every
+        # row, so the wrapper's scalar survives the executor unwrap.
+        # Read it; do not recompute it.
+        #
+        # Recomputing would give the same answer today and would be a
+        # second implementation of a rule that has already been got
+        # wrong once — the first version summed USD, CAD, GBP and EUR
+        # into "-17232.52", a figure in no currency at all. Two copies
+        # is how one of them ends up weakened.
+        #
+        # These two fields were invisible until --show-raw-output
+        # stopped truncating at six columns, in the same session. The
+        # first draft of this branch recomputed for no better reason
+        # than not knowing they were there.
+        first = rows[0] if rows else {}
+        total_credit = first.get("total_credit")
+        total_note = first.get("total_credit_note")
+        return CreditMemoListResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="credit memos",
+                    # Exactly what the display renders for a memo.
+                    displayed_fields=[
+                        "TransactionNumber", "EnteredAmount",
+                        "CreditMemoCurrency", "TransactionDate",
+                        "BillToCustomerName", "CreditMemoStatus",
+                    ],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                    # The table headers, so the summary names a column
+                    # the way the column names itself one line below.
+                    labels={
+                        "TransactionNumber": "Transaction",
+                        "EnteredAmount": "Amount",
+                        "CreditMemoCurrency": "Currency",
+                        "TransactionDate": "Date",
+                        "BillToCustomerName": "Customer",
+                        "CreditMemoStatus": "Status",
+                    },
+                )
+            ),
+            credit_memos=build_credit_memo_records(rows),
+            total_credit=total_credit,
+            total_credit_note=total_note,
             truncation_notes=notes,
         )
 

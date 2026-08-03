@@ -136,6 +136,7 @@ def local_list_summary(
     displayed_fields: list[str] | None = None,
     filtered_fields: list[str] | None = None,
     total_available: int | None = None,
+    labels: dict[str, str] | None = None,
 ) -> list[str]:
     """Build summary statements from the rows, without an LLM.
 
@@ -170,6 +171,17 @@ def local_list_summary(
             only so a caller that has not been updated still works.
         total_available: The authoritative total from the truncation
             block, when known.
+        labels: Optional field-name -> display-label map. The summary
+            names a field in the reader's terms, not the pod's.
+
+            Without it the summary says "CreditMemoCurrency: 16 USD"
+            above a table whose header says "Currency". Same field, two
+            names, one line apart — the same inconsistency that made
+            records render two ways depending on the code path, in
+            miniature.
+
+            Optional because most fields need no translation: Status,
+            Supplier and Amount already read as themselves.
 
     Returns:
         Statements, one fact each. Empty list when there is nothing
@@ -262,13 +274,15 @@ def local_list_summary(
             # the 8 rows that carried it and null on the other 17, which
             # would have produced "All 25 have TaxpayerCountryCode US"
             # from 8 rows. len(values) == shown is what excludes it.
-            out.append(_sentence(f"All {shown} have {key} {distinct[0]}"))
+            label = (labels or {}).get(key, key)
+            out.append(_sentence(f"All {shown} have {label} {distinct[0]}"))
         elif len(distinct) == 1:
             # Uniform where present, absent elsewhere. Say both numbers
             # rather than rounding the gap away.
             out.append(
                 _sentence(
-                    f"{len(values)} of {shown} have {key} {distinct[0]}; "
+                    f"{len(values)} of {shown} have "
+                    f"{(labels or {}).get(key, key)} {distinct[0]}; "
                     f"the rest have none"
                 )
             )
@@ -282,7 +296,7 @@ def local_list_summary(
             counts = {d: sum(1 for v in values if v == d) for d in distinct}
             ordered = sorted(counts.items(), key=lambda kv: -kv[1])
             parts = ", ".join(f"{n} {d}" for d, n in ordered)
-            out.append(_sentence(f"{key}: {parts}"))
+            out.append(_sentence(f"{(labels or {}).get(key, key)}: {parts}"))
         # Otherwise descriptive — the column already shows it.
 
     return out
