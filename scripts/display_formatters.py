@@ -260,6 +260,28 @@ def _indent(lines: list[str], by: str = "  ") -> list[str]:
     return out
 
 
+def _append_summary(lines: list[str], response: Any) -> None:
+    """Append the summary, unless there is nothing to say.
+
+    An empty summary is a legitimate answer since summaries went local:
+    with the records in a table below, there is often nothing to add
+    that the table does not already show. A single record says
+    everything about itself.
+
+    Appending "" anyway leaves a blank line under "Answer:" and another
+    under that, which reads as something having gone missing rather than
+    as nothing needing to be said.
+
+    Guarded in ONE place because it was first fixed in one branch out of
+    nine. The other eight appended unguarded and every entity converted
+    to a local summary after that would have reintroduced the same two
+    blank lines, one branch at a time.
+    """
+    summary = getattr(response, "summary", "")
+    if summary:
+        lines.append(summary)
+
+
 def _render_records(
     title: str,
     rows: list[dict],
@@ -385,8 +407,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         # not already show. Appending "" anyway left a blank line under
         # "Answer:" and another under that, which reads as something
         # having gone missing.
-        if response.summary:
-            lines.append(response.summary)
+        _append_summary(lines, response)
         rows = []
         for s in response.suppliers:
             row = {
@@ -446,7 +467,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, InvoiceResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         rows = [
             {
                 "Invoice": inv.invoice_number,
@@ -469,7 +490,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, PurchaseOrderResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         rows = []
         for po in response.purchase_orders:
             row = {
@@ -504,7 +525,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, ReceivablesInvoiceResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         rows = []
         for inv in response.receivables_invoices:
             row = {
@@ -565,7 +586,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, CustomerAccountResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         rows = []
         for acct in response.customer_accounts:
             row = {
@@ -575,31 +596,114 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 "Open Receivables": acct.open_receivables,
                 "Transactions Due": acct.transactions_due,
             }
-            if acct.transactions:
-                row["Transactions"] = len(acct.transactions)
-            if acct.credit_memos:
-                row["Credit Memos"] = len(acct.credit_memos)
-            if acct.receipts:
-                row["Receipts"] = len(acct.receipts)
-            if getattr(acct, "applications", None):
-                row["Applications"] = len(acct.applications)
+            # No child COUNTS on the account row. Each populated child
+            # list renders as its own table below, so "Applications :
+            # 10" restates the number of rows the reader is about to
+            # look at.
+            #
+            # Same rule as the counts line above a record table: a
+            # number is worth stating when the reader cannot see it, and
+            # noise when they can. It read as useful while the children
+            # were invisible; printing them is what made it redundant.
             rows.append(row)
         cols = [
             "Customer", "AccountId", "AccountNumber",
             "Open Receivables", "Transactions Due",
         ]
-        for extra in ("Transactions", "Credit Memos", "Receipts", "Applications"):
-            if any(extra in r for r in rows):
-                cols.append(extra)
         lines.extend(
             _render_records(
                 "Customer Accounts", rows, cols, "No customer accounts found."
             )
         )
+        # The child rows themselves, below the account.
+        #
+        # Without this the account table shows "Applications : 10" and
+        # stops — a COUNT where the ten rows were asked for. "Show
+        # receipt applications for customer X" fetched ten applications
+        # and displayed none of them, which is worse than the prose it
+        # replaced: the model at least narrated them.
+        #
+        # This is the carried-forward count-instead-of-detail defect. It
+        # was left alone during the table conversion on the grounds that
+        # a layout change should not hide a behaviour change in its
+        # diff. Local synthesis made it blocking, because the narration
+        # that had been covering for it is gone.
+        #
+        # Same treatment as contacts and tax lines: a one-to-many is its
+        # own set of records and belongs below the parent, not squeezed
+        # into a cell.
+        for acct in response.customer_accounts:
+            for title, items, cols_, mapper in (
+                (
+                    "transactions",
+                    acct.transactions,
+                    ["Transaction", "Class", "Date", "Amount", "Balance", "Status"],
+                    lambda t: {
+                        "Transaction": t.transaction_number,
+                        "Class": t.transaction_class,
+                        "Date": t.transaction_date,
+                        "Amount": t.amount,
+                        "Balance": t.balance,
+                        "Status": t.status,
+                    },
+                ),
+                (
+                    "credit memos",
+                    acct.credit_memos,
+                    ["Credit Memo", "Date", "Amount", "Balance", "Currency", "Status"],
+                    lambda m: {
+                        "Credit Memo": m.credit_memo_number,
+                        "Date": m.credit_memo_date,
+                        "Amount": m.amount,
+                        "Balance": m.balance,
+                        "Currency": m.currency,
+                        "Status": m.status,
+                    },
+                ),
+                (
+                    "receipts",
+                    acct.receipts,
+                    ["Receipt", "Date", "Amount", "Currency", "Method", "State", "Unapplied"],
+                    lambda r: {
+                        "Receipt": r.receipt_number,
+                        "Date": r.receipt_date,
+                        "Amount": r.amount,
+                        "Currency": r.currency,
+                        "Method": r.receipt_method,
+                        "State": r.state,
+                        "Unapplied": r.unapplied_amount,
+                    },
+                ),
+                (
+                    "applications",
+                    getattr(acct, "applications", None) or [],
+                    ["Receipt", "Method", "Transaction", "Status", "Amount", "Date", "Currency"],
+                    lambda a: {
+                        "Receipt": a.receipt_number,
+                        "Method": a.receipt_method,
+                        "Transaction": a.transaction_number,
+                        "Status": a.transaction_status,
+                        "Amount": a.application_amount,
+                        "Date": a.application_date,
+                        "Currency": a.currency,
+                    },
+                ),
+            ):
+                if items:
+                    lines.extend(
+                        _indent(
+                            _render_records(
+                                f"{acct.customer_name} — {title}",
+                                [mapper(i) for i in items],
+                                cols_,
+                                "",
+                            )
+                        )
+                    )
         return _with_truncation(lines, response)
 
     if isinstance(response, AddressResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         rows = [
             {
                 "Address": a.formatted_address or f"{a.city}, {a.country}",
@@ -620,7 +724,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, CreditMemoListResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         if response.credit_memos:
             rows = [
                 {
@@ -666,17 +770,17 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, CountResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         if not response.count_is_exact:
             lines.append(f"(count is a lower bound; true total may be higher)")
         return "\n".join(lines)
 
     if isinstance(response, ComparisonResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         return _with_truncation(lines, response)
 
     if isinstance(response, SupplierSpendRankingResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.extend(
             _render_records(
                 "Top suppliers by spend",
@@ -697,7 +801,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, SupplierPOValueRankingResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.extend(
             _render_records(
                 "Top suppliers by PO value",
@@ -718,7 +822,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, POStatusBreakdownResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.append(f"\nTotal POs: {response.total_pos}, total value: {response.total_ordered:,.2f}")
         lines.extend(
             _render_records(
@@ -738,7 +842,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, OpenPOSummaryResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.append(
             f"\nOpen PO count: {response.po_count}, total ordered: {response.total_ordered:,.2f}, "
             f"suppliers: {response.supplier_count}"
@@ -747,7 +851,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     # --- StandardReceiptResponse ---
     if isinstance(response, StandardReceiptResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         receipts = getattr(response, 'standard_receipts', [])
         rows = [
             {
@@ -777,7 +881,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     # --- ExposureRankingResponse ---
     if isinstance(response, ExposureRankingResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.extend(
             _render_records(
                 "Top accounts by outstanding exposure",
@@ -797,7 +901,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         return _with_truncation(lines, response)
 
     if isinstance(response, ReceiptMethodDistributionResponse):
-        lines.append(response.summary)
+        _append_summary(lines, response)
         lines.append(
             f"\nTotal receipts: {response.total_receipts}, total amount: {response.total_amount:,.2f}"
         )
@@ -853,7 +957,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         # separate finding rather than the same one twice.
         if not response.legs:
             lines.append("")
-            lines.append(response.summary)
+            _append_summary(lines, response)
             return "\n".join(lines)
 
         verdicts = []
@@ -870,7 +974,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         )
 
         lines.append("")
-        lines.append(response.summary)
+        _append_summary(lines, response)
 
         currency = f" ({response.currency})" if response.currency else ""
         lines.append(f"\nAmounts{currency}:")

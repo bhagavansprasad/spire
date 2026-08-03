@@ -722,7 +722,179 @@ def build_receivables_invoice_records(
                 amount=float(row.get("EnteredAmount") or 0),
                 balance=float(row.get("InvoiceBalanceAmount") or 0),
                 lines=lines,
-                dff=None,
+                dff=build_invoice_dff(
+                    children.get("receivablesinvoicetransactiondff") or []
+                ),
             )
         )
     return records
+
+
+def build_customer_account_records(
+    parent_rows: list[dict],
+    children: dict[str, list[dict]],
+) -> list["CustomerAccountRecord"]:
+    """Executor customer-account rows -> CustomerAccountRecord, verbatim.
+
+    Pure: no LLM, no I/O. One parent row, so every child bucket present
+    belongs to it — see single_parent_shape.
+
+    Four child buckets, each with its own key names, and none of them
+    guessable from the model's field names:
+
+      customer_transactions        TransactionId, TotalOriginalAmount
+      account_credit_memos         CreditMemoId, TotalOriginalAmount
+      account_receipts             StandardReceiptId, Amount
+      account_receipt_applications ApplicationId, ReferenceTransactionId
+
+    The applications bucket is the trap. Its transaction fields are
+    ReferenceTransactionId and ReferenceTransactionNumber, NOT
+    TransactionId — a builder copying the pattern from
+    customer_transactions reads two fields that do not exist and
+    silently produces zeroes.
+
+    FLOAT NOTE: TotalTransactionsDueForAccount on account 26370 is
+    1179915.3225. Four decimal places do not terminate in IEEE-754 and
+    the synthesizer once emitted the full binary expansion to the token
+    cap. float() here is a straight copy of a value the pod already
+    rounded in transit; the rounding guards elsewhere still apply.
+    """
+    records: list[CustomerAccountRecord] = []
+
+    transactions = [
+        CustomerAccountTransactionInfo(
+            transaction_id=t.get("TransactionId") or 0,
+            transaction_number=str(t.get("TransactionNumber") or ""),
+            transaction_class=str(t.get("TransactionClass") or ""),
+            transaction_date=str(t.get("TransactionDate") or ""),
+            amount=float(t.get("TotalOriginalAmount") or 0),
+            balance=float(t.get("TotalBalanceAmount") or 0),
+            status=str(t.get("InstallmentStatus") or ""),
+        )
+        for t in (children.get("customer_transactions") or [])
+    ]
+
+    credit_memos = [
+        AccountCreditMemoInfo(
+            credit_memo_id=m.get("CreditMemoId") or 0,
+            credit_memo_number=str(m.get("CreditMemoNumber") or ""),
+            credit_memo_date=str(m.get("CreditMemoDate") or ""),
+            amount=float(m.get("TotalOriginalAmount") or 0),
+            balance=float(m.get("TotalBalanceAmount") or 0),
+            status=str(m.get("CreditMemoStatus") or ""),
+            currency=str(m.get("CreditMemoCurrency") or ""),
+        )
+        for m in (children.get("account_credit_memos") or [])
+    ]
+
+    receipts = [
+        AccountReceiptInfo(
+            receipt_id=r.get("StandardReceiptId") or 0,
+            receipt_number=str(r.get("ReceiptNumber") or ""),
+            receipt_date=str(r.get("ReceiptDate") or ""),
+            amount=float(r.get("Amount") or 0),
+            currency=str(r.get("Currency") or ""),
+            receipt_method=str(r.get("ReceiptMethod") or ""),
+            state=str(r.get("State") or ""),
+            unapplied_amount=float(r.get("UnappliedAmount") or 0),
+        )
+        for r in (children.get("account_receipts") or [])
+    ]
+
+    applications = [
+        AccountReceiptApplicationInfo(
+            application_id=a.get("ApplicationId") or 0,
+            receipt_id=a.get("StandardReceiptId") or 0,
+            receipt_number=str(a.get("ReceiptNumber") or ""),
+            receipt_method=str(a.get("ReceiptMethod") or ""),
+            # Reference*, not Transaction*. See the docstring.
+            transaction_id=a.get("ReferenceTransactionId") or 0,
+            transaction_number=str(a.get("ReferenceTransactionNumber") or ""),
+            transaction_status=str(a.get("ReferenceTransactionStatus") or ""),
+            application_amount=float(a.get("ApplicationAmount") or 0),
+            application_date=str(a.get("ApplicationDate") or ""),
+            currency=str(a.get("EnteredCurrency") or ""),
+        )
+        for a in (children.get("account_receipt_applications") or [])
+    ]
+
+    for row in parent_rows:
+        records.append(
+            CustomerAccountRecord(
+                account_id=row.get("AccountId") or 0,
+                account_number=str(row.get("AccountNumber") or ""),
+                customer_name=str(row.get("CustomerName") or ""),
+                open_receivables=float(
+                    row.get("TotalOpenReceivablesForAccount") or 0
+                ),
+                transactions_due=float(
+                    row.get("TotalTransactionsDueForAccount") or 0
+                ),
+                transactions=transactions,
+                credit_memos=credit_memos,
+                receipts=receipts,
+                applications=applications,
+            )
+        )
+    return records
+
+
+def build_standard_receipt_records(
+    rows: list[dict],
+) -> list["StandardReceiptRecord"]:
+    """Executor standard-receipt rows -> StandardReceiptRecord, verbatim.
+
+    Pure: no LLM, no I/O. A top-level list, not a child of an account —
+    the site-filtered receipts prompt uses /standardReceipts directly.
+
+    Distinct from account_receipts despite the shared StandardReceiptId:
+    these rows carry CustomerName, CustomerAccountNumber and the
+    remittance bank fields, which the account child does not, and lack
+    State and UnappliedAmount, which it does.
+
+    TRAP, from the endpoints reference: "Santa Clara" spans accounts
+    26360 AND 26370. A result that does not resolve to an
+    AccountNumber cannot be trusted — which is why CustomerAccountNumber
+    is copied here rather than left out as redundant.
+    """
+    return [
+        StandardReceiptRecord(
+            standard_receipt_id=r.get("StandardReceiptId") or 0,
+            receipt_number=str(r.get("ReceiptNumber") or ""),
+            receipt_date=str(r.get("ReceiptDate") or ""),
+            amount=float(r.get("Amount") or 0),
+            currency=str(r.get("Currency") or ""),
+            receipt_method=str(r.get("ReceiptMethod") or ""),
+            status=str(r.get("Status") or ""),
+            customer_name=str(r.get("CustomerName") or ""),
+            customer_account_number=str(r.get("CustomerAccountNumber") or ""),
+            customer_site=str(r.get("CustomerSite") or ""),
+            remittance_bank_name=str(r.get("RemittanceBankName") or ""),
+            remittance_bank_branch=str(r.get("RemittanceBankBranch") or ""),
+            remittance_bank_account_number=str(
+                r.get("RemittanceBankAccountNumber") or ""
+            ),
+        )
+        for r in rows
+    ]
+
+
+def build_invoice_dff(rows: list[dict]) -> "ReceivablesInvoiceTransactionDFFInfo | None":
+    """DFF row -> ReceivablesInvoiceTransactionDFFInfo, or None.
+
+    The key names here are unlike every other AR bucket and would not
+    have been guessed: the id is `CustomerTrxId`, not
+    CustomerTransactionId, and the context fields carry a DOUBLE
+    LEADING UNDERSCORE — `__FLEX_Context`, `__FLEX_Context_DisplayValue`.
+
+    Observed, not inferred. Reading them wrong yields a DFF block that
+    renders empty, which looks like an invoice without flexfield values
+    rather than like a bug.
+    """
+    if not rows:
+        return None
+    row = rows[0]
+    return ReceivablesInvoiceTransactionDFFInfo(
+        context=str(row.get("__FLEX_Context") or ""),
+        context_display_value=str(row.get("__FLEX_Context_DisplayValue") or ""),
+    )

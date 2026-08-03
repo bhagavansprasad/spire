@@ -124,7 +124,10 @@ from spire.synthesizer.aggregation import (  # noqa: F401
 )
 from spire.synthesizer.ar import (  # noqa: F401
     build_credit_memo_records,
+    build_customer_account_records,
+    build_invoice_dff,
     build_receivables_invoice_records,
+    build_standard_receipt_records,
     plain_credit_memo_bucket,
     single_parent_shape,
 )
@@ -573,10 +576,11 @@ def synthesize_response(
     # fields rather than one (an AR invoice row and a credit memo row
     # both carry CustomerTransactionId).
     #
-    # Tax lines are handled; DFF values are not, and that invoice still
-    # goes to the model. The DFF bucket's key names have not been
-    # observed, and a builder reading invented keys is how "None
-    # examined" reached a user's screen.
+    # Lines, tax lines and DFF values are all handled. Any OTHER child
+    # bucket still falls through to the model: the guard is an allowlist
+    # of buckets whose key names have been observed, not a blanket
+    # accept. A builder reading invented keys is how "None examined"
+    # reached a user's screen.
     if target_entity == "ReceivablesInvoice":
         shape = single_parent_shape(
             outputs,
@@ -587,6 +591,7 @@ def synthesize_response(
             unhandled = set(children) - {
                 "receivables_invoice_lines",
                 "receivablestaxline",
+                "receivablesinvoicetransactiondff",
             }
             if not unhandled:
                 rows = outputs[parent]
@@ -620,6 +625,106 @@ def synthesize_response(
                     ),
                     truncation_notes=notes,
                 )
+
+    # Customer account, with whichever children were fetched.
+    #
+    # One parent row always — every customer_accounts bucket across the
+    # sixteen AR prompts holds exactly one. Four possible children and
+    # the query decides which arrive: transactions, credit memos,
+    # receipts, applications.
+    #
+    # Each child bucket has its own key names and none follows from the
+    # others. The applications bucket is the trap: its transaction
+    # fields are ReferenceTransactionId / ReferenceTransactionNumber,
+    # not TransactionId, so a builder copying the transactions pattern
+    # reads two absent fields and silently writes zeroes.
+    if target_entity == "CustomerAccount":
+        shape = single_parent_shape(
+            outputs,
+            ("AccountId", "AccountNumber", "TotalOpenReceivablesForAccount"),
+        )
+        if shape is not None:
+            parent, children = shape
+            unhandled = set(children) - {
+                "customer_transactions",
+                "account_credit_memos",
+                "account_receipts",
+                "account_receipt_applications",
+            }
+            if not unhandled:
+                rows = outputs[parent]
+                total_available, notes = _local_truncation(
+                    parent, rows, truncation_by_step, metadata_by_step
+                )
+                return CustomerAccountResponse(
+                    summary="\n".join(
+                        local_list_summary(
+                            rows,
+                            entity_label="customer accounts",
+                            displayed_fields=[
+                                "CustomerName", "AccountNumber",
+                                "TotalOpenReceivablesForAccount",
+                                "TotalTransactionsDueForAccount",
+                            ],
+                            filtered_fields=filtered_fields,
+                            total_available=total_available,
+                            labels={
+                                "CustomerName": "Customer",
+                                "AccountNumber": "AccountNumber",
+                                "TotalOpenReceivablesForAccount":
+                                    "Open Receivables",
+                                "TotalTransactionsDueForAccount":
+                                    "Transactions Due",
+                            },
+                        )
+                    ),
+                    customer_accounts=build_customer_account_records(
+                        rows, children
+                    ),
+                    truncation_notes=notes,
+                )
+
+    # Standard receipts: a top-level list, not an account child.
+    #
+    # Distinct from account_receipts despite sharing StandardReceiptId —
+    # these rows carry CustomerName, CustomerAccountNumber and the
+    # remittance bank fields, and lack State and UnappliedAmount.
+    #
+    # CustomerAccountNumber is displayed deliberately. The endpoints
+    # reference records that "Santa Clara" spans accounts 26360 AND
+    # 26370, so a receipt list that does not resolve to an account
+    # number cannot be trusted.
+    if target_entity == "StandardReceipt" and len(outputs) == 1:
+        name, rows = next(iter(outputs.items()))
+        if rows and isinstance(rows[0], dict) and "StandardReceiptId" in rows[0] \
+                and "CustomerAccountNumber" in rows[0]:
+            total_available, notes = _local_truncation(
+                name, rows, truncation_by_step, metadata_by_step
+            )
+            return StandardReceiptResponse(
+                summary="\n".join(
+                    local_list_summary(
+                        rows,
+                        entity_label="receipts",
+                        displayed_fields=[
+                            "ReceiptNumber", "Amount", "Currency",
+                            "ReceiptDate", "ReceiptMethod", "CustomerSite",
+                            "CustomerAccountNumber", "Status",
+                        ],
+                        filtered_fields=filtered_fields,
+                        total_available=total_available,
+                        labels={
+                            "ReceiptNumber": "Receipt",
+                            "ReceiptDate": "Date",
+                            "ReceiptMethod": "Method",
+                            "CustomerSite": "Site",
+                            "CustomerAccountNumber": "Account",
+                        },
+                    )
+                ),
+                receipts=build_standard_receipt_records(rows),
+                truncation_notes=notes,
+            )
 
     if llm is None:
         from spire.config import build_llm
