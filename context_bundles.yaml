@@ -2,14 +2,18 @@ bundles:
   # ── project root (content files only; tooling and secrets excluded) ──
   root:
   - README.md
-  - how-to-run-02.md
+  - spire_setup_guide.md          # renamed from how-to-run-02.md, 2026-08-02
+  - how-to-run-after-pull.md
+  - prompt_coverage.md
   - build_context.py
   - context_bundles.yaml
   - pyproject.toml
+  - requirements.txt
+  - requirements-dev.txt
+  - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
-  - pyproject.toml
-  - requirements.txt
+  - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
   - docs/spire_plan.md
   - docs/spire_fusion_endpoints_reference.md
@@ -30,6 +34,7 @@ bundles:
   - scripts/prompts/07_alacarte.txt
   - scripts/prompts/08_lifecycle.txt
   - scripts/prompts/10_refusal_examples.txt
+  - scripts/prompts/11_column_vocabulary.txt
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/README.md
   - scripts/prompts/scorer/parser_stress.txt
@@ -117,6 +122,7 @@ bundles:
   - src/spire/synthesizer/models_common.py
   - src/spire/synthesizer/p2p.py
   - src/spire/synthesizer/ar.py
+  - src/spire/synthesizer/local_summary.py
   - src/spire/synthesizer/aggregation.py
   - src/spire/synthesizer/prompts.py
   - src/spire/synthesizer/validation.py
@@ -128,6 +134,9 @@ bundles:
   - tests/test_agent_runner.py
   - tests/test_aggregate_invoices_tool.py
   - tests/test_aggregation_routing.py
+  - tests/test_ar_account_builders.py
+  - tests/test_ar_invoice_builder.py
+  - tests/test_ar_local_builders.py
   - tests/test_buyer_tool.py
   - tests/test_compare_orders_to_invoices.py
   - tests/test_config.py
