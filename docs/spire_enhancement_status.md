@@ -16,7 +16,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-08-03 (local synthesis proven and merged on two entities)
+**Last updated:** 2026-08-03 (local synthesis: AR complete, 14 of 16 prompts LLM-free)
 
 ---
 
@@ -27,7 +27,7 @@ phases of design detail bury the status table above them.
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
 | 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 (narrowing guidance) and UX-03 (truncation disclosure) not started — **deferred behind 2A**. |
-| **2A** | **OUT-01 to OUT-05, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | OUT-04 and OUT-05 **merged** for Supplier and CreditMemo. OUT-01 to OUT-03 partly delivered by them. COL-* and CSV-01 not started. §G, §G10, §G11. |
+| **2A** | **OUT-01 to OUT-05, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | OUT-04/05 **merged for all of AR + Supplier**. OUT-01 to OUT-03 partly delivered by them. **COL-01/02/03 and CSV-01 NOT STARTED** — the SME's original request. §G, §G10, §G11, §G12. |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -1616,3 +1616,146 @@ Supplier and credit memo are done. Not yet converted:
 Each needs a deterministic builder, a conservative bucket detector, a
 displayed-fields list and a label map. `ar.py`'s remaining three are the
 obvious next batch; they share a module and a shape.
+
+---
+
+## G12. AR fully local (2026-08-03)
+
+Continues §G11. Four more shapes converted; **fourteen of the sixteen
+prompts in `03_ar.txt` now run with no synthesize call.** The two
+remaining are aggregations, whose records were already deterministic —
+only their prose still goes to the model.
+
+### G12.1 The single-parent shape
+
+`plain_supplier_bucket` and `plain_credit_memo_bucket` both require
+`len(outputs) == 1`. That was right for them and rejects almost all of
+AR. Bucket shapes across all sixteen prompts:
+
+| Shape | Count |
+|---|---|
+| Single bucket | 4 |
+| One parent + one child | 8 |
+| One parent + two children | 1 |
+| Aggregation (already local) | 2 |
+
+`single_parent_shape` covers thirteen: **one parent row, any number of
+child buckets.** The single row is what makes it safe — with 25
+suppliers and a bucket of buyers, which buyer belongs to which supplier
+is real work and stays with the model, exactly as
+`plain_supplier_bucket`'s docstring says. With one parent there is no
+attribution question. Every parent bucket across those sixteen prompts
+holds exactly one row.
+
+**The rule came from enumerating all sixteen, not the first three
+looked at.** Those three suggested "one parent, ONE child" — and the
+invoice-with-tax-lines case has two, so that rule would have needed
+rework immediately. The enumeration cost one command.
+
+This is also the point where the decision to stop and design was taken
+against momentum. The suggestion at the time was to build the narrow
+rule and generalise later; the developer pushed for enumerating first.
+That was correct.
+
+### G12.2 Key names, none of them guessable
+
+Recorded in full in `docs/spire_fusion_endpoints_reference.md` §15.
+The two that fail SILENTLY:
+
+- **`account_receipt_applications`** uses `ReferenceTransactionId` /
+  `ReferenceTransactionNumber`, not `TransactionId`. A builder copying
+  the `customer_transactions` pattern writes 0 and "" into every row.
+  Structurally the output is perfect: right row count, right receipt
+  numbers, and a column of zeros that reads as data the pod does not
+  hold.
+- **`receivablesinvoicetransactiondff`** uses `CustomerTrxId` and
+  `__FLEX_Context` — a DOUBLE leading underscore. Read wrong, the DFF
+  block renders empty and looks like an invoice with no flexfield
+  values.
+
+Also: `account_credit_memos` and the top-level `credit_memos` are the
+same business object in two different shapes, as are `standard_receipts`
+and `account_receipts`. Conflating either pair yields zeros.
+
+### G12.3 The regression the AR work exposed
+
+`Show receipt applications for customer X` fetched ten applications and
+displayed:
+
+```
+  Applications     : 10
+```
+
+A count where the rows were asked for — and **worse than the prose it
+replaced**, because the model at least narrated them. The local path
+made this prompt strictly worse until the display was fixed.
+
+This is the carried-forward count-instead-of-detail defect. It was left
+alone deliberately during the table conversion, on the grounds that a
+layout change should not hide a behaviour change in its diff. Local
+synthesis made it blocking: the narration that had been covering for it
+is gone.
+
+Each populated child list now renders as an indented table under the
+account, and the counts came off the account row entirely — a number is
+worth stating when the reader cannot see it, and noise when they can.
+Same rule that removed the counts line above record tables.
+
+**The general lesson:** removing a layer can expose a defect the layer
+was masking. The defect was not introduced by the change; it was made
+visible by it. Expect more of these as the remaining entities convert.
+
+### G12.4 `_append_summary`
+
+Eighteen branches appended `response.summary` unguarded. The empty-summary
+guard had been added to exactly ONE of them, when the supplier path went
+local.
+
+Every entity converted after that would have reintroduced the two blank
+lines under `Answer:` — one branch at a time, each looking like a fresh
+bug. Now centralised.
+
+### G12.5 Tests
+
+Three LLM removals have now left the suite at **771 → 771, 779 → 779,
+789 → 789.** Nothing mocked any of those calls. A green suite says
+nothing about these paths and would say nothing if a builder started
+writing zeros.
+
+Twenty tests added across the AR work. The ones that matter assert
+VALUES, not structure:
+
+- tax rows land on their own line, checked by taxable amount (10,592 vs
+  26,480) — under a wrong join every line still shows two tax rows and
+  the output still looks plausible
+- applications carry a real transaction id, not 0
+- DFF reads the double-underscore keys
+
+Suite now **799 passed, 18 deselected, 1 xfailed.**
+
+### G12.6 What is still on the model
+
+| Path | State |
+|---|---|
+| Invoice lists (P2P) | prose + records both from the model |
+| Purchase orders | prose + records both from the model |
+| Rankings | records local; prose still recites the table |
+| Anything needing a cross-bucket join | correctly stays with the model |
+
+`single_parent_shape` is entity-agnostic and should carry straight over
+to P2P.
+
+### G12.7 An honest note on where the effort went
+
+Two full days on output quality. It began as an observation about
+paragraph summaries and grew into local synthesis across six entity
+shapes.
+
+The work is real — measured token savings, wrong numbers eliminated,
+identical or better output. But **COL-01, COL-02 and COL-03 have not
+been started**, and those are what the SME actually raised: columns
+named in a prompt not appearing in the output. They are marked P0 and
+have been since 2026-07-31.
+
+Worth deciding deliberately whether to finish P2P first or switch back,
+rather than continuing to drift toward whichever thread is warm.

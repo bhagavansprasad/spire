@@ -1731,3 +1731,33 @@ the supplier record were curled with no `fields=` specifically to see
 what they carry under their real names. `AmountPaid`, `CanceledFlag` and
 `OnOFACListFlag` were all found that way — none of them was on the list
 of fields anyone had thought to ask for.
+---
+
+## 15. Local-synthesis field discovery (2026-08-02 / 08-03)
+
+Field names collected while replacing LLM-built records with
+deterministic builders. Every row below was OBSERVED in executor output
+or a curl, not inferred from a model's field description. Three of them
+would have been guessed wrong, and two of those fail silently.
+
+| Date | Endpoint / bucket | Finding |
+|---|---|---|
+| 2026-08-03 | `/receivablesCreditMemos` | **`fields=` is accepted (HTTP 200).** Unlike `/standardReceipts`, which 500s on it. Projected fields: `CustomerTransactionId`, `TransactionNumber`, `TransactionDate`, `EnteredAmount`, `CreditMemoCurrency`, `CreditMemoStatus`, `BillToCustomerName`, `BillToCustomerNumber`. |
+| 2026-08-03 | `/receivablesCreditMemos` | **WHO columns are present** — `CreatedBy`, `CreationDate`, `LastUpdatedBy`, `LastUpdateDate`, confirmed by curl. Direct evidence for COL-01, which lists them as absent from the KG. Also on the header: `BusinessUnit`, `TransactionType`, `TransactionSource`, `AccountingDate`, `LegalEntityIdentifier`, `BillToSite`, `CreditReason`, `CrossReference`, `DefaultTaxationCountry`, `ShipToCustomerName`. |
+| 2026-08-03 | `account_receipt_applications` | **Transaction fields are `ReferenceTransactionId` / `ReferenceTransactionNumber` / `ReferenceTransactionStatus`, NOT `TransactionId`.** A builder copying the pattern from `customer_transactions` reads two absent fields and writes 0 and "" into every row — a column of zeros that reads as data the pod does not hold rather than as a bug. Other fields: `ApplicationId`, `StandardReceiptId`, `ReceiptNumber`, `ReceiptMethod`, `ApplicationAmount`, `ApplicationDate`, `ApplicationStatus`, `CustomerSite`, `EnteredCurrency`. |
+| 2026-08-03 | `receivablesinvoicetransactiondff` | **The id is `CustomerTrxId`, not `CustomerTransactionId`, and the context fields carry a DOUBLE leading underscore: `__FLEX_Context`, `__FLEX_Context_DisplayValue`.** Unlike every other AR bucket. Read wrong, the DFF block renders empty and looks like an invoice carrying no flexfield values. |
+| 2026-08-03 | `account_credit_memos` vs `credit_memos` | **The same business object in two shapes.** The account child uses `CreditMemoId` + `TotalOriginalAmount` + `TotalBalanceAmount`; the top-level list uses `CustomerTransactionId` + `EnteredAmount`. Easy to conflate, and conflating them yields zeros. The account child also carries `TransactionClass` ("On Account Credit Memo"), `AvailableAmount`, `BillToSiteNumber`. |
+| 2026-08-03 | `standard_receipts` vs `account_receipts` | **Also two shapes.** Both carry `StandardReceiptId`, `ReceiptNumber`, `ReceiptDate`, `Amount`, `Currency`, `ReceiptMethod`. Only the top-level list carries `CustomerName`, `CustomerAccountNumber`, `Status` and the three `RemittanceBank*` fields; only the account child carries `State`, `UnappliedAmount`, `ProcessStatus`, `BusinessUnit`. |
+| 2026-08-03 | `customer_transactions` | `TransactionId`, `TransactionNumber`, `TransactionClass`, `TransactionDate`, `PaymentScheduleDueDate`, `TotalOriginalAmount`, `TotalBalanceAmount`, `InstallmentStatus`. |
+| 2026-08-02 | `/suppliers` vs `/invoices` — **ordering stability** | **`/suppliers` returns the same rows across runs. `/invoices` does not.** Byte-diffing the same eight prompts twice, minutes apart: seven outputs identical, the invoice one returned entirely different rows — same structure, same count, different data (2013–2016 dates on one run, 2023–2024 on the next). This confirms on a SECOND endpoint the ordering hypothesis previously open for `/standardReceipts`. Consequence: an aggregate computed over a 25-row sample is not merely wrong, it is DIFFERENTLY wrong on each run, and the same question answered twice gives two answers with no error either time. |
+| 2026-08-03 | `receivablesInvoiceLineTaxLines` | Endpoint name confirmed. It is NOT `receivablesTaxLines` — a curl against that path returns empty. Reinforces the CAUTION in section 9: the tax row's own `CustomerTransactionLineId` is the TAX line's PK; the join key to its invoice line is **`ParentCustomerTransactionLineId`**. |
+
+**Method note.** These were found only after `--show-raw-output` stopped
+truncating each row at six fields. It had been capping silently, and on
+2026-08-03 that cost two turns and a wrong conclusion: a credit-memo row
+displayed six fields, the table showed a populated Customer column, and
+the obvious reading was that the model had invented customer names. It
+had not — `BillToCustomerName` sits at position seven and the tool had
+been fetching it all along. The flag now names what it holds back, and
+the two stamped fields `total_credit` / `total_credit_note` surfaced on
+its first run afterwards.
