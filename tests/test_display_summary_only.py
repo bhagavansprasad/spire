@@ -136,3 +136,122 @@ def test_lifecycle_not_found_display_asserts_nothing():
     assert "Amounts" not in rendered
     assert "no purchase order found with OrderNumber" not in rendered
     assert response.exceptions  # kept on the response, just not printed    
+
+# ─────────────────────────────────────────────────────────────────────
+# Record rendering — tables, added 2026-08-03
+#
+# Eight entity branches printed records as bullets with the field names
+# repeated inline; column queries had printed tables since projection
+# shipped. One renderer now serves both.
+#
+# These are here because the rendering change shipped on visual
+# inspection alone and broke this file twice on the way. Every defect it
+# had was found by running a prompt and reading the screen — "1
+# suppliers", a doubled blank line, a contacts column joined with commas
+# where the names themselves contain commas. None was found by reading
+# code, and none of them would have been caught by the tests that
+# existed.
+# ─────────────────────────────────────────────────────────────────────
+
+
+from scripts.display_formatters import _is_quantity, _render_records
+
+
+def test_many_records_render_as_a_table():
+    """Two or more records get a header, a rule, and aligned columns."""
+    out = "\n".join(
+        _render_records(
+            "Suppliers",
+            [
+                {"Supplier": "Lee Supplies", "SupplierNumber": "1252"},
+                {"Supplier": "JGA", "SupplierNumber": "1254"},
+            ],
+            ["Supplier", "SupplierNumber"],
+            "none",
+        )
+    )
+    assert "Supplier" in out and "SupplierNumber" in out
+    assert "-+-" in out          # the rule
+    assert " | " in out          # the separator
+    assert "Lee Supplies" in out and "JGA" in out
+
+
+def test_one_record_renders_vertically():
+    """A one-row table is as wide as its widest value and forces the
+    reader across the screen to read a single thing. Field per line."""
+    out = "\n".join(
+        _render_records(
+            "Suppliers",
+            [{"Supplier": "Dell Inc.", "SupplierNumber": "1255"}],
+            ["Supplier", "SupplierNumber"],
+            "none",
+        )
+    )
+    assert "-+-" not in out      # NOT a table
+    assert "Supplier" in out
+    assert "Dell Inc." in out
+    # field : value, one per line
+    assert len([ln for ln in out.splitlines() if " : " in ln]) == 2
+
+
+def test_missing_values_show_an_em_dash():
+    """Absent must be visibly different from empty."""
+    out = "\n".join(
+        _render_records(
+            "Receipts",
+            [{"Receipt": "R1", "Bank": None}, {"Receipt": "R2", "Bank": "HSBC"}],
+            ["Receipt", "Bank"],
+            "none",
+        )
+    )
+    assert "—" in out
+
+
+def test_no_records_uses_the_empty_text():
+    out = _render_records("Suppliers", [], ["Supplier"], "No suppliers found.")
+    assert out == ["No suppliers found."]
+
+
+def test_quantities_right_align_and_identifiers_do_not():
+    """The alignment rule, which has now been wrong in both directions.
+
+    First version: right-align anything numeric, minus a denylist of
+    id-ish names. "Transaction" carries no marker, so a transaction
+    NUMBER right-aligned as though it were an amount while
+    "AccountNumber" did not — the same kind of value rendered two ways
+    depending on whether its name happened to contain a marker word.
+
+    Inverted to an allowlist of quantity names. Its predicted miss
+    appeared on the first run: "Invoices" (261, 122, 78) is a count with
+    no quantity word in its name, and left-aligned with the text.
+    """
+    assert _is_quantity("Amount", [-150.0, 10000.0])
+    assert _is_quantity("Total Spend", ["141,171,590.98"])
+    assert _is_quantity("Open Receivables", ["165,428,563.24"])
+    assert _is_quantity("Rank", [1, 2, 3])
+    assert _is_quantity("Invoices", [261, 122])       # the allowlist miss
+    assert _is_quantity("Lines", [4])
+
+    assert not _is_quantity("Transaction", [11001, 130766])
+    assert not _is_quantity("CustomerTransactionId", [300000313072555])
+    assert not _is_quantity("SupplierNumber", ["1252"])
+    assert not _is_quantity("Customer", ["DMART"])
+
+
+def test_a_quantity_name_with_textual_values_is_not_right_aligned():
+    """BOTH tests must pass — the name AND the values. A column called
+    "Total" holding words is not a quantity."""
+    assert not _is_quantity("Total", ["high", "low"])
+    assert not _is_quantity("Total", [])
+
+
+def test_an_empty_summary_leaves_no_blank_line(response_with_addresses):
+    """An empty summary is a legitimate answer now: with records in a
+    table below, there is often nothing to say the table does not show.
+    Appending "" anyway left a blank line under "Answer:" and another
+    under that, which reads as something having gone missing.
+    """
+    response_with_addresses.summary = ""
+    out = _format_synthesized(response_with_addresses)
+    assert "Answer:\n\n\n" not in out
+    assert "Lee Supplies" in out
