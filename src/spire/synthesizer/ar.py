@@ -568,3 +568,161 @@ def plain_credit_memo_bucket(outputs: dict[str, list[dict]]) -> str | None:
     if "CustomerTransactionId" in first and "CreditMemoCurrency" in first:
         return name
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────
+# The single-parent shape
+#
+# plain_supplier_bucket and plain_credit_memo_bucket both require
+# len(outputs) == 1. That was right for them and rejects almost
+# everything in AR: of sixteen prompts in 03_ar.txt, four are single
+# bucket, nine carry a parent plus one or two children, and two are
+# aggregations that were already local.
+#
+# The rule below was derived from all sixteen rather than from the first
+# three looked at — which matters, because the rule the first three
+# suggested was "one parent, ONE child" and the invoice-with-tax-lines
+# case has two.
+#
+#   One parent row, any number of child buckets.
+#
+# The single parent row is what makes it safe. plain_supplier_bucket's
+# docstring defers multi-bucket deliberately: with 25 suppliers and a
+# bucket of buyers, working out which buyer belongs to which supplier is
+# real work and stays with the model. With exactly ONE parent there is
+# no attribution question to get wrong — every child belongs to it by
+# construction. Every parent bucket across those sixteen prompts holds
+# exactly one row.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def single_parent_shape(
+    outputs: dict[str, list[dict]],
+    parent_markers: tuple[str, ...],
+) -> tuple[str, dict[str, list[dict]]] | None:
+    """Find a one-row parent bucket and its children.
+
+    Args:
+        outputs: Executor output buckets.
+        parent_markers: Field names that identify the parent's rows. ALL
+            must be present on the first row. Several rather than one
+            because AR shapes overlap — an AR invoice row and a credit
+            memo row both carry CustomerTransactionId, and a detector
+            keyed on that alone would claim the wrong bucket. A wrong
+            bucket returns wrong data confidently, which is the failure
+            mode this whole line of work exists to remove.
+
+    Returns:
+        (parent_bucket_name, {child_bucket: rows}) or None.
+
+        None when there is no matching bucket, when the parent holds
+        anything other than exactly one row, or when a second bucket
+        also matches the markers — that last is ambiguous and belongs
+        with the model.
+    """
+    if not outputs:
+        return None
+
+    matches = [
+        name
+        for name, rows in outputs.items()
+        if rows
+        and isinstance(rows[0], dict)
+        and all(m in rows[0] for m in parent_markers)
+    ]
+    if len(matches) != 1:
+        return None
+
+    parent = matches[0]
+    if len(outputs[parent]) != 1:
+        return None
+
+    children = {n: r for n, r in outputs.items() if n != parent}
+    return parent, children
+
+
+def build_receivables_invoice_records(
+    parent_rows: list[dict],
+    children: dict[str, list[dict]],
+) -> list["ReceivablesInvoiceRecord"]:
+    """Executor AR-invoice rows -> ReceivablesInvoiceRecord, verbatim.
+
+    Pure: no LLM, no I/O. Children are attached to the single parent by
+    construction — see single_parent_shape for why that is safe.
+
+    Line rows carry TransacationBusinessCategory, misspelled by Oracle.
+    Not read here, but noted: anything that does read it must use the
+    typo exactly.
+
+    TAX LINES JOIN ON ParentCustomerTransactionLineId, NOT on their own
+    CustomerTransactionLineId. The tax row carries BOTH, and its own is
+    the TAX line's PK — 112, say — while the invoice line it belongs to
+    is 74. Joining on the obvious-looking field matches nothing, or
+    matches the wrong line.
+
+    That is not a deduction from the field names. It is written down in
+    docs/spire_fusion_endpoints_reference.md, under a CAUTION, and was
+    found only after two wrong guesses at how to fetch these rows at
+    all — including a curl against an endpoint that does not exist
+    (`receivablesTaxLines`; the real one is
+    `receivablesInvoiceLineTaxLines`). The reference doc is the
+    authority on pod behaviour and reading it first would have cost a
+    minute.
+    """
+    records: list[ReceivablesInvoiceRecord] = []
+    line_rows = children.get("receivables_invoice_lines") or []
+    tax_rows = children.get("receivablestaxline") or []
+
+    # Group tax rows by the line they belong to. Rows whose parent id is
+    # missing are dropped rather than attached to an arbitrary line: a
+    # tax figure under the wrong line is worse than one not shown.
+    tax_by_line: dict[int, list[dict]] = {}
+    for tx in tax_rows:
+        parent_line = tx.get("ParentCustomerTransactionLineId")
+        if parent_line is None:
+            continue
+        tax_by_line.setdefault(parent_line, []).append(tx)
+
+    for row in parent_rows:
+        lines = [
+            ReceivablesInvoiceLineInfo(
+                customer_transaction_line_id=ln.get("CustomerTransactionLineId") or 0,
+                line_number=ln.get("LineNumber") or 0,
+                description=str(ln.get("Description") or ""),
+                quantity=float(ln.get("Quantity") or 0),
+                unit_selling_price=float(ln.get("UnitSellingPrice") or 0),
+                amount=float(ln.get("LineAmount") or 0),
+                tax_lines=[
+                    ReceivablesTaxLineInfo(
+                        customer_transaction_line_id=(
+                            tx.get("CustomerTransactionLineId") or 0
+                        ),
+                        tax_line_number=tx.get("TaxLineNumber") or 0,
+                        tax=str(tx.get("Tax") or ""),
+                        tax_rate=float(tx.get("TaxRate") or 0),
+                        tax_amount=float(tx.get("TaxAmount") or 0),
+                        taxable_amount=float(tx.get("TaxableAmount") or 0),
+                        jurisdiction=str(tx.get("TaxJurisdictionCode") or ""),
+                    )
+                    for tx in tax_by_line.get(
+                        ln.get("CustomerTransactionLineId"), []
+                    )
+                ],
+            )
+            for ln in line_rows
+        ]
+        records.append(
+            ReceivablesInvoiceRecord(
+                customer_transaction_id=row.get("CustomerTransactionId") or 0,
+                transaction_number=str(row.get("TransactionNumber") or ""),
+                transaction_date=str(row.get("TransactionDate") or ""),
+                bill_to_customer_name=str(row.get("BillToCustomerName") or ""),
+                status=str(row.get("InvoiceStatus") or ""),
+                currency=str(row.get("InvoiceCurrencyCode") or ""),
+                amount=float(row.get("EnteredAmount") or 0),
+                balance=float(row.get("InvoiceBalanceAmount") or 0),
+                lines=lines,
+                dff=None,
+            )
+        )
+    return records

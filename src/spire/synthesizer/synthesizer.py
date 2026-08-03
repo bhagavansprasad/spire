@@ -124,7 +124,9 @@ from spire.synthesizer.aggregation import (  # noqa: F401
 )
 from spire.synthesizer.ar import (  # noqa: F401
     build_credit_memo_records,
+    build_receivables_invoice_records,
     plain_credit_memo_bucket,
+    single_parent_shape,
 )
 from spire.synthesizer.local_summary import local_list_summary
 from spire.synthesizer.p2p import (  # noqa: F401
@@ -562,6 +564,62 @@ def synthesize_response(
             total_credit_note=total_note,
             truncation_notes=notes,
         )
+
+    # AR invoice with its lines: no LLM.
+    #
+    # First use of the single-parent shape — one parent row, any number
+    # of child buckets. See single_parent_shape for why one row is what
+    # makes attaching children safe, and why the marker list is three
+    # fields rather than one (an AR invoice row and a credit memo row
+    # both carry CustomerTransactionId).
+    #
+    # Tax lines are handled; DFF values are not, and that invoice still
+    # goes to the model. The DFF bucket's key names have not been
+    # observed, and a builder reading invented keys is how "None
+    # examined" reached a user's screen.
+    if target_entity == "ReceivablesInvoice":
+        shape = single_parent_shape(
+            outputs,
+            ("CustomerTransactionId", "TransactionNumber", "InvoiceCurrencyCode"),
+        )
+        if shape is not None:
+            parent, children = shape
+            unhandled = set(children) - {
+                "receivables_invoice_lines",
+                "receivablestaxline",
+            }
+            if not unhandled:
+                rows = outputs[parent]
+                total_available, notes = _local_truncation(
+                    parent, rows, truncation_by_step, metadata_by_step
+                )
+                return ReceivablesInvoiceResponse(
+                    summary="\n".join(
+                        local_list_summary(
+                            rows,
+                            entity_label="AR invoices",
+                            displayed_fields=[
+                                "TransactionNumber", "EnteredAmount",
+                                "InvoiceCurrencyCode", "TransactionDate",
+                                "BillToCustomerName", "InvoiceStatus",
+                            ],
+                            filtered_fields=filtered_fields,
+                            total_available=total_available,
+                            labels={
+                                "TransactionNumber": "Transaction",
+                                "EnteredAmount": "Amount",
+                                "InvoiceCurrencyCode": "Currency",
+                                "TransactionDate": "Date",
+                                "BillToCustomerName": "Customer",
+                                "InvoiceStatus": "Status",
+                            },
+                        )
+                    ),
+                    receivables_invoices=build_receivables_invoice_records(
+                        rows, children
+                    ),
+                    truncation_notes=notes,
+                )
 
     if llm is None:
         from spire.config import build_llm
