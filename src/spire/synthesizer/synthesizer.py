@@ -122,6 +122,7 @@ from spire.synthesizer.aggregation import (  # noqa: F401
     _build_count_response,
     _direction_phrase,
 )
+from spire.synthesizer.local_summary import local_list_summary
 from spire.synthesizer.p2p import (  # noqa: F401
     build_supplier_records,
     plain_supplier_bucket,
@@ -243,6 +244,71 @@ def _comparison_shape(outputs: dict[str, list[dict]]) -> str | None:
 
 
 
+def _local_truncation(
+    bucket: str,
+    rows: list[dict],
+    truncation_by_step: dict[str, dict] | None,
+    metadata_by_step: dict[str, dict] | None,
+) -> tuple[int | None, list[str]]:
+    """The authoritative total and the truncation note, from the data.
+
+    Same source and same order of preference as _build_count_response,
+    which has done this since Phase 10: the truncation entry's
+    total_available is the pod's own count and is authoritative;
+    metadata's total_available covers the non-iterating steps.
+
+    Until now the entity-list path took a different route to the same
+    numbers — the model read the truncation block and wrote a sentence
+    about it. That is why one query announced "Showing 20" while 25 rows
+    printed underneath: nothing counted anything, a model described a
+    block it had been shown. Here the count is the count.
+
+    "examined" is len(rows), not a field on the truncation entry. The
+    entry carries total_available, limit_applied and truncated and
+    nothing else — the first draft of this function read entry["examined"]
+    and printed "None examined for filtering" to the screen. The key was
+    inferred from _build_count_response's ``entry.get("examined", examined)``
+    without checking the executor; the DEFAULT in that call was the clue
+    that it is not always there, and it was read as evidence that it
+    usually is.
+
+    The note wording is copied from what the model was instructed to
+    produce, so existing readers and the 05/07/08 prompt-set baselines
+    see the same shape. "total in source" is inherited and is loose on a
+    filtered query — it reads as unfiltered when the fetch was scoped.
+    Left alone deliberately: changing it is a user-visible format change
+    and belongs with the counts-line work, not smuggled in here.
+
+    Returns:
+        (total_available or None, notes list)
+    """
+    total_available: int | None = None
+    examined = len(rows)
+
+    entry = (truncation_by_step or {}).get(bucket)
+    if entry:
+        total_available = entry.get("total_available")
+
+    if total_available is None:
+        meta = (metadata_by_step or {}).get(bucket) or {}
+        total_available = meta.get("total_available")
+
+    notes: list[str] = []
+    if entry:
+        total_text = (
+            f"{total_available}" if total_available is not None else "unknown"
+        )
+        notes.append(
+            f"{bucket}: {total_text} total in source; "
+            f"{examined} examined for filtering."
+        )
+
+    return (
+        int(total_available) if total_available is not None else None,
+        notes,
+    )
+
+
 def synthesize_response(
     outputs: dict[str, list[dict]],
     target_entity: str,
@@ -250,6 +316,7 @@ def synthesize_response(
     truncation_by_step: dict[str, dict] | None = None,
     count_only: bool = False,
     metadata_by_step: dict[str, dict] | None = None,
+    filtered_fields: list[str] | None = None,
 ) -> BaseModel:
     """Turn the executor's output into a validated structured response,
     using the schema for the Intent's target_entity.
@@ -266,6 +333,10 @@ def synthesize_response(
         metadata_by_step: Optional dict from execute_plan containing
             ToolResult metadata (e.g. total_available) for non-iterating
             steps. Used to provide exact totals to the LLM.
+        filtered_fields: Field names the user filtered on, from the
+            Intent. A local summary may describe these even when they
+            are not rendered, because the reader supplied them — see
+            local_list_summary.
 
     Returns:
         A Pydantic model — SupplierResponse, InvoiceResponse, or
@@ -361,53 +432,63 @@ def synthesize_response(
             )
         prompt_key = target_entity
 
-    # Plain supplier list: build the records here and ask the LLM only for
-    # the summary. See build_supplier_records for why. Placed with the
-    # other pre-LLM short-circuits (count_only, comparison, aggregation)
-    # because it is the same idea: when the data already determines the
-    # answer, do not pay a language model to restate it.
+    # Plain supplier list: no LLM at all.
+    #
+    # This branch used to build the records here and call the model for
+    # the prose. It now builds both. The comment that stood here said the
+    # right thing already — "when the data already determines the answer,
+    # do not pay a language model to restate it" — and then paid one to
+    # restate it, because the prose felt like the model's job.
+    #
+    # It was not. Measured 2026-08-02 over eight prompts, three runs each,
+    # byte identical every run:
+    #
+    #   "Showing 20 of 426 suppliers"  while 25 rows printed below it
+    #   "Some suppliers have a Taxpayer Country Code"  a column not shown
+    #
+    # Both are arithmetic and inventory, and len() cannot get either
+    # wrong. The second is the more instructive: the model sees the whole
+    # record and has no way to know which fields the renderer prints, so
+    # instructing it to describe only displayed fields cannot work. It
+    # failed four times. Handing the builder a field list makes the rule
+    # structural — it cannot describe what it was not given.
+    #
+    # What is lost is real and should not be glossed. The model wrote
+    # "All invoices are from EIP Inc" — a genuine observation this code
+    # would only make if a supplier column happened to be uniform. The
+    # local rules are cruder: uniformity, splits, counts. That trade is
+    # deliberate, on the grounds that a crude true statement beats a
+    # fluent one the reader cannot verify against the rows in front of
+    # them.
+    #
+    # This fires ONLY where plain_supplier_bucket returns a bucket — one
+    # bucket, supplier rows, nothing to join. Anything needing a join
+    # still goes to the model below, which is the "otherwise go to the
+    # LLM if required" half of the rule.
     supplier_bucket = (
         plain_supplier_bucket(outputs) if target_entity == "Supplier" else None
     )
     if supplier_bucket is not None:
-        if llm is None:
-            from spire.config import build_llm
-
-            llm = build_llm(_TEMPERATURE)
-        # include_raw so the call lands in the token log like every
-        # other stage. Without it this call is invisible in the usage
-        # totals — and those totals are the evidence base for the
-        # parse-cost work ("parse is 65% of consumption"). A synthesize
-        # call missing from the ledger would quietly flatter it.
-        summary_llm = llm.with_structured_output(
-            SupplierSummaryResponse, include_raw=True
+        rows = outputs[supplier_bucket]
+        total_available, notes = _local_truncation(
+            supplier_bucket, rows, truncation_by_step, metadata_by_step
         )
-        result = summary_llm.invoke(
-            [
-                ("system", _build_system_prompt("SupplierSummaryOnly")),
-                (
-                    "human",
-                    _build_synthesis_prompt(
-                        outputs, truncation_by_step, metadata_by_step
-                    ),
-                ),
-            ]
-        )
-        # Real LLM returns {"raw", "parsed", ...}; unit-test mocks return
-        # the bare model or a dict. Handle both, as the main path does.
-        if isinstance(result, dict) and "parsed" in result:
-            from spire.config import log_usage
-
-            log_usage(result.get("raw"), stage="synthesize")
-            summary = result["parsed"]
-        else:
-            summary = result
-        if isinstance(summary, dict):
-            summary = SupplierSummaryResponse(**summary)
         return SupplierResponse(
-            summary=summary.summary,
-            suppliers=build_supplier_records(outputs[supplier_bucket]),
-            truncation_notes=summary.truncation_notes,
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="suppliers",
+                    # Exactly what build_supplier_records renders. Not
+                    # the row keys: the rows carry Status,
+                    # BusinessRelationship and TaxpayerCountryCode, none
+                    # of which reach the screen on this path.
+                    displayed_fields=["Supplier", "SupplierNumber"],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                )
+            ),
+            suppliers=build_supplier_records(rows),
+            truncation_notes=notes,
         )
 
     if llm is None:
