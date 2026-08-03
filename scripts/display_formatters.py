@@ -111,6 +111,38 @@ def _format_outputs(outputs: dict[str, list[dict]]) -> str:
     return "\n".join(lines)
 
 
+def _with_truncation(lines: list[str], response: Any) -> str:
+    """Append the truncation block, if any, and join.
+
+    Extracted 2026-08-02. This block appeared SIXTEEN times, byte for
+    byte, once per response shape in ``_format_synthesized``:
+
+        if response.truncation_notes:
+            lines.append("\\nTruncation:")
+            lines.extend(f"  - {note}" for note in response.truncation_notes)
+        return "\\n".join(lines)
+
+    Sixteen copies is sixteen chances to miss one when the format
+    changes — and the output contract (OUT-02) changes exactly this
+    shape. A missed copy would render one entity type differently from
+    the other fifteen, which is a silent inconsistency: the answer still
+    prints, so nothing fails, and only a reader comparing two entity
+    types would notice.
+
+    ``getattr`` rather than attribute access, so the one caller that
+    reaches here without a typed response (the summary_only path) can
+    use it too.
+
+    This extraction changed no output. Verified by byte-diffing eight
+    prompts — four of them carrying truncation notes — before and after.
+    """
+    notes = getattr(response, "truncation_notes", None)
+    if notes:
+        lines.append("\nTruncation:")
+        lines.extend(f"  - {note}" for note in notes)
+    return "\n".join(lines)
+
+
 def _format_synthesized(response: Any, summary_only: bool = False) -> str:
     """Render a synthesized response.
 
@@ -143,12 +175,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             # Not a summary-bearing shape; fall through to the full
             # render rather than printing nothing.
             return _format_synthesized(response)
-        out = ["Answer:", summary]
-        notes = getattr(response, "truncation_notes", None)
-        if notes:
-            out.append("\nTruncation:")
-            out.extend(f"  - {n}" for n in notes)
-        return "\n".join(out)
+        return _with_truncation(["Answer:", summary], response)
 
     lines = ["Answer:"]
     if isinstance(response, SynthesizedResponse) or isinstance(response, SupplierResponse):
@@ -171,10 +198,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                         lines.append(f"    contact: {c.contact_name} ({c.email or 'no email'})")
         else:
             lines.append("No suppliers found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, InvoiceResponse):
         lines.append(response.summary)
@@ -188,10 +212,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No invoices found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, PurchaseOrderResponse):
         lines.append(response.summary)
@@ -212,10 +233,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                     lines.append(f"    distributions: {len(po.distributions)}")
         else:
             lines.append("No purchase orders found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, ReceivablesInvoiceResponse):
         lines.append(response.summary)
@@ -251,10 +269,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                     lines.append(f"    DFF context: {inv.dff.context}")
         else:
             lines.append("No AR invoices found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, CustomerAccountResponse):
         lines.append(response.summary)
@@ -275,10 +290,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                     lines.append(f"    applications: {len(acct.applications)}")
         else:
             lines.append("No customer accounts found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, AddressResponse):
         lines.append(response.summary)
@@ -291,10 +303,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No addresses found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, CreditMemoListResponse):
         lines.append(response.summary)
@@ -324,10 +333,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No credit memos found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, CountResponse):
         lines.append(response.summary)
@@ -337,10 +343,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     if isinstance(response, ComparisonResponse):
         lines.append(response.summary)
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, SupplierSpendRankingResponse):
         lines.append(response.summary)
@@ -353,10 +356,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No suppliers found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, SupplierPOValueRankingResponse):
         lines.append(response.summary)
@@ -369,10 +369,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No suppliers found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, POStatusBreakdownResponse):
         lines.append(response.summary)
@@ -383,10 +380,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 lines.append(
                     f"  - {row.status}: {row.po_count} POs, total value {row.total_ordered:,.2f}"
                 )
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, OpenPOSummaryResponse):
         lines.append(response.summary)
@@ -394,10 +388,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             f"\nOpen PO count: {response.po_count}, total ordered: {response.total_ordered:,.2f}, "
             f"suppliers: {response.supplier_count}"
         )
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     # --- StandardReceiptResponse ---
     if isinstance(response, StandardReceiptResponse):
@@ -414,10 +405,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No receipts found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     # --- ExposureRankingResponse ---
     if isinstance(response, ExposureRankingResponse):
@@ -431,10 +419,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("No accounts found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     if isinstance(response, ReceiptMethodDistributionResponse):
         lines.append(response.summary)
@@ -450,10 +435,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 )
         else:
             lines.append("\nNo receipts found.")
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
 
     # Fallback for unrecognized shape.
     # --- POLifecycleResponse (Module 5) ---
@@ -563,11 +545,7 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             lines.append("\nUnresolved:")
             lines.extend(f"  - {item}" for item in response.exceptions)
 
-        if response.truncation_notes:
-            lines.append("\nTruncation:")
-            lines.extend(f"  - {note}" for note in response.truncation_notes)
-
-        return "\n".join(lines)
+        return _with_truncation(lines, response)
     
     return f"(Unrecognized response shape.)\n{response}"
 
