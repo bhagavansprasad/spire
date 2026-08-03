@@ -48,7 +48,8 @@ def patch_nodes(monkeypatch):
     monkeypatch.setattr(
         pipeline, "synthesize_response",
         lambda outputs, target_entity, truncation_by_step=None,
-        count_only=False, metadata_by_step=None: "ANSWER",
+        count_only=False, metadata_by_step=None,
+        filtered_fields=None: "ANSWER",
     )
     return monkeypatch
 

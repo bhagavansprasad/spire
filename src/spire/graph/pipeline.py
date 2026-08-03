@@ -150,6 +150,32 @@ async def execute_node(state: GraphState) -> dict:
         return {"error": f"execute: {exc}"}
 
 
+def _filtered_fields(intent) -> list[str]:
+    """Field names the user filtered on, for the local summary.
+
+    A locally-built summary may describe a field the reader can SEE or a
+    field the reader ASKED for. This supplies the second half.
+
+    Without it the rule collapses to displayed-fields-only, and on the
+    commonest query in the system — "list active suppliers" — the whole
+    summary becomes the count line: build_supplier_records renders name,
+    number and addresses, so Status is not on screen and could not be
+    mentioned. "All 25 are ACTIVE" is worth saying, and the reader can
+    check it, because they are the one who said "active".
+
+    Filters carry a `type` (status, country, name), which is the field
+    in the user's vocabulary rather than the pod's. That is the right
+    end to take it from: the reader recognises what they asked for, not
+    what Oracle calls it.
+    """
+    out: list[str] = []
+    for f in getattr(intent, "filters", None) or []:
+        ftype = f.get("type") if isinstance(f, dict) else getattr(f, "type", None)
+        if ftype and ftype not in out:
+            out.append(str(ftype))
+    return out
+
+
 def synthesize_node(state: GraphState) -> dict:
     try:
         intent = state["intent"]
@@ -160,6 +186,7 @@ def synthesize_node(state: GraphState) -> dict:
             truncation_by_step=state.get("truncation_by_step"),
             count_only=getattr(intent, "count_only", False),
             metadata_by_step=state.get("metadata_by_step"),   # added
+            filtered_fields=_filtered_fields(intent),
         )
         return {"response": response}
     except DegenerateOutputError as exc:

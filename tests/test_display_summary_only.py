@@ -84,7 +84,13 @@ def test_full_render_is_unchanged(response_with_addresses):
     out = _format_synthesized(response_with_addresses)
     assert "Suppliers:" in out
     assert "Lee Supplies" in out
-    assert "address: 7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM" in out
+    # Records render as a table (many) or field-per-line (one) since
+    # 2026-08-03; this used to assert the bullet form "address: ...".
+    # The point of the test is that the DETAIL survives, not the layout,
+    # so it asserts the value and not the prefix. A supplier with more
+    # than one address shows the first and a count of the rest.
+    assert "7 Saxon Close,AGHORY,Armagh,UNITED KINGDOM" in out
+    assert "more)" in out
 
 
 def test_summary_only_on_a_shape_without_summary_falls_back():

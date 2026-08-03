@@ -143,6 +143,114 @@ def _with_truncation(lines: list[str], response: Any) -> str:
     return "\n".join(lines)
 
 
+def _indent(lines: list[str], by: str = "  ") -> list[str]:
+    """Indent a rendered block, so a nested table sits under its parent.
+
+    Child records — a supplier's contacts, an invoice line's tax rows —
+    are records too, and get the same table treatment as their parent.
+    They are indented so the nesting is visible; without it a contacts
+    table and a suppliers table sit at the same depth and read as two
+    unrelated results.
+
+    Blank lines stay blank rather than becoming two spaces, so the
+    separator between blocks survives.
+
+    The title line arrives as "\nContacts:" — a leading newline, not a
+    separate blank entry — so indenting it needs the prefix inserted
+    AFTER the newline rather than before it. A naive prefix put the
+    title at column 0 while its rows sat indented under it, which read
+    as a new top-level result rather than a child of the row above.
+    """
+    out: list[str] = []
+    for ln in lines:
+        if not ln.strip():
+            out.append(ln)
+        elif ln.startswith("\n"):
+            out.append("\n" + by + ln[1:])
+        else:
+            out.append(by + ln)
+    return out
+
+
+def _render_records(
+    title: str,
+    rows: list[dict],
+    columns: list[str],
+    empty_text: str,
+) -> list[str]:
+    """Render typed records as a table, or vertically when there is one.
+
+    Replaces the per-entity bullet blocks. Those printed one line per
+    record with the field names repeated inline:
+
+        - Lee Supplies (SupplierId=300000047414503, SupplierNumber=1252)
+        - Distributori Automatici Roma Miglior Caffe (SupplierId=3000...)
+
+    which cannot be scanned down a column, repeats every label on every
+    row, and runs off the screen on long values. Column queries have
+    printed a table since the projection feature shipped; there was
+    never a reason for the same data to render two ways depending on
+    which code path produced it.
+
+    TWO SHAPES, CHOSEN BY THE DATA
+
+    Many records -> a table, columns aligned.
+
+    One record -> vertical, field per line. A one-row table is as wide
+    as its widest value and forces the reader across the screen to read
+    a single thing; the vertical form puts the fields under each other,
+    which is how anyone reads a single record.
+
+    The shape follows the data, never the code path. That is the whole
+    point: an answer should not look different because of which branch
+    of a formatter built it.
+
+    Columns come from the caller and match what the typed record used to
+    print — this is a LAYOUT change and nothing else. A branch that
+    starts choosing different columns as well makes any difference in
+    output impossible to attribute.
+
+    Nested values (a supplier's addresses, a PO's lines) flatten to one
+    cell, as the column path already does. That loses the one thing
+    bullets could do and tables cannot: nest. Accepted deliberately —
+    twenty-five suppliers with twenty-five addresses each is two hundred
+    lines of nesting, which was the original argument for summary_only
+    on the column path.
+
+    Missing values print as an em dash, so absent is visibly different
+    from empty.
+    """
+    if not rows:
+        return [empty_text]
+
+    out = [f"\n{title}:"]
+
+    if len(rows) == 1:
+        row = rows[0]
+        label_w = max(len(c) for c in columns)
+        for c in columns:
+            v = row.get(c)
+            out.append(f"  {c.ljust(label_w)} : {'—' if v in (None, '') else v}")
+        return out
+
+    widths = {}
+    for c in columns:
+        cell_lens = [
+            len(str(r.get(c))) if r.get(c) not in (None, "") else 1 for r in rows
+        ]
+        widths[c] = max([len(c)] + cell_lens)
+
+    out.append("  " + " | ".join(c.ljust(widths[c]) for c in columns))
+    out.append("  " + "-+-".join("-" * widths[c] for c in columns))
+    for r in rows:
+        cells = []
+        for c in columns:
+            v = r.get(c)
+            cells.append(("—" if v in (None, "") else str(v)).ljust(widths[c]))
+        out.append("  " + " | ".join(cells))
+    return out
+
+
 def _format_synthesized(response: Any, summary_only: bool = False) -> str:
     """Render a synthesized response.
 
@@ -179,142 +287,271 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     lines = ["Answer:"]
     if isinstance(response, SynthesizedResponse) or isinstance(response, SupplierResponse):
-        lines.append(response.summary)
-        if response.suppliers:
-            lines.append("\nSuppliers:")
-            for s in response.suppliers:
-                lines.append(f"  - {s.supplier_name} (SupplierId={s.supplier_id}, SupplierNumber={s.supplier_number})")
-                if s.open_po_count is not None:
-                    lines.append(f"    open POs: {s.open_po_count}")
-                if s.buyers:
-                    buyers = ", ".join(b.display_name for b in s.buyers)
-                    lines.append(f"    buyers: {buyers}")
-                if s.addresses:
-                    for a in s.addresses:
-                        addr = a.formatted_address or f"{a.city}, {a.country}"
-                        lines.append(f"    address: {addr}")
-                if s.contacts:
-                    for c in s.contacts:
-                        lines.append(f"    contact: {c.contact_name} ({c.email or 'no email'})")
-        else:
-            lines.append("No suppliers found.")
+        # An empty summary is now a legitimate answer: with records in a
+        # table below, there is often nothing to say that the table does
+        # not already show. Appending "" anyway left a blank line under
+        # "Answer:" and another under that, which reads as something
+        # having gone missing.
+        if response.summary:
+            lines.append(response.summary)
+        rows = []
+        for s in response.suppliers:
+            row = {
+                "Supplier": s.supplier_name,
+                "SupplierId": s.supplier_id,
+                "SupplierNumber": s.supplier_number,
+            }
+            if s.open_po_count is not None:
+                row["Open POs"] = s.open_po_count
+            if s.buyers:
+                row["Buyers"] = ", ".join(b.display_name for b in s.buyers)
+            if s.addresses:
+                # First address only, as the column path does. A
+                # supplier with 25 addresses would otherwise own 25 rows
+                # of a table that is meant to have one row per supplier.
+                a = s.addresses[0]
+                row["Address"] = a.formatted_address or f"{a.city}, {a.country}"
+                if len(s.addresses) > 1:
+                    row["Address"] += f" (+{len(s.addresses) - 1} more)"
+            rows.append(row)
+        cols = ["Supplier", "SupplierId", "SupplierNumber"]
+        for extra in ("Open POs", "Buyers", "Address"):
+            if any(extra in r for r in rows):
+                cols.append(extra)
+        lines.extend(
+            _render_records("Suppliers", rows, cols, "No suppliers found.")
+        )
+        # Contacts stay OUT of the table, below it, one per line.
+        #
+        # They were briefly a table cell, joined with commas, and the
+        # result was unreadable for a reason worth recording: the values
+        # themselves contain commas. Ten contacts rendered as
+        #   Kim, John, Rossier, Bruce, Romo, Gabi, ...
+        # where "Kim, John" is ONE person in "Last, First" form. The
+        # separator collided with the data and produced a line no reader
+        # can parse — strictly worse than the bullets this replaced.
+        #
+        # The general rule, the same one the AR tax lines follow: a
+        # one-to-many relationship belongs below the table, not squeezed
+        # into a cell. A table row is one record; contacts are their own
+        # records.
+        for s in response.suppliers:
+            if s.contacts:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"{s.supplier_name} — contacts",
+                            [
+                                {"Contact": c.contact_name, "Email": c.email}
+                                for c in s.contacts
+                            ],
+                            ["Contact", "Email"],
+                            "",
+                        )
+                    )
+                )
         return _with_truncation(lines, response)
 
     if isinstance(response, InvoiceResponse):
         lines.append(response.summary)
-        if response.invoices:
-            lines.append("\nInvoices:")
-            for inv in response.invoices:
-                lines.append(
-                    f"  - {inv.invoice_number} ({inv.invoice_id}) — "
-                    f"{inv.invoice_amount} {inv.invoice_currency} on {inv.invoice_date}; "
-                    f"supplier: {inv.supplier_name}"
-                )
-        else:
-            lines.append("No invoices found.")
+        rows = [
+            {
+                "Invoice": inv.invoice_number,
+                "InvoiceId": inv.invoice_id,
+                "Amount": inv.invoice_amount,
+                "Currency": inv.invoice_currency,
+                "Date": inv.invoice_date,
+                "Supplier": inv.supplier_name,
+            }
+            for inv in response.invoices
+        ]
+        lines.extend(
+            _render_records(
+                "Invoices",
+                rows,
+                ["Invoice", "InvoiceId", "Amount", "Currency", "Date", "Supplier"],
+                "No invoices found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, PurchaseOrderResponse):
         lines.append(response.summary)
-        if response.purchase_orders:
-            lines.append("\nPurchase Orders:")
-            for po in response.purchase_orders:
-                lines.append(
-                    f"  - {po.order_number} (POHeaderId={po.po_header_id}) — "
-                    f"{po.status}; supplier: {po.supplier_name}"
-                )
-                if po.buyer:
-                    lines.append(f"    buyer: {po.buyer.display_name}")
-                if po.lines:
-                    lines.append(f"    lines: {len(po.lines)}")
-                if po.schedules:
-                    lines.append(f"    schedules: {len(po.schedules)}")
-                if po.distributions:
-                    lines.append(f"    distributions: {len(po.distributions)}")
-        else:
-            lines.append("No purchase orders found.")
+        rows = []
+        for po in response.purchase_orders:
+            row = {
+                "Order": po.order_number,
+                "POHeaderId": po.po_header_id,
+                "Status": po.status,
+                "Supplier": po.supplier_name,
+            }
+            if po.buyer:
+                row["Buyer"] = po.buyer.display_name
+            # Counts, not the child rows themselves — the same thing the
+            # bullets showed. That "lines: 2" is a COUNT where the user
+            # asked for the lines is a real defect, carried forward and
+            # NOT fixed here: this change is layout only, and fixing it
+            # inside a formatting change would hide it in the diff.
+            if po.lines:
+                row["Lines"] = len(po.lines)
+            if po.schedules:
+                row["Schedules"] = len(po.schedules)
+            if po.distributions:
+                row["Distributions"] = len(po.distributions)
+            rows.append(row)
+        cols = ["Order", "POHeaderId", "Status", "Supplier"]
+        for extra in ("Buyer", "Lines", "Schedules", "Distributions"):
+            if any(extra in r for r in rows):
+                cols.append(extra)
+        lines.extend(
+            _render_records(
+                "Purchase Orders", rows, cols, "No purchase orders found."
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, ReceivablesInvoiceResponse):
         lines.append(response.summary)
-        if response.receivables_invoices:
-            lines.append("\nAR Invoices:")
-            for inv in response.receivables_invoices:
-                lines.append(
-                    f"  - {inv.transaction_number} (CustomerTransactionId={inv.customer_transaction_id}) — "
-                    f"{inv.amount} {inv.currency} on {inv.transaction_date}; "
-                    f"customer: {inv.bill_to_customer_name}; status: {inv.status}"
-                )
-                if inv.lines:
-                    lines.append(f"    lines: {len(inv.lines)}")
-                    # Tax lines nest under each invoice line. Without this
-                    # loop the synthesizer populates them correctly and the
-                    # display silently drops them: the tax-line prompt
-                    # printed "lines: 4" and no tax at all, while the
-                    # executor had fetched 8 tax rows and the narration
-                    # described them. `ln` rather than `line` — `lines` is
-                    # the output buffer being appended to.
-                    for ln in inv.lines:
-                        if ln.tax_lines:
-                            lines.append(
-                                f"      line {ln.line_number} — "
-                                f"{len(ln.tax_lines)} tax line(s):"
+        rows = []
+        for inv in response.receivables_invoices:
+            row = {
+                "Transaction": inv.transaction_number,
+                "CustomerTransactionId": inv.customer_transaction_id,
+                "Amount": inv.amount,
+                "Currency": inv.currency,
+                "Date": inv.transaction_date,
+                "Customer": inv.bill_to_customer_name,
+                "Status": inv.status,
+            }
+            if inv.lines:
+                row["Lines"] = len(inv.lines)
+            if inv.dff:
+                row["DFF"] = inv.dff.context
+            rows.append(row)
+        cols = [
+            "Transaction", "CustomerTransactionId", "Amount", "Currency",
+            "Date", "Customer", "Status",
+        ]
+        for extra in ("Lines", "DFF"):
+            if any(extra in r for r in rows):
+                cols.append(extra)
+        lines.extend(
+            _render_records("AR Invoices", rows, cols, "No AR invoices found.")
+        )
+        # Tax lines nest two deep — line, then tax rows under it — which
+        # a table cannot hold. Kept as a block BELOW the table rather
+        # than flattened to a count.
+        #
+        # This detail was silently dropped once already: the tax-line
+        # prompt printed "lines: 4" and no tax at all while the executor
+        # had fetched 8 tax rows and the narration described them. It is
+        # here for that reason and must not be reduced to a number.
+        # `ln`, not `line` — `lines` is the output buffer.
+        for inv in response.receivables_invoices:
+            for ln in inv.lines or []:
+                if ln.tax_lines:
+                    lines.extend(
+                        _indent(
+                            _render_records(
+                                f"Invoice {inv.transaction_number}, line "
+                                f"{ln.line_number} — tax",
+                                [
+                                    {
+                                        "Tax": tx.tax,
+                                        "Rate %": tx.tax_rate,
+                                        "Tax Amount": tx.tax_amount,
+                                        "Taxable": tx.taxable_amount,
+                                    }
+                                    for tx in ln.tax_lines
+                                ],
+                                ["Tax", "Rate %", "Tax Amount", "Taxable"],
+                                "",
                             )
-                            for tx in ln.tax_lines:
-                                lines.append(
-                                    f"        {tx.tax} {tx.tax_rate}% — "
-                                    f"tax {tx.tax_amount} on {tx.taxable_amount}"
-                                )
-                if inv.dff:
-                    lines.append(f"    DFF context: {inv.dff.context}")
-        else:
-            lines.append("No AR invoices found.")
+                        )
+                    )
         return _with_truncation(lines, response)
 
     if isinstance(response, CustomerAccountResponse):
         lines.append(response.summary)
-        if response.customer_accounts:
-            lines.append("\nCustomer Accounts:")
-            for acct in response.customer_accounts:
-                lines.append(
-                    f"  - {acct.customer_name} (AccountId={acct.account_id}, AccountNumber={acct.account_number}); "
-                    f"open receivables {acct.open_receivables}, transactions due {acct.transactions_due}"
-                )
-                if acct.transactions:
-                    lines.append(f"    transactions: {len(acct.transactions)}")
-                if acct.credit_memos:
-                    lines.append(f"    credit memos: {len(acct.credit_memos)}")
-                if acct.receipts:
-                    lines.append(f"    receipts: {len(acct.receipts)}")
-                if hasattr(acct, "applications") and acct.applications:
-                    lines.append(f"    applications: {len(acct.applications)}")
-        else:
-            lines.append("No customer accounts found.")
+        rows = []
+        for acct in response.customer_accounts:
+            row = {
+                "Customer": acct.customer_name,
+                "AccountId": acct.account_id,
+                "AccountNumber": acct.account_number,
+                "Open Receivables": acct.open_receivables,
+                "Transactions Due": acct.transactions_due,
+            }
+            if acct.transactions:
+                row["Transactions"] = len(acct.transactions)
+            if acct.credit_memos:
+                row["Credit Memos"] = len(acct.credit_memos)
+            if acct.receipts:
+                row["Receipts"] = len(acct.receipts)
+            if getattr(acct, "applications", None):
+                row["Applications"] = len(acct.applications)
+            rows.append(row)
+        cols = [
+            "Customer", "AccountId", "AccountNumber",
+            "Open Receivables", "Transactions Due",
+        ]
+        for extra in ("Transactions", "Credit Memos", "Receipts", "Applications"):
+            if any(extra in r for r in rows):
+                cols.append(extra)
+        lines.extend(
+            _render_records(
+                "Customer Accounts", rows, cols, "No customer accounts found."
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, AddressResponse):
         lines.append(response.summary)
-        if response.addresses:
-            lines.append("\nAddresses:")
-            for a in response.addresses:
-                addr = a.formatted_address or f"{a.city}, {a.country}"
-                lines.append(
-                    f"  - {addr} (AddressId={a.address_id}) — supplier: {a.supplier_name} ({a.supplier_number})"
-                )
-        else:
-            lines.append("No addresses found.")
+        rows = [
+            {
+                "Address": a.formatted_address or f"{a.city}, {a.country}",
+                "AddressId": a.address_id,
+                "Supplier": a.supplier_name,
+                "SupplierNumber": a.supplier_number,
+            }
+            for a in response.addresses
+        ]
+        lines.extend(
+            _render_records(
+                "Addresses",
+                rows,
+                ["Address", "AddressId", "Supplier", "SupplierNumber"],
+                "No addresses found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, CreditMemoListResponse):
         lines.append(response.summary)
         if response.credit_memos:
-            lines.append("\nCredit Memos (newest first):")
-            for cm in response.credit_memos:
-                lines.append(
-                    f"  - {cm.transaction_number} (CustomerTransactionId={cm.customer_transaction_id}) — "
-                    f"{cm.entered_amount} {cm.currency} on {cm.transaction_date}; "
-                    f"customer: {cm.customer_name}; status: {cm.status}"
+            rows = [
+                {
+                    "Transaction": cm.transaction_number,
+                    "CustomerTransactionId": cm.customer_transaction_id,
+                    "Amount": cm.entered_amount,
+                    "Currency": cm.currency,
+                    "Date": cm.transaction_date,
+                    "Customer": cm.customer_name,
+                    "Status": cm.status,
+                }
+                for cm in response.credit_memos
+            ]
+            lines.extend(
+                _render_records(
+                    "Credit Memos (newest first)",
+                    rows,
+                    [
+                        "Transaction", "CustomerTransactionId", "Amount",
+                        "Currency", "Date", "Customer", "Status",
+                    ],
+                    "No credit memos found.",
                 )
+            )
             # Exactly one of total_credit / total_credit_note is set. A
             # null total means the memos span several currencies: show
             # the reason, never "None" and never a number.
@@ -394,17 +631,30 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
     if isinstance(response, StandardReceiptResponse):
         lines.append(response.summary)
         receipts = getattr(response, 'standard_receipts', [])
-        if receipts:
-            lines.append("\nReceipts:")
-            for r in receipts:
-                lines.append(
-                    f"  - {r.receipt_number} ({r.standard_receipt_id}) — "
-                    f"{r.amount} {r.currency} on {r.receipt_date}; "
-                    f"{r.receipt_method}; site: {r.customer_site or 'N/A'}; "
-                    f"bank: {r.remittance_bank_name or 'N/A'}"
-                )
-        else:
-            lines.append("No receipts found.")
+        rows = [
+            {
+                "Receipt": r.receipt_number,
+                "ReceiptId": r.standard_receipt_id,
+                "Amount": r.amount,
+                "Currency": r.currency,
+                "Date": r.receipt_date,
+                "Method": r.receipt_method,
+                "Site": r.customer_site,
+                "Bank": r.remittance_bank_name,
+            }
+            for r in receipts
+        ]
+        lines.extend(
+            _render_records(
+                "Receipts",
+                rows,
+                [
+                    "Receipt", "ReceiptId", "Amount", "Currency", "Date",
+                    "Method", "Site", "Bank",
+                ],
+                "No receipts found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     # --- ExposureRankingResponse ---
