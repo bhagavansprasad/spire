@@ -143,12 +143,40 @@ def _with_truncation(lines: list[str], response: Any) -> str:
     return "\n".join(lines)
 
 
-# Column names that hold numbers which are NOT quantities. An id is a
-# label that happens to be spelled in digits: right-aligning
-# SupplierNumber sorts nothing and lines up nothing, it just moves the
-# text. Matched as substrings so SupplierId, CustomerTransactionId,
-# AccountNumber and POHeaderId are all covered.
-_ID_MARKERS = ("id", "number", "account", "code", "year")
+# Column names that hold QUANTITIES — numbers worth comparing down a
+# column. The test was originally the other way round: right-align
+# anything numeric, minus a list of id-ish names. That list was
+# open-ended and grew wrong immediately. "Transaction" carries no id
+# marker, so a transaction NUMBER right-aligned as though it were an
+# amount, while "AccountNumber" did not — the same kind of value
+# rendered two ways depending on whether its name happened to contain a
+# marker word.
+#
+# Inverted, the list is short and closed: the things that are genuinely
+# quantities are amounts, totals, counts and ordinals, and that set does
+# not really grow. It also fails in the safe direction. An unrecognised
+# numeric column stays left-aligned, which is the old behaviour and
+# never looks wrong; a mis-right-aligned identifier looks like a number
+# being compared to the ones above it.
+#
+# Matched as substrings, so Total Spend, Open Receivables, Tax Amount,
+# invoice_count and Rate % are all covered.
+# The last four are COUNTS whose names carry no quantity word — the
+# predicted miss of an allowlist, seen on the first run: a ranking's
+# "Invoices" column (261, 122, 78) and a PO's "Lines" (4) are numbers
+# worth comparing and were left-aligned with the text.
+#
+# Added by hand rather than by inferring "integer means count", because
+# an identifier is an integer too and that inference is how the previous
+# version right-aligned transaction numbers. Curated and extended when a
+# miss is SEEN is the honest description of this list; it is not
+# expected to be complete.
+_QUANTITY_MARKERS = (
+    "amount", "total", "spend", "balance", "due", "value", "price",
+    "qty", "quantity", "count", "rate", "ordered", "received",
+    "invoiced", "paid", "receivables", "rank",
+    "invoices", "lines", "pos", "schedules",
+)
 
 
 def _is_quantity(column: str, values: list[Any]) -> bool:
@@ -157,20 +185,15 @@ def _is_quantity(column: str, values: list[Any]) -> bool:
     Right-aligned numbers line up by magnitude, so a column of amounts
     can be read down at a glance — 165,428,563 above 143,551,790 above
     43,959,648 shows its own shape. Left-aligned they start at the same
-    x and the reader has to parse each one.
+    x and the reader parses each one.
 
-    The test is on the VALUES, not the column name: a name-based rule
-    would have to know every column that will ever exist. The name is
-    consulted only to EXCLUDE identifiers, which are numbers that are
-    not quantities.
-
-    Rank is the deliberate exception to that exclusion — it is an
-    ordinal, and a column reading 1..10 wants its digits aligned.
+    BOTH tests must pass: the NAME must look like a quantity, and every
+    VALUE must actually be a number. The name alone would right-align an
+    empty or textual column called "Total"; the values alone right-align
+    every identifier in the system, which is the bug this replaced.
     """
-    if column == "Rank":
-        return True
     low = column.lower()
-    if any(m in low for m in _ID_MARKERS):
+    if not any(m in low for m in _QUANTITY_MARKERS):
         return False
     present = [v for v in values if v not in (None, "")]
     if not present:
