@@ -143,6 +143,50 @@ def _with_truncation(lines: list[str], response: Any) -> str:
     return "\n".join(lines)
 
 
+# Column names that hold numbers which are NOT quantities. An id is a
+# label that happens to be spelled in digits: right-aligning
+# SupplierNumber sorts nothing and lines up nothing, it just moves the
+# text. Matched as substrings so SupplierId, CustomerTransactionId,
+# AccountNumber and POHeaderId are all covered.
+_ID_MARKERS = ("id", "number", "account", "code", "year")
+
+
+def _is_quantity(column: str, values: list[Any]) -> bool:
+    """True when a column holds quantities worth right-aligning.
+
+    Right-aligned numbers line up by magnitude, so a column of amounts
+    can be read down at a glance — 165,428,563 above 143,551,790 above
+    43,959,648 shows its own shape. Left-aligned they start at the same
+    x and the reader has to parse each one.
+
+    The test is on the VALUES, not the column name: a name-based rule
+    would have to know every column that will ever exist. The name is
+    consulted only to EXCLUDE identifiers, which are numbers that are
+    not quantities.
+
+    Rank is the deliberate exception to that exclusion — it is an
+    ordinal, and a column reading 1..10 wants its digits aligned.
+    """
+    if column == "Rank":
+        return True
+    low = column.lower()
+    if any(m in low for m in _ID_MARKERS):
+        return False
+    present = [v for v in values if v not in (None, "")]
+    if not present:
+        return False
+    for v in present:
+        if isinstance(v, bool):
+            return False
+        if isinstance(v, (int, float)):
+            continue
+        try:
+            float(str(v).replace(",", ""))
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
 def _indent(lines: list[str], by: str = "  ") -> list[str]:
     """Indent a rendered block, so a nested table sits under its parent.
 
@@ -240,13 +284,18 @@ def _render_records(
         ]
         widths[c] = max([len(c)] + cell_lens)
 
-    out.append("  " + " | ".join(c.ljust(widths[c]) for c in columns))
+    numeric = {c: _is_quantity(c, [r.get(c) for r in rows]) for c in columns}
+
+    def _cell(text: str, col: str) -> str:
+        return text.rjust(widths[col]) if numeric[col] else text.ljust(widths[col])
+
+    out.append("  " + " | ".join(_cell(c, c) for c in columns))
     out.append("  " + "-+-".join("-" * widths[c] for c in columns))
     for r in rows:
         cells = []
         for c in columns:
             v = r.get(c)
-            cells.append(("—" if v in (None, "") else str(v)).ljust(widths[c]))
+            cells.append(_cell("—" if v in (None, "") else str(v), c))
         out.append("  " + " | ".join(cells))
     return out
 
@@ -584,39 +633,64 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     if isinstance(response, SupplierSpendRankingResponse):
         lines.append(response.summary)
-        if response.suppliers:
-            lines.append("\nTop suppliers by spend:")
-            for i, row in enumerate(response.suppliers, 1):
-                lines.append(
-                    f"  {i}. {row.supplier_name} ({row.supplier_number}) — "
-                    f"${row.total_spend:,.2f} across {row.invoice_count} invoices"
-                )
-        else:
-            lines.append("No suppliers found.")
+        lines.extend(
+            _render_records(
+                "Top suppliers by spend",
+                [
+                    {
+                        "Rank": i,
+                        "Supplier": row.supplier_name,
+                        "SupplierNumber": row.supplier_number,
+                        "Total Spend": f"{row.total_spend:,.2f}",
+                        "Invoices": row.invoice_count,
+                    }
+                    for i, row in enumerate(response.suppliers, 1)
+                ],
+                ["Rank", "Supplier", "SupplierNumber", "Total Spend", "Invoices"],
+                "No suppliers found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, SupplierPOValueRankingResponse):
         lines.append(response.summary)
-        if response.suppliers:
-            lines.append("\nTop suppliers by PO value:")
-            for i, row in enumerate(response.suppliers, 1):
-                lines.append(
-                    f"  {i}. {row.supplier_name} (SupplierId={row.supplier_id}) — "
-                    f"${row.total_ordered:,.2f} across {row.po_count} POs"
-                )
-        else:
-            lines.append("No suppliers found.")
+        lines.extend(
+            _render_records(
+                "Top suppliers by PO value",
+                [
+                    {
+                        "Rank": i,
+                        "Supplier": row.supplier_name,
+                        "SupplierId": row.supplier_id,
+                        "Total Ordered": f"{row.total_ordered:,.2f}",
+                        "POs": row.po_count,
+                    }
+                    for i, row in enumerate(response.suppliers, 1)
+                ],
+                ["Rank", "Supplier", "SupplierId", "Total Ordered", "POs"],
+                "No suppliers found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, POStatusBreakdownResponse):
         lines.append(response.summary)
         lines.append(f"\nTotal POs: {response.total_pos}, total value: {response.total_ordered:,.2f}")
-        if response.statuses:
-            lines.append("\nBreakdown by status:")
-            for row in response.statuses:
-                lines.append(
-                    f"  - {row.status}: {row.po_count} POs, total value {row.total_ordered:,.2f}"
-                )
+        lines.extend(
+            _render_records(
+                "Breakdown by status",
+                [
+                    {
+                        "Status": row.status,
+                        "POs": row.po_count,
+                        "Total Ordered": f"{row.total_ordered:,.2f}",
+                    }
+                    for row in response.statuses
+                ],
+                ["Status", "POs", "Total Ordered"],
+                "",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, OpenPOSummaryResponse):
@@ -660,15 +734,22 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
     # --- ExposureRankingResponse ---
     if isinstance(response, ExposureRankingResponse):
         lines.append(response.summary)
-        if response.accounts:
-            lines.append("\nTop accounts by outstanding exposure:")
-            for i, row in enumerate(response.accounts, 1):
-                lines.append(
-                    f"  {i}. {row.customer_name} (Account {row.account_number}) — "
-                    f"open receivables: {row.open_receivables:,.2f}"
-                )
-        else:
-            lines.append("No accounts found.")
+        lines.extend(
+            _render_records(
+                "Top accounts by outstanding exposure",
+                [
+                    {
+                        "Rank": i,
+                        "Customer": row.customer_name,
+                        "AccountNumber": row.account_number,
+                        "Open Receivables": f"{row.open_receivables:,.2f}",
+                    }
+                    for i, row in enumerate(response.accounts, 1)
+                ],
+                ["Rank", "Customer", "AccountNumber", "Open Receivables"],
+                "No accounts found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     if isinstance(response, ReceiptMethodDistributionResponse):
