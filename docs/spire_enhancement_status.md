@@ -2079,3 +2079,127 @@ a legitimate choice and it should keep being made explicitly rather than
 by drifting toward whichever thread is warm. The third time it comes up,
 the question is worth asking differently: not "which is more valuable
 today" but "what is it about the column work that keeps losing".
+
+## G14. COL-03 taken up — the plan, decided (2026-08-04)
+
+The third time COL-03 came up (§G13.10 asked for exactly this), it was
+taken, not deferred. The measurement it needs was already on disk —
+`11_column_vocabulary.txt`, the labelled prompt set from 07-31 — so the
+first act was to run it, not to build. What follows is the plan concluded
+from that run. It is a decision record, written before any code, so the
+plan survives a dropped session.
+
+### G14.1 The run that grounded it
+
+`11_column_vocabulary.txt` was run live against the pod, 53 prompts,
+`--show-parser`, captured to `t.txt`. The tally read 51/53 clean — and
+the tally lies exactly as the file warns. Scored against the labels,
+roughly 21 are correct and ~30 are misses. Two errored on environment,
+not Spire (a Google-token network drop, a pod timeout); both are
+unmeasured and should be re-run.
+
+The findings that shaped the plan:
+
+- **The partial-column case fails completely.** Every mixed valid+invalid
+  prompt (section I) refuses the whole query and names none of the
+  resolvable columns. This is the SME's actual ask, 0 for 4.
+- **The worst 07-31 outcome still reproduces.** `include supplier-site`
+  silently becomes `include: ['Address']` and returns addresses as if
+  they were sites. No disclosure.
+- **Count-instead-of-detail is a PARSER gap, not fetch.** Proved by two
+  adjacent prompts on the same PO: bare-noun phrasing ("its lines with
+  qty and price") drops `fields` and prints "Lines: 2"; the fully-spelled
+  column list keeps all four `fields` and prints them populated. Same
+  data underneath.
+- **Normalization already works.** Underscores, camelCase, ALL CAPS,
+  hyphens, plurals all resolve. That layer needs nothing.
+- **The drifting sentence is the LLM narration.** "PO 2144 with order
+  number and total" narrated 41,250 while the local table said 45,168 —
+  two numbers in one answer. The local table was right; the LLM sentence
+  above it drifted. This is the pattern, not the exception: the code
+  table is reliable, the model prose is not.
+
+### G14.2 The architectural decision
+
+The list and by-id read paths still hand records to the model to write a
+prose summary. That summary is where the wrong numbers live. **Decision:
+stop asking the model to write it. Build the list summary locally, in
+code, the way §G11–G13 already did for the six aggregation shapes.** Code
+can only state what is in the data, so it cannot drift.
+
+This is the OUT-04 principle (local synthesis) extended from aggregations
+to lists.
+
+### G14.3 The honest-column behaviour, agreed
+
+When a prompt names columns and some do not exist, the behaviour is:
+
+1. **All exist** → show them. No note.
+2. **Some missing** → show the ones that exist. For each missing one,
+   print a note that it is not available. AND list the columns that ARE
+   available on that entity, so the user can choose from a real menu.
+
+**No substitution.** An earlier draft included a third case — substitute
+a similar column (e.g. show `Status` for "state") and note it. That was
+rejected: guessing a near-match locally, with no model in the loop, is
+how `supplier-site` returned addresses. Substitution is exactly the
+silent-wrong-column failure this work exists to remove. So Spire never
+guesses a replacement; it shows what exists and names what does not.
+
+The "available columns" list is read straight from the KG — fully
+deterministic, no matching rule required. That is what makes this the
+safety net under the whole jargon effort (§G14.5): while the vocabulary
+is incomplete, every unresolved term is disclosed, never silently
+dropped or wrongly matched.
+
+### G14.4 Two more wrong-number defects, newly seen this run
+
+Logged here, not yet fixed:
+
+- `who details` → routed to `include: ['Contact']`, returned 94 contact
+  rows with the name column all em-dashes, 79.6s. (The 07-31 "silent
+  drop" for `who columns` did NOT reproduce — it changed shape.)
+- `PO 2144 with order number and total` → narration 41,250 vs table
+  45,168. The §G14.2 local-summary change removes the narration and so
+  removes this class of mismatch at the root.
+
+### G14.5 The three layers, and the build order
+
+The Oracle-jargon vocabulary (Appendix A of the requirements doc) is a
+large candidate list, mostly unverified. It splits into three tiers by
+whether the target field exists — and that split fixes the build order.
+
+**Layer 1 — local summary + honest columns.** §G14.2 and §G14.3. No LLM
+for list output; show what exists, disclose what does not, list what is
+available; never substitute. *Built first — it is the safety net that
+makes every unverified jargon term fail honestly rather than silently.*
+
+**Layer 3 — missing fields into the KG.** Some jargon points at fields
+Spire does not model. The who-columns (CreatedBy, CreationDate,
+LastUpdatedBy, LastUpdateDate) are the first case. **Curl-confirmed on
+`/suppliers` on 2026-08-04:** all four exist, return real values
+(CreatedBy "CALVIN.ROTH", real timestamps), and survive `fields=`
+projection — no 500, unlike `/standardReceipts`. So layer 3 for Supplier
+is a KG field-row addition. Every field/entity is curl-confirmed before a
+row is authored; scoped to the miss list, not all entities at once.
+
+**Layer 2 — field synonyms.** Map jargon to real fields, only for fields
+confirmed to exist, from Appendix A. First step is a curl-audit of the
+jargon list into ready / blocked / not-modeled. "vendor"→Supplier,
+"qty"→Quantity, "trx number"→TransactionNumber are the ready slice;
+who-columns are blocked on layer 3; "DSO", "dunning", "aging buckets",
+"matching level" and similar are not modeled at all and must NOT get
+synonyms (that produces the em-dash column).
+
+**Build order: 1 → 3 → 2.** Layer 1 first because it protects users while
+2 and 3 are partial. Layer 3 before the who-column part of layer 2,
+because a synonym needs its target field to exist first. The doc's own
+rule governs the whole of layer 2: never author a synonym for a field
+COL-01 has not confirmed.
+
+### G14.6 Status at the point of writing
+
+Plan concluded and recorded. No code written yet. Next action: read the
+current list-display and synthesizer code (the two sites of the drifting
+sentence and the silent missing column) before designing the layer-1
+change — code not yet read is code not yet safe to change.

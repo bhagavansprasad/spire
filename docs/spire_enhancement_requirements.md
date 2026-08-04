@@ -11,6 +11,7 @@
 | **v1.2 adds** | OUT-01 to OUT-03 (the output contract), from SME discussion 2026-08-02. Supersedes part of COL-03 and part of UX-01 — see §4B. |
 | **v1.3 adds** | OUT-04 (local synthesis) and OUT-05 (record rendering), 2026-08-03. Both were BUILT before being written down — prototype first was the deliberate choice. Recorded here now that two entities are merged. |
 | **v1.4 adds** | OUT-06 (fetch completeness), 2026-08-04. Same pattern as v1.3 — built first, written down after, because the requirement only became visible once local synthesis stopped the model from hedging over it. Also records OUT-04's delivery status; OUT-04 itself is unchanged. |
+| **v1.5 revises** | COL-03 (2026-08-04) — substitution REMOVED. Case 2 (project a close match and state it) is struck; local substitution is now prohibited outright, not merely required to disclose. Decided after the 07-31 measurement was re-run: even disclosed substitution reproduces the `supplier-site`→`Address` failure when the guessed match is wrong. COL-03 is now a two-case rule — show what exists, name and menu what does not. Also extends OUT-04's scope note to the list and by-id read paths (the drifting-narration source). Full narrative in `docs/spire_enhancement_status.md` §G14. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -493,6 +494,18 @@ number in a summary originates from the model" was met immediately; "a
 summary says only what is worth saying" is not an acceptance criterion
 and probably cannot be one.
 
+**Update, 2026-08-04 (v1.5).** The two remaining list paths are now being
+taken up — not as fresh OUT-04 scope, but as the first layer of the
+COL-03 build, because the same code that builds a list summary locally is
+where the honest missing-column note (COL-03 case 2) must be written. The
+`11_column_vocabulary.txt` re-run confirmed the model narration is the
+drift source: "PO 2144 with order number and total" narrated 41,250 while
+the local table read 45,168 — two numbers in one answer, the narration
+wrong. Building the list summary locally removes that class of mismatch at
+the root. The build order for this work is layered — local list summary
+first (the safety net), then absent fields into the KG, then jargon
+synonyms — and is recorded in full in §G14 of the status doc.
+
 ---
 
 ### OUT-05 — One record renderer · P0
@@ -795,30 +808,40 @@ already resolves synonyms deterministically for eight other categories.
 silent dropping; the dominant defect is wholesale refusal. The requirement
 below leads with that.*
 
+*Revised again 2026-08-04 (v1.5). Substitution REMOVED. The 07-31
+measurement was re-run over the full labelled set (`11_column_vocabulary.txt`,
+53 prompts); `supplier-site` still silently resolved to `Address` and
+returned addresses presented as sites. That is the failure a close-match
+rule was meant to disclose — but disclosure does not make a wrong match
+right, and a locally-guessed match with no model in the loop cannot be
+trusted to be close. Spire now performs NO local substitution. The
+three-case rule below is a two-case rule. Full narrative in
+`docs/spire_enhancement_status.md` §G14.*
+
 **Primary requirement — always return data.** Where a request names several
 columns and at least one resolves, Spire **shall** return rows. Spire
 **shall not** decline a query because part of the column list was
 unrecognised.
 
-**The three cases.** For each column named:
+**The two cases.** For each column named:
 
 1. **The column exists** — project it.
-2. **The column does not exist but a close match does** — project the
-   match, and **state the substitution**. Silent substitution is
-   prohibited: `supplier-site` resolving to `Address` returned 25
-   addresses presented as sites, confidently and without warning.
-3. **The column does not exist and nothing close does** — do not project
-   anything for it, name it, and offer a short list of columns that are
-   available.
+2. **The column does not exist** — do not project anything for it, name it
+   in a note, and offer a short list of columns that ARE available on the
+   entity, so the user can choose from a real menu.
+
+**Substitution is prohibited.** Spire **shall not** project a different
+column in place of a requested one, even with a note. A local near-match
+guess is exactly the `supplier-site`→`Address` failure: 25 addresses
+returned as sites, confidently. The user is given the available-column
+list instead, and chooses; Spire does not choose for them. (Should
+model-mediated substitution ever be reconsidered, it is a new requirement
+with its own safeguards — not a relaxation of this one.)
 
 **The available-column list shall be capped and authored.** Roughly five
 per entity, chosen deliberately and held in code, not the entity's full
 column list. Thirty column names printed to a user who asked for one is
 not help.
-
-**Substituted and guessed shall read differently.** A curated mapping is
-stated as fact; a match the model inferred is stated as an inference. The
-user **shall** be able to tell which they are looking at.
 
 **Notes appear above the data**, so they are read before the table rather
 than after it.
@@ -830,9 +853,13 @@ an inability case under OUT-01.
 **Rationale.** Two opposite failure modes were measured, neither
 acceptable. Wholesale refusal loses data the user was entitled to — five of
 six measured cases returned nothing while naming a valid column. Silent
-dropping returns a clean table that cannot be distinguished from success.
-The correct behaviour is neither: answer with what resolved, state what was
-substituted, name what was dropped.
+dropping returns a clean table that cannot be distinguished from success. A
+third path — substitute a close match and disclose it — was specified, then
+struck: the disclosed substitution still shows a column the user did not
+ask for, and when the guess is wrong (as `supplier-site` was) the note does
+not save it. The correct behaviour is to answer with what resolved, name
+what did not, and hand the user the real list of what is available — never
+to guess a replacement.
 
 *Revision note, 2026-08-02.* The version of this requirement written on
 2026-07-31 specified a sixth refusal flavor, `UNSUPPORTED_FIELD`, so that
@@ -851,10 +878,12 @@ from a total refusal.
 
 - A request naming one valid and one invalid column returns rows for the
   valid column, and names the invalid one.
-- A substituted column produces a visible note naming both terms.
 - A dropped column produces a visible note naming the term and offering a
   capped list of available columns.
-- Curated mappings and inferred matches are distinguishable in the output.
+- No column is ever projected in place of a different requested column —
+  the output contains only columns the user named that resolved, never a
+  substitute. (`supplier-site` returns the available-column list, not
+  addresses.)
 - No column request produces an inability-to-answer outcome while a query
   could still have run.
 - Running the column prompt sets yields a miss list that can be read
