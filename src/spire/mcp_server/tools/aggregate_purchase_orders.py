@@ -70,15 +70,47 @@ from spire.fusion.client import FusionClient
 
 PURCHASE_ORDERS_PATH = "/fscmRestApi/resources/11.13.18.05/purchaseOrders"
 
-# Page size per fetch. The endpoints reference documents ~200 as the
-# pod's practical max before requests get slow. Page at 200 rather than
-# grabbing one big page. (Note: aggregate_invoices sets 500 while its
-# comment claims 200 — a discrepancy worth reconciling separately.)
-_PAGE_SIZE = 200
+# Page size per fetch. Raised from 200 to 500 on 2026-08-04.
+#
+# The endpoints reference documents ~200 as the pod's practical maximum
+# before requests get slow, and this file honoured that. Two things
+# argued against it:
+#
+#   1. aggregate_invoices.py has used 500 against /invoices all along and
+#      works — 50 pages of 500 complete routinely. The reference note and
+#      the shipped code have disagreed for as long as both existed, and
+#      the disagreement was never resolved, only noted.
+#   2. At 200, MAX_PAGES * _PAGE_SIZE = 10,000, and the collection is
+#      larger than that (see below), so every unfiltered scan truncated.
+#      A cap that fires on an ordinary query is set wrong.
+#
+# 500 against /purchaseOrders is NOT independently measured — it is
+# inferred from /invoices. If runs slow badly or start erroring, the
+# reference note is right and this goes back to 200 with MAX_PAGES raised
+# instead.
+_PAGE_SIZE = 500
 
 # Max pages before stopping. Bounds the work; hitting it flags the
-# result truncated (sums become lower bounds). At 200/page, 50 pages =
-# 10,000 POs — the pod has 3,362, so a full scan fits comfortably.
+# result truncated (sums become lower bounds). At 500/page, 50 pages =
+# 25,000 POs.
+#
+# THE COLLECTION IS 15,839 POs, not the 3,362 this comment claimed until
+# 2026-08-04. Measured directly:
+#
+#   /purchaseOrders?limit=1&totalResults=true  ->  totalResults: 15839
+#
+# The old figure made the cap look comfortable when it was not: at 200 a
+# full scan needs 80 pages, so every unfiltered breakdown stopped at
+# 10,000 of 15,839 and reported lower bounds. Nothing was broken — the
+# tool said truncated=True and the summary said so — but the answer
+# covered 63% of the data and read like a full one.
+#
+# At 500/page the scan is 32 pages, inside this cap, so an unfiltered
+# breakdown now completes and truncated comes back False.
+#
+# Worth noting how the wrong number survived: it was in a docstring,
+# nobody re-measured it, and it was used as the reason a cap was safe.
+# One curl settled it.
 MAX_PAGES = 50
 
 OVERFETCH_LIMIT = _PAGE_SIZE * MAX_PAGES
@@ -96,6 +128,131 @@ _PROJECTED_FIELDS = [
 # supplier_spend_ranking: the rows carry supplier_id, not
 # supplier_number, so it needs its own schema and validator.
 _SHAPE = "supplier_po_value_ranking"
+
+
+async def _fetch_all_pages(
+    client: FusionClient,
+    server_clause: str | None,
+    tool_label: str,
+    report_progress=None,
+) -> tuple[list[dict], bool, int | None]:
+    """Page through /purchaseOrders, and say how much is being missed.
+
+    All three tools in this module page identically — same path, same
+    projection, same cap, same end condition. They had three copies of
+    that loop, which is why the page size was wrong in one place and
+    right in another for as long as it was. One loop, three callers.
+
+    WHAT THE PROBE BUYS
+    A count before any data is fetched (see FusionClient.total_results),
+    which turns three guesses into measurements:
+
+      - The progress line gets a DENOMINATOR. "page 12" says nothing
+        about how much is left; "page 12/32, 6,000/15,839 (38%)" does.
+      - The cap warning fires BEFORE the fetch instead of after. On
+        /invoices the cap covers 51% of the collection, so a two-minute
+        wait ends in a partial answer that could have been announced at
+        second one.
+      - truncated stops being inferred. It was "the loop used all its
+        pages", a proxy; with a total it is fetched-vs-expected.
+
+    A probe that returns None degrades all three back to the previous
+    behaviour rather than failing. See the return note on
+    total_results — Fusion omits the count on some resources, and this
+    module worked without it for months.
+
+    Returns:
+        (items, hit_page_cap, total_available)
+    """
+    total_available = await client.total_results(
+        PURCHASE_ORDERS_PATH, server_clause
+    )
+
+    # Up front, before a single page is fetched. Loud on purpose: a
+    # footnote after the fact is what let a 10,000-of-15,839 answer read
+    # as complete, with CLOSED understated by 860 million.
+    if total_available is not None and total_available > OVERFETCH_LIMIT:
+        print(
+            f"[{tool_label}] "
+            f"*** WARNING: {total_available:,} records match, and the page "
+            f"cap stops at {OVERFETCH_LIMIT:,}. This answer will cover "
+            f"{OVERFETCH_LIMIT / total_available:.0%} of the data. ***",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    expected_pages: int | None = None
+    if total_available is not None:
+        expected_pages = min(
+            MAX_PAGES, -(-total_available // _PAGE_SIZE)  # ceil division
+        )
+
+    items: list[dict] = []
+    hit_page_cap = False
+    for page in range(MAX_PAGES):
+        params: dict[str, str | int] = {
+            "limit": _PAGE_SIZE,
+            "offset": page * _PAGE_SIZE,
+            "onlyData": "true",
+            "fields": ",".join(_PROJECTED_FIELDS),
+        }
+        if server_clause:
+            params["q"] = server_clause
+
+        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
+        page_items = response.get("items", [])
+        items.extend(page_items)
+
+        if expected_pages:
+            pct = min(100, int(len(items) / min(total_available, OVERFETCH_LIMIT) * 100))
+            bar_width = 20
+            filled = int(bar_width * pct / 100)
+            bar = "#" * filled + "." * (bar_width - filled)
+            msg = (
+                f"[{bar}] {pct:3d}%  page {page + 1}/{expected_pages}  "
+                f"{len(items):,}/{min(total_available, OVERFETCH_LIMIT):,}"
+            )
+        else:
+            # No total from the pod: the old line, which is all that can
+            # honestly be said without a denominator.
+            msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
+
+        # A bar that redraws in place is right for a terminal and wrong
+        # for a file. Runs here are piped through tee as a matter of
+        # habit, and a file full of carriage returns is one unreadable
+        # line — the saved output is what gets re-read hours later, so it
+        # is the case that must stay legible.
+        #
+        # isatty() distinguishes them: live bar on a terminal, one line
+        # per page into a pipe. Same information either way.
+        _last = (page + 1 == expected_pages) if expected_pages else False
+        if sys.stderr.isatty():
+            end = "\n" if _last else "\r"
+            print(f"[{tool_label}] {msg}", end=end, file=sys.stderr, flush=True)
+        else:
+            print(f"[{tool_label}] {msg}", file=sys.stderr, flush=True)
+
+        if report_progress is not None:
+            await report_progress(page + 1, expected_pages, msg)
+
+        has_more = response.get("hasMore")
+        if has_more is False or (
+            has_more is None and len(page_items) < _PAGE_SIZE
+        ):
+            break
+    else:
+        # Exhausted MAX_PAGES without the pod signalling the end — there
+        # may be more matching POs than we fetched.
+        hit_page_cap = True
+
+    # The loop can leave the cursor mid-line: a \r-terminated bar, then
+    # an early break because the pod said hasMore=false before the
+    # expected page count. Without this the next thing printed lands on
+    # top of the bar.
+    if sys.stderr.isatty():
+        print("", file=sys.stderr, flush=True)
+
+    return items, hit_page_cap, total_available
 
 
 def _aggregate_rows(
@@ -192,40 +349,12 @@ async def aggregate_purchase_orders_by_supplier(
     if status:
         server_clause = f"StatusCode='{status}'"
 
-    items: list[dict] = []
-    hit_page_cap = False
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "fields": ",".join(_PROJECTED_FIELDS),
-        }
-        if server_clause:
-            params["q"] = server_clause
-
-        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
-        print(
-            f"[aggregate_purchase_orders_by_supplier] {msg}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if report_progress is not None:
-            await report_progress(page + 1, None, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            break
-    else:
-        # Exhausted MAX_PAGES without the pod signalling the end — there
-        # may be more matching POs than we fetched.
-        hit_page_cap = True
+    items, hit_page_cap, total_available = await _fetch_all_pages(
+        client,
+        server_clause,
+        "aggregate_purchase_orders_by_supplier",
+        report_progress,
+    )
 
     rows, total_suppliers = _aggregate_rows(items, top_n)
 
@@ -240,6 +369,13 @@ async def aggregate_purchase_orders_by_supplier(
         "total_suppliers": total_suppliers,
         "returned": len(rows),
         "truncated": truncated,
+        # How many POs MATCHED, as opposed to how many were fetched.
+        # Without this the synthesizer can say "the fetch stopped at the
+        # cap" but not how much was missed, and the difference between
+        # those two sentences is the difference between a footnote and a
+        # warning. None when the pod gave no count.
+        "total_available": total_available,
+        "examined": len(items),
         "rows": rows,
     }
 
@@ -309,9 +445,11 @@ async def aggregate_purchase_orders_by_status(
 
     NO SERVER CLAUSE. Grouping BY status means we need every status, so
     there is nothing selective to push to q= — this pages the whole PO
-    collection. The pod has ~3,362 POs, which at 200/page is ~17 requests
-    (roughly a minute and a half). That is the honest cost of aggregating
-    a full collection; progress is reported per page.
+    collection. The pod has 15,839 POs (measured 2026-08-04 via
+    totalResults; the ~3,362 this docstring claimed until then was wrong
+    and was the reason the page cap looked safe). At 500/page that is 32
+    requests. That is the honest cost of aggregating a full collection;
+    progress is reported per page.
 
     Args:
         top_n: Unused for status breakdown — statuses are few (OPEN,
@@ -335,35 +473,9 @@ async def aggregate_purchase_orders_by_status(
         No POs -> total_pos=0, rows=[].
     """
     items: list[dict] = []
-    hit_page_cap = False
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "fields": ",".join(_PROJECTED_FIELDS),
-        }
-
-        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
-        print(
-            f"[aggregate_purchase_orders_by_status] {msg}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if report_progress is not None:
-            await report_progress(page + 1, None, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            break
-    else:
-        hit_page_cap = True
+    items, hit_page_cap, total_available = await _fetch_all_pages(
+        client, None, "aggregate_purchase_orders_by_status", report_progress
+    )
 
     rows, grand_count, grand_total = _aggregate_by_status(items)
 
@@ -372,6 +484,8 @@ async def aggregate_purchase_orders_by_status(
         "total_pos": grand_count,
         "total_ordered": grand_total,
         "truncated": hit_page_cap,
+        "total_available": total_available,
+        "examined": len(items),
         "rows": rows,
     }
 
@@ -444,37 +558,9 @@ async def summarize_open_purchase_orders(
     """
     server_clause = "StatusCode='OPEN'"
 
-    items: list[dict] = []
-    hit_page_cap = False
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "fields": ",".join(_PROJECTED_FIELDS),
-            "q": server_clause,
-        }
-
-        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
-        print(
-            f"[summarize_open_purchase_orders] {msg}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if report_progress is not None:
-            await report_progress(page + 1, None, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            break
-    else:
-        hit_page_cap = True
+    items, hit_page_cap, total_available = await _fetch_all_pages(
+        client, server_clause, "summarize_open_purchase_orders", report_progress
+    )
 
     po_count, total_ordered, supplier_count = _summarize(items)
 
@@ -484,4 +570,6 @@ async def summarize_open_purchase_orders(
         "total_ordered": total_ordered,
         "supplier_count": supplier_count,
         "truncated": hit_page_cap,
+        "total_available": total_available,
+        "examined": len(items),
     }

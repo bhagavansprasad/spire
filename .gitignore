@@ -9,6 +9,7 @@ venv/
 env/
 ENV/
 test_results/
+.spire_cache/
 
 # Env files
 .env

@@ -121,6 +121,7 @@ from spire.synthesizer.aggregation import (  # noqa: F401
     _build_comparison_response,
     _build_count_response,
     _direction_phrase,
+    build_local_aggregation_response,
 )
 from spire.synthesizer.ar import (  # noqa: F401
     build_credit_memo_records,
@@ -424,6 +425,26 @@ def synthesize_response(
         )
 
     if shape is not None:
+        # Local first: the aggregation tools have already done the
+        # grouping, the summing and the sort, so for the six known shapes
+        # there is nothing left to synthesize. Returns before any LLM
+        # setup, exactly as the count and comparison paths do above.
+        #
+        # Measured on "top 5 suppliers by spend" before this branch
+        # existed: synthesize in=1004 out=1880. The 1,880 output tokens
+        # were the model retyping five rows the executor already held,
+        # plus prose that announced date_from and date_to were null.
+        #
+        # None means "no local builder for this shape", NOT "no answer" —
+        # a seventh aggregation tool added later falls through to the
+        # schema lookup below and keeps working on the model path until
+        # someone gives it a builder. Distinguishing None from an empty
+        # response is the whole reason the builder returns None rather
+        # than an empty model.
+        local = build_local_aggregation_response(outputs["aggregation"][0])
+        if local is not None:
+            return local
+
         entry = AGGREGATION_SCHEMAS.get(shape)
         if entry is None:
             raise UnsupportedEntityError(

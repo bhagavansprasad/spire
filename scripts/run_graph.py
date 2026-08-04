@@ -78,18 +78,33 @@ def _block(log, text: str) -> None:
     log.debug("%s\n", text)
 
 
-async def _run(prompt: str) -> int:
+async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> int:
     reset_usage()
     menu = load_kg_menu()
 
     async with Client(MCP_SERVER_URL) as client:
 
         async def _on_progress(progress, total, message=None):
-            shown = message or ""
-            if total:
-                _progress_log.info("  … progress %s/%s %s", progress, total, shown)
+            # Forward the tool's message as it stands. It used to be
+            # wrapped as "progress 1.0/32.0 <message>", which printed the
+            # page numbers twice — the tool's own line already reads
+            # "page 1/32" — and printed them as floats, because the
+            # values arrive over MCP as JSON numbers.
+            #
+            # The tool is the one that knows what it is counting. This
+            # side's job is to put the line on the screen.
+            shown = message or f"{progress}/{total}" if total else str(progress)
+
+            # Redraw in place on a terminal, one line per page into a
+            # pipe. Runs here are piped through tee by habit, and \r in a
+            # file collapses the whole fetch into one unreadable line.
+            # Mirrors the same check on the server side.
+            if sys.stderr.isatty():
+                print(f"  … {shown}", end="\r", file=sys.stderr, flush=True)
+                if total and progress and int(progress) >= int(total):
+                    print("", file=sys.stderr, flush=True)
             else:
-                _progress_log.info("  … progress %s", shown)
+                _progress_log.info("  … %s", shown)
 
         state = await GRAPH.ainvoke(
             {
@@ -97,6 +112,8 @@ async def _run(prompt: str) -> int:
                 "menu": menu,
                 "session": client,
                 "progress_handler": _on_progress,
+                "cache_mode": cache_mode,
+                "cache_slot": cache_slot,
             }
         )
 
@@ -170,6 +187,32 @@ def main() -> int:
         description="Run the Spire pipeline via the LangGraph graph.",
     )
     parser.add_argument("--prompt", required=True, help="Natural-language prompt.")
+    # Execution cache. The pod is the slow part of a run and the part
+    # that does not change while the synthesizer is being worked on: a
+    # page-capped aggregation is minutes of fetching in front of
+    # milliseconds of formatting.
+    #
+    # --save-cache runs LIVE and writes the executor's output to the
+    # slot, overwriting whatever was there. That overwrite is the refresh
+    # mechanism; there is no separate clear step.
+    #
+    # --use-cache skips the pod and replays the slot. Parse and plan
+    # still run, so a parser or planner change is still exercised — only
+    # the fetch is replaced.
+    #
+    # Mutually exclusive: "save from the cache" is not a thing, and
+    # allowing both would mean re-saving what was just read.
+    cache = parser.add_mutually_exclusive_group()
+    cache.add_argument(
+        "--save-cache",
+        metavar="SLOT",
+        help="Run live and save the executor output to SLOT (overwrites).",
+    )
+    cache.add_argument(
+        "--use-cache",
+        metavar="SLOT",
+        help="Replay the executor output from SLOT instead of calling the pod.",
+    )
     add_diagnostic_arguments(parser)
     args = parser.parse_args()
 
@@ -178,7 +221,14 @@ def main() -> int:
     # levels are in place here.
     setup_diagnostics(flags_from_args(args))
 
-    return asyncio.run(_run(args.prompt))
+    if args.save_cache:
+        cache_mode, cache_slot = "save", args.save_cache
+    elif args.use_cache:
+        cache_mode, cache_slot = "use", args.use_cache
+    else:
+        cache_mode, cache_slot = None, None
+
+    return asyncio.run(_run(args.prompt, cache_mode, cache_slot))
 
 
 if __name__ == "__main__":

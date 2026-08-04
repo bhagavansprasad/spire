@@ -6,13 +6,20 @@ carries no target entity at all, only an aggregate or comparison block.
 CountResponse and ComparisonResponse are built deterministically from the
 tool's own numbers with no LLM involved; the ranking schemas are the ones
 an LLM actually narrates.
+
+As of 2026-08-04 that last sentence is being retired. The six aggregation
+shapes now have local builders at the foot of this module — see
+"Local aggregation response builders" — and the model is no longer asked
+to retype a ranking it did not compute.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from spire.synthesizer.errors import UnsupportedEntityError
 from spire.synthesizer.models_common import _SUMMARY_FIELD, _TRUNCATION_FIELD
+from spire.synthesizer.ranking_summary import local_aggregation_summary
 
 
 class SupplierSpendRow(BaseModel):
@@ -208,11 +215,9 @@ class ComparisonResponse(BaseModel):
 
     Built deterministically, without the LLM — the comparison tool has
     already fetched both sides, joined them, and computed the totals and
-    the difference. There is nothing to synthesize and no risk of an
-    invented number, so this mirrors CountResponse rather than the
-    LLM-driven aggregation path. The 'summary' is templated from the
-    tool's own numbers; the structured fields carry those numbers through
-    unchanged."""
+    the difference. There is nothing left to synthesize: the summary is
+    templated from the tool's own numbers; the structured fields carry
+    those numbers through unchanged."""
 
     summary: str = Field(
         description="Plain-language statement of the comparison."
@@ -420,3 +425,236 @@ def _build_comparison_response(
         shape=shape,
         truncation_notes=truncation_notes,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Local aggregation response builders — deterministic, no LLM
+# ─────────────────────────────────────────────────────────────────────
+#
+# Same rule as the count and comparison builders above, applied to the
+# six aggregation shapes: the tool has already done the grouping, the
+# summing and the sort, so there is nothing left to synthesize. Until
+# 2026-08-04 these shapes were the exception — the ranking was handed to
+# the model and the model retyped it field by field into the schema.
+#
+# Measured cost of that, on "top 5 suppliers by spend":
+#
+#     synthesize   in=1004  out=1880
+#
+# 1,880 output tokens to reproduce five rows the executor already held,
+# plus six sentences of prose of which two restated the table heading and
+# one announced that date_from and date_to were null.
+#
+# WHY THE FIELD NAMES DO NOT LINE UP
+# The tools and these schemas were written at different times and by
+# different hands. The tool emits `supplier`; SupplierSpendRow declares
+# `supplier_name`. Same value, two spellings — which is precisely why the
+# mapping belongs in code and not in a prompt: the model was inferring
+# this correspondence on every single call, and an inference that
+# succeeds 99 times in 100 is a silent wrong answer on the hundredth.
+#
+# WHERE THE SUMMARY COMES FROM
+# ranking_summary.local_aggregation_summary. Kept in its own module
+# because summary rules and record mapping are different jobs; these
+# builders are the only caller.
+#
+# TRUNCATION NOTES ARE DELIBERATELY EMPTY
+# The truncation sentence is part of the summary text, not the
+# truncation_notes list, so it prints exactly once. The LLM path fills
+# both and the display formatter prints both, so filling both here would
+# duplicate the sentence. Verify this on the first end-to-end run — if
+# the formatter turns out to print truncation_notes somewhere the summary
+# does not reach, move the sentence rather than duplicating it.
+
+
+def _f(value: object, default: float = 0.0) -> float:
+    """Coerce a measure to float, defaulting when absent or non-numeric.
+
+    The tools already guard their arithmetic this way (a non-numeric
+    Ordered contributes 0 but still counts), so this mirrors a rule that
+    is already established rather than inventing a new one.
+    """
+    return float(value) if isinstance(value, (int, float)) else default
+
+
+def _i(value: object, default: int = 0) -> int:
+    """Coerce a count to int, defaulting when absent or non-numeric."""
+    return int(value) if isinstance(value, (int, float)) else default
+
+
+def _s(value: object, default: str = "") -> str:
+    """Coerce a label to str, defaulting when absent."""
+    return str(value) if value not in (None, "") else default
+
+
+def _summary_text(bucket: dict) -> str:
+    """The local summary, joined for the response's single summary field.
+
+    An empty list joins to an empty string, which is correct: a summary
+    with nothing truthful to say prints nothing rather than padding.
+    """
+    return "\n".join(local_aggregation_summary(bucket) or [])
+
+
+def build_supplier_spend_ranking(bucket: dict) -> SupplierSpendRankingResponse:
+    """supplier_spend_ranking -> response, no LLM."""
+    return SupplierSpendRankingResponse(
+        summary=_summary_text(bucket),
+        suppliers=[
+            SupplierSpendRow(
+                supplier_name=_s(r.get("supplier")),
+                supplier_number=_s(r.get("supplier_number")),
+                total_spend=_f(r.get("total_spend")),
+                invoice_count=_i(r.get("invoice_count")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
+def build_supplier_po_value_ranking(
+    bucket: dict,
+) -> SupplierPOValueRankingResponse:
+    """supplier_po_value_ranking -> response, no LLM.
+
+    supplier_id, not supplier_number: a PO header carries SupplierId only.
+    """
+    return SupplierPOValueRankingResponse(
+        summary=_summary_text(bucket),
+        suppliers=[
+            SupplierPOValueRow(
+                supplier_name=_s(r.get("supplier")),
+                supplier_id=_i(r.get("supplier_id")),
+                total_ordered=_f(r.get("total_ordered")),
+                po_count=_i(r.get("po_count")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
+def build_po_status_breakdown(bucket: dict) -> POStatusBreakdownResponse:
+    """po_status_breakdown -> response, no LLM."""
+    return POStatusBreakdownResponse(
+        summary=_summary_text(bucket),
+        total_pos=_i(bucket.get("total_pos")),
+        total_ordered=_f(bucket.get("total_ordered")),
+        statuses=[
+            POStatusRow(
+                status=_s(r.get("status"), "(unknown)"),
+                po_count=_i(r.get("po_count")),
+                total_ordered=_f(r.get("total_ordered")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
+def build_open_po_summary(bucket: dict) -> OpenPOSummaryResponse:
+    """open_po_summary -> response, no LLM.
+
+    The only shape with no rows. Its three scalars ARE the answer, so
+    unlike every other shape there is no table beneath the summary to
+    carry the figures.
+    """
+    return OpenPOSummaryResponse(
+        summary=_summary_text(bucket),
+        po_count=_i(bucket.get("po_count")),
+        total_ordered=_f(bucket.get("total_ordered")),
+        supplier_count=_i(bucket.get("supplier_count")),
+        truncation_notes=[],
+    )
+
+
+def build_exposure_ranking(bucket: dict) -> ExposureRankingResponse:
+    """exposure_ranking -> response, no LLM.
+
+    open_receivables and transactions_due stay None when the pod omits
+    them — the row model allows null for both, and a null exposure is a
+    fact about the account rather than a zero. account_id, account_number
+    and customer_name do NOT allow null, so a row missing any of them
+    raises here.
+
+    That is deliberate and is a behaviour change worth watching: on the
+    LLM path the model would fill an absent value with something
+    plausible and the response would validate. Loud is better, but the
+    first time this raises it will look like a regression, and it is not
+    one — it is a pod row that was always malformed becoming visible.
+    """
+    return ExposureRankingResponse(
+        summary=_summary_text(bucket),
+        accounts=[
+            ExposureRankingRow(
+                account_id=r.get("account_id"),
+                account_number=_s(r.get("account_number")),
+                customer_name=_s(r.get("customer_name")),
+                open_receivables=r.get("open_receivables"),
+                transactions_due=r.get("transactions_due"),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
+def build_receipt_method_distribution(
+    bucket: dict,
+) -> ReceiptMethodDistributionResponse:
+    """receipt_method_distribution -> response, no LLM.
+
+    total_amount appears twice with different meanings — once per row (the
+    method's total) and once at the top level (the grand total across all
+    methods). Reading the wrong one gives a share of itself.
+    """
+    return ReceiptMethodDistributionResponse(
+        summary=_summary_text(bucket),
+        total_receipts=_i(bucket.get("total_receipts")),
+        total_amount=_f(bucket.get("total_amount")),
+        methods=[
+            ReceiptMethodDistributionRow(
+                receipt_method=_s(r.get("receipt_method"), "(unknown)"),
+                receipt_count=_i(r.get("receipt_count")),
+                total_amount=_f(r.get("total_amount")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
+# shape tag -> builder. Same one-row-per-shape discipline as
+# _COMPARISON_BUILDERS and AGGREGATION_SCHEMAS: a seventh aggregation tool
+# is a new row here, not another branch in the routing.
+_LOCAL_AGGREGATION_BUILDERS = {
+    "supplier_spend_ranking": build_supplier_spend_ranking,
+    "supplier_po_value_ranking": build_supplier_po_value_ranking,
+    "po_status_breakdown": build_po_status_breakdown,
+    "open_po_summary": build_open_po_summary,
+    "exposure_ranking": build_exposure_ranking,
+    "receipt_method_distribution": build_receipt_method_distribution,
+}
+
+
+def build_local_aggregation_response(bucket: dict) -> BaseModel | None:
+    """Build a complete aggregation response locally, or None.
+
+    Args:
+        bucket: The single dict the aggregation tool returned, as the
+            executor holds it under the "aggregation" output.
+
+    Returns:
+        The populated response, or None when the shape has no local
+        builder — in which case the caller must fall through to the model
+        rather than treating None as an empty answer. Returning None for
+        an unknown shape (instead of raising) is what keeps a newly added
+        seventh aggregation tool working on the LLM path until someone
+        adds its row above.
+    """
+    if not isinstance(bucket, dict):
+        return None
+    shape = bucket.get("shape")
+    builder = _LOCAL_AGGREGATION_BUILDERS.get(shape) if isinstance(shape, str) else None
+    return builder(bucket) if builder is not None else None

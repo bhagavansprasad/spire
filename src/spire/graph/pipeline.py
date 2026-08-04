@@ -23,6 +23,10 @@ nodes are otherwise pure functions of state.
 
 from __future__ import annotations
 
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -56,6 +60,14 @@ class GraphState(TypedDict, total=False):
     menu: Any
     session: Any
     progress_handler: Optional[Any]
+
+    # Execution cache (2026-08-04). Set by the caller; read only by
+    # execute_node. See _cache_path for what is stored and why it is
+    # only the executor's output.
+    #   cache_mode: "save" | "use" | None
+    #   cache_slot: a name the caller chooses, e.g. "po_status"
+    cache_mode: Optional[str]
+    cache_slot: Optional[str]
 
     intent: Optional[Any]
     refusal: Optional[Any]
@@ -131,13 +143,131 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
     return projected
 
 
-async def execute_node(state: GraphState) -> dict:
-    try:
-        outputs, truncation, metadata = await execute_plan(
-            state["plan"],
-            state["session"],
-            progress_handler=state.get("progress_handler"),
+# ── Execution cache ───────────────────────────────────────────────────
+#
+# A page-capped aggregation takes minutes: "top 5 suppliers by spend"
+# walks 50 pages of 500 invoices, and timed out mid-fetch once on
+# 2026-08-04. Iterating on the SYNTHESIZER against that is a poor trade —
+# the layer being changed runs in milliseconds and the fetch in front of
+# it runs for minutes.
+#
+# WHAT IS CACHED, AND WHY ONLY THIS
+# The executor's three outputs and nothing else. Parse and plan still run
+# live on every replay, so:
+#
+#   - intent and plan never need serialising. They are Pydantic objects
+#     and rebuilding them from JSON would be a second, drifting
+#     definition of what the graph already produces.
+#   - a parser or planner change is still exercised. Only the POD is
+#     removed, which is the slow part and the only part.
+#   - projected_outputs is DERIVED (outputs + intent.fields), so it is
+#     recomputed rather than stored. Storing it would let it disagree
+#     with outputs after a projection change.
+#
+# The cost of a live parse is one cheap LLM call, ~9k tokens. Worth it to
+# avoid a serialised copy of two Pydantic models.
+#
+# WHAT THIS CANNOT CATCH
+# A tool whose return shape changed. The cache keeps answering with the
+# old shape and everything looks fine — the same drift that makes stale
+# context bundles dangerous. Hence the header: every replay prints the
+# prompt and the age of the file it is reading, to stderr, before the
+# answer. A view that does not announce its own limits produces confident
+# wrong answers indefinitely.
+
+_CACHE_DIR = Path(".spire_cache")
+
+
+def _cache_path(slot: str) -> Path:
+    """File for a named slot. Named, not hashed, deliberately.
+
+    A hash of the prompt is automatic and unreadable: `ls .spire_cache`
+    shows nothing about what is in there, and two variants of the same
+    question cannot both be kept. A slot the caller names survives
+    rephrasing and is greppable.
+    """
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in slot)
+    return _CACHE_DIR / f"{safe}.json"
+
+
+def _save_execution(slot: str, prompt: str, payload: dict) -> None:
+    """Write the executor's output for a slot, overwriting any previous.
+
+    Overwrite IS the refresh mechanism — re-running with --save-cache
+    replaces the file. A confirm-before-clobber step was considered and
+    rejected: friction there means stale caches survive longer, which is
+    the failure this whole thing is meant to avoid.
+    """
+    _CACHE_DIR.mkdir(exist_ok=True)
+    record = {
+        "prompt": prompt,
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "outputs": payload["outputs"],
+        "truncation_by_step": payload["truncation_by_step"],
+        "metadata_by_step": payload["metadata_by_step"],
+    }
+    _cache_path(slot).write_text(json.dumps(record, indent=2, default=str))
+
+
+def _load_execution(slot: str) -> dict:
+    """Read a slot, or raise.
+
+    Raises rather than falling back to a live fetch. A --use-cache run
+    that silently went to the pod would be indistinguishable from a
+    cached one except by how long it took, and the whole point is to know
+    which you are looking at.
+    """
+    path = _cache_path(slot)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No cached execution in slot {slot!r} ({path}). "
+            f"Run once with --save-cache {slot} first."
         )
+    return json.loads(path.read_text())
+
+
+async def execute_node(state: GraphState) -> dict:
+    mode = state.get("cache_mode")
+    slot = state.get("cache_slot")
+
+    try:
+        if mode == "use":
+            record = _load_execution(slot)
+            # To stderr, always, ungated — same reasoning as the progress
+            # lines and the counts footer. A replay that does not announce
+            # itself is a trap.
+            print(
+                f"[cache] replaying slot {slot!r} saved "
+                f"{record.get('saved_at')} for prompt "
+                f"{record.get('prompt')!r} — no pod call",
+                file=sys.stderr,
+                flush=True,
+            )
+            outputs = record["outputs"]
+            truncation = record["truncation_by_step"]
+            metadata = record["metadata_by_step"]
+        else:
+            outputs, truncation, metadata = await execute_plan(
+                state["plan"],
+                state["session"],
+                progress_handler=state.get("progress_handler"),
+            )
+            if mode == "save":
+                _save_execution(
+                    slot,
+                    state["prompt"],
+                    {
+                        "outputs": outputs,
+                        "truncation_by_step": truncation,
+                        "metadata_by_step": metadata,
+                    },
+                )
+                print(
+                    f"[cache] saved slot {slot!r} -> {_cache_path(slot)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
         fields = getattr(state.get("intent"), "fields", []) or []
         projected = _project_outputs(outputs, fields)
         return {
