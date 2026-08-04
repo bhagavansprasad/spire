@@ -432,6 +432,61 @@ def test_counts_line_omitted_when_nothing_is_hidden(po_value_bucket):
     assert "EIP Inc leads" in joined
 
 
+def test_gap_ratio_stated_when_the_lead_is_real(po_value_bucket):
+    """A leader nearly three times the next is worth saying.
+
+    Two large numbers side by side do not announce their ratio; the
+    reader has to divide them. This is the statement the summary exists
+    for. Measured: supplier spend, 284,449,939 against 102,877,202.
+    """
+    po_value_bucket["rows"][0]["total_ordered"] = 284449939.51
+    po_value_bucket["rows"][1]["total_ordered"] = 102877202.30
+
+    joined = "\n".join(local_aggregation_summary(po_value_bucket))
+
+    assert "2.8x the next" in joined
+
+
+def test_gap_ratio_dropped_when_the_lead_is_not_real(po_value_bucket):
+    """A 1.2x lead says nothing the column does not already show.
+
+    Measured on the exposure ranking: 165,428,563 against 143,551,790,
+    with rows three and four inside 0.1% of each other. "Leads with X —
+    1.2x the next" implies a separation the table shows to be absent, and
+    the same rule fires on both cases, so it only earns its place on one.
+
+    Same principle as _MAX_DISTINCT_RATIO in local_summary.py: a
+    technically-true observation about a column the reader is looking at
+    is noise.
+
+    WITHOUT THIS TEST the threshold could be deleted and the suite would
+    stay green — it was added on 2026-08-04 and went untested until this
+    was written.
+    """
+    po_value_bucket["rows"][0]["total_ordered"] = 165428563.24
+    po_value_bucket["rows"][1]["total_ordered"] = 143551790.57
+
+    joined = "\n".join(local_aggregation_summary(po_value_bucket))
+
+    assert "x the next" not in joined
+    # The leader is still named. Only the multiple is dropped.
+    assert "EIP Inc leads with 165,428,563.24." in joined
+
+
+def test_gap_ratio_boundary_is_inclusive(po_value_bucket):
+    """Exactly at the threshold, the multiple is stated.
+
+    Pinned because ">= 1.5" and "> 1.5" both read as correct and the
+    difference is invisible in any other test.
+    """
+    po_value_bucket["rows"][0]["total_ordered"] = 150.0
+    po_value_bucket["rows"][1]["total_ordered"] = 100.0
+
+    joined = "\n".join(local_aggregation_summary(po_value_bucket))
+
+    assert "1.5x the next" in joined
+
+
 def test_gap_ratio_skipped_when_second_row_is_zero(po_value_bucket):
     """A zero divisor has no ratio. Say the leader without one rather
     than computing something unsayable."""
