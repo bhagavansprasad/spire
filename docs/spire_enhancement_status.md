@@ -1759,3 +1759,323 @@ have been since 2026-07-31.
 
 Worth deciding deliberately whether to finish P2P first or switch back,
 rather than continuing to drift toward whichever thread is warm.
+
+---
+
+## G13. Aggregations local, and the fetch layer underneath (2026-08-04)
+
+Four branches, all merged to master. The thread was chosen as "finish
+local synthesis" — Option B in the 2026-08-03 handoff, the warm one, over
+COL-03 which was asked for. §G12.7's warning applies again and is
+restated at the end of this section.
+
+Most of the session was not spent on synthesis. It was spent one layer
+down, in the fetch, because every output defect found traced back to what
+had been fetched.
+
+### G13.1 What was built
+
+All six aggregation shapes now build records AND summary in code:
+
+| Shape | Kind | Verified live |
+|---|---|---|
+| `supplier_spend_ranking` | ranking | yes |
+| `supplier_po_value_ranking` | ranking | yes |
+| `exposure_ranking` | ranking | yes |
+| `po_status_breakdown` | distribution | yes |
+| `receipt_method_distribution` | distribution | yes |
+| `open_po_summary` | scalar | yes |
+
+Measured before, on "top 5 suppliers by spend": `synthesize in=1004
+out=1880`. The 1,880 output tokens were the model retyping five rows the
+executor already held, plus six sentences of prose of which two restated
+the table heading and one announced that `date_from` and `date_to` were
+null. After: no synthesize call at all, on any of the six.
+
+New module `src/spire/synthesizer/ranking_summary.py`. Three functions
+rather than one config-driven function, because the six shapes collapse
+to three real kinds and the differences between kinds are structural:
+`open_po_summary` has no `rows` at all, `exposure_ranking` has no
+`truncated` key. A config table would have needed a "has no rows" flag
+and a "has no truncated" flag, which is the shape difference smuggled
+into data.
+
+Record builders went into `aggregation.py`, beside the models they
+construct.
+
+### G13.2 The enumeration that paid for itself
+
+The six were read end to end before any code was written, per §G12.1's
+lesson. They disagree in four ways that would each have broken a function
+generalised from the first one or two:
+
+- `open_po_summary` has no rows — three scalars.
+- `exposure_ranking` has no `truncated` key, so the check must be
+  absent-safe rather than False-safe.
+- The measure is spelled three ways (`total_spend`, `total_ordered`,
+  `total_amount`), the count three ways (`invoice_count`, `po_count`,
+  `receipt_count`).
+- Two shapes carry a grand total and three do not — **the opposite of
+  what was assumed.** Distributions can state a share honestly;
+  rankings cannot, because `_aggregate_rows` ranks every supplier and
+  then returns `ranked[:top_n]`, discarding the denominator.
+
+`exposure_ranking` also does no arithmetic at all: the two measures come
+straight off the pod, and the tool sorts on
+`TotalOpenReceivablesForAccount` only. Quoting `transactions_due` would
+have named a figure that is not why the account is first.
+
+### G13.3 Three summary rules corrected by running
+
+None of these was found by reading code.
+
+**`open_po_summary` duplicated the formatter.** Measured against the pod:
+
+```
+1,085 open purchase orders worth 32,790,396.90, across 66 suppliers.
+Open PO count: 1085, total ordered: 32,790,396.90, suppliers: 66
+```
+
+Both correct, both saying the same thing. The second is the display
+formatter rendering the three scalar fields — it was always there, and
+the model's longer, vaguer paragraph read as a recap rather than a
+duplicate. The summary is now empty for that shape; only the truncation
+note survives, because the formatter line does not carry truncation
+state.
+
+**A share over a truncated fetch is not a share.** The receipt
+distribution printed "Lockbox is the largest at 869,350,062.55 (99% of
+the total)" against a fetch that had stopped at exactly 5,000 rows. That
+is a ratio of two lower bounds presented as a proportion of the whole —
+the arithmetic-over-a-sample defect this whole thread exists to remove,
+reintroduced in the one shape where the grand total looked trustworthy
+enough to divide by. Suppressed unless the fetch completed. A truncation
+sentence printed underneath does not repair it: stating the figure and
+then hedging is what the model used to do.
+
+**A 1.2x gap is noise.** Two real rankings:
+
+```
+supplier spend    284,449,939 vs 102,877,202  ->  2.8x
+account exposure  165,428,563 vs 143,551,790  ->  1.2x
+```
+
+The first is a finding — one supplier nearly three times the next, and
+nothing on screen announces it. The second is five accounts spanning 165M
+to 119M with rows three and four inside 0.1% of each other; "leads with X
+— 1.2x the next" implies a separation the column shows to be absent. Same
+rule, earns its place in one case only. `_MIN_GAP_RATIO = 1.5`, chosen by
+eye from those two cases and not measured across a set.
+
+### G13.4 The wrong number that was nearly printed
+
+Writing the truncation sentence out found a defect that reading the code
+had not.
+
+The obvious label for the counts is `entity_label`, which on a ranking is
+"suppliers". But `total_available` and `examined` count what was
+FETCHED — invoices for the spend ranking — and the tool then groups those
+into suppliers. Labelling the note with `entity_label` produces:
+
+```
+PARTIAL: 25,000 of 48,931 suppliers examined
+```
+
+over a pod holding 117 suppliers. A wrong number, stated with total
+confidence, in the one sentence whose entire job is to tell the reader
+how much to trust the others.
+
+Fixed with `source_label` per shape, and a test that asserts the wrong
+version fails rather than merely that the right one passes.
+
+Same class as the two `total_amount` fields on the receipt distribution —
+a name that reads correctly in one place and means something else in
+another.
+
+### G13.5 The fetch layer
+
+**Four paging loops became one.** `aggregate_purchase_orders`,
+`aggregate_invoices`, `compare_orders_to_invoices` and `po_lifecycle`
+each had their own. That is how the codebase came to page at 200 rows in
+one file and 500 in another, both citing the same reference note, with
+one truncating every unfiltered scan at 10,000 rows for months and
+nothing connecting the two facts.
+
+`tools/pagination.page_all` took its signature from
+`compare_orders_to_invoices` and `po_lifecycle`, which had each arrived
+at path/fields/clause/label independently — two implementations agreeing
+is a stronger argument than one. It took its count-reading from
+`po_lifecycle` too: `totalResults=true` on every page, value from page
+one, rather than a separate `limit=1` probe. One fewer round trip.
+
+Read from the FIRST page specifically. The run that hits the cap is the
+run whose count matters most, and that run's last page is where the loop
+stops, so a count read at the end vanishes exactly when it is needed.
+
+No page size changed in the extraction commit: an extraction that also
+retunes the thing it extracts cannot be verified as a no-op. Verified by
+running "purchase orders by status" three times across the changes —
+15,839 records, 32 pages, cached buckets diff clean.
+
+**`_fetch_total_for_clause` was four copies, not one dead function.**
+`suppliers.py`, `purchase_orders.py` and `invoices.py` each defined and
+called their own; `aggregate_invoices.py` held a fourth that `page_all`
+had orphaned. Character-identical except for the path constant.
+`FusionClient.total_results` is the same function with the path as a
+parameter — it had no callers and now has three.
+
+**Measured pod totals**, all previously unknown to the code:
+
+```
+/purchaseOrders                          15,839   (docstring said 3,362)
+/invoices                                48,931   25,000 cap = 51%
+/standardReceipts                        37,338
+/receivablesCustomerAccountActivities       435
+```
+
+The 3,362 figure was the reason a page cap looked safe. At 200 rows a
+full PO scan needs 80 pages against a 50-page cap, so every unfiltered
+breakdown stopped at 10,000 of 15,839 and understated CLOSED by 860
+million — reported as complete apart from one footnote sentence.
+
+The cap warning now fires off page one with a percentage, and the
+truncation note says `PARTIAL: N of M examined (X%)` instead of "there
+may be more". It is stated FIRST, above the figures: if an answer covers
+51% of the collection, that decides whether the numbers are worth
+reading.
+
+### G13.6 Receipts — the oldest wrong-number defect, closed
+
+`/standardReceipts` has no default ordering, so a paginated fetch walking
+`offset` sampled differently on every call. Measured twice, a fortnight
+apart:
+
+| | Run A | Run B |
+|---|---|---|
+| 2026-07-22, account 26360 | 215,721,775.28 | 250,557,301.49 |
+| 2026-08-04, pod-wide | 874,836,787.64 | 977,327,230.90 |
+
+Same row count both times, no error either time.
+
+§12.2 of the endpoints reference had recorded the rule — any paginated
+fetch here needs a deterministic `orderBy` — with the sort key
+unconfirmed. Confirmed by curl: page 1 at `limit=3` returned ids 1, 2, 3;
+page 2 at `offset=3` returned 4, 21, 22, contiguous across the boundary,
+so the parameter is applied and not merely accepted. The PK, not
+`ReceiptNumber` — an ordered fetch on that returned two rows both
+numbered "1".
+
+**Ordering alone would have shipped a repeatable wrong answer.** A
+PK-ascending cap returns the OLDEST rows:
+
+| | Unordered 5,000 | Ordered 5,000 | Complete 37,338 |
+|---|---|---|---|
+| Methods | 4 | 3 | **22** |
+| Lockbox | 4,754 | 4,998 | 18,661 |
+| Check (Directly/No Remit) | 179 | **absent** | **18,480** |
+
+Check is 49.5% of all receipts — within a percent of Lockbox by count —
+and the ordered-but-capped answer reported it as not existing. The
+unordered version was closer to reality by accident, which is the worst
+kind of correct.
+
+`MAX_UNSCOPED_PAGES` raised 10 → 100 in the same change. Two full
+75-page runs now diff clean.
+
+**Rule, added to the reference:** an `orderBy` on a capped fetch buys
+reproducibility and can cost representativeness. Add the ordering and
+raise the cap together, or state the skew.
+
+### G13.7 Tests
+
+857 selected, 856 passed, 18 deselected, 1 xfailed, from 799 at the start
+of the session.
+
+New files: `tests/test_local_aggregation.py`,
+`tests/test_pagination.py` (six tests moved from
+`test_po_lifecycle_tool.py`, plus five new),
+`tests/test_aggregate_standard_receipts_tool.py` (17 — that tool had
+none, despite the history above).
+
+**The mock raises on contact.** `_forbidden_llm` fails the test if
+`with_structured_output` is touched at all. §G11.5 records three LLM
+removals that left the suite at 771 → 771, 779 → 779, 789 → 789 because
+nothing asserted the ABSENCE of a call; a recording mock would have
+passed through every one of them.
+
+**Two tests replaced rather than deleted.**
+`test_synthesize_routes_to_ranking_schema` became "builds locally, LLM
+never reached". `test_synthesize_ranking_catches_hallucinated_supplier`
+became "no LLM call means nothing can be invented" — asserting the
+PRECONDITION that makes skipping the guard safe. Worth stating plainly:
+`_validate_no_hallucinated_ids` runs AFTER the LLM call, so every local
+return skips it. Correct — records copied from the executor's rows cannot
+contain an id the executor never saw — but the guard is now unreachable
+on those paths rather than passing on them.
+
+**A bare `AsyncMock` hides a missed interface.** It answers any attribute
+with another mock, so `client.total_results` became a mock and failed
+three frames away as a `TypeError`. Six tests failed that way and failing
+was right: a plausible-looking return would have let the cap arithmetic
+run on nonsense. `test_compare_orders_to_invoices.py` now has one
+`_fusion_mock()` constructor instead of three ad-hoc fakes.
+
+### G13.8 The execution cache
+
+`run_graph.py --save-cache SLOT` runs live and writes the executor's
+output to `.spire_cache/`; `--use-cache SLOT` replays it with no pod
+call. Re-running `--save-cache` overwrites — that IS the refresh, and a
+confirm-before-clobber step was rejected because friction there means
+stale caches survive longer.
+
+It hooks inside `execute_node`, not above the graph, so parse and plan
+still run and `intent`/`plan` never need serialising. Only `outputs`,
+`truncation_by_step` and `metadata_by_step` go to disk, all plain dicts.
+`projected_outputs` is derived and recomputed.
+
+Every replay prints the slot and its age to stderr before the answer,
+ungated. What it cannot catch is a tool whose return shape changed — the
+cache keeps answering with the old shape and everything looks fine, which
+is the same drift that makes stale context bundles dangerous. Hence the
+header: a view that does not announce its own limits produces confident
+wrong answers indefinitely.
+
+Round-trip verified byte-identical, twice, including after the bucket
+gained two new keys.
+
+### G13.9 Newly logged, not yet fixed
+
+- **`_QUANTITY_MARKERS` fails silently per entity.** A hardcoded list of
+  column-name fragments in `display_formatters.py`; a numeric column
+  whose name is not on it left-aligns with no error. "pos" was there,
+  "receipts" was not — found only because the receipt distribution became
+  a table and sat next to the PO one. The narrower general fix —
+  right-align any column whose values are all genuine `int`/`float`,
+  never numeric-looking strings — is described in place but not
+  attempted, because values-alone was tried once and reverted for
+  right-aligning every identifier in the system.
+- **`rank_customer_accounts_by_exposure` sorts without a tiebreaker**,
+  unlike the other two rankings which sort on `(-measure, name)`. Two
+  accounts with equal open receivables can swap between runs.
+- **`CANCELED`: 1,496 POs totalling 4,000.00** across the full 15,839
+  scan. Survived a complete fetch, so real data rather than a sampling
+  artefact. Unexplained.
+- **Four tool test files take ~65s for 32 tests** while every other tool
+  test file runs in under a second. Possibly live-pod tests. Unverified.
+
+### G13.10 Where the effort went — again
+
+§G12.7 recorded that two full days went into output quality while COL-03,
+the SME's actual request and P0 since 2026-07-31, had not been started.
+This session was offered the same choice, in the same words — "A is the
+one that was asked for. B is the one that is warm" — and chose B again.
+
+The work was real: six shapes local, an endpoint made reproducible for
+the first time, four duplicated helpers collapsed, and a distribution
+that had been reporting 3 of its 22 categories. None of it was COL-03.
+
+**COL-03 has now been deferred twice, deliberately both times.** That is
+a legitimate choice and it should keep being made explicitly rather than
+by drifting toward whichever thread is warm. The third time it comes up,
+the question is worth asking differently: not "which is more valuable
+today" but "what is it about the column work that keeps losing".

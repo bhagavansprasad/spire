@@ -10,6 +10,7 @@
 | **v1.1 adds** | COL-01 to COL-03 (column resolution) and CSV-01 (result export), from SME feedback 2026-07-31. Not derived from the original 16-item list — see §12. |
 | **v1.2 adds** | OUT-01 to OUT-03 (the output contract), from SME discussion 2026-08-02. Supersedes part of COL-03 and part of UX-01 — see §4B. |
 | **v1.3 adds** | OUT-04 (local synthesis) and OUT-05 (record rendering), 2026-08-03. Both were BUILT before being written down — prototype first was the deliberate choice. Recorded here now that two entities are merged. |
+| **v1.4 adds** | OUT-06 (fetch completeness), 2026-08-04. Same pattern as v1.3 — built first, written down after, because the requirement only became visible once local synthesis stopped the model from hedging over it. Also records OUT-04's delivery status; OUT-04 itself is unchanged. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -469,6 +470,29 @@ bucket costs correctness.
 the answer format as a prompt-engineering problem. It is a rendering
 problem.
 
+**Delivery status, 2026-08-04.** The requirement is unchanged; this is a
+note on how far it has been met.
+
+Every read path now builds locally except two: P2P invoice lists and PO
+lists, and cross-bucket joins. The joins are out of scope by the rule
+above; the P2P lists are simply not built yet.
+
+Converted and verified against the pod, `parse` alone in the token log:
+supplier lists, credit memos, AR invoices with lines/tax/DFF, customer
+accounts with four child types, standard receipts (2026-08-03), and all
+six aggregation shapes (2026-08-04) — `supplier_spend_ranking`,
+`supplier_po_value_ranking`, `exposure_ranking`, `po_status_breakdown`,
+`receipt_method_distribution`, `open_po_summary`.
+
+Three summary rules had to be corrected after conversion, none of them
+found by reading code — a summary that duplicated the renderer's own
+line, a percentage computed over a truncated fetch, and a leader-versus-
+runner-up ratio stated where the gap was 1.2x. See
+`docs/spire_enhancement_status.md` §G13.3. The acceptance criterion "no
+number in a summary originates from the model" was met immediately; "a
+summary says only what is worth saying" is not an acceptance criterion
+and probably cannot be one.
+
 ---
 
 ### OUT-05 — One record renderer · P0
@@ -517,6 +541,77 @@ commas, so ten contacts rendered as a line no reader could parse —
 - Rankings carry rank as a column.
 
 **Depends on:** OUT-04 for the summary above it. **Related:** OUT-02.
+
+---
+
+### OUT-06 — An answer shall state how much of the data it covers · P0
+
+*Added v1.4, 2026-08-04. Built before being written down, like OUT-04
+and OUT-05. **NOT YET AGREED WITH THE SME** — this records behaviour that
+exists in code and the reasoning behind it, and the wording is open.*
+
+Where a fetch is bounded by a page cap, the answer **shall** state how
+many records were examined and how many matched, as a count and a
+proportion. It **shall not** report only that the result may be
+incomplete.
+
+Where the pod supplies no total, the tool **shall** say plainly that the
+fetch stopped at a cap, and **shall not** substitute the examined count
+for the total.
+
+Where an answer covers materially less than the whole, the statement
+**shall** appear before the figures rather than beneath them.
+
+**Why this needed writing down.** It was invisible while the model was
+narrating. Asked for a supplier spend ranking, the model produced "as the
+data is truncated, these totals are based on a sample of invoices and may
+understate actual spend" — a reasonable sentence, and one that reads as a
+footnote. It gives the reader no way to tell whether the shortfall is one
+row or half the collection.
+
+Measured 2026-08-04, on this pod:
+
+| Collection | Rows | Cap | Covered |
+|---|---|---|---|
+| `/purchaseOrders` | 15,839 | 10,000 | 63% |
+| `/invoices` | 48,931 | 25,000 | 51% |
+| `/standardReceipts` | 37,338 | 5,000 | **13%** |
+
+The PO breakdown reported 10,000 records with that one footnote sentence
+and understated one status by 860 million. The receipt distribution
+reported three payment methods; the complete collection has 22, and the
+second-largest — 18,480 receipts, 49.5% of the total — did not appear at
+all.
+
+None of these produced an error. Each was a plausible, well-formed,
+confidently-stated wrong answer.
+
+**Why the proportion and not just the flag.** A boolean `truncated` was
+already there and already reported. It is the difference between "there
+may be more" and "this covers 13%" that changes what a reader does next.
+
+**A caution that came out of building it.** Making a capped fetch
+DETERMINISTIC can make it less representative. `/standardReceipts` had no
+default ordering, so its samples varied between runs; adding
+`orderBy=StandardReceiptId` fixed that and simultaneously made the cap
+return the OLDEST rows rather than arbitrary ones, which is a worse
+sample honestly reported. Ordering a capped fetch and raising the cap
+belong in the same change. See
+`docs/spire_fusion_endpoints_reference.md` §12.2.
+
+**Acceptance criteria**
+
+- A truncated result states examined, total and percentage.
+- The statement precedes the figures it qualifies.
+- A tool that cannot obtain a total says so rather than reporting the
+  examined count as the total.
+- No proportion is computed over a truncated fetch — a ratio of two lower
+  bounds is not a share.
+- Where a cap will bite, the caller is told before the fetch completes,
+  not only afterwards.
+
+**Depends on:** none. **Related:** OUT-01 (a partial answer is still an
+answer), OUT-04 (the numbers are computed, not narrated).
 
 ---
 

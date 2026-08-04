@@ -1795,3 +1795,133 @@ had not — `BillToCustomerName` sits at position seven and the tool had
 been fetching it all along. The flag now names what it holds back, and
 the two stamped fields `total_credit` / `total_credit_note` surfaced on
 its first run afterwards.
+
+---
+
+## 16. Collection sizes, page size and ordering (2026-08-04)
+
+Everything below was measured against `fa-esll-dev37` on 2026-08-04. Two
+entries CONTRADICT earlier sections of this document; both are marked.
+
+### 16.1 How big the collections actually are
+
+None of these numbers was known to the code. Each was obtained with one
+call — `limit=1&totalResults=true&onlyData=true`, no projection.
+
+| Endpoint | `totalResults` | Previously recorded |
+|---|---|---|
+| `/purchaseOrders` | **15,839** | ~3,362, in a tool docstring |
+| `/invoices` | **48,931** | not recorded |
+| `/standardReceipts` | **37,338** | 37,335 (§9), then 37,337 (§12) |
+| `/receivablesCustomerAccountActivities` | 435 | 435 — unchanged |
+
+**The 3,362 mattered.** It lived in `aggregate_purchase_orders.py` and
+was used as the reason a 50-page cap was safe. At 200 rows per page a
+full PO scan needs 80 pages, so every unfiltered breakdown stopped at
+10,000 of 15,839 and reported lower bounds — with one status understated
+by 860 million. A wrong number in a docstring, used to justify a bound,
+survives for as long as nobody re-measures.
+
+`/standardReceipts` has now been recorded three times as three different
+numbers (37,335 / 37,337 / 37,338). The collection is presumably growing;
+treat any recorded count here as an order of magnitude, not a constant,
+and re-probe when the exact figure matters.
+
+### 16.2 `limit=500` works — the "~200 practical max" is too conservative
+
+**Contradicts §7 quirk 5**, which says "max practical limit before things
+get slow: ~200".
+
+`aggregate_invoices.py` had been paging `/invoices` at 500 for as long as
+both it and that note existed, without incident. Measured on 2026-08-04
+against `/purchaseOrders`: **32 pages of 500, no slowdown, complete
+15,839-row scan.** Also 75 pages of 500 against `/standardReceipts`,
+37,338 rows, twice.
+
+Both aggregation paths now use 500. `compare_orders_to_invoices` and
+`po_lifecycle` still use 200 — deliberately unchanged, because raising
+them at the same time as extracting their shared paging loop would have
+made the extraction unverifiable as a no-op.
+
+The ~200 note is either stale or endpoint-specific. It has not been
+disproved for every resource, so it stays in §7 rather than being
+deleted; if a fetch starts erroring or slowing, it is the first thing to
+re-read.
+
+### 16.3 `orderBy=StandardReceiptId` — see §12.2
+
+Recorded in full at §12.2, which is now resolved. The short version: the
+sort key is the PK, it is genuinely applied across page boundaries, and
+`ReceiptNumber` is NOT unique on this pod so it cannot serve as one.
+
+**The caution is worth repeating here.** Adding `orderBy` to a fetch that
+is still CAPPED buys reproducibility and can cost representativeness — a
+PK-ascending cap returns the oldest rows rather than arbitrary ones. Add
+the ordering and raise the cap together, or state the skew.
+
+### 16.4 A single-field `fields=` returned 200 on `/standardReceipts`
+
+**Apparently contradicts §7 quirk 7 and the two §2 entries** which state
+that `fields=` is unusable on this endpoint — that it 500s even when
+every named field is valid, confirmed twice, at a cost of six
+misdiagnosed calls.
+
+On 2026-08-04, this returned HTTP 200 with two rows:
+
+```
+/standardReceipts?limit=2&orderBy=ReceiptNumber&onlyData=true&fields=ReceiptNumber
+```
+
+A three-field projection in the same session returned an empty body
+(`fields=ReceiptId,ReceiptNumber,Amount`) — but that call ALSO carried an
+invalid field name, `ReceiptId`, so it is not a clean test of the
+projection.
+
+**Not treated as a correction.** One observation against two confirmed
+ones, with a plausible confounder (single field versus several, or
+`orderBy` present), and no clean isolation was run. Recorded so the next
+person knows the rule may be narrower than "any projection 500s" —
+possibly "more than one field", possibly something else.
+
+**The operational advice does not change: do not project on
+`/standardReceipts`.** Fetch full rows and discard client-side. The cost
+of being wrong here is a 500 that reads as a dead endpoint, which has
+already been misdiagnosed twice.
+
+### 16.5 The complete receipt-method distribution
+
+Worth recording because every previously observed version of this was a
+sample, and the samples were badly unrepresentative.
+
+Full scan, 37,338 receipts, 22 methods. Top of the distribution:
+
+| Method | Receipts | Total |
+|---|---|---|
+| Lockbox | 18,661 | 8,400,099,630.76 |
+| Check (Directly/No Remit) | 18,480 | 2,143,250,945.29 |
+| EFT (Automatic) | 29 | 2,006,690.95 |
+| Credit Card (No Confirmation) | 80 | 608,796.28 |
+
+Grand total 10,546,439,259.11. The remaining 18 methods are single- and
+double-digit counts.
+
+**Lockbox and Check are within 1% of each other by count.** Every capped
+version of this answer got that badly wrong — a 5,000-row unordered
+sample showed 4,754 Lockbox against 179 Check; the ordered sample showed
+Check as absent entirely.
+
+`ReceiptMethod` values are free text and messier than the four above
+suggest: `BO_EPAY`, `MD_CHECK`, `DDHC Automatic Receipt Method`,
+`BFTC Receipt Method wo Remit`, `ERPONE RECEIPT METHOD`. Anything
+matching on this field client-side should not assume a small closed set.
+
+### 16.6 `CANCELED` POs — unexplained
+
+Across the complete 15,839-row scan: **1,496 POs with status `CANCELED`,
+totalling 4,000.00** — under three units each, against an overall average
+in the tens of thousands.
+
+It survived a full fetch, so it is real data rather than a sampling
+artefact. Either cancelled orders zero out their `Ordered` amount on this
+pod, or the demo data is shaped oddly. Not investigated. Worth knowing
+before anyone builds a metric that includes cancelled orders.
