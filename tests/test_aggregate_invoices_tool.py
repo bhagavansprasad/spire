@@ -46,8 +46,26 @@ def _mock_client(items, total_results=None) -> AsyncMock:
     The limit=1 totalResults probe and the main fetch both return the
     same items list; tests that care about the distinction assert on the
     recorded call params instead.
+
+    total_results IS STUBBED EXPLICITLY. The tool calls
+    client.total_results(...) before paging, and on a bare AsyncMock that
+    returns another AsyncMock rather than an int — which then blew up on
+    the first comparison:
+
+        TypeError: '>' not supported between instances of
+                   'AsyncMock' and 'int'
+
+    Six tests failed that way, and failing was the right outcome: a mock
+    that answered the probe with a plausible-looking object would have
+    let the cap-warning arithmetic run on nonsense. FusionClient.
+    total_results returns int | None, and None is a real and documented
+    answer — Fusion omits totalResults on some resources — so the default
+    here exercises the degrade path that most of these tests want.
+
+    Pass a number to exercise the probe path instead.
     """
     client = AsyncMock()
+    client.total_results = AsyncMock(return_value=total_results)
 
     async def _get(path, params=None):
         params = params or {}
@@ -248,6 +266,53 @@ async def test_tool_not_truncated_when_pod_runs_out():
     assert result["truncated"] is False
     # All distinct suppliers were seen.
     assert result["total_suppliers"] == _PAGE_SIZE + 5
+
+
+@pytest.mark.asyncio
+async def test_tool_carries_the_probe_count_to_the_caller():
+    """total_available and examined ride on the result.
+
+    Without them a summary can say the fetch stopped at the cap but not
+    how much was missed, and the difference between those two sentences
+    is the difference between a footnote and a warning. Measured on the
+    live pod: /invoices holds 48,931 records against a 25,000 cap, so a
+    spend ranking covers 51% — worth stating as a number rather than as
+    "there may be more".
+    """
+    items = [_inv("Acme", "1", 100, "2026-01-05")]
+    client = _mock_client(items, total_results=48931)
+
+    result = await aggregate_invoices_by_supplier(
+        client, date_from="2026-01-01"
+    )
+
+    assert result["total_available"] == 48931
+    assert result["examined"] == len(items)
+
+
+@pytest.mark.asyncio
+async def test_tool_survives_a_pod_that_reports_no_total():
+    """None is a real answer, not a failure.
+
+    Fusion omits totalResults on some resources and some parameter
+    combinations. Everything the probe enables — the denominator, the
+    up-front cap warning, the count in the truncation note — degrades to
+    what the loop did before the probe existed, and the aggregate itself
+    is unaffected.
+    """
+    items = [
+        _inv("Acme", "1", 100, "2026-01-05"),
+        _inv("Globex", "2", 500, "2026-01-06"),
+    ]
+    client = _mock_client(items, total_results=None)
+
+    result = await aggregate_invoices_by_supplier(
+        client, date_from="2026-01-01"
+    )
+
+    assert result["total_available"] is None
+    assert result["total_suppliers"] == 2
+    assert result["truncated"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────

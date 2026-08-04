@@ -50,9 +50,8 @@ synthesizer phrases "no invoices in that range" from that shape.
 
 from __future__ import annotations
 
-import sys
-
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 
 
 INVOICES_PATH = "/fscmRestApi/resources/11.13.18.05/invoices"
@@ -210,48 +209,29 @@ async def aggregate_invoices_by_supplier(
         server_clause = f"InvoiceDate >= '{date_from}'"
 
     # Page through matching invoices. Aggregation needs every in-range
-    # invoice for correct sums, so we walk pages until the pod says there
-    # are no more (hasMore=false) or we hit MAX_PAGES. The page cap bounds
-    # the work on very large ranges; hitting it sets truncated=True.
-    items: list[dict] = []
-    hit_page_cap = False
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-        }
-        if server_clause:
-            params["q"] = server_clause
-
-        response = await client.get(INVOICES_PATH, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        # Progress: report to the caller via the callback when one is
-        # provided (client sees it mid-call), and always echo to stderr
-        # as a server-side liveness fallback.
-        msg = (
-            f"page {page + 1}: +{len(page_items)} (total {len(items)})"
-        )
-        print(
-            f"[aggregate_invoices_by_supplier] {msg}",
-            file=sys.stderr,
-            flush=True,
-        )
-        if report_progress is not None:
-            # progress = pages done; total unknown until the pod stops,
-            # so report the running page count without a fixed total.
-            await report_progress(page + 1, None, msg)
-
-        # Stop when the pod reports no further pages. Fall back to a short
-        # page as the end signal if hasMore is absent.
-        has_more = response.get("hasMore")
-        if has_more is False or (has_more is None and len(page_items) < _PAGE_SIZE):
-            break
-    else:
-        # Loop exhausted MAX_PAGES without the pod signalling the end —
-        # there may be more matching invoices than we fetched.
-        hit_page_cap = True
+    # invoice for correct sums, so the helper walks pages until the pod
+    # says there are no more or the cap stops it.
+    #
+    # NO PROJECTION. This tool needs four fields and used to fetch whole
+    # invoice bodies, and that is left alone here: converting the loop and
+    # adding a fields= parameter at the same time would be two changes
+    # measured as one. The projection happens client-side below, as it
+    # always has.
+    #
+    # WHAT THE PROBE REVEALS HERE, and it is not comfortable: /invoices
+    # holds 48,931 records (measured 2026-08-04). At 500 x 50 this reads
+    # 25,000 of them, so every spend ranking is computed over roughly half
+    # the collection. That was always true; it was reported as one
+    # footnote sentence. The helper now warns before the fetch instead.
+    items, hit_page_cap, total_available = await page_all(
+        client,
+        INVOICES_PATH,
+        "aggregate_invoices_by_supplier",
+        server_clause=server_clause,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
+    )
 
     # Apply the client-side upper bound (and, defensively, the lower
     # bound too — cheap and keeps the math correct even if the server
@@ -289,5 +269,14 @@ async def aggregate_invoices_by_supplier(
         "total_suppliers": total_suppliers,
         "returned": len(rows),
         "truncated": truncated,
+        # How many invoices MATCHED, as against how many were fetched.
+        # Without it a summary can say the fetch stopped at the cap but
+        # not how much was missed, and the difference between those two
+        # sentences is the difference between a footnote and a warning.
+        # None when the pod gave no count.
+        "total_available": total_available,
+        "examined": len(items),
         "rows": rows,
     }
+
+

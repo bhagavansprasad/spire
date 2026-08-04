@@ -91,15 +91,28 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
             # "page 1/32" — and printed them as floats, because the
             # values arrive over MCP as JSON numbers.
             #
-            # The tool is the one that knows what it is counting. This
-            # side's job is to put the line on the screen.
-            shown = message or f"{progress}/{total}" if total else str(progress)
+            # The parentheses are load-bearing. Without them this reads
+            # as (message or "n/total") if total else str(progress), so a
+            # message arriving with total=None was DISCARDED and replaced
+            # by the progress number. That is exactly the case the
+            # pre-fetch cap warning uses, and it printed "0" instead of
+            # the warning until this was measured.
+            shown = message or (
+                f"{progress}/{total}" if total else str(progress)
+            )
+
+            # progress=0 marks a message sent BEFORE any page is fetched
+            # — currently the page-cap warning. It gets its own line even
+            # on a terminal: written with \r like the bar, the first page
+            # would overwrite it and the reader would never see that
+            # their answer covers half the data.
+            preamble = not progress
 
             # Redraw in place on a terminal, one line per page into a
             # pipe. Runs here are piped through tee by habit, and \r in a
             # file collapses the whole fetch into one unreadable line.
             # Mirrors the same check on the server side.
-            if sys.stderr.isatty():
+            if sys.stderr.isatty() and not preamble:
                 print(f"  … {shown}", end="\r", file=sys.stderr, flush=True)
                 if total and progress and int(progress) >= int(total):
                     print("", file=sys.stderr, flush=True)
