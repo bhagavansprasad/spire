@@ -329,6 +329,99 @@ def test_truncated_true_says_lower_bound(po_value_bucket):
     assert "lower bounds" in joined
 
 
+def test_truncation_note_counts_the_SOURCE_rows_not_the_ranked_entity(
+    po_value_bucket,
+):
+    """A ranking's truncation counts are fetched rows, not ranked ones.
+
+    THE BUG THIS EXISTS TO CATCH, found while wiring the note and not by
+    any test: the obvious label for the sentence is entity_label, which
+    on a ranking is "suppliers". But total_available and examined count
+    what was FETCHED — purchase orders here, invoices for the spend
+    ranking — and the tool then GROUPS those into suppliers. Labelling
+    the note with entity_label produces
+
+        PARTIAL: 25,000 of 48,931 suppliers examined
+
+    over a pod holding 117 suppliers. A wrong number, stated with total
+    confidence, in the one sentence whose whole job is to tell the reader
+    how much to trust the others.
+
+    Same class as the two total_amount fields on the receipt
+    distribution: a name that reads right in one place and means
+    something else in another. Hence source_label, per shape.
+    """
+    po_value_bucket["truncated"] = True
+    po_value_bucket["total_available"] = 15839
+    po_value_bucket["examined"] = 10000
+
+    joined = "\n".join(local_aggregation_summary(po_value_bucket))
+
+    assert "10,000 of 15,839 purchase orders examined" in joined
+    # The ranked entity must NOT be what the note counts.
+    assert "15,839 suppliers" not in joined
+    assert "of 15,839 suppliers" not in joined
+
+
+def test_truncation_note_states_the_share_when_counts_are_present(
+    po_value_bucket,
+):
+    """PARTIAL, with both numbers and a percentage.
+
+    "Lower bound" alone does not tell a reader whether the shortfall is
+    one row or half the collection, and that is the only thing they need
+    in order to judge the figures below it. Measured on /invoices the
+    same day: 25,000 of 48,931, which is 51% — a footnote that size is
+    not a footnote.
+    """
+    po_value_bucket["truncated"] = True
+    po_value_bucket["total_available"] = 15839
+    po_value_bucket["examined"] = 10000
+
+    lines = local_aggregation_summary(po_value_bucket)
+
+    assert lines[0].startswith("PARTIAL:")
+    assert "63%" in lines[0]
+    assert "lower bounds" in lines[0]
+
+
+def test_truncation_note_comes_first(po_value_bucket):
+    """Before the figures, not after them.
+
+    It sat last until 2026-08-04, which is where the model put it too:
+    state the numbers, then hedge. If an answer covers 63% of the
+    collection, that belongs above the numbers — it decides whether they
+    are worth reading.
+    """
+    po_value_bucket["truncated"] = True
+    po_value_bucket["total_available"] = 15839
+    po_value_bucket["examined"] = 10000
+
+    lines = local_aggregation_summary(po_value_bucket)
+
+    assert lines[0].startswith("PARTIAL:")
+    assert any("leads with" in line for line in lines[1:])
+
+
+def test_truncation_note_falls_back_without_counts(po_value_bucket):
+    """An older tool, or a pod that returned no count, still gets a note.
+
+    total_results returns None when Fusion omits totalResults, and every
+    behaviour that depends on it degrades rather than failing. Here that
+    means the original sentence — everything that can honestly be said
+    without a denominator.
+    """
+    po_value_bucket["truncated"] = True
+    po_value_bucket.pop("total_available", None)
+    po_value_bucket.pop("examined", None)
+
+    joined = "\n".join(local_aggregation_summary(po_value_bucket))
+
+    assert "PARTIAL" not in joined
+    assert "page cap" in joined
+    assert "lower bounds" in joined
+
+
 def test_counts_line_omitted_when_nothing_is_hidden(po_value_bucket):
     """"Top 2 of 2" restates the table. The count line earns its place
     only when the total is a number the reader cannot see."""

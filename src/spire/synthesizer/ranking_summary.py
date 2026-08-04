@@ -120,6 +120,15 @@ _RANKING_FIELDS: dict[str, dict[str, Any]] = {
         "measure_key": "total_spend",
         "total_key": "total_suppliers",
         "entity_label": "suppliers",
+        # WHAT WAS FETCHED, which on a ranking is not what was ranked.
+        # total_available and examined count INVOICES; total_suppliers
+        # counts the distinct suppliers those invoices grouped into.
+        # Labelling the truncation note with entity_label would print
+        # "25,000 of 48,931 suppliers examined" over a pod holding 117
+        # suppliers — a wrong number stated with total confidence, which
+        # is the exact failure this module exists to remove. Caught while
+        # wiring the note, not by a test.
+        "source_label": "invoices",
         "measure_label": "spend",
     },
     "supplier_po_value_ranking": {
@@ -127,6 +136,7 @@ _RANKING_FIELDS: dict[str, dict[str, Any]] = {
         "measure_key": "total_ordered",
         "total_key": "total_suppliers",
         "entity_label": "suppliers",
+        "source_label": "purchase orders",
         "measure_label": "committed value",
     },
     "exposure_ranking": {
@@ -135,6 +145,9 @@ _RANKING_FIELDS: dict[str, dict[str, Any]] = {
         "measure_key": "open_receivables",
         "total_key": "total_accounts",
         "entity_label": "accounts",
+        # The one shape where source and entity coincide: the tool
+        # fetches accounts and ranks accounts, with no grouping step.
+        "source_label": "accounts",
         "measure_label": "open receivables",
     },
 }
@@ -146,6 +159,10 @@ _DISTRIBUTION_FIELDS: dict[str, dict[str, Any]] = {
         "grand_total_key": "total_ordered",
         "grand_count_key": "total_pos",
         "entity_label": "purchase orders",
+        # Distributions partition what they fetched, so the two labels
+        # agree here — unlike the rankings above, where a grouping step
+        # sits between them.
+        "source_label": "purchase orders",
     },
     "receipt_method_distribution": {
         "label_key": "receipt_method",
@@ -155,6 +172,7 @@ _DISTRIBUTION_FIELDS: dict[str, dict[str, Any]] = {
         "grand_total_key": "total_amount",
         "grand_count_key": "total_receipts",
         "entity_label": "receipts",
+        "source_label": "receipts",
     },
 }
 
@@ -201,24 +219,52 @@ def _num(value: Any) -> str:
     return f"{value:,}"
 
 
-def _truncation_note(bucket: dict, what: str) -> list[str]:
+def _truncation_note(
+    bucket: dict, what: str, entity_label: str = "records"
+) -> list[str]:
     """The one sentence worth writing about a capped fetch.
 
     .get() rather than [] because exposure_ranking has no truncated key
     at all — absent means "the tool cannot be incomplete", which is true
     of that endpoint (435 rows, fetched whole).
 
-    Says LOWER BOUND rather than "based on a sample". The model's phrasing
-    ("may understate actual spend") was not wrong, but "lower bound" is
-    the precise claim: every figure shown is at least this, and the true
-    figure is at least as large.
+    SAYS HOW MUCH IS MISSING, WHEN THE TOOL KNOWS. Until 2026-08-04 this
+    read "the fetch stopped at the page cap, so these figures are lower
+    bounds". True, and far too quiet. Measured that day:
+
+        /invoices    25,000 examined of 48,931   51%
+        /purchaseOrders (before the page-size fix)
+                     10,000 examined of 15,839   63%
+
+    The second case understated one status by 860 million and read like a
+    complete answer with a footnote. "Lower bound" does not tell a reader
+    whether the shortfall is one row or half the collection, and that is
+    the only thing they need to know in order to judge the number.
+
+    The counts come from total_available and examined, which the fetch
+    helper now puts on every bucket it returns. Both absent — an older
+    tool, or a pod that returned no count — falls back to the original
+    sentence, which is everything that can honestly be said without them.
+
+    No warning symbol. It renders inconsistently across terminals and
+    log viewers, and a word carries the same weight without the risk.
     """
-    if bucket.get("truncated") is True:
+    if bucket.get("truncated") is not True:
+        return []
+
+    total = bucket.get("total_available")
+    examined = bucket.get("examined")
+
+    if isinstance(total, int) and isinstance(examined, int) and total > 0:
         return [
-            f"The fetch stopped at the page cap, so these {what} "
-            f"are lower bounds — there may be more."
+            f"PARTIAL: {examined:,} of {total:,} {entity_label} examined "
+            f"({examined / total:.0%}). These {what} are lower bounds."
         ]
-    return []
+
+    return [
+        f"The fetch stopped at the page cap, so these {what} "
+        f"are lower bounds — there may be more."
+    ]
 
 
 def _ranking_summary(bucket: dict, shape: str) -> list[str]:
@@ -246,6 +292,17 @@ def _ranking_summary(bucket: dict, shape: str) -> list[str]:
     if not isinstance(returned, int):
         returned = len(rows)
     total = bucket.get(fields["total_key"])
+
+    # ---- 0. how complete this answer is ----
+    #
+    # FIRST, not last. It used to sit at the bottom, which is where the
+    # model put it too: state the figures, then hedge. If an answer covers
+    # 51% of the collection, that is not a closing caveat — it is the
+    # thing a reader needs before they read the numbers, because it
+    # decides whether the numbers are worth reading at all.
+    out.extend(
+        _truncation_note(bucket, "totals", fields["source_label"])
+    )
 
     # ---- 1. counts ----
     #
@@ -293,8 +350,6 @@ def _ranking_summary(bucket: dict, shape: str) -> list[str]:
     elif isinstance(measure, (int, float)):
         out.append(f"{name} leads with {_money(measure)}.")
 
-    # ---- 3. truncation ----
-    out.extend(_truncation_note(bucket, "totals"))
     return out
 
 
@@ -315,6 +370,11 @@ def _distribution_summary(bucket: dict, shape: str) -> list[str]:
     out: list[str] = []
     grand_total = bucket.get(fields["grand_total_key"])
     truncated = bucket.get("truncated") is True
+
+    # ---- 0. how complete this answer is ---- (see _ranking_summary)
+    out.extend(
+        _truncation_note(bucket, "figures", fields["source_label"])
+    )
 
     # ---- 1. how many groups ----
     #
@@ -370,8 +430,6 @@ def _distribution_summary(bucket: dict, shape: str) -> list[str]:
             # true, the proportion is not.
             out.append(f"{label} is the largest at {_money(measure)}.")
 
-    # ---- 3. truncation ----
-    out.extend(_truncation_note(bucket, "figures"))
     return out
 
 
@@ -406,7 +464,7 @@ def _scalar_summary(bucket: dict) -> list[str]:
         # case where a sentence beats the scalars. (OUT-01.)
         return ["No open purchase orders."]
 
-    return _truncation_note(bucket, "figures")
+    return _truncation_note(bucket, "figures", "purchase orders")
 
 
 def local_aggregation_summary(bucket: dict) -> list[str] | None:
