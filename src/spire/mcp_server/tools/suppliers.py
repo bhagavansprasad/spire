@@ -45,6 +45,17 @@ _PROJECTED_FIELDS = [
     "Status",
     "BusinessRelationship",
     "TaxpayerCountryCode",
+    # WHO columns (COL-03 / layer 3). Present in the raw /suppliers
+    # response (this tool sends no fields= to the pod, so the row already
+    # carries them) but formerly discarded by this projection. Now in the
+    # KG as projectable Supplier fields, so a query naming one must carry
+    # its value. They ride on every supplier row; the pipeline's
+    # _project_outputs trims to intent.fields, so they only DISPLAY when
+    # the user asked for them. Four extra keys per row is negligible.
+    "CreatedBy",
+    "CreationDate",
+    "LastUpdatedBy",
+    "LastUpdateDate",
 ]
 
 

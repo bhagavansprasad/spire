@@ -84,6 +84,28 @@ class KGMenu:
     def is_known_filter(self, filter_type: str) -> bool:
         return filter_type in self.filter_types
 
+    def is_known_field(self, entity_name: str, field_name: str) -> bool:
+        """True if ``field_name`` is a projectable column of ``entity_name``.
+
+        Checked against ``entity_columns`` (from kg_entity_field). Used by
+        validate_intent (COL-03 Step 4) to split a requested column list
+        into resolvable names and unresolved ones — the latter are named
+        back to the user rather than refusing the whole query. An entity
+        with no field rows in the KG (e.g. Site) has no entry here, so
+        every column on it is correctly unresolved.
+        """
+        return field_name in self.entity_columns.get(entity_name, [])
+
+    def available_columns(self, entity_name: str) -> list[str]:
+        """The projectable columns of ``entity_name``, in KG order.
+
+        Empty list when the entity has no field rows. Used by display to
+        offer a real menu of columns when a requested one did not resolve
+        (COL-03) — the list the user can actually choose from, read
+        straight from the KG rather than guessed.
+        """
+        return list(self.entity_columns.get(entity_name, []))
+
 
 def _read_clob(value) -> str:
     """Coerce a possibly-CLOB column value to str. Mirrors the planner's sync

@@ -2203,3 +2203,160 @@ Plan concluded and recorded. No code written yet. Next action: read the
 current list-display and synthesizer code (the two sites of the drifting
 sentence and the silent missing column) before designing the layer-1
 change — code not yet read is code not yet safe to change.
+
+## G15. COL-03 built — and the pivot the build forced (2026-08-04, later)
+
+G14 recorded the plan: build order 1 → 3 → 2, layer 1 (the honest note)
+first as the safety net. The build was done in that order — and then
+end-to-end testing forced the order to change. This section records what
+was built, the measurement that forced the pivot, and where it landed.
+Written after a stability run, not from the plan.
+
+### G15.1 Layer 1 was built and tested, exactly as designed
+
+All five layer-1 pieces landed and pass their tests:
+
+- `models.py` — `Intent.unresolved_fields`, the field carrying unknown
+  columns through to display.
+- `vocabulary.py` — `KGMenu.is_known_field` and `available_columns`, the
+  KG field-catalog accessors.
+- `validation.py` — Step 4: splits `intent.fields` against the catalog,
+  known names stay, unknown ones move to `unresolved_fields`, returns
+  None (no refusal). Mutates the Intent; the only validation step that
+  does. **26 tests pass** in `test_nl_parser.py` (21 existing + 5 new
+  COL-03 cases), verified through the real parse path.
+- `parser.py` — a system-prompt carve-out telling the model not to refuse
+  on unknown columns.
+- `display_formatters.py` + both runners — the note above the table,
+  naming unresolved columns and offering the available ones. Note-builder
+  stub-tested across partial / all-invalid / clean cases.
+
+The deterministic split is correct. Given an Intent carrying
+`['Supplier','Status','created by']`, Step 4 produces
+`fields=['Supplier','Status']`, `unresolved_fields=['created by']`, no
+refusal. Proven.
+
+### G15.2 The measurement that broke the plan
+
+A live re-run of the partial-column prompts showed layer 1 was **not
+firing**. The SME case — "supplier name, status, and created by" — still
+refused wholesale, exactly as before the work.
+
+A probe on the raw model draft settled why, and it is the important
+finding of the session:
+
+```
+[PROBE] unanswerable=True kind='unsupported_filter' fields=[] target=''
+```
+
+The MODEL set `unanswerable=True`, emitted an EMPTY `fields`, and left
+`target_entity` blank. So the Intent was never built; Step 4 never ran;
+the valid columns (`Supplier`, `Status`) were discarded by the model
+before any deterministic code saw them. Layer 1 is correct but
+UNREACHABLE for this case, because the refusal happens upstream of it, in
+the model.
+
+The carve-out (the `parser.py` prompt change) did not stop the refusal.
+This is the soft spot flagged at design time: a prompt instruction is a
+request the model can decline, and here it declined.
+
+### G15.3 Why the prompt is the wrong lever — decided
+
+The instinct was to strengthen the prompt. That was rejected, on a clear
+principle stated by Bhagavan: *the prompt can be anything; the system
+should resolve anything deterministically, not by tuning instructions the
+model may ignore.*
+
+The probe proved the hard limit behind that principle: when the model
+refuses, it hands downstream code an empty draft. Deterministic code can
+only resolve what it receives. There is no downstream fix for a column
+the model never passed through — the information does not exist on our
+side of the boundary. So "resolve anything" cannot be achieved by
+catching the refusal; it must be achieved by stopping the refusal, and
+the only deterministic way to stop it is to make the column real in the
+KG.
+
+### G15.4 The pivot: layer 3 first, and it worked
+
+Why the model refused: its column list comes from the KG (`entity_columns`
+via `load_kg_menu`), and its instruction says use only names on that list.
+`created by`/`CreatedBy` was not on the list, because the who-columns were
+never in the KG — even though they exist on the pod. So the model,
+following its instruction correctly, refused.
+
+The fix is therefore not the note. It is **completing the KG**. The
+who-columns were curl-confirmed on `/suppliers` (G14.5): `CreatedBy`,
+`CreationDate`, `LastUpdatedBy`, `LastUpdateDate` all exist, return real
+values, survive projection. So four rows were added to `kg_entity_field`
+for Supplier, role `projection`, actual Oracle names.
+
+Result, measured after `rebuild_kg.py` + server restart:
+
+```
+[PROBE] unanswerable=False fields=['Supplier','Status','CreatedBy'] target='Supplier'
+```
+
+The model stopped refusing — with NO prompt change — because the KG now
+tells it `CreatedBy` is a real column. It resolved it on its own. This is
+the architecture working as intended: the KG is the authority on what a
+column is, we made the KG complete, and the behaviour followed.
+
+### G15.5 The second bug: the fetcher discarded the data
+
+The column now resolved, but printed em-dashes. Curl proved the data
+exists, so the value was being lost between pod and display. Cause,
+located in `src/spire/mcp_server/tools/suppliers.py`: `_PROJECTED_FIELDS`,
+a hardcoded six-column list, and `row = {k: item.get(k) for k in
+_PROJECTED_FIELDS}` threw away every key not on it. The pod sends no
+`fields=` on this endpoint, so the raw row DID carry `CreatedBy` — the
+fetcher's own projection discarded it.
+
+Fix: the four who-columns added to `_PROJECTED_FIELDS`. They ride on every
+supplier row (four extra keys, negligible); the pipeline's
+`_project_outputs` trims to `intent.fields`, so they DISPLAY only when
+asked for. No executor change, no new parameter, no pod-request change.
+
+### G15.6 Stability — measured across variations
+
+A seven-prompt run confirmed the who-columns are stable, not a one-off:
+
+- `CreatedBy` alone; `CreatedBy`+`CreationDate`; `SupplierNumber`+
+  `LastUpdatedBy`; `Status`+`LastUpdateDate` — ALL populate with real,
+  varied data across different columns, combinations and positions.
+  Edge cases the KG note predicted appeared (`LastUpdatedBy` as an email
+  `delivery@transformedge.com` and as a login `lee.avery`).
+- Regression prompts (name/number/status, plain list) — unchanged.
+- `credit rating` (genuinely absent) — still refuses. The RIGHT failure:
+  no data was invented for a fake column.
+
+The SME's real vocabulary — the who/audit columns — now works, with real
+data, deterministically.
+
+### G15.7 What this leaves open
+
+- **Genuinely-absent columns** (`credit rating`, `risk score`) still
+  refuse with the misleading filter message. Layer 1's note is built and
+  correct but stays unreachable for these, because the model refuses
+  first and the note can only fire once columns flow. Solving this needs
+  the absent-column case to stop refusing wholesale — a harder problem,
+  not solved this session.
+- **Raw date display.** `CreationDate` prints the full Oracle timestamp
+  (`2013-11-15T18:58:48.031+00:00`). Correct data, but a user likely
+  wants `2013-11-15`. A display-formatting nicety, not logged as a bug.
+- **Synonyms** (`created by` → `CreatedBy`) — deliberately deferred:
+  actual names first, per Bhagavan. Only exact Oracle names resolve
+  today; natural phrasing is layer-2 work.
+- **The who-columns are Supplier-only.** Other entities' who-columns are
+  the same recipe (curl-confirm, add rows) driven by real need, not done
+  here.
+
+### G15.8 Tripwires and housekeeping
+
+- `kg_entity_field` grew 194 → 198. `scripts/print_kg.py` expected count
+  bumped to 198. **`tests/test_kg_metadata.py` must be bumped too** — the
+  paired tripwire; not yet confirmed done at time of writing.
+- A temporary `[PROBE]` line was added to `parser.py` for G15.2/G15.4 and
+  must be removed before commit.
+- The `parser.py` carve-out (G15.1) is now doing nothing useful for the
+  who-columns (the KG change is what fixed them) but is harmless and left
+  in; it may help if the absent-column case is taken up.

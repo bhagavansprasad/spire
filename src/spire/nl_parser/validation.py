@@ -17,11 +17,26 @@ So a single Refusal never mixes flavors.
      target (no fetcher)              -> UNSUPPORTED_OPERATION (stop)
   3. entity valid: collect every
      filter type not in the KG        -> UNSUPPORTED_FILTER    (all at once)
+  4. columns: split requested fields   -> NO refusal; the query
+     into known / unknown                runs, unknown names are
+                                         recorded on the Intent
 
 Step 3 mirrors the planner's own _validate_intent_filters, which reports ALL
 unknown filter types at once rather than the first.
 
-Returns None when the draft is fully valid (nothing to refuse).
+Step 4 (COL-03) is deliberately NOT a refusal gate. An unknown COLUMN does
+not make a query out of scope the way an unknown entity or filter does: the
+records still exist and the valid columns can still be shown. So instead of
+refusing, Step 4 mutates the Intent — known columns stay in ``fields``,
+unknown ones move to ``unresolved_fields`` — and returns None. Display names
+the unresolved columns back to the user and offers the entity's available
+columns. This is the one step that mutates the Intent rather than only
+inspecting it, and the only column handling that is deterministic rather
+than left to the model; before it, an unknown column was refused wholesale
+by the model, discarding the valid columns named alongside it.
+
+Returns None when the draft is fully valid — including the partial-column
+case, which is a SUCCESS (rows with a note), not a refusal.
 """
 
 from __future__ import annotations
@@ -41,8 +56,16 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
         menu: The KG menu (allowed entities, targets, filter types).
 
     Returns:
-        None if the Intent is fully KG-valid. Otherwise a Refusal naming the
-        single flavor that applies (B1 ordering).
+        None if the Intent is fully KG-valid, OR valid except for unknown
+        columns (which are moved to intent.unresolved_fields rather than
+        refused — see Step 4). Otherwise a Refusal naming the single flavor
+        that applies (B1 ordering).
+
+    Side effect:
+        On the field-split step (COL-03), MUTATES ``intent``: unknown column
+        names are removed from ``intent.fields`` and placed in
+        ``intent.unresolved_fields``. The Intent is fresh per parse and not
+        shared, so this is safe. No other step mutates the Intent.
     """
     entity = intent.target_entity
 
@@ -85,5 +108,28 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
             offending_entity=entity,
             offending_filters=[bf for bf in bad_filters if bf is not None],
         )
+
+    # ── Step 4: split requested columns into resolvable vs unresolved ──
+    # COL-03. Unlike the gates above, an unknown COLUMN does not refuse the
+    # query. The entity and filters are valid, so the query runs; the
+    # requested column list is split against the KG field catalog. Known
+    # names stay in intent.fields (projection prints them); unknown ones
+    # move to intent.unresolved_fields, which display names back to the
+    # user alongside the entity's available columns. No substitution: an
+    # unknown column is reported, never swapped for a near-match.
+    #
+    # This MUTATES the intent (the only gate that does) — resolving fields
+    # is the point, not merely checking them. Safe because parse() builds a
+    # fresh Intent immediately before this call; it is never shared.
+    #
+    # No-op when no columns were named (the common case) and for aggregate/
+    # compare intents, which skip validate_intent entirely upstream.
+    if intent.fields:
+        known: list[str] = []
+        unresolved: list[str] = []
+        for col in intent.fields:
+            (known if menu.is_known_field(entity, col) else unresolved).append(col)
+        intent.fields = known
+        intent.unresolved_fields = unresolved
 
     return None

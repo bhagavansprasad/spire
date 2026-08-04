@@ -243,6 +243,13 @@ async def test_kg_table_row_counts_match_v1_1():
     same DATA and differ only in rendering, which is the synthesizer's
     choice, not the planner's.
 
+    COL-03 layer 3 (2026-08-04) added FOUR who-columns to Supplier as
+    projectable fields (kg_entity_field 194->198): CreatedBy, CreationDate,
+    LastUpdatedBy, LastUpdateDate. Curl-confirmed on /suppliers — they
+    exist, return real values, and survive fields= projection. Role
+    'projection' (display-only; the creation-date FILTER already exists
+    separately in kg_entity_filter). No other table moved.
+
     NOTE the counts in this test are one of FOUR places that must move
     together, not two as earlier notes implied: this dict,
     scripts/print_kg.py's expected_rows, and the two
@@ -251,7 +258,7 @@ async def test_kg_table_row_counts_match_v1_1():
     persona = load_persona("default_dev")
     expected = {
         "kg_entity": 22,
-        "kg_entity_field": 194,
+        "kg_entity_field": 198,
         "kg_edge": 17,
         "kg_pattern": 3,
         "kg_vocabulary": 97,
@@ -333,10 +340,14 @@ async def test_assigned_to_edge_crosses_pillars():
 
 
 @pytest.mark.asyncio
-async def test_supplier_has_four_projection_fields():
+async def test_supplier_has_projection_fields():
     """FK from kg_entity_field to kg_entity works; Supplier has its
-    four declared projection fields (SupplierId, SupplierNumber,
-    Supplier, Status)."""
+    declared projection fields — the original four (SupplierId,
+    SupplierNumber, Supplier, Status) plus the four COL-03 who-columns
+    (CreatedBy, CreationDate, LastUpdatedBy, LastUpdateDate). Eight total.
+
+    Order below is ASCII (ORDER BY field_name): uppercase sorts before
+    lowercase, so LastUpdateDate precedes LastUpdatedBy."""
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
         rows = await oc.fetch_all(
@@ -345,7 +356,16 @@ async def test_supplier_has_four_projection_fields():
             "ORDER BY field_name"
         )
     field_names = [row[0] for row in rows]
-    assert field_names == ["Status", "Supplier", "SupplierId", "SupplierNumber"]
+    assert field_names == [
+        "CreatedBy",
+        "CreationDate",
+        "LastUpdateDate",
+        "LastUpdatedBy",
+        "Status",
+        "Supplier",
+        "SupplierId",
+        "SupplierNumber",
+    ]
 
 
 # ----- Vocabulary lookups --------------------------------------------

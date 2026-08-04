@@ -165,9 +165,10 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
     _block(_executor_log, _format_outputs(_display_outputs))
 
     _fields = state["intent"].fields
+    _unresolved = state["intent"].unresolved_fields
     _synth_failed = state.get("synth_failed")
 
-    if _fields:
+    if _fields or _unresolved:
         # Column query: summary on top (when it succeeded), table below.
         # SUMMARY ONLY — not the typed record block. The table below
         # prints the columns the user asked for; printing the records too
@@ -176,15 +177,28 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
         # The table trims to the requested columns itself and flattens any
         # nested addresses, so it takes the RAW outputs (projected_outputs
         # has already stripped the addresses key).
-        if _synth_failed:
+        #
+        # COL-03: when _fields is empty but _unresolved is not, EVERY
+        # requested column was unknown. There is no valid column to
+        # summarize, so skip the summary — the note carries the message.
+        _entity = state["intent"].target_entity
+        _available = menu.available_columns(_entity)
+        if not _fields:
+            pass  # no summary; the note below is the answer
+        elif _synth_failed:
             answer(
                 "Answer summary: (skipped — result too large to summarize; "
                 "showing the table only)"
             )
+            answer("")
         else:
             answer(_format_synthesized(state.get("response"), summary_only=True))
-        answer("")
-        answer(_format_projected_table(_outputs, _fields))
+            answer("")
+        answer(
+            _format_projected_table(
+                _outputs, _fields, _unresolved, _available, _entity
+            )
+        )
     else:
         answer(_format_synthesized(state.get("response")))
 

@@ -12,6 +12,7 @@
 | **v1.3 adds** | OUT-04 (local synthesis) and OUT-05 (record rendering), 2026-08-03. Both were BUILT before being written down — prototype first was the deliberate choice. Recorded here now that two entities are merged. |
 | **v1.4 adds** | OUT-06 (fetch completeness), 2026-08-04. Same pattern as v1.3 — built first, written down after, because the requirement only became visible once local synthesis stopped the model from hedging over it. Also records OUT-04's delivery status; OUT-04 itself is unchanged. |
 | **v1.5 revises** | COL-03 (2026-08-04) — substitution REMOVED. Case 2 (project a close match and state it) is struck; local substitution is now prohibited outright, not merely required to disclose. Decided after the 07-31 measurement was re-run: even disclosed substitution reproduces the `supplier-site`→`Address` failure when the guessed match is wrong. COL-03 is now a two-case rule — show what exists, name and menu what does not. Also extends OUT-04's scope note to the list and by-id read paths (the drifting-narration source). Full narrative in `docs/spire_enhancement_status.md` §G14. |
+| **v1.6 records** | COL-03 partial delivery (2026-08-04). The who/audit columns — the SME's actual vocabulary — now resolve on Supplier with real data (CreatedBy, CreationDate, LastUpdatedBy, LastUpdateDate), via COL-01/layer-3 (KG field rows), not via the note. The build forced a pivot: layer 1 (the note) was built and tested but is UNREACHABLE for a wholly-unknown column, because the model refuses before the Intent is built. Making the column real in the KG stops the refusal deterministically — no prompt tuning. Requirement text unchanged; this records delivery status. Full narrative in `docs/spire_enhancement_status.md` §G15. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md` |
 
 ---
@@ -892,6 +893,36 @@ from a total refusal.
 
 **Depends on:** none. **Blocks:** measurement of COL-01, COL-02.
 **Related:** UX-01 — same root cause, second occurrence.
+
+**Delivery status, 2026-08-04.** The requirement is unchanged; this notes
+how far it has been met, and a finding that reshaped the approach.
+
+The deterministic split (Step 4 in `nl_parser/validation.py`) and the
+honest note (in `display_formatters.py`) are BUILT and tested — 26 tests
+through the real parse path. But a live re-run showed they do not fire for
+a wholly-unknown column: the model sets `unanswerable=true` and emits an
+empty draft, so no Intent is built and the deterministic split never runs.
+The valid columns are discarded by the model, upstream of any code we
+control. A system-prompt carve-out (COL-03 leaning on the parser prompt)
+did not stop this — a prompt instruction is a request the model can
+decline.
+
+The consequence, decided explicitly: the note cannot be reached by
+catching the refusal, because a refused draft carries nothing to recover.
+The reachable, deterministic fix is to make the column REAL in the KG so
+the model stops refusing — which is COL-01's job, not COL-03's. Done for
+the who/audit columns on Supplier (CreatedBy, CreationDate, LastUpdatedBy,
+LastUpdateDate): four KG field rows, curl-confirmed, real data flowing,
+stable across variations, with NO prompt change — the model resolves them
+because the KG now says they exist.
+
+So COL-03's note remains built and correct but stays unreachable for
+GENUINELY-ABSENT columns (e.g. `credit rating`), which still refuse
+wholesale. Making the note reachable for those is open work: it requires
+the absent-column case to stop refusing at the model, which the KG fix
+cannot address (there is no real column to add). The who-column majority —
+the SME's actual vocabulary — is delivered via COL-01. Full narrative:
+`docs/spire_enhancement_status.md` §G15.
 
 ---
 

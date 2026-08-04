@@ -1109,7 +1109,42 @@ def _format_summary(plan, outputs, response) -> str:
     return "\n".join(lines)
 
 
-def _format_projected_table(outputs: dict[str, list[dict]], fields: list[str]) -> str:
+def _unresolved_columns_note(
+    entity: str | None,
+    unresolved_fields: list[str],
+    available_columns: list[str],
+) -> str:
+    """COL-03: the note printed above a projected table when some requested
+    columns did not resolve.
+
+    Names the columns that are not available on the entity, then offers the
+    columns that ARE — read straight from the KG field catalog, so the user
+    is handed a real menu to choose from rather than left guessing. No
+    substitution is ever suggested: an unknown column is reported, never
+    swapped for a near-match (that was the supplier-site failure).
+
+    Returns "" when nothing is unresolved, so the caller can prepend
+    unconditionally.
+    """
+    if not unresolved_fields:
+        return ""
+    label = entity or "this record"
+    missing = ", ".join(f"'{f}'" for f in unresolved_fields)
+    plural = "columns aren't" if len(unresolved_fields) > 1 else "column isn't"
+    note = f"Note: the following {plural} available on {label}: {missing}."
+    if available_columns:
+        offered = ", ".join(available_columns)
+        note += f"\nAvailable columns: {offered}."
+    return note
+
+
+def _format_projected_table(
+    outputs: dict[str, list[dict]],
+    fields: list[str],
+    unresolved_fields: list[str] | None = None,
+    available_columns: list[str] | None = None,
+    entity: str | None = None,
+) -> str:
     """Print the final output bucket as a table of exactly the requested
     columns, in the order named.
 
@@ -1160,11 +1195,29 @@ def _format_projected_table(outputs: dict[str, list[dict]], fields: list[str]) -
         if "Address" not in cols:
             cols.append("Address")
 
-    lines = [
-        "Answer:",
-        f"\n{bucket_name} ({len(rows)} record(s)) — "
-        f"columns: {', '.join(cols)}\n",
-    ]
+    # COL-03 note, above the table. Built from unresolved_fields (columns
+    # the user named that the entity does not have) and the entity's
+    # available columns. Empty string when nothing is unresolved.
+    note = _unresolved_columns_note(
+        entity, list(unresolved_fields or []), list(available_columns or [])
+    )
+
+    # All requested columns unresolved: there is no table to show (no
+    # resolvable column), but the rows exist and the user must be told what
+    # is available. Print the note and the row count, not an empty table.
+    if not cols:
+        n = len(rows)
+        body = note if note else "No columns to display."
+        return f"Answer:\n\n{body}\n\n({n} record(s) matched; no requested column was available.)"
+
+    lines = ["Answer:"]
+    if note:
+        lines.append(note)
+        lines.append("")
+    lines.append(
+        f"{bucket_name} ({len(rows)} record(s)) — "
+        f"columns: {', '.join(cols)}\n"
+    )
 
     if not rows:
         lines.append("  (no rows)")
