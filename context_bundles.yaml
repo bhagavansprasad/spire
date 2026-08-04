@@ -100,6 +100,9 @@ bundles:
   - src/spire/mcp_server/tools/standard_receipts.py
   - src/spire/mcp_server/tools/aggregate_standard_receipts_by_method.py
   - src/spire/mcp_server/tools/rank_customer_accounts_by_exposure.py
+  # Shared paged-fetch helper, 2026-08-04. Four tools' private paging
+  # loops collapsed into this; any task touching a fetch needs it.
+  - src/spire/mcp_server/tools/pagination.py
 
   parser_planner:
   - src/spire/nl_parser/capability.py
@@ -176,6 +179,13 @@ bundles:
   - tests/test_supplier_contacts_tool.py
   - tests/test_receivables_invoice_detail_tool.py
   - tests/test_standard_receipts_tool.py
+  # Added 2026-08-04. Note test_standard_receipts_tool.py above covers
+  # the SEARCH tool; this one covers the AGGREGATE, which had no tests
+  # at all despite the longest wrong-number history in the project.
+  - tests/test_aggregate_standard_receipts_tool.py
+  # Paging tests, moved out of test_po_lifecycle_tool.py when the loop
+  # became shared — they were never about lifecycle reconciliation.
+  - tests/test_pagination.py
 
 excludes:
 - traces
