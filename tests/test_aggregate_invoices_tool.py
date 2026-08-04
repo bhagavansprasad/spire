@@ -43,41 +43,39 @@ def _inv(supplier, number, amount, date):
 def _mock_client(items, total_results=None) -> AsyncMock:
     """A FusionClient whose .get returns a canned /invoices payload.
 
-    The limit=1 totalResults probe and the main fetch both return the
-    same items list; tests that care about the distinction assert on the
-    recorded call params instead.
+    MODELS totalResults THE WAY THE POD DOES: returned on any page whose
+    params ask for it, not only on a limit=1 probe. page_all sends
+    totalResults=true on every fetch page and reads the value from page
+    one; there is no probe call any more.
 
-    total_results IS STUBBED EXPLICITLY. The tool calls
-    client.total_results(...) before paging, and on a bare AsyncMock that
-    returns another AsyncMock rather than an int — which then blew up on
-    the first comparison:
+    That change broke this mock, which is the right outcome — it had a
+    limit=1 special case modelling a request nobody makes, and returned
+    no count on the pages that now carry it. The test asserting
+    total_available reached the caller failed with None, correctly: the
+    fake endpoint was no longer behaving like the real one.
 
-        TypeError: '>' not supported between instances of
-                   'AsyncMock' and 'int'
-
-    Six tests failed that way, and failing was the right outcome: a mock
-    that answered the probe with a plausible-looking object would have
-    let the cap-warning arithmetic run on nonsense. FusionClient.
-    total_results returns int | None, and None is a real and documented
-    answer — Fusion omits totalResults on some resources — so the default
-    here exercises the degrade path that most of these tests want.
-
-    Pass a number to exercise the probe path instead.
+    total_results=None is the default and is a real answer, not a
+    failure — Fusion omits totalResults on some resources — so most tests
+    here exercise the degrade path. Pass a number to exercise the
+    counted path.
     """
     client = AsyncMock()
+    # FusionClient.total_results is no longer called by page_all, but the
+    # method still exists and a bare AsyncMock would answer it with
+    # another mock. Stubbed so that a future caller fails on the
+    # assertion rather than on a TypeError three frames away.
     client.total_results = AsyncMock(return_value=total_results)
 
     async def _get(path, params=None):
         params = params or {}
-        # totalResults probe (limit=1), if any caller still uses it.
-        if params.get("limit") == 1:
-            return {"totalResults": total_results, "items": items[:1]}
-        # Paginated fetch: serve the slice at offset, report hasMore.
         offset = params.get("offset", 0)
         limit = params.get("limit", len(items))
         page = items[offset : offset + limit]
         has_more = offset + limit < len(items)
-        return {"items": page, "hasMore": has_more}
+        response: dict = {"items": page, "hasMore": has_more}
+        if params.get("totalResults") == "true":
+            response["totalResults"] = total_results
+        return response
 
     client.get.side_effect = _get
     return client
@@ -269,7 +267,7 @@ async def test_tool_not_truncated_when_pod_runs_out():
 
 
 @pytest.mark.asyncio
-async def test_tool_carries_the_probe_count_to_the_caller():
+async def test_tool_carries_the_total_count_to_the_caller():
     """total_available and examined ride on the result.
 
     Without them a summary can say the fetch stopped at the cap but not
@@ -291,14 +289,36 @@ async def test_tool_carries_the_probe_count_to_the_caller():
 
 
 @pytest.mark.asyncio
+async def test_tool_asks_the_pod_for_the_total_on_the_fetch():
+    """totalResults rides on the fetch page, not a separate request.
+
+    Without totalResults=true the pod returns `count`, which is the PAGE
+    size rather than the total — easy to misread, and it is what made
+    truncation unreportable before. Asserted on the params because the
+    alternative implementation (a limit=1 probe first) produces the same
+    total_available and one extra round trip per fetch, and nothing else
+    here would tell the two apart.
+    """
+    client = _mock_client([_inv("Acme", "1", 100, "2026-01-05")])
+    await aggregate_invoices_by_supplier(client, date_from="2026-01-01")
+
+    calls = client.get.call_args_list
+    params = calls[0].kwargs.get("params") or calls[0].args[1]
+    assert params["totalResults"] == "true"
+    # And it is a real fetch page, not a count-only probe.
+    assert params["limit"] == _PAGE_SIZE
+    client.total_results.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_tool_survives_a_pod_that_reports_no_total():
     """None is a real answer, not a failure.
 
     Fusion omits totalResults on some resources and some parameter
-    combinations. Everything the probe enables — the denominator, the
-    up-front cap warning, the count in the truncation note — degrades to
-    what the loop did before the probe existed, and the aggregate itself
-    is unaffected.
+    combinations. Everything the count enables — the denominator, the
+    cap warning, the numbers in the truncation note — degrades to what
+    the loop did before it was read, and the aggregate itself is
+    unaffected.
     """
     items = [
         _inv("Acme", "1", 100, "2026-01-05"),

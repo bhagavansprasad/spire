@@ -130,10 +130,9 @@ POD QUIRKS THIS RELIES ON (all curl-verified 2026-07-29)
 
 from __future__ import annotations
 
-import sys
 from datetime import date, datetime
-
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 
 
 PURCHASE_ORDERS_PATH = "/fscmRestApi/resources/11.13.18.05/purchaseOrders"
@@ -232,62 +231,18 @@ _SITE_FIELDS = [
 _SHAPE = "po_lifecycle_status"
 
 
-async def _page_all(
-    client: FusionClient,
-    path: str,
-    server_clause: str,
-    fields: list[str],
-    label: str,
-    report_progress=None,
-) -> tuple[list[dict], bool, int | None]:
-    """Page a server-filtered collection to exhaustion or the cap.
-
-    Returns (items, hit_page_cap, total_available). The clause is
-    mandatory: this tool never scans an unfiltered collection.
-
-    `totalResults=true` is requested on every page. Without it the pod
-    returns `count`, which is the PAGE size, not the total — easy to
-    misread, and it made truncation unreportable. The value is taken from
-    the FIRST page: it describes the whole filtered set, so later pages
-    add nothing, and reading it from the last page would lose it entirely
-    when the cap is hit.
-
-    total_available is None when the endpoint omits totalResults — an
-    honest "unknown", not a zero. Callers must not treat it as a count.
-    """
-    items: list[dict] = []
-    total_available: int | None = None
-
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "totalResults": "true",
-            "q": server_clause,
-            "fields": ",".join(fields),
-        }
-        response = await client.get(path, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        if page == 0:
-            reported = response.get("totalResults")
-            if isinstance(reported, int):
-                total_available = reported
-
-        msg = f"{label} page {page + 1}: +{len(page_items)} (total {len(items)})"
-        print(f"[po_lifecycle] {msg}", file=sys.stderr, flush=True)
-        if report_progress is not None:
-            await report_progress(page + 1, total_available, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            return items, False, total_available
-
-    return items, True, total_available
+# Paging lives in tools/pagination.py — page_all. The helper that was
+# here is where page_all learned to read the count: totalResults=true
+# on every page, value taken from the first, no separate probe. The
+# shared version had a limit=1 probe call until 2026-08-04, which cost
+# an extra round trip per fetch for the same number; this file had
+# already got it right, so the shared one adopted this approach and
+# then this copy became redundant.
+#
+# _PAGE_SIZE stays at 200 here and is passed in. Raising it to 500,
+# as the aggregation tools use, changes how this tool behaves and
+# belongs in its own commit — an extraction that also retunes the
+# thing it extracts cannot be verified as a no-op.
 
 
 def _num(value) -> float:
@@ -961,16 +916,28 @@ async def get_purchase_order_lifecycle_status(
 
     po = po_items[0]
 
-    schedules, schedules_hit_cap, schedule_total = await _page_all(
-        client, PURCHASE_ORDER_SCHEDULES_PATH, f"OrderNumber='{po_number}'",
-        _SCHEDULE_FIELDS, "schedules", report_progress,
+    schedules, schedules_hit_cap, schedule_total = await page_all(
+        client,
+        PURCHASE_ORDER_SCHEDULES_PATH,
+        "po_lifecycle: schedules",
+        server_clause=f"OrderNumber='{po_number}'",
+        fields=_SCHEDULE_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
     if not schedules:
         notes.append("no schedules returned for this PO")
 
-    invoices, invoices_hit_cap, invoice_total = await _page_all(
-        client, INVOICES_PATH, f"PurchaseOrderNumber='{po_number}'",
-        _INVOICE_FIELDS, "invoices", report_progress,
+    invoices, invoices_hit_cap, invoice_total = await page_all(
+        client,
+        INVOICES_PATH,
+        "po_lifecycle: invoices",
+        server_clause=f"PurchaseOrderNumber='{po_number}'",
+        fields=_INVOICE_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     # Setup: two single-record fetches, both by ID from the PO header.
