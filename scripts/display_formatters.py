@@ -192,11 +192,32 @@ def _with_truncation(lines: list[str], response: Any) -> str:
 # version right-aligned transaction numbers. Curated and extended when a
 # miss is SEEN is the honest description of this list; it is not
 # expected to be complete.
+# Column names that mark a quantity worth right-aligning.
+#
+# A HARDCODED VOCABULARY, and that is a known weakness rather than a
+# design. Every new entity needs its word added here, and the failure is
+# SILENT: a numeric column whose name is not on this list simply
+# left-aligns, with no error and nothing to notice unless someone puts
+# two tables side by side.
+#
+# That is how "receipts" came to be missing. "pos" was added when the PO
+# status breakdown was written, so that table right-aligns its counts;
+# the receipt distribution rendered as bullets until 2026-08-04, so its
+# count column had never been through here at all. The moment it became a
+# table the gap showed — POs right, Receipts left, same shape of data.
+#
+# The obvious fix is to drop the name test and right-align any column
+# whose values are all genuinely numeric. The docstring below records
+# that values-alone was tried and reverted because it right-aligned every
+# identifier in the system. Worth revisiting with the narrower rule —
+# real int/float only, not numeric-looking strings, since ids arrive as
+# strings — but that changes every table in the system and belongs in its
+# own change with its own verification.
 _QUANTITY_MARKERS = (
     "amount", "total", "spend", "balance", "due", "value", "price",
     "qty", "quantity", "count", "rate", "ordered", "received",
     "invoiced", "paid", "receivables", "rank",
-    "invoices", "lines", "pos", "schedules",
+    "invoices", "lines", "pos", "schedules", "receipts",
 )
 
 
@@ -905,15 +926,36 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         lines.append(
             f"\nTotal receipts: {response.total_receipts}, total amount: {response.total_amount:,.2f}"
         )
-        if response.methods:
-            lines.append("\nDistribution by method:")
-            for row in response.methods:
-                lines.append(
-                    f"  - {row.receipt_method}: {row.receipt_count} receipts, "
-                    f"total {row.total_amount:,.2f}"
-                )
-        else:
-            lines.append("\nNo receipts found.")
+        # A table, like every other multi-row output. This branch rendered
+        # bullets until 2026-08-04 — the one distribution missed when
+        # records were converted to tables across eight branches. The
+        # inconsistency was invisible while the pod-wide fetch was capped
+        # at 5,000 rows and returned three methods; a complete fetch
+        # returns 22, and twenty-two bullets next to the PO status TABLE
+        # made it obvious.
+        #
+        # Same three columns and the same helper as POStatusBreakdown,
+        # which is the shape this most resembles: a partition of a whole
+        # into named buckets with a count and a total each.
+        #
+        # The helper also fixes "1 receipts", which the bullet loop
+        # printed for every single-receipt method — and with 22 methods
+        # there were five of them.
+        lines.extend(
+            _render_records(
+                "Distribution by method",
+                [
+                    {
+                        "Method": row.receipt_method,
+                        "Receipts": row.receipt_count,
+                        "Total Amount": f"{row.total_amount:,.2f}",
+                    }
+                    for row in response.methods
+                ],
+                ["Method", "Receipts", "Total Amount"],
+                "No receipts found.",
+            )
+        )
         return _with_truncation(lines, response)
 
     # Fallback for unrecognized shape.
