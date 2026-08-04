@@ -368,6 +368,15 @@ INSERT INTO kg_entity_field VALUES ('Supplier', 'SupplierId',     'canonical_id'
 INSERT INTO kg_entity_field VALUES ('Supplier', 'SupplierNumber', 'display_id',   'string',  'Human-readable identifier (e.g. ''1252''). Used to join to Invoice.SupplierNumber.');
 INSERT INTO kg_entity_field VALUES ('Supplier', 'Supplier',       'display_name', 'string',  'Display name of the supplier.');
 INSERT INTO kg_entity_field VALUES ('Supplier', 'Status',         'status',       'string',  'e.g. ACTIVE.');
+-- COL-03 / layer 3: WHO columns. Curl-confirmed on /suppliers 2026-08-04 —
+-- all four exist, return real values (CreatedBy e.g. ''CALVIN.ROTH''), and
+-- survive fields= projection on this endpoint. Projectable, display-only:
+-- the user asks to SEE these, not filter on them. (A creation-date FILTER
+-- exists separately in kg_entity_filter; these are the projection side.)
+INSERT INTO kg_entity_field VALUES ('Supplier', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''CALVIN.ROTH''). WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('Supplier', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only. Distinct from the creation-date FILTER.');
+INSERT INTO kg_entity_field VALUES ('Supplier', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only. May be an email or a login id.');
+INSERT INTO kg_entity_field VALUES ('Supplier', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- Invoice
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceId',       'canonical_id', 'numeric', 'System primary key.');
@@ -617,7 +626,7 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (194 rows).
+PROMPT Seeded kg_entity_field (198 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge

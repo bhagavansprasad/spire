@@ -46,6 +46,23 @@ class Intent:
     # the default field set". Projection trims the raw output records to
     # these columns; the synthesized prose answer is unaffected.
     fields: list[str] = field(default_factory=list)
+    # COL-03 (partial column resolution): columns the user named that the
+    # entity does NOT have. Populated by validate_intent (Step 4), which
+    # splits the parser's raw column list — valid names stay in `fields`,
+    # unknown ones move here — instead of refusing the whole query. The
+    # planner and executor IGNORE this field entirely; it rides through to
+    # display, which prints a note naming these columns and offering the
+    # entity's available columns, above the projected table. Empty means
+    # every requested column resolved (or none were requested).
+    #
+    # WHY A SEPARATE LIST AND NOT AN em-dash COLUMN: an absent field
+    # printed as a dashed column cannot be told apart from a real field
+    # that is simply null on every row. Carrying the unresolved names as
+    # data lets display disclose them explicitly — the silent-drop defect
+    # (a clean table with a requested column quietly missing) is exactly
+    # what COL-03 exists to remove. Substitution is NOT performed: a
+    # near-match is never guessed in place of an unknown column.
+    unresolved_fields: list[str] = field(default_factory=list)
     # Feature 7: when set, the question is an aggregation, not a list.
     # The LLM parser fills this when it detects aggregation/ranking
     # wording; it is None for ordinary list queries (the default), so

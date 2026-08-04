@@ -70,6 +70,12 @@ def menu() -> KGMenu:
         },
         country_terms={"US": "US", "USA": "US", "United States": "US",
                        "United Kingdom": "GB", "UK": "GB", "India": "IN"},
+        # COL-03: the Supplier field catalog, so validate_intent's Step 4
+        # can tell a real column from an unknown one. These are the four
+        # confirmed Supplier fields in the live KG.
+        entity_columns={
+            "Supplier": ["Supplier", "Status", "SupplierId", "SupplierNumber"],
+        },
     )
 
 
@@ -265,6 +271,108 @@ def test_bad_entity_gates_before_bad_filter(menu):
     assert result.refusal.flavor == RefusalFlavor.UNKNOWN_ENTITY
     # The filter problem is not reported — entity gate fired first.
     assert result.refusal.offending_filters == []
+
+
+# ─────────────────────────────────────────────────────────────────────
+# COL-03: partial column resolution (validate_intent Step 4)
+#
+# An unknown COLUMN does not refuse the query — the entity and filters are
+# valid, so it runs. The requested column list is split against the KG
+# field catalog: known names stay in intent.fields, unknown ones move to
+# intent.unresolved_fields. Every case below is a SUCCESS (not a refusal),
+# which is the whole point — before Step 4, a single unknown column made
+# the model declare the query unanswerable, discarding the valid columns.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_all_requested_columns_resolve(menu):
+    """All columns known -> all stay in fields, nothing unresolved, no
+    refusal."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[DraftFilter(type="country", value_json='"US"')],
+        include=[],
+        fields=["Supplier", "SupplierNumber"],
+    )
+    result = parse("US suppliers with name and number", llm=MockLLM(draft), menu=menu)
+
+    assert not result.is_refusal
+    assert result.intent.fields == ["Supplier", "SupplierNumber"]
+    assert result.intent.unresolved_fields == []
+
+
+def test_partial_columns_split_not_refused(menu):
+    """The SME case: two valid columns and one unknown. The query is NOT
+    refused — valid columns stay, the unknown one is recorded."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[DraftFilter(type="country", value_json='"US"')],
+        include=[],
+        fields=["Supplier", "Status", "created by"],
+    )
+    result = parse(
+        "suppliers with name, status, and created by",
+        llm=MockLLM(draft),
+        menu=menu,
+    )
+
+    # Not a refusal — the defect this fixes was wholesale refusal here.
+    assert not result.is_refusal
+    assert result.intent.fields == ["Supplier", "Status"]
+    assert result.intent.unresolved_fields == ["created by"]
+
+
+def test_all_columns_unknown_still_not_refused(menu):
+    """Every requested column is unknown. Still NOT a refusal: the rows can
+    run, and the query becomes rows-with-a-note (COL-03: not an inability
+    case). fields empties; all names land in unresolved."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[],
+        include=[],
+        fields=["credit rating", "risk score"],
+    )
+    result = parse(
+        "suppliers with credit rating and risk score",
+        llm=MockLLM(draft),
+        menu=menu,
+    )
+
+    assert not result.is_refusal
+    assert result.intent.fields == []
+    assert result.intent.unresolved_fields == ["credit rating", "risk score"]
+
+
+def test_column_split_preserves_requested_order(menu):
+    """Known and unknown columns keep their requested order within each
+    list — the table prints columns in the order asked, and the note names
+    the misses in the order asked."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[],
+        include=[],
+        fields=["created by", "Supplier", "risk score", "Status"],
+    )
+    result = parse("...", llm=MockLLM(draft), menu=menu)
+
+    assert not result.is_refusal
+    assert result.intent.fields == ["Supplier", "Status"]
+    assert result.intent.unresolved_fields == ["created by", "risk score"]
+
+
+def test_no_columns_named_is_a_noop(menu):
+    """When no columns are requested, Step 4 does nothing: both lists stay
+    empty. This is the common case and must be untouched."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[DraftFilter(type="country", value_json='"US"')],
+        include=[],
+    )
+    result = parse("US suppliers", llm=MockLLM(draft), menu=menu)
+
+    assert not result.is_refusal
+    assert result.intent.fields == []
+    assert result.intent.unresolved_fields == []
 
 
 # ─────────────────────────────────────────────────────────────────────
