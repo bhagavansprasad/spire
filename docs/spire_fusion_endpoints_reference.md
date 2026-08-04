@@ -1227,8 +1227,8 @@ total meaningless.
 
 ### 12.2 `/standardReceipts` — paging without `orderBy` is NOT stable
 
-**This is an open issue, recorded here because it is a pod behaviour, not
-a code bug.**
+**RESOLVED 2026-08-04 (sort key confirmed; see the end of this section).
+Kept in full because the failure is the useful part.**
 
 Two runs of the same receipt-method aggregation over account 26360, on
 consecutive days, with identical code:
@@ -1249,8 +1249,42 @@ walks `offset` without an `orderBy` can therefore see shifted or
 overlapping pages between calls.
 
 **Rule: any paginated fetch against `/standardReceipts` must specify a
-deterministic `orderBy`.** Not yet confirmed by curl which sort keys are
-accepted here — do that before relying on it.
+deterministic `orderBy`.**
+
+**RESOLVED 2026-08-04 — the sort key is `StandardReceiptId`.** Confirmed
+by curl, not inferred: page 1 at `limit=3` returned ids 1, 2, 3; page 2 at
+`offset=3` returned 4, 21, 22. Contiguous across the page boundary and
+ascending, so the parameter is APPLIED and not merely accepted (this pod
+silently ignores `expand=sites` on bulk fetches, so "no error" is not
+evidence on its own). Ids are not contiguous — the 4 → 21 gap is real
+data, and ascending order is all pagination needs.
+
+Use the PK, **not `ReceiptNumber`**: an ordered fetch on `ReceiptNumber`
+returned two rows both numbered `"1"`, so it is not unique here and gives
+no deterministic tiebreak — rows sharing a sort value can still swap
+between calls.
+
+`aggregate_standard_receipts_by_method` sends it on every page as of the
+same date, and two full 37,338-row runs now produce byte-identical
+output. Note `fields=` is still unusable on this endpoint (§7 above);
+`orderBy` and `totalResults=true` are both fine.
+
+**A second measurement, and a caution.** Ordering FIXES reproducibility
+and can WORSEN representativeness. A PK-ascending fetch stopped by a page
+cap returns the OLDEST rows, not an arbitrary sample. Measured pod-wide
+at a 5,000-row cap:
+
+| | Unordered (random 5,000) | Ordered (oldest 5,000) | Complete (37,338) |
+|---|---|---|---|
+| Methods seen | 4 | 3 | 22 |
+| Lockbox | 4,754 | 4,998 | 18,661 |
+| Check (Directly/No Remit) | 179 | **absent** | 18,480 |
+
+Check is 49.5% of all receipts — within a percent of Lockbox by count —
+and the ordered-but-capped answer reported it as not existing. So an
+`orderBy` added to a capped fetch buys a repeatable answer that may be
+more systematically wrong than the random one it replaced. **Add the
+ordering and raise the cap together, or state the skew.**
 
 ### 12.3 Float precision — `TotalTransactionsDueForAccount`
 

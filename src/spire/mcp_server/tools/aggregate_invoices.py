@@ -144,25 +144,15 @@ def _aggregate_rows(
     return rows, total_suppliers
 
 
-async def _fetch_total_for_clause(
-    client: FusionClient, server_clause: str | None
-) -> int | None:
-    """Cheaply ask Fusion how many records match the server clause.
-
-    Mirrors search_invoices._fetch_total_for_clause: limit=1 +
-    totalResults=true for minimum bandwidth. Returns None if the
-    response doesn't carry totalResults.
-    """
-    params: dict[str, str | int] = {
-        "limit": 1,
-        "totalResults": "true",
-        "onlyData": "true",
-    }
-    if server_clause:
-        params["q"] = server_clause
-    response = await client.get(INVOICES_PATH, params=params)
-    total = response.get("totalResults")
-    return total if isinstance(total, int) else None
+# _fetch_total_for_clause was removed on 2026-08-04. It was orphaned
+# when page_all took over paging here, and it was one of FOUR copies of
+# the same function — suppliers.py, purchase_orders.py and invoices.py
+# had the other three, all live. All four now call
+# FusionClient.total_results, which is the same code with the path as a
+# parameter.
+#
+# This tool does not call it at all: page_all reads the count off the
+# fetch page via totalResults=true, one round trip cheaper.
 
 
 async def aggregate_invoices_by_supplier(

@@ -73,20 +73,17 @@ def _flatten_address(address: dict) -> dict:
     }
 
 
-async def _fetch_total_for_clause(
-    client: FusionClient, server_clause: str | None
-) -> int | None:
-    """Cheaply ask Fusion how many records match the server clause."""
-    params: dict[str, str | int] = {
-        "limit": 1,
-        "totalResults": "true",
-        "onlyData": "true",
-    }
-    if server_clause:
-        params["q"] = server_clause
-    response = await client.get(SUPPLIERS_PATH, params=params)
-    total = response.get("totalResults")
-    return total if isinstance(total, int) else None
+# The totalResults probe lives on FusionClient — client.total_results.
+# This module had its own _fetch_total_for_clause, and so did
+# invoices.py and purchase_orders.py:
+# three copies of one function, differing only in which path constant
+# they closed over, plus a fourth in aggregate_invoices.py that was
+# already orphaned. FusionClient.total_results is the same function with
+# the path as a parameter, and it existed unused because page_all stopped
+# calling it when the count moved onto the fetch page.
+#
+# Four copies of a helper is how this codebase came to page at 200 in one
+# file and 500 in another. One caller-visible behaviour, one definition.
 
 
 async def search_suppliers(
@@ -215,7 +212,7 @@ async def search_suppliers(
         )
 
     if not needs_client_filter and len(final_items) >= limit:
-        total = await _fetch_total_for_clause(client, server_clause)
+        total = await client.total_results(SUPPLIERS_PATH, server_clause)
         return ToolResult.build(
             items=projected,
             limit_applied=limit,

@@ -391,7 +391,18 @@ def _distribution_summary(bucket: dict, shape: str) -> list[str]:
     #
     # The group count is not on that line, and it is not trivially
     # countable from a long list, so it survives.
-    out.append(f"Across {len(rows)} groups.")
+    # "Across 1 groups." was printing whenever a distribution had a single
+    # bucket — visible on the receipt distribution while its fetch was
+    # capped at 5,000 rows and returned three methods, and on any
+    # single-status PO breakdown. The same defect local_summary._count_phrase
+    # exists to fix, reappearing here because this module was written
+    # separately and did not reuse it.
+    #
+    # Not reused now either: _count_phrase takes a plural label and
+    # derives the singular, which is the right shape for "25 suppliers"
+    # but heavier than one word needs. If a third caller appears, share it.
+    group_word = "group" if len(rows) == 1 else "groups"
+    out.append(f"Across {len(rows)} {group_word}.")
 
     # ---- 2. the dominant bucket, and its share only when it is real ----
     #
