@@ -158,10 +158,36 @@ def test_compare_rows_sorted_by_abs_difference_desc():
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _fusion_mock() -> AsyncMock:
+    """A stand-in FusionClient with total_results already stubbed.
+
+    Every fake client in this file goes through here. Three tests built
+    their own AsyncMock before, and the difference between them was
+    invisible until page_all started calling client.total_results: the
+    two that short-circuit before paging kept passing, and the one that
+    actually pages failed with
+
+        TypeError: '>' not supported between instances of
+                   'AsyncMock' and 'int'
+
+    A bare AsyncMock answers any attribute with another AsyncMock, so it
+    does not fail when an interface is missed — it fails later, somewhere
+    else, on a type error. FusionClient.total_results returns int | None,
+    and None is a real answer (Fusion omits totalResults on some
+    resources), so that is the default here.
+
+    Three ways of faking one client is the same drift as three copies of
+    the paging loop, one layer up. One constructor.
+    """
+    client = AsyncMock()
+    client.total_results = AsyncMock(return_value=None)
+    return client
+
+
 def _mock_po_client(po_item, invoices):
     """A FusionClient whose .get serves one PO on the purchaseOrders path
     and the given invoices on the invoices path."""
-    client = AsyncMock()
+    client = _fusion_mock()
 
     async def _get(path, params=None):
         params = params or {}
@@ -201,7 +227,7 @@ async def test_po_tool_not_found():
 @pytest.mark.asyncio
 async def test_supplier_tool_ambiguous_refuses():
     """Several name matches -> ambiguous, no comparison run."""
-    client = AsyncMock()
+    client = _fusion_mock()
 
     async def _get(path, params=None):
         return {"items": [
@@ -217,7 +243,7 @@ async def test_supplier_tool_ambiguous_refuses():
 
 @pytest.mark.asyncio
 async def test_supplier_tool_not_found():
-    client = AsyncMock()
+    client = _fusion_mock()
     client.get.side_effect = AsyncMock(return_value={"items": []})
     result = await compare_supplier_orders_to_invoices(client, "Nobody")
     assert result["found"] is False

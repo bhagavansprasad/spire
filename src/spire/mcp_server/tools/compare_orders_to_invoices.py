@@ -48,9 +48,8 @@ figure this code computes.
 
 from __future__ import annotations
 
-import sys
-
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 from spire.mcp_server.tools.aggregate_purchase_orders import (
     aggregate_purchase_orders_by_supplier,
 )
@@ -84,43 +83,18 @@ _SUPPLIER_SHAPE = "supplier_invoiced_vs_ordered"
 _TOP_SUPPLIERS_SHAPE = "top_suppliers_invoiced_vs_ordered"
 
 
-async def _page_all(
-    client: FusionClient,
-    path: str,
-    server_clause: str,
-    fields: list[str],
-    label: str,
-    report_progress=None,
-) -> tuple[list[dict], bool]:
-    """Page a server-filtered collection to exhaustion or the cap.
-
-    Returns (items, hit_page_cap). The clause is mandatory: these tools
-    never scan an unfiltered collection — that is the whole point.
-    """
-    items: list[dict] = []
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "q": server_clause,
-            "fields": ",".join(fields),
-        }
-        response = await client.get(path, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        msg = f"{label} page {page + 1}: +{len(page_items)} (total {len(items)})"
-        print(f"[compare_orders_to_invoices] {msg}", file=sys.stderr, flush=True)
-        if report_progress is not None:
-            await report_progress(page + 1, None, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            return items, False
-    return items, True
+# Paging lives in tools/pagination.py — page_all. This module had its
+# own _page_all, and so did po_lifecycle, and so did
+# aggregate_purchase_orders: three private helpers with the same job.
+# The shared one took ITS signature from this file and po_lifecycle,
+# which had arrived at path/fields/clause/label independently — two
+# implementations agreeing was the argument for that shape over the
+# hardcoded one.
+#
+# _PAGE_SIZE stays at 200 here and is passed in. Raising it to 500,
+# as the aggregation tools now use, is a change to how this tool
+# behaves and belongs in its own commit — an extraction that also
+# retunes the thing it extracts cannot be verified as a no-op.
 
 
 def _sum_invoice_amounts(invoices: list[dict]) -> float:
@@ -229,9 +203,15 @@ async def compare_purchase_order_to_invoices(
         }
     po = po_items[0]
 
-    invoices, hit_cap = await _page_all(
-        client, INVOICES_PATH, f"PurchaseOrderNumber='{po_number}'",
-        _INVOICE_FIELDS, "invoices", report_progress,
+    invoices, hit_cap, _ = await page_all(
+        client,
+        INVOICES_PATH,
+        "compare_orders_to_invoices: invoices",
+        server_clause=f"PurchaseOrderNumber='{po_number}'",
+        fields=_INVOICE_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     ordered = po.get("Ordered")
@@ -293,13 +273,25 @@ async def _compare_resolved_supplier(
         total_invoiced, total_difference, unmatched_invoice_count,
         returned, truncated, and the top_n rows.
     """
-    purchase_orders, po_cap = await _page_all(
-        client, PURCHASE_ORDERS_PATH, f"SupplierId={supplier_id}",
-        _PO_FIELDS, "POs", report_progress,
+    purchase_orders, po_cap, _ = await page_all(
+        client,
+        PURCHASE_ORDERS_PATH,
+        "compare_orders_to_invoices: POs",
+        server_clause=f"SupplierId={supplier_id}",
+        fields=_PO_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
-    invoices, inv_cap = await _page_all(
-        client, INVOICES_PATH, f"SupplierNumber='{supplier_number}'",
-        _INVOICE_FIELDS, "invoices", report_progress,
+    invoices, inv_cap, _ = await page_all(
+        client,
+        INVOICES_PATH,
+        "compare_orders_to_invoices: invoices",
+        server_clause=f"SupplierNumber='{supplier_number}'",
+        fields=_INVOICE_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     rows, total_ordered, total_invoiced = _compare_by_po(

@@ -7,8 +7,8 @@ Two layers:
             would be invisible, because nothing downstream can check a
             derived figure or a judgement.
 
-  FAKE      _page_all, the installments fan-out and the setup fetches
-            driven by a stub client. These cover the things that fail
+  FAKE      The installments fan-out and the setup fetches driven by a
+            stub client. These cover the things that fail
             SILENTLY — totalResults read from the wrong page, a bitten
             cap, a child fetch that dies — none of which are reachable
             without a client.
@@ -46,7 +46,6 @@ from spire.mcp_server.tools.po_lifecycle import (
     _is_complete,
     _lifecycle_stage,
     _num,
-    _page_all,
     _parse_date,
     _recommend_action,
     _responsible_team,
@@ -852,83 +851,17 @@ def test_open_findings_do_not_override_an_incomplete_leg():
 
 
 # --------------------------------------------------------------------------
-# FAKE — paging and totalResults
+# Paging tests moved to tests/test_pagination.py on 2026-08-04.
+#
+# They tested this module's private _page_all, which is now the shared
+# tools/pagination.page_all used by four tools. The tests were never
+# about lifecycle reconciliation; leaving them here would have meant
+# one tool's test file owning behaviour every tool depends on.
+#
+# They also caught the removal: deleting _page_all broke this file's
+# import immediately, which is what "enumerate every caller" is for —
+# tests/ as well as src/.
 # --------------------------------------------------------------------------
-
-async def test_page_all_requests_total_results_on_every_page():
-    # A totalResults you did not request is not there.
-    client = FakeClient({"purchaseOrderSchedules": [
-        _page(SCHEDULES_701337, has_more=False, total=2)
-    ]})
-    await _page_all(client, mod.PURCHASE_ORDER_SCHEDULES_PATH,
-                    "OrderNumber='701337'", ["Amount"], "schedules")
-    _, params = client.calls[0]
-    assert params["totalResults"] == "true"
-
-
-async def test_page_all_returns_the_pods_own_total():
-    client = FakeClient({"purchaseOrderSchedules": [
-        _page(SCHEDULES_701337, has_more=False, total=2)
-    ]})
-    items, hit_cap, total = await _page_all(
-        client, mod.PURCHASE_ORDER_SCHEDULES_PATH, "OrderNumber='701337'",
-        ["Amount"], "schedules",
-    )
-    assert len(items) == 2
-    assert hit_cap is False
-    assert total == 2
-
-
-async def test_page_all_reads_total_from_the_first_page_only(monkeypatch):
-    # Reading it from the LAST page loses it entirely when the cap is hit,
-    # which is the case the count is needed for.
-    monkeypatch.setattr(mod, "_PAGE_SIZE", 2)
-    client = FakeClient({"invoices": [
-        _page([{"a": 1}, {"a": 2}], has_more=True, total=3),
-        _page([{"a": 3}], has_more=False),  # no totalResults on page 2
-    ]})
-    items, hit_cap, total = await _page_all(
-        client, mod.INVOICES_PATH, "PurchaseOrderNumber='X'",
-        ["InvoiceId"], "invoices",
-    )
-    assert len(items) == 3
-    assert hit_cap is False
-    assert total == 3
-
-
-async def test_page_all_reports_the_cap(monkeypatch):
-    monkeypatch.setattr(mod, "_PAGE_SIZE", 1)
-    monkeypatch.setattr(mod, "MAX_PAGES", 3)
-    client = FakeClient({"invoices": [
-        _page([{"a": 1}], has_more=True, total=99)
-    ]})
-    items, hit_cap, total = await _page_all(
-        client, mod.INVOICES_PATH, "PurchaseOrderNumber='X'",
-        ["InvoiceId"], "invoices",
-    )
-    assert hit_cap is True
-    assert len(items) == 3
-    assert total == 99, "the count must survive so truncation is quantifiable"
-
-
-async def test_page_all_total_is_none_when_pod_omits_it():
-    # An honest unknown, not a zero. Callers must not treat it as a count.
-    client = FakeClient({"invoices": [{"items": [], "hasMore": False}]})
-    _, _, total = await _page_all(
-        client, mod.INVOICES_PATH, "PurchaseOrderNumber='X'",
-        ["InvoiceId"], "invoices",
-    )
-    assert total is None
-
-
-async def test_page_all_always_sends_a_single_clause():
-    # Composite q= fails silently on this pod with HTTP 200 / 0 results.
-    client = FakeClient({"invoices": [_page([], total=0)]})
-    await _page_all(client, mod.INVOICES_PATH, "PurchaseOrderNumber='X'",
-                    ["InvoiceId"], "invoices")
-    _, params = client.calls[0]
-    assert " AND " not in params["q"]
-    assert params["q"].count("=") == 1
 
 
 # --------------------------------------------------------------------------

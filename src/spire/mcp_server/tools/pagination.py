@@ -11,22 +11,36 @@ WHY THIS SIGNATURE
 Not designed from one example. compare_orders_to_invoices and po_lifecycle
 had each already written a private paged-fetch helper taking path and
 fields as parameters — independently, and arriving at the same shape.
-This takes that shape and adds what aggregate_purchase_orders learned:
-a count probe before the loop.
+This takes that shape, and takes po_lifecycle's way of reading the count
+as well (see below).
 
 Two implementations agreeing is a stronger argument than one, which is
 why the parameterised signature won over the hardcoded one it replaced.
 
-WHAT THE PROBE BUYS
-A count before any data is fetched (FusionClient.total_results), turning
-three guesses into measurements:
+WHERE THE COUNT COMES FROM
+`totalResults=true` rides on every fetch page, and the value is taken
+from the FIRST page. This replaced a separate limit=1 probe on
+2026-08-04, the same day the probe was written: po_lifecycle had already
+solved it this way, and its version costs one fewer round trip per fetch
+for the same information.
+
+The trade is that the cap warning fires after page 1 rather than before
+page 0. On a 32-page fetch that is early enough to matter, and it is
+worth a request per call.
+
+Read from the first page specifically, not the last: the count describes
+the whole filtered set, so later pages add nothing, and reading it at the
+end would lose it entirely on the run that hits the cap — the exact run
+where it matters most.
+
+WHAT THE COUNT BUYS
+Three guesses become measurements:
 
   - Progress gets a DENOMINATOR. "page 12" says nothing about how much
     remains; "page 12/32, 6,000/15,839" does.
-  - The cap warning fires BEFORE the fetch rather than after. On
-    /invoices the cap reaches 51% of the collection, so a two-minute wait
-    ends in a partial answer that could have been announced at second
-    one.
+  - A cap warning at all. On /invoices the cap reaches 51% of the
+    collection, and that used to be reported as one hedging sentence
+    under the answer.
   - truncated stops being inferred. It was "the loop used all its pages",
     a proxy; with a total it is fetched against expected.
 
@@ -104,10 +118,9 @@ async def page_all(
         server_clause: Optional q= clause. Optional because two callers
             legitimately scan a whole collection: a status breakdown
             needs every status, so there is nothing selective to push to
-            the server. Passed to the probe as well as the fetch, so the
-            count describes the same set — a filtered fetch measured
-            against an unfiltered total would report itself truncated
-            forever.
+            the server. It rides on every page alongside totalResults, so
+            the count the pod reports describes the same set being
+            fetched.
         fields: Optional projection. Omitted entirely when None rather
             than sent empty; /standardReceipts returns HTTP 500 for a
             fields= parameter it does not like, and an empty projection
@@ -122,42 +135,13 @@ async def page_all(
         total_available is None when the pod returned no count. Callers
         must not read that as zero — it means "unknown", and every
         behaviour that depends on it degrades to what this loop did
-        before the probe existed.
+        before the count was read.
     """
-    total_available = await client.total_results(path, server_clause)
     overfetch_limit = page_size * max_pages
 
-    # Before a single page is fetched, and loud. A footnote after the
-    # fact is what let a 10,000-of-15,839 answer read as complete, with
-    # one status understated by 860 million.
-    #
-    # SENT TWICE, ON PURPOSE. The print goes to the SERVER's stderr,
-    # which on a normal run is a different terminal from the one the
-    # question was asked in — measured 2026-08-04: the warning appeared
-    # in the server log while the client watched a progress bar with no
-    # indication it would stop at half the data. report_progress is the
-    # channel that reaches the caller, so the warning goes down it too.
-    #
-    # This does not replace saying it in the ANSWER. Progress output is
-    # transient and goes to stderr; a reader who redirects stdout keeps
-    # the answer and loses this entirely. total_available rides on the
-    # returned bucket for that reason.
-    if total_available is not None and total_available > overfetch_limit:
-        warning = (
-            f"*** WARNING: {total_available:,} records match, and the page "
-            f"cap stops at {overfetch_limit:,}. This answer will cover "
-            f"{overfetch_limit / total_available:.0%} of the data. ***"
-        )
-        print(f"[{label}] {warning}", file=sys.stderr, flush=True)
-        if report_progress is not None:
-            # progress=0: nothing fetched yet. The message is the point.
-            await report_progress(0, None, warning)
-
+    total_available: int | None = None
     expected_pages: int | None = None
     target: int | None = None
-    if total_available is not None:
-        target = min(total_available, overfetch_limit)
-        expected_pages = min(max_pages, -(-total_available // page_size))
 
     items: list[dict] = []
     hit_page_cap = False
@@ -167,6 +151,10 @@ async def page_all(
             "limit": page_size,
             "offset": page * page_size,
             "onlyData": "true",
+            # Without this the pod returns `count`, which is the PAGE
+            # size, not the total — easy to misread, and it is what made
+            # truncation unreportable before po_lifecycle worked it out.
+            "totalResults": "true",
         }
         if server_clause:
             params["q"] = server_clause
@@ -176,6 +164,48 @@ async def page_all(
         response = await client.get(path, params=params)
         page_items = response.get("items", [])
         items.extend(page_items)
+
+        if page == 0:
+            reported = response.get("totalResults")
+            if isinstance(reported, int):
+                total_available = reported
+                target = min(total_available, overfetch_limit)
+                expected_pages = min(
+                    max_pages, -(-total_available // page_size)
+                )
+
+                # As early as this can be known, and loud. A footnote
+                # after the fact is what let a 10,000-of-15,839 answer
+                # read as complete, with one status understated by 860
+                # million.
+                #
+                # SENT TWICE, ON PURPOSE. The print goes to the SERVER's
+                # stderr, which on a normal run is a different terminal
+                # from the one the question was asked in — measured
+                # 2026-08-04: the warning appeared in the server log
+                # while the client watched a progress bar with no
+                # indication it would stop at half the data.
+                # report_progress is the channel that reaches the caller.
+                #
+                # This does not replace saying it in the ANSWER. Progress
+                # output is transient and goes to stderr; a reader who
+                # redirects stdout keeps the answer and loses this
+                # entirely. total_available rides on the returned bucket
+                # for that reason.
+                if total_available > overfetch_limit:
+                    warning = (
+                        f"*** WARNING: {total_available:,} records match, "
+                        f"and the page cap stops at {overfetch_limit:,}. "
+                        f"This answer will cover "
+                        f"{overfetch_limit / total_available:.0%} of the "
+                        f"data. ***"
+                    )
+                    print(f"[{label}] {warning}", file=sys.stderr, flush=True)
+                    if report_progress is not None:
+                        # progress=0 marks a pre-fetch message; the
+                        # caller prints it on its own line rather than
+                        # letting the first bar overwrite it.
+                        await report_progress(0, None, warning)
 
         if expected_pages and target:
             msg = _render_bar(len(items), target, page + 1, expected_pages)

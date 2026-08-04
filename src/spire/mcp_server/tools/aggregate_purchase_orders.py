@@ -63,9 +63,8 @@ Zero matching POs returns a well-formed empty ranking
 
 from __future__ import annotations
 
-import sys
-
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 
 
 PURCHASE_ORDERS_PATH = "/fscmRestApi/resources/11.13.18.05/purchaseOrders"
@@ -130,129 +129,18 @@ _PROJECTED_FIELDS = [
 _SHAPE = "supplier_po_value_ranking"
 
 
-async def _fetch_all_pages(
-    client: FusionClient,
-    server_clause: str | None,
-    tool_label: str,
-    report_progress=None,
-) -> tuple[list[dict], bool, int | None]:
-    """Page through /purchaseOrders, and say how much is being missed.
-
-    All three tools in this module page identically — same path, same
-    projection, same cap, same end condition. They had three copies of
-    that loop, which is why the page size was wrong in one place and
-    right in another for as long as it was. One loop, three callers.
-
-    WHAT THE PROBE BUYS
-    A count before any data is fetched (see FusionClient.total_results),
-    which turns three guesses into measurements:
-
-      - The progress line gets a DENOMINATOR. "page 12" says nothing
-        about how much is left; "page 12/32, 6,000/15,839 (38%)" does.
-      - The cap warning fires BEFORE the fetch instead of after. On
-        /invoices the cap covers 51% of the collection, so a two-minute
-        wait ends in a partial answer that could have been announced at
-        second one.
-      - truncated stops being inferred. It was "the loop used all its
-        pages", a proxy; with a total it is fetched-vs-expected.
-
-    A probe that returns None degrades all three back to the previous
-    behaviour rather than failing. See the return note on
-    total_results — Fusion omits the count on some resources, and this
-    module worked without it for months.
-
-    Returns:
-        (items, hit_page_cap, total_available)
-    """
-    total_available = await client.total_results(
-        PURCHASE_ORDERS_PATH, server_clause
-    )
-
-    # Up front, before a single page is fetched. Loud on purpose: a
-    # footnote after the fact is what let a 10,000-of-15,839 answer read
-    # as complete, with CLOSED understated by 860 million.
-    if total_available is not None and total_available > OVERFETCH_LIMIT:
-        print(
-            f"[{tool_label}] "
-            f"*** WARNING: {total_available:,} records match, and the page "
-            f"cap stops at {OVERFETCH_LIMIT:,}. This answer will cover "
-            f"{OVERFETCH_LIMIT / total_available:.0%} of the data. ***",
-            file=sys.stderr,
-            flush=True,
-        )
-
-    expected_pages: int | None = None
-    if total_available is not None:
-        expected_pages = min(
-            MAX_PAGES, -(-total_available // _PAGE_SIZE)  # ceil division
-        )
-
-    items: list[dict] = []
-    hit_page_cap = False
-    for page in range(MAX_PAGES):
-        params: dict[str, str | int] = {
-            "limit": _PAGE_SIZE,
-            "offset": page * _PAGE_SIZE,
-            "onlyData": "true",
-            "fields": ",".join(_PROJECTED_FIELDS),
-        }
-        if server_clause:
-            params["q"] = server_clause
-
-        response = await client.get(PURCHASE_ORDERS_PATH, params=params)
-        page_items = response.get("items", [])
-        items.extend(page_items)
-
-        if expected_pages:
-            pct = min(100, int(len(items) / min(total_available, OVERFETCH_LIMIT) * 100))
-            bar_width = 20
-            filled = int(bar_width * pct / 100)
-            bar = "#" * filled + "." * (bar_width - filled)
-            msg = (
-                f"[{bar}] {pct:3d}%  page {page + 1}/{expected_pages}  "
-                f"{len(items):,}/{min(total_available, OVERFETCH_LIMIT):,}"
-            )
-        else:
-            # No total from the pod: the old line, which is all that can
-            # honestly be said without a denominator.
-            msg = f"page {page + 1}: +{len(page_items)} (total {len(items)})"
-
-        # A bar that redraws in place is right for a terminal and wrong
-        # for a file. Runs here are piped through tee as a matter of
-        # habit, and a file full of carriage returns is one unreadable
-        # line — the saved output is what gets re-read hours later, so it
-        # is the case that must stay legible.
-        #
-        # isatty() distinguishes them: live bar on a terminal, one line
-        # per page into a pipe. Same information either way.
-        _last = (page + 1 == expected_pages) if expected_pages else False
-        if sys.stderr.isatty():
-            end = "\n" if _last else "\r"
-            print(f"[{tool_label}] {msg}", end=end, file=sys.stderr, flush=True)
-        else:
-            print(f"[{tool_label}] {msg}", file=sys.stderr, flush=True)
-
-        if report_progress is not None:
-            await report_progress(page + 1, expected_pages, msg)
-
-        has_more = response.get("hasMore")
-        if has_more is False or (
-            has_more is None and len(page_items) < _PAGE_SIZE
-        ):
-            break
-    else:
-        # Exhausted MAX_PAGES without the pod signalling the end — there
-        # may be more matching POs than we fetched.
-        hit_page_cap = True
-
-    # The loop can leave the cursor mid-line: a \r-terminated bar, then
-    # an early break because the pod said hasMore=false before the
-    # expected page count. Without this the next thing printed lands on
-    # top of the bar.
-    if sys.stderr.isatty():
-        print("", file=sys.stderr, flush=True)
-
-    return items, hit_page_cap, total_available
+# Paging lives in tools/pagination.py — page_all. This module had its
+# own copy until 2026-08-04: probe, progress bar and cap warning, all
+# written here first and then needed by aggregate_invoices too.
+#
+# Two copies is exactly how this file came to page at 200 while
+# aggregate_invoices paged at 500, both citing the same reference
+# note, with one of them truncating every unfiltered scan at 10,000
+# rows for months. The second copy is deleted rather than kept in
+# sync.
+#
+# _PAGE_SIZE and MAX_PAGES stay here and are passed in: they are this
+# tool's decision about this collection, not a property of paging.
 
 
 def _aggregate_rows(
@@ -349,11 +237,20 @@ async def aggregate_purchase_orders_by_supplier(
     if status:
         server_clause = f"StatusCode='{status}'"
 
-    items, hit_page_cap, total_available = await _fetch_all_pages(
+    items, hit_page_cap, total_available = await page_all(
         client,
-        server_clause,
+        PURCHASE_ORDERS_PATH,
         "aggregate_purchase_orders_by_supplier",
-        report_progress,
+        server_clause=server_clause,
+        # Passed explicitly. page_all omits the fields= parameter entirely
+        # when it is None (/standardReceipts returns HTTP 500 for one it
+        # dislikes), so a projection this tool has always sent would
+        # silently stop being sent if left off — fetching whole PO bodies
+        # instead of four columns, slower and invisible.
+        fields=_PROJECTED_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     rows, total_suppliers = _aggregate_rows(items, top_n)
@@ -473,8 +370,16 @@ async def aggregate_purchase_orders_by_status(
         No POs -> total_pos=0, rows=[].
     """
     items: list[dict] = []
-    items, hit_page_cap, total_available = await _fetch_all_pages(
-        client, None, "aggregate_purchase_orders_by_status", report_progress
+    items, hit_page_cap, total_available = await page_all(
+        client,
+        PURCHASE_ORDERS_PATH,
+        "aggregate_purchase_orders_by_status",
+        # No clause: grouping BY status needs every status, so there is
+        # nothing selective to push to the server.
+        fields=_PROJECTED_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     rows, grand_count, grand_total = _aggregate_by_status(items)
@@ -558,8 +463,15 @@ async def summarize_open_purchase_orders(
     """
     server_clause = "StatusCode='OPEN'"
 
-    items, hit_page_cap, total_available = await _fetch_all_pages(
-        client, server_clause, "summarize_open_purchase_orders", report_progress
+    items, hit_page_cap, total_available = await page_all(
+        client,
+        PURCHASE_ORDERS_PATH,
+        "summarize_open_purchase_orders",
+        server_clause=server_clause,
+        fields=_PROJECTED_FIELDS,
+        page_size=_PAGE_SIZE,
+        max_pages=MAX_PAGES,
+        report_progress=report_progress,
     )
 
     po_count, total_ordered, supplier_count = _summarize(items)
