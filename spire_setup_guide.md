@@ -12,7 +12,8 @@ Commands below are marked:
 
 🔵 **ONE-TIME**
 ```bash
-python -m venv ~/venv/spire
+
+
 source ~/venv/spire/bin/activate
 pip install -r requirements.txt
 pip install -e .

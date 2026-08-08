@@ -38,4 +38,4 @@ addopts = "-m 'not integration'"
 # show_synthesizer = true
 # show_tokens = true
 # show_timings = true
-# show_all = true
+show_all = true

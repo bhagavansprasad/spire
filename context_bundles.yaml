@@ -22,6 +22,7 @@ bundles:
   - docs/spire_enhancement_status.md
   - docs/spire_lifecycle_sme_update.md
   - tests/spire_sme_validation_checklist.md
+  - docs/spire_overnight_findings.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -55,6 +56,8 @@ bundles:
   - scripts/verify_nested_addresses.py
   - scripts/score_parser_prompts.py
   - test_tools/try_po_lifecycle.py
+  - scripts/overnight_sets.yaml
+  - scripts/run_overnight.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
