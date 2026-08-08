@@ -633,6 +633,19 @@ def _reason_line(refusal: Refusal, menu: KGMenu) -> str:
         return "I'm not sure which record you mean."
 
     if flavor is RefusalFlavor.UNSUPPORTED_OPERATION:
+        # QA-05: surface the specific reason when the refusal carries one,
+        # the same rule UNSUPPORTED_FIELD follows above. This flavor is
+        # broad — it covers aggregations, rankings, comparisons, AND
+        # deliberate carve-outs like the Site-listing refusal (AI-11) and
+        # "everything about supplier X". The generic sentence below is
+        # right ONLY for the aggregation/compare family; for a carve-out
+        # that set a precise detail, printing "needs a total, a ranking, a
+        # trend" throws away the correct diagnosis for a wrong one — the
+        # same misdirection UX-01 removed elsewhere. When detail is set,
+        # it IS the reason; fall back to the generic line only when it is
+        # not.
+        if refusal.detail:
+            return refusal.detail
         # Deliberately broader than "totals and grouping". This flavor also
         # covers rankings and side-by-side comparisons — "compare the
         # lifecycle of PO 701337 and PO 162034" is neither a total nor a
@@ -731,3 +744,4 @@ def capabilities_sentence(menu: KGMenu) -> str:
 # Backward-compatible alias: the previous private name, in case anything
 # outside this module imported it.
 _capabilities_sentence = capabilities_sentence
+
