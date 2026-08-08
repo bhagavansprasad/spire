@@ -2546,9 +2546,144 @@ Observations for a later suite-tidy pass, not acted on now:
 ### G16.8 Status
 
 Analysis complete; all 12 sets closed in `docs/spire_overnight_findings.md`.
-None of AI-1…AI-11 is fixed yet — this campaign was measurement, and the
-fixes are the next body of work. The requirements doc records them as
-committed work items (v1.7). Priority order proposed: AI-1 (clearest), then
-AI-4 + REC-1 (highest value), then AI-7 and AI-10/11 (the remaining big
-four), then the refusal-quality set (AI-5/AI-9/AI-6), then cleanup
-(AI-2/AI-3).
+This campaign was measurement; the fixes were the next body of work,
+recorded as committed items in the requirements doc (v1.7). Priority order
+proposed: AI-1 (clearest), then AI-4 + REC-1 (highest value), then AI-7 and
+AI-10/11 (the remaining big four), then the refusal-quality set
+(AI-5/AI-9/AI-6), then cleanup (AI-2/AI-3).
+
+**Update:** the fix phase is COMPLETE — see **§G17**. 8 fixes + the QA-12
+feature shipped across 5 commits (merged to master 2026-08-06); QA-08 closed
+as not-a-bug; three items deferred with reasons. Four of the census's root
+causes turned out wrong on inspection and are corrected in G17.
+
+## G17. The fix phase — 8 fixes + 1 feature shipped, and the root causes the census got wrong (2026-08-06)
+
+G16 was measurement; G17 is the fixes. The eleven action items plus the
+feature were worked in cluster order, one at a time, each verified live on
+the exact prompt that exhibited it and against the full suite. Eight fixes
+and the QA-12 feature merged to master across five commits; three items were
+deferred with documented reasons, and one "bug" was closed as not-a-bug.
+
+The most useful outcome was not the fixes themselves but how often the
+census's *root cause* was wrong while its *symptom* was right. Reading code
+and running the prompt corrected four of them. This is the same lesson the
+repo keeps relearning: an assertion from reading a log is not a finding.
+
+### G17.1 What shipped
+
+- **Commit `8ad9b39`** — QA-01 (child rows), QA-02 (honest denominators),
+  QA-12 (completeness advisory), QA-03 (receipts).
+- **Commit `37522b1`** — QA-04/AI-11 (site-listing crash), QA-05 (refusal
+  message, the message half).
+- **Commit `4360035`** — refactor: the two `validation.py` files renamed to
+  `intent_validation.py` and `response_validation.py`.
+- **Commit `b85eed1`** — QA-06 (mixed valid+invalid columns).
+- **Commit `eb2fd72`** — QA-07 (single-leg PO routing).
+
+Suite throughout: 861 → 862 passed (the +1 is a new QA-05 test), 1 xfailed,
+0 failures.
+
+### G17.2 Four root causes the census got wrong
+
+Each was "verified (from logs)" in G16 with a plausible mechanism; each was
+different once read in code or run against the pod.
+
+- **QA-03 (AI-7) — the field-name mismatch.** The census blamed the
+  client-side site filter dropping rows or mis-setting an empty flag. The
+  filter was fine and the 25 rows were fetched. The synthesizer passed
+  `receipts=` to `StandardReceiptResponse`, whose field is
+  `standard_receipts=`; Pydantic's `extra='ignore'` silently discarded every
+  record, so the response was empty. A one-word fix. This is the recurring
+  field-name-mismatch class again — the same shape as the `_parent_stamp`
+  scope bug earlier.
+
+- **QA-01 (AI-1) — narrower than reported.** The census listed five broken
+  child cases including supplier contacts and AR tax lines. Reading
+  `display_formatters.py`: contacts (474–487) and tax lines (585–605) already
+  rendered as proper indented sub-tables — the fix *template* was sitting in
+  the same file. The real defect was four `len()` sites in two blocks. The
+  fix was to apply the existing pattern, not build a new one.
+
+- **QA-04 (AI-10 + AI-11) — one bug, not two of a kind.** The census merged
+  them as "the Site KG gap, broken two ways." They parse differently: AI-11
+  produces `include=['Site']` and crashes; AI-10 produces `include=['Address']`
+  and silently substitutes. AI-11 was cleanly fixable at `validate_intent`
+  (refuse a Site include at parse time — the sole exit-1 gone). AI-10 is a
+  parser-mapping bug ("sites" → Address) and was deferred. One guard could
+  not catch both because the parser mis-maps to different resources.
+
+- **QA-07 (AI-6) — a routing fix, not a new tool.** The census wanted "a
+  dedicated 'received' reconciliation shape mirroring the compare tool." The
+  lifecycle tool *already* reconciles ordered/received/invoiced/paid and
+  derives received from quantity (which the naive schedule read gets wrong —
+  `ReceivedAmount` is empty on this pod, so the generic path showed 0.0). The
+  fix was one parser clause: a single-leg question about one PO is still the
+  lifecycle filter. No new tool, and the answer is *more* correct than a new
+  tool reading the raw schedule would have been.
+
+### G17.3 QA-02 — the honest denominator, and where it already worked
+
+The census framed AI-4 as one pervasive bug. In code it was a routing split:
+the plain-supplier path already produced honest denominators via
+`local_list_summary`, but a *filtered* (two-bucket, join) result fell through
+to the model, which wrote "2 of 432". The fix added a deterministic
+filtered-supplier branch — `_filtered_supplier_list` detects the source +
+`{source}_{suffix}` shape — producing "Examined 25 of 432; of those 25, 2
+match" with no LLM. QA-12 then layers the narrowing advisory on top of that
+same honest sentence, exactly the floor→ceiling dependency the census called.
+
+### G17.4 The two parser-prompt fixes — fragile, and they held
+
+QA-06 and QA-07 were both parser-prompt changes — the lever G15 explicitly
+warned against ("the prompt is the wrong lever"). Both held on the first try,
+for a reason worth recording: they were *permissions and clarifications*, not
+new behaviours. QA-06 told the model an unknown column is not grounds to
+refuse (put all columns in `fields`, let the deterministic split report the
+unavailable one — the split was already built and correct, G15's open piece).
+QA-07 told the model a single-leg PO question is still the lifecycle filter,
+mirroring the risk/payment clauses already in that guidance. Neither asked
+the model to do something new; each removed a reason it was refusing or
+mis-routing. That is the difference between this and the G15 attempt that
+failed: there, the prompt fought the model's own `unanswerable`; here, the
+structural fix (the KG, the split, the lifecycle tool) already existed and
+the prompt only had to stop steering around it.
+
+### G17.5 QA-08 — closed as not-a-bug
+
+`[debug] shape = None` was reported as leaking to user output. In
+`diagnostics.py` the `spire.synthesizer` logger is gated: DEBUG when
+`--show-synthesizer` is on, WARNING (silent) otherwise. The line only appears
+under `show_all` — which both the overnight run and the re-tests used. It is
+correct behaviour, not a leak. Closed with no code change; the findings doc
+is corrected. `flag_matrix.sh` greps for the literal `[debug] shape` as its
+`--show-synthesizer` proof marker, so the line must not simply be deleted.
+
+### G17.6 Deferred, with reasons
+
+- **AI-10** (sites → addresses) — a parser-mapping bug; the AI-11 crash
+  sibling is fixed. Needs a parser change to stop mapping "sites" to Address.
+- **The "everything about X" refusal mis-routing** — lands on
+  `UNSUPPORTED_FILTER` when it is not a filter problem. The QA-05 message fix
+  improves rendering; the routing is a separate parser change.
+- **POHeaderId → OrderNumber for the lifecycle tool** — "PO 2144" (a header
+  id) is not found by a tool that keys on OrderNumber. A fallback resolution
+  in `po_lifecycle.py`, deferred as its own change.
+
+### G17.7 Method notes worth keeping
+
+- **Curl/run corrected the census four times.** Every wrong root cause was
+  caught by reading the actual code or running the actual prompt, never by
+  re-reading the log. QA-03 especially: the fix was invisible until the field
+  names were compared.
+- **The fix template often already exists.** QA-01 (contacts/tax-lines
+  pattern), QA-02 (the plain-supplier deterministic branch), QA-07 (the
+  lifecycle tool) — three of the fixes were "reach the code that already does
+  this correctly," not "write new code."
+- **The bundle predates the rename.** During QA-07, a parser.py extracted
+  from an older bundle still imported `nl_parser.validation`; saving it broke
+  the import that the rename commit had fixed. Caught immediately by the run.
+  File drift is real even mid-session.
+- **Stack fixes, commit in coherent units, one PR.** Eight fixes were built
+  and verified on one branch, committed in five coherent commits (not one per
+  micro-fix, not one giant commit), and merged as a single PR.

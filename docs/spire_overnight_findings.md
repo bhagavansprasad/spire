@@ -28,6 +28,25 @@ Status: `open` · `verified` (confirmed real, fix defined, not yet built) ·
 through AI-11) + 1 feature proposal (REC-1). Below, grouped by theme and
 ordered by priority.
 
+**FIX PHASE COMPLETE (2026-08-06 — merged to master).** 8 fixes + 1 feature
+shipped across 5 commits, each verified live and against the full suite (862
+passed, 1 xfailed):
+- ✅ QA-01/AI-1 (child rows), QA-02/AI-4 (honest denominators), QA-12/REC-1
+  (completeness advisory), QA-03/AI-7 (receipts field-name mismatch) —
+  commit `8ad9b39`
+- ✅ QA-04/AI-11 (site-listing crash), ⚠️ QA-05/AI-5 (refusal message — the
+  message half only) — commit `37522b1`
+- ✅ QA-06/AI-9 (mixed valid+invalid columns) — commit `b85eed1`
+- ✅ QA-07/AI-6 (single-leg PO routing) — commit `eb2fd72`
+- ⚪ QA-08/AI-2 — closed as not-a-bug (show_all artifact)
+- Refactor: the two `validation.py` files renamed (`intent_validation.py`,
+  `response_validation.py`) — commit `4360035`
+
+**Deferred (documented, not yet done):** AI-10 (sites → addresses, a parser-
+mapping bug — the AI-11 crash sibling); the "everything about X" refusal
+mis-routing (parser); POHeaderId → OrderNumber resolution for the lifecycle
+tool. Per-finding status lines below carry the detail.
+
 ### Root-cause clusters (verified 2026-08-06 — fix by cluster, not by finding)
 
 The 11 findings share roots. Verified against source, they collapse to 4
@@ -223,7 +242,7 @@ all four child cases (and any more found in later sets), not piecemeal.
 **Recommend grouping with any related child-rendering findings from other
 sets before building.**
 
-**Status:** verified. Not yet fixed (held per the analyze-all-sets-first
+**Status:** ✅ FIXED (commit 8ad9b39). Child sub-tables now render for PO lines/schedules/distributions and AR invoice lines. Scope was narrower than reported: contacts and tax lines were already correct.
 method).
 
 ---
@@ -336,7 +355,7 @@ not the total. State examined/total as context. This is a message/synthesis
 correction, independent of REC-1. Even without the advisory feature, the
 message must stop stating a partial as a total.
 
-**Status:** verified. Not yet fixed.
+**Status:** ✅ FIXED (commit 8ad9b39). Deterministic filtered-supplier branch: "Examined 25 of 432; of those 25, 2 match." No LLM.
 
 ---
 
@@ -390,7 +409,7 @@ It is now escalated — it fixes a whole CLASS of misleading-count situations,
 not one prompt, and it is the headline recommendation of the analysis so
 far.
 
-**Status:** proposed. Design deferred until the full set analysis is done
+**Status:** ✅ SHIPPED (commit 8ad9b39). Ruled Tip block, filters read from kg_entity_filter, states why the full scan is slow.
 (so the threshold and scope are informed by all the evidence).
 
 **Relationship to AI-4:** AI-4 (bug) is the *floor* — the message must not
@@ -430,7 +449,7 @@ filter-refusal message.
 **Severity:** 🟡 — it correctly declines rather than inventing data, but the
 reason misleads. Related to AI-4 (both are wrong-message bugs).
 
-**Status:** verified. Not yet fixed.
+**Status:** ⚠️ PARTIAL (commit 37522b1). The message half is fixed — UNSUPPORTED_OPERATION now surfaces refusal.detail. The "everything about X" mis-routing to UNSUPPORTED_FILTER is a separate parser fix, deferred.
 
 ---
 
@@ -451,7 +470,7 @@ Prose: "It includes two schedules, both shipping to Seattle with a requested del
 
 **Severity:** 🔴 — but slightly lower than first assessed, since the data does reach the user via prose. The table defect and prose/table inconsistency are still real.
 
-**Status:** verified. Not yet fixed. (Folds into the AI-1 fix — render child rows for lines, schedules, distributions, AR invoice lines, and supplier contacts.)
+**Status:** ✅ FIXED (commit 8ad9b39). Covered by the AI-1 fix.
 
 ---
 
@@ -472,7 +491,7 @@ Table: `Schedules: 2`
 
 **Severity:** 🟡 — data is present and correct (in prose); the defect is relevance/focus, not wrong numbers. The question isn't directly answered.
 
-**Status:** verified. Not yet fixed.
+**Status:** ✅ FIXED (commit eb2fd72). Single-leg PO questions now route to the lifecycle tool (direct received-vs-ordered answer). Deferred: POHeaderId input (e.g. "PO 2144") isn't resolved to OrderNumber.
 
 ---
 
@@ -536,7 +555,7 @@ pending a pod curl. Not yet fixed. Singleton — not merged into AI-4/Cluster B.
 
 **Severity:** 🔴 — a contradictory/false-empty answer. The user is told no receipts exist when 25 do.
 
-**Status:** verified (from logs). Root cause to be confirmed in code. Not yet fixed.
+**Status:** ✅ FIXED (commit 8ad9b39). Root cause confirmed in code: a field-name mismatch (receipts= vs standard_receipts=) silently dropped the records via Pydantic. Not the client-side filter machinery.
 
 ---
 
@@ -557,7 +576,7 @@ Table: `Lines                 : 1`
 
 **Severity:** 🔴 — folds into the AI-1 fix.
 
-**Status:** verified. Not yet fixed. AI-1 scope is now confirmed across: PO lines, PO schedules, PO distributions, AR invoice lines, and supplier contacts.
+**Status:** ✅ FIXED (commit 8ad9b39). Covered by the AI-1 fix.
 
 ---
 
@@ -578,7 +597,7 @@ Truncation: "credit_memos: 2111 total in source; 25 examined for filtering."
 
 **Severity:** 🔴 — folds into AI-4 (denominator honesty).
 
-**Status:** verified. Not yet fixed.
+**Status:** ✅ FIXED (commit 8ad9b39). Same deterministic honest-denominator branch.
 
 ---
 
@@ -937,7 +956,7 @@ This set is the strongest evidence that the dedicated computed tools
 
 **Severity:** 🔴 — silent wrong-resource substitution. The user asked for X and got Y with no indication. This is exactly the "no substitution" principle (from COL-03) being violated at the resource level.
 
-**Status:** verified (from logs). Connects to the known Site KG gap. Not yet fixed.
+**Status:** ⏸️ DEFERRED. The AI-11 crash (sibling) is fixed (commit 37522b1); AI-10's silent sites→addresses substitution is a parser-mapping bug needing a separate parser change.
 
 ## Set 10_refusal_examples — CLOSED
 
@@ -1049,7 +1068,7 @@ Same root cause: the Site resource has no proper standalone fetcher (known KG ga
 
 **Severity:** 🔴 — a user-facing crash. Also the sole exit-1 cause for the set.
 
-**Status:** verified (from logs). Part of the Site KG gap (with AI-10). Not yet fixed.
+**Status:** ✅ FIXED (commit 37522b1). validate_intent refuses a Site include at parse time — no crash. (AI-10, the sibling, remains deferred.)
 
 ## Set qa_testcases — CLOSED
 

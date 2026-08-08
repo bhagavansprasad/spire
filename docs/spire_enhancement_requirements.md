@@ -13,7 +13,7 @@
 | **v1.4 adds** | OUT-06 (fetch completeness), 2026-08-04. Same pattern as v1.3 — built first, written down after, because the requirement only became visible once local synthesis stopped the model from hedging over it. Also records OUT-04's delivery status; OUT-04 itself is unchanged. |
 | **v1.5 revises** | COL-03 (2026-08-04) — substitution REMOVED. Case 2 (project a close match and state it) is struck; local substitution is now prohibited outright, not merely required to disclose. Decided after the 07-31 measurement was re-run: even disclosed substitution reproduces the `supplier-site`→`Address` failure when the guessed match is wrong. COL-03 is now a two-case rule — show what exists, name and menu what does not. Also extends OUT-04's scope note to the list and by-id read paths (the drifting-narration source). Full narrative in `docs/spire_enhancement_status.md` §G14. |
 | **v1.6 records** | COL-03 partial delivery (2026-08-04). The who/audit columns — the SME's actual vocabulary — now resolve on Supplier with real data (CreatedBy, CreationDate, LastUpdatedBy, LastUpdateDate), via COL-01/layer-3 (KG field rows), not via the note. The build forced a pivot: layer 1 (the note) was built and tested but is UNREACHABLE for a wholly-unknown column, because the model refuses before the Intent is built. Making the column real in the KG stops the refusal deterministically — no prompt tuning. Requirement text unchanged; this records delivery status. Full narrative in `docs/spire_enhancement_status.md` §G15. |
-| **v1.7 adds** | §6C — the overnight QA findings (2026-08-05). The full prompt-set suite was run twice and analyzed set-by-set, with pod curls verifying suspected numbers; 11 defects (QA-01…QA-11 → findings AI-1…AI-11) and 1 feature (QA-12 → REC-1) were identified and are recorded as committed work items. Detail in `docs/spire_overnight_findings.md`; narrative in `spire_enhancement_status.md` §G16. Priority order: QA-01 (child rows as counts, clearest), then QA-02 + QA-12 (honest denominators + completeness advisory, highest value), then QA-03/QA-04 (false-empty; supplier-sites), then the refusal-quality set (QA-05/QA-06/QA-07), then cleanup (QA-08/QA-09). Nothing fixed yet — this campaign was measurement. |
+| **v1.7 adds** | §6C — the overnight QA findings (2026-08-05). The full prompt-set suite was run twice and analyzed set-by-set, with pod curls verifying suspected numbers; 11 defects (QA-01…QA-11 → findings AI-1…AI-11) and 1 feature (QA-12 → REC-1) were identified and are recorded as committed work items. Detail in `docs/spire_overnight_findings.md`; narrative in `spire_enhancement_status.md` §G16. Priority order: QA-01 (child rows as counts, clearest), then QA-02 + QA-12 (honest denominators + completeness advisory, highest value), then QA-03/QA-04 (false-empty; supplier-sites), then the refusal-quality set (QA-05/QA-06/QA-07), then cleanup (QA-08/QA-09). **FIX PHASE COMPLETE (2026-08-06, merged to master):** 8 fixes + the QA-12 feature shipped across 5 commits (`8ad9b39`, `37522b1`, `4360035`, `b85eed1`, `eb2fd72`); QA-08 closed as not-a-bug; suite 862 passed, 1 xfailed. Deferred: AI-10 (sites→addresses), the "everything about X" refusal mis-routing, and POHeaderId→OrderNumber for the lifecycle tool. Per-item status in §6C below. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md`, `docs/spire_overnight_findings.md` |
 
 ---
@@ -1209,7 +1209,7 @@ apply to single related records (a PO's buyer renders correctly). Root:
 `display_formatters.py` ~531/533/535/562. The synthesizer prose often carries
 the detail while the table shows the count — so the fix also removes a
 prose/table inconsistency. Clearest single bug: one root cause, one fix, wide
-impact. **Findings: AI-1.**
+impact. **Findings: AI-1.** · ✅ **FIXED** (commit `8ad9b39`). Child sub-tables render for PO lines/schedules/distributions and AR invoice lines; scope was narrower than reported (contacts and tax lines already correct).
 
 ### QA-02 — Honest denominators on capped/edge-traversal results · P0
 
@@ -1220,7 +1220,7 @@ the denominator lies. Must read "examined 25 of 429; 2 of those 25 are
 Small Business." Pervasive across every edge-traversal filter (all
 classifications, business-unit/site, invoice-amount, open-POs,
 no-recent-invoices). This is the floor for QA-12 (the completeness advisory);
-the message must not lie even before the advisory is built. **Findings: AI-4.**
+the message must not lie even before the advisory is built. **Findings: AI-4.** · ✅ **FIXED** (commit `8ad9b39`). Deterministic filtered-supplier branch, no LLM.
 
 ### QA-03 — No false-empty / self-contradiction · P0
 
@@ -1228,8 +1228,7 @@ A response must not contradict the data it fetched. "Show receipts for ABC
 App Software at Santa Clara" says "All 25 have Site Santa Clara" then "No
 receipts found" — 25 real receipts were fetched. The final render must show
 the matching rows (or an honest partial), never declare empty when rows were
-found and described. Root: the client-side site filter over the receipts
-fetch drops rows or mis-sets the empty flag. **Findings: AI-7.**
+found and described. Root (corrected): NOT the client-side filter — the synthesizer passed `receipts=` to a response whose field is `standard_receipts=`, so Pydantic silently dropped all records. **Findings: AI-7.** · ✅ **FIXED** (commit `8ad9b39`), one-word field-name fix.
 
 ### QA-04 — Supplier sites: no silent wrong-resource, no crash · P0
 
@@ -1241,7 +1240,7 @@ routes to `search_suppliers_by_site_bu` and crashes on a missing required
 `business_unit` argument (the sole exit-1 of the run). Root: Site has no
 proper standalone KG fetcher (the long-known Site gap). Also: required-arg
 validation should fail at plan time (graceful refusal), not execute time
-(crash). **Findings: AI-10, AI-11.**
+(crash). **Findings: AI-10, AI-11.** · ⚠️ **PARTIAL**: AI-11 (crash) ✅ FIXED (commit `37522b1`) — `validate_intent` refuses a Site include at parse time. AI-10 (silent sites→addresses) ⏸️ DEFERRED — a parser-mapping bug.
 
 ### QA-05 — Refusal reasons must match the actual reason · P1
 
@@ -1252,7 +1251,7 @@ ratings (do not exist), "everything about supplier 1252" (a specific supplier
 named). The accurate reason sits in the parenthetical but is not surfaced.
 Three misapplied templates were seen. Fix direction is already in the system:
 the PLANNER-GUARD refusals are hand-crafted, accurate, and give concrete
-examples — model the parser's refusal messages on those. **Findings: AI-5.**
+examples — model the parser's refusal messages on those. **Findings: AI-5.** · ⚠️ **PARTIAL** (commit `37522b1`): the message half is fixed — `UNSUPPORTED_OPERATION` surfaces `refusal.detail`. The "everything about X" mis-routing to `UNSUPPORTED_FILTER` ⏸️ DEFERRED (a parser change).
 
 ### QA-06 — Partial-column requests must not refuse wholesale · P1
 
@@ -1265,7 +1264,7 @@ the valid columns, names the invalid one, lists what is available). It fails
 only when specific phrasings trip the model's upstream `unanswerable` flag
 before the deterministic split runs — the G15 limitation. The fix is to stop
 the model refusing upstream on unknown columns so the split (already built and
-correct) is always reached. **Findings: AI-9.** Relates to COL-03.
+correct) is always reached. **Findings: AI-9.** · ✅ **FIXED** (commit `b85eed1`): two DraftIntent prompt changes stop the upstream refusal; the valid column renders with an honest note. Relates to COL-03.
 
 ### QA-07 — Answer the specific question asked · P2
 
@@ -1273,18 +1272,18 @@ A specific question should get a direct answer, not a generic dump. "How much
 of PO 2144 was received?" returns a full PO summary with the received figures
 buried in prose. Desired: a direct received-vs-ordered line, ideally via a
 dedicated "received" reconciliation shape mirroring the invoiced-vs-ordered
-compare tool. Relevance/focus issue; data is correct. **Findings: AI-6.**
+compare tool. Relevance/focus issue; data is correct. **Findings: AI-6.** · ✅ **FIXED** (commit `eb2fd72`): a single-leg PO question now routes to the lifecycle tool — no new tool needed. Deferred: POHeaderId→OrderNumber resolution.
 
 ### QA-08 — Remove debug leakage from user output · P2
 
 `[debug] shape = None` appears in user-facing output. Remove or gate behind a
-diagnostic flag. Trivial. **Findings: AI-2.**
+diagnostic flag. Trivial. **Findings: AI-2.** · ⚪ **CLOSED — not a bug**: the line is a `show_all` diagnostic artifact, correctly gated; it only appears when `--show-synthesizer` is on. No code change.
 
 ### QA-09 — Local synthesis for address lists · P3
 
 Address-list synthesis re-narrates every city/country via the LLM
 (out≈3133 tokens). Move to local synthesis (the OUT-04 pattern) or trim.
-Efficiency, not correctness. **Findings: AI-3.** Extends OUT-04.
+Efficiency, not correctness. **Findings: AI-3.** · ⏸️ **DEFERRED** (P3 efficiency, not a defect). Extends OUT-04.
 
 ### QA-12 — Completeness advisory · P1 · feature
 
@@ -1298,7 +1297,7 @@ not linked to a PO and excluded"); this generalizes it to the edge-traversal
 path. Walking the full set to make the count exact is rejected as a fix
 (~7-8 min is unusable). QA-02 is the floor (message must not lie); this is the
 ceiling (honest message plus a narrowing recommendation) and depends on
-QA-02. **Findings: REC-1.**
+QA-02. **Findings: REC-1.** · ✅ **SHIPPED** (commit `8ad9b39`): ruled Tip block, filters read from `kg_entity_filter`, states why the full scan is slow.
 
 **Not-a-bug (verified, do not re-open):** supplier count 429, the −206,448.85
 AR balance, the 165M exposure ranking with open=due, the run-1 rate-limit
