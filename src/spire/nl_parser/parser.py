@@ -32,7 +32,7 @@ from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE, LLM_MAX_OUTPUT_TOKENS
 from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
-from spire.nl_parser.validation import validate_intent
+from spire.nl_parser.intent_validation import validate_intent
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
 

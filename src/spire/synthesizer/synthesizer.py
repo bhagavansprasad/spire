@@ -147,7 +147,7 @@ from spire.synthesizer.prompts import (  # noqa: F401
     _build_system_prompt,
     _round_floats,
 )
-from spire.synthesizer.validation import (  # noqa: F401
+from spire.synthesizer.response_validation import (
     _collect_valid_ids,
     _is_supplier_spend_ranking,
     _raise_if_bad,

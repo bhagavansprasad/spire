@@ -112,7 +112,7 @@ bundles:
   - src/spire/nl_parser/draft.py
   - src/spire/nl_parser/parser.py
   - src/spire/nl_parser/result.py
-  - src/spire/nl_parser/validation.py
+  - src/spire/nl_parser/intent_validation.py
   - src/spire/nl_parser/vocabulary.py
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
@@ -132,7 +132,7 @@ bundles:
   - src/spire/synthesizer/ranking_summary.py
   - src/spire/synthesizer/aggregation.py
   - src/spire/synthesizer/prompts.py
-  - src/spire/synthesizer/validation.py
+  - src/spire/synthesizer/response_validation.py
   - src/spire/synthesizer/lifecycle.py
   - src/spire/graph/pipeline.py
 
