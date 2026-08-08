@@ -109,6 +109,30 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
             offending_filters=[bf for bf in bad_filters if bf is not None],
         )
 
+    # ── Step 3b: reject includes that have no standalone fetcher ─────
+    # AI-11 / QA-04. "supplier sites for X" parses to Supplier with
+    # include=['Site']. Site has no site-listing tool — the only Site tool
+    # (search_suppliers_by_site_bu) is a BU *filter* and needs a
+    # business_unit the listing does not carry. The planner builds a step
+    # calling it with supplier_id only, and the executor crashes on the
+    # missing required arg (the sole exit-1 in the QA campaign). Refuse
+    # here, at parse time, before a plan is built — the same principle the
+    # findings doc drew: validate required args at PLAN time, not execute
+    # time. Site is refused honestly rather than silently substituting a
+    # different resource (contrast AI-10, where "sites" degrades to
+    # addresses — a separate parser-mapping bug, not fixed here).
+    if "Site" in intent.include:
+        return Refusal(
+            flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
+            detail=(
+                "Supplier sites aren't available as a standalone listing "
+                "(there is no site-list fetcher; the only site tool filters "
+                "suppliers by business unit). Ask for suppliers with a site "
+                "in a named business unit, or for the supplier's addresses."
+            ),
+            offending_entity=entity,
+        )
+
     # ── Step 4: split requested columns into resolvable vs unresolved ──
     # COL-03. Unlike the gates above, an unknown COLUMN does not refuse the
     # query. The entity and filters are valid, so the query runs; the
@@ -133,3 +157,4 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
         intent.unresolved_fields = unresolved
 
     return None
+

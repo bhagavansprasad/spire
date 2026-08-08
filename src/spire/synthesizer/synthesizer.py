@@ -133,9 +133,12 @@ from spire.synthesizer.ar import (  # noqa: F401
     single_parent_shape,
 )
 from spire.synthesizer.local_summary import local_list_summary
+from spire.planner.kg_db import _entity_level_filter_types
 from spire.synthesizer.p2p import (  # noqa: F401
     build_supplier_records,
     plain_supplier_bucket,
+    _filtered_supplier_list,
+    build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -144,7 +147,7 @@ from spire.synthesizer.prompts import (  # noqa: F401
     _build_system_prompt,
     _round_floats,
 )
-from spire.synthesizer.validation import (  # noqa: F401
+from spire.synthesizer.response_validation import (
     _collect_valid_ids,
     _is_supplier_spend_ranking,
     _raise_if_bad,
@@ -491,6 +494,64 @@ def synthesize_response(
     # fluent one the reader cannot verify against the rows in front of
     # them.
     #
+    # Filtered supplier list (edge-traversal): honest denominators, no LLM.
+    #
+    # QA-02. A filter like has_classification runs as two steps — fetch the
+    # source suppliers (capped, e.g. 25) then keep the ones that match
+    # (e.g. 2), via filter_source_when_nonempty. That leaves TWO buckets:
+    # the source (examined) and the matched (`{source}_{suffix}`, shown).
+    # Because there are two buckets, plain_supplier_bucket returns None and
+    # the answer used to fall to the model below — which wrote "showing 2
+    # of 432", framing the 2 MATCHED against the 432 pod-wide total. That
+    # denominator is wrong: 2 is of the 25 EXAMINED, not of 432.
+    #
+    # The _local_truncation note already states the honest split ("432
+    # total in source; 25 examined for filtering") — the numbers exist and
+    # are correct. The defect is only that a model sentence contradicts it.
+    # So build the summary here, deterministically, from the two bucket
+    # sizes plus the source total: "Examined 25 of 432 suppliers. Of those
+    # 25, 2 match." The count is always N-of-examined; the pod total is
+    # stated as context, never as the denominator of the matched count.
+    #
+    # Generalises to every edge-traversal filter, since the shape (a source
+    # bucket plus a `{source}_{suffix}` matched bucket) is the same for all
+    # of them. Field-generic wording for now (names no classification
+    # value) — the value is not threaded into this function; QA-12 layers
+    # the narrowing advisory on top of this same honest sentence.
+    filtered = _filtered_supplier_list(outputs) if target_entity == "Supplier" else None
+    if filtered is not None:
+        source_bucket, matched_bucket = filtered
+        matched_rows = outputs[matched_bucket]
+        examined = len(outputs[source_bucket])
+        # Source total from the SOURCE bucket's truncation entry — the pod
+        # count the fetch was capped against (432), not the matched count.
+        source_total, notes = _local_truncation(
+            source_bucket, outputs[source_bucket], truncation_by_step, metadata_by_step
+        )
+        shown = len(matched_rows)
+        total_text = f"{source_total:,}" if source_total is not None else "an unknown number of"
+        summary = (
+            f"Examined {examined} of {total_text} suppliers. "
+            f"Of those {examined}, {shown} match the filter."
+        )
+        # QA-12: this answer is a SAMPLE (examined < total), so add the
+        # completeness advisory — the entity-level filters that would let
+        # the reader get a full answer without the slow whole-set walk.
+        # Names come from the KG (kg_entity_filter, entity_level), minus
+        # by_id which is a fetch-one, not a narrowing filter.
+        supplier_filters = _entity_level_filter_types().get("Supplier", set())
+        tip = build_narrowing_tip(
+            {ft for ft in supplier_filters if ft != "by_id"},
+            source_total,
+            entity_label="suppliers",
+        )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=build_supplier_records(matched_rows),
+            truncation_notes=notes,
+            narrowing_tip=tip,
+        )
+
     # This fires ONLY where plain_supplier_bucket returns a bucket — one
     # bucket, supplier rows, nothing to join. Anything needing a join
     # still goes to the model below, which is the "otherwise go to the
@@ -743,7 +804,7 @@ def synthesize_response(
                         },
                     )
                 ),
-                receipts=build_standard_receipt_records(rows),
+                standard_receipts=build_standard_receipt_records(rows),
                 truncation_notes=notes,
             )
 
@@ -832,4 +893,5 @@ def synthesize_response(
     response = response.__class__(**rounded_dict)
 
     return response
+
 

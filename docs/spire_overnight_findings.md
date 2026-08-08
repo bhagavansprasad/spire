@@ -28,6 +28,56 @@ Status: `open` · `verified` (confirmed real, fix defined, not yet built) ·
 through AI-11) + 1 feature proposal (REC-1). Below, grouped by theme and
 ordered by priority.
 
+### Root-cause clusters (verified 2026-08-06 — fix by cluster, not by finding)
+
+The 11 findings share roots. Verified against source, they collapse to 4
+clusters + 4 singletons. Fix by cluster.
+
+**Cluster A — child-as-count display (QA-01 / AI-1).** One file
+(`display_formatters.py`). VERIFIED SCOPE: 4 sites in 2 parent blocks —
+PO lines/schedules/distributions (531/533/535) and AR invoice lines (562).
+Supplier contacts and AR tax lines were reported here too but are ALREADY
+FIXED in code (indented sub-tables, 474–487 and 585–605) — the fix template
+already exists in-file. One fix, closes AI-1 across sets 00/02/03/07/08/10.
+
+**Cluster B — edge-traversal engine (QA-02/AI-4 + QA-12/REC-1 + the set-06
+slowness).** One mechanism: fetch 25 suppliers, walk each one's children
+client-side. Produces the lying denominator (AI-4), the 29–113s latency, and
+is the base REC-1's advisory sits on. FLOOR→CEILING: AI-4 (message must not
+lie) is prerequisite; REC-1 (honest message + narrowing rec) builds on it.
+Order is fixed: AI-4 then REC-1.
+
+**Cluster C — refusal-message template (QA-05/AI-5 + the MESSAGE half of
+QA-06/AI-9).** The parser's `unsupported_filter` flavor emits a generic
+"narrow by country/status/name" string regardless of the real reason.
+Misapplied to payment terms, ratings, "everything about X", and (3rd variant)
+the aggregation "needs a total/ranking/trend" template on a column problem.
+One message-routing fix. NB: QA-06 is split — its MESSAGE is Cluster C; its
+BEHAVIOUR (wholesale refusal) is the G15 upstream-`unanswerable` parser
+limitation, a separate harder fix.
+
+**Cluster D — Site KG gap (QA-04 = AI-10 + AI-11).** Already merged. Site has
+no standalone KG fetcher: one phrasing degrades to addresses (AI-10), another
+crashes on missing `business_unit` (AI-11). One root, one fix (give Site a
+fetcher, or refuse at plan time + validate required args at plan not execute).
+
+**Singletons (do not merge):**
+- **QA-03 / AI-7** — false-empty. VERIFIED standalone in code (see AI-7): an
+  exact-string-match site filter in `standard_receipts.py`, NOT Cluster B's
+  engine.
+- **QA-07 / AI-6** — no dedicated "received" tool.
+- **QA-08 / AI-2** — debug leak. Trivial.
+- **QA-09 / AI-3** — token-heavy synthesis. Efficiency.
+
+**Feature-vs-bug question (settled):** building REC-1 does NOT fix bugs for
+free. It is the ceiling of Cluster B only; AI-4 (the floor) is its
+prerequisite, and it touches no other cluster. The only place "feature helps
+bugs" is real is inside Cluster B, and only in the order AI-4→REC-1.
+
+**Proposed cluster order:** A (pure win, no deps) → B as a unit (AI-4 then
+REC-1) → C (one template fix) → D → singletons → the harder QA-06 behaviour.
+
+
 ### The big four (fix first — real wrong/missing/crashing output)
 
 | ID | Sev | Status | Summary | Scope |
@@ -157,8 +207,13 @@ forward and NOT fixed here: this change is layout only."* So it is a KNOWN,
 deliberately-deferred defect — deferred to avoid hiding a behaviour change
 inside a formatting diff. Good discipline; now due.
 
-**Scope:** every parent-with-children query — "PO and its lines /
-schedules / distributions", "AR invoice and its lines". Not one prompt.
+**Scope (verified in code 2026-08-06):** 4 collapse sites in 2 parent blocks
+— PO lines/schedules/distributions (`display_formatters.py` 531/533/535) and
+AR invoice lines (562). CORRECTION to earlier addenda: supplier contacts
+(474–487) and AR tax lines (585–605) are ALREADY rendered as proper indented
+sub-tables — NOT collapsed — so they are NOT part of this defect. The working
+contacts/tax-lines pattern (`_indent` + `_render_records`) is the exact fix
+template for the 4 broken sites; no new render primitive is needed.
 
 **Fix (defined, not built):** render a child sub-table (Line/Description/
 Qty/Price/… for PO lines; the analogous set for schedules, distributions,
@@ -173,24 +228,28 @@ method).
 
 ---
 
-### AI-2 🟡 verified — `[debug] shape = None` leaks to output
+### AI-2 / QA-08 ⚪ CLOSED — not a bug (verified 2026-08-06)
 
-**Set:** 00_dipstick (seen across the show_all run, most prompts)
-**Prompt:** e.g. `Get list of active suppliers` (appears on many)
+**Reported:** `[debug] shape = None` leaks to user output.
 
-**Actual:** a line `[debug] shape = None` printed between the parse and the
-Intent, reaching user-facing output.
+**Verified in code — NOT a leak.** `diagnostics.py` gates the
+`spire.synthesizer` logger correctly: DEBUG when `show_synthesizer` is on,
+WARNING (silent) when off. The `_log.debug("[debug] shape = %s", shape)` line
+in `synthesizer.py` only prints when `--show-synthesizer` is set. It appeared
+in overnight run 2 and in re-tests because BOTH were run with `show_all = true`
+(which `_expand_show_all` turns into every gated flag on, `show_synthesizer`
+included). With `show_all`/`--show-synthesizer` off, the line is silent — as
+designed. The finding mistook a `show_all` diagnostic artifact for a leak.
 
-**Expected:** no debug line in the answer stream.
+**Action:** none required. The behaviour is correct. OPTIONAL future tidy:
+the line prints "shape = None" on every non-aggregation answer (shape is None
+unless the result is an aggregation), which is noisy even when synthesizer
+output is requested — could log only when shape is not None. Not a defect;
+low priority. NB: `flag_matrix.sh` greps for the literal string "[debug] shape"
+as its `--show-synthesizer` proof marker, so the line must not simply be
+deleted without updating that harness.
 
-**Root cause:** a leftover debug print (not yet located to a line; appears
-after parse, before Intent — likely in the parser or graph pipeline). Emits
-`shape = None` on the non-aggregation path.
-
-**Fix:** remove or gate the print behind a diagnostic flag. Trivial.
-
-**Status:** verified (cosmetic). Not yet fixed.
-
+**Status:** CLOSED — no code change. Doc corrected.
 ---
 
 ### AI-3 🟢 open — Address-list synthesis is token-heavy
@@ -457,7 +516,23 @@ Answer: "No receipts found."
 
 **Expected:** show the 25 matching receipts (or an honest partial/advisory), not "No receipts found." The final answer must not contradict the data it just fetched and described.
 
-**Root cause (likely):** the "at Santa Clara" site filter is applied as a client-side edge filter over the standard_receipts fetch; the filtered-result assembly appears to drop the rows or mis-set the empty flag, so the final render reports empty despite the prose (from an earlier stage) reporting 25 matches. Likely the same client-side-filter-over-capped-fetch machinery as AI-4, but here it produces a false-empty instead of a mislabeled count. Note this prompt routed to StandardReceipt (standard_receipts) whereas prompt 11 ("Show receipts for ABC Application Software") routed to AccountReceipt (account_receipts) — the receipts-entity inconsistency is also present.
+**Root cause (CONFIRMED in code 2026-08-06):** `standard_receipts.py` applies
+the site filter as exact string equality — `if site != customer_site:
+continue`. The prompt passes `customer_site="Santa Clara"`; the pod's
+`CustomerSite` value does not match that string exactly (casing/suffix), so
+every row fails `!=`, `filtered` empties, and the tool returns `items=[]` →
+"No receipts found." The synthesizer narrated the 25 rows from BEFORE this
+drop (hence "All 25 have Site Santa Clara"); the render reports empty AFTER
+it — that is the contradiction. NOT Cluster B's capped-fetch engine; a
+standalone matching bug in this one tool.
+
+**Fix:** normalize the comparison (case-insensitive; likely substring or
+suffix-tolerant). MUST curl the pod first for the actual `CustomerSite` value
+to choose the exact rule — the mismatch reason is inferred from code; the
+value itself is not yet curl-confirmed.
+
+**Status:** verified in code. Fix direction defined; exact matching rule
+pending a pod curl. Not yet fixed. Singleton — not merged into AI-4/Cluster B.
 
 **Severity:** 🔴 — a contradictory/false-empty answer. The user is told no receipts exist when 25 do.
 

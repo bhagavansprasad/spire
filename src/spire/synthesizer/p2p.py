@@ -244,6 +244,13 @@ class SupplierResponse(BaseModel):
         "Empty if none passed the filters.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only when "
+        "the answer is a SAMPLE (examined < total) — tells the reader the "
+        "full scan is slow and lists the entity-level filters that would "
+        "narrow it. Empty when the answer already covers the full set.",
+    )
 
 
 class SupplierSummaryResponse(BaseModel):
@@ -400,3 +407,101 @@ def plain_supplier_bucket(outputs: dict[str, list[dict]]) -> str | None:
         return name
     return None
 
+
+def _filtered_supplier_list(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """Names of (source, matched) buckets for a FILTERED supplier list.
+
+    The mirror of plain_supplier_bucket for the two-bucket case. An
+    edge-traversal filter (has_classification, has_site_in_bu,
+    has_invoice_over_amount, and the rest) fetches a source list, then
+    keeps the rows that match, via filter_source_when_nonempty. The
+    executor names the matched bucket ``{source}_{suffix}`` — so exactly
+    two buckets remain and one name is the other's prefix.
+
+    Returns (source_bucket, matched_bucket) when the outputs have that
+    shape and both hold supplier rows; None otherwise. Conservative in
+    the same spirit as plain_supplier_bucket: return None the moment the
+    shape is not unmistakably a source + matched pair, so a wrong guess
+    never routes a join-shaped result through the honest-denominator
+    branch.
+
+    Detection is by name (``{source}_{suffix}``), not by row count: the
+    matched set can equal, be smaller than, or in a degenerate case match
+    the source size, so length cannot tell source from matched. The name
+    can.
+    """
+    if len(outputs) != 2:
+        return None
+    names = list(outputs.keys())
+    # One name must be a strict prefix of the other, with an underscore
+    # boundary — that is the source/matched naming, not a coincidence.
+    a, b = names
+    if b.startswith(a + "_"):
+        source, matched = a, b
+    elif a.startswith(b + "_"):
+        source, matched = b, a
+    else:
+        return None
+    # Both buckets must be supplier rows (or empty — an empty matched set
+    # is a valid answer: "0 of 25 match").
+    for bucket in (source, matched):
+        rows = outputs[bucket]
+        if rows and (not isinstance(rows[0], dict) or "SupplierId" not in rows[0]):
+            return None
+    # The source bucket must actually carry supplier rows; if it is empty
+    # there was nothing to examine and this is not the shape we handle.
+    if not outputs[source]:
+        return None
+    return (source, matched)
+# ─────────────────────────────────────────────────────────────────────
+# QA-12 completeness advisory
+# ─────────────────────────────────────────────────────────────────────
+
+# Reader-facing label for each entity-level Supplier filter type. Only
+# the NARROWING filters appear — by_id is a fetch-one and is excluded by
+# the caller, so it needs no label. Kept here beside the response it
+# feeds; if a new entity-level filter is added to kg_entity_filter, add
+# its label here or it will show as its raw type name.
+_SUPPLIER_FILTER_LABELS: dict[str, str] = {
+    "country": "country",
+    "status": "status",
+    "business_relationship": "business relationship",
+    "name_fragment": "name",
+    "created_date": "creation date",
+}
+
+
+def build_narrowing_tip(
+    filter_types: set[str],
+    total: int | None,
+    entity_label: str = "suppliers",
+) -> str:
+    """Short completeness advisory (QA-12), or "" when not applicable.
+
+    Given the entity-level filter types available for the entity (from
+    kg_entity_filter, mechanism=entity_level) and the pod total, return a
+    one-line tip naming the filters a reader can add to get a complete
+    answer cheaply. Deterministic — the filter names come from the KG,
+    never guessed. Returns "" when there is no total to talk about.
+
+    The wording states WHY (the full scan is slow) so the ask to narrow
+    is not mysterious. Kept crisp on purpose: a long tip does not get
+    read.
+    """
+    if total is None:
+        return ""
+    labels = [
+        _SUPPLIER_FILTER_LABELS.get(ft, ft)
+        for ft in filter_types
+        if ft in _SUPPLIER_FILTER_LABELS
+    ]
+    if not labels:
+        return ""
+    labels.sort()
+    filters_text = ", ".join(labels)
+    return (
+        f"Reading all {total:,} {entity_label} is slow. "
+        f"Narrow with a filter: {filters_text}."
+    )

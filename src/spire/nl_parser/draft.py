@@ -182,7 +182,15 @@ class DraftIntent(BaseModel):
             "filter that is not listed, an aggregation, or is too vague to "
             "pin down. When true, do NOT guess a target_entity or map the "
             "request to the closest listed entity; leave the other fields at "
-            "their defaults and explain in unanswerable_reason."
+            "their defaults and explain in unanswerable_reason. "
+            "IMPORTANT: an unknown COLUMN is NOT a reason to set this true. "
+            "If the entity and filters are supported but the question also "
+            "asks for a column that is not in the entity's column list, the "
+            "question IS answerable: set unanswerable=false, fill "
+            "target_entity and filters normally, and put ALL requested "
+            "columns in `fields` (see `fields`). The system reports any "
+            "unavailable column and returns the rest — do NOT refuse the "
+            "whole query because one column is unknown."
         ),
     )
     unanswerable_reason: str = Field(
@@ -258,9 +266,16 @@ class DraftIntent(BaseModel):
         description=(
             "When the question asks for specific columns (e.g. 'get the "
             "supplier name and number', 'with invoice number and amount'), "
-            "list the EXACT column names from the target entity's column "
-            "list below. Empty if the question does not name specific "
-            "columns. Use only names that appear in that list."
+            "list EVERY column the question names, using the entity's column "
+            "names below where they match. If the question names a column "
+            "that is NOT in the list (e.g. 'credit rating' on a supplier), "
+            "still include it here as the user wrote it, and still fill "
+            "target_entity and filters normally — do NOT set unanswerable. "
+            "The system checks each name against the entity's columns, "
+            "returns the ones that exist, and reports the ones that do not; "
+            "listing an unknown column here is how it gets reported, so never "
+            "drop a requested column. Empty only if the question names no "
+            "specific columns."
         ),
     )
     aggregate: DraftAggregate | None = Field(
@@ -402,6 +417,7 @@ class DraftIntent(BaseModel):
             invoice_limit=self.invoice_limit,
             balance_only=self.balance_only,
         )
+
 
 
 

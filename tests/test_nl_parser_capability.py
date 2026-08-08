@@ -341,10 +341,30 @@ def test_genuinely_absent_entity_still_lists_what_exists(menu):
 
 def test_unsupported_operation_covers_more_than_arithmetic(menu):
     """"compare the lifecycle of PO 701337 and PO 162034" is neither a
-    total nor a trend, and was told it needed one."""
-    r = Refusal(flavor=RefusalFlavor.UNSUPPORTED_OPERATION, detail="x")
+    total nor a trend, and was told it needed one.
+
+    The generic operation reason shows only when the refusal carries NO
+    specific detail (QA-05: a detail, when present, IS the reason — see
+    test_unsupported_operation_surfaces_detail). With detail empty, the
+    fallback must still name comparisons, not just arithmetic."""
+    r = Refusal(flavor=RefusalFlavor.UNSUPPORTED_OPERATION, detail="")
     reason = _lines(capability_message(r, menu))["Reason"]
     assert "side by side" in reason or "comparison" in reason.lower()
+
+
+def test_unsupported_operation_surfaces_detail(menu):
+    """QA-05: when an UNSUPPORTED_OPERATION refusal carries a specific
+    detail (a carve-out like the Site-listing refusal, or "everything
+    about X"), that detail is the Reason — the generic "a total, a
+    ranking, a trend" line is thrown away for it, not printed over it.
+    This mirrors UNSUPPORTED_FIELD, which already surfaces its detail."""
+    r = Refusal(
+        flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
+        detail="Supplier sites aren't available as a standalone listing.",
+    )
+    reason = _lines(capability_message(r, menu))["Reason"]
+    assert "standalone listing" in reason
+    assert "a total, a" not in reason
 
 
 def test_operation_example_matches_the_entity(menu):
@@ -523,3 +543,4 @@ def test_reason_line_never_prints_a_filter_key(menu):
                     offending_entity="Supplier", offending_filters=[key])
         reason = _lines(capability_message(r, menu))["Reason"]
         assert f"not by {key}" in reason, reason
+

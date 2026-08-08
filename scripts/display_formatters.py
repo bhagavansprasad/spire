@@ -161,6 +161,16 @@ def _with_truncation(lines: list[str], response: Any) -> str:
     if notes:
         lines.append("\nTruncation:")
         lines.extend(f"  - {note}" for note in notes)
+    # QA-12 completeness advisory. Rendered as a visually distinct ruled
+    # block, deliberately NOT folded into the answer prose: it is metadata
+    # ON the answer (the query succeeded), and a reader skims past advice
+    # that reads like more of the answer. getattr so the summary_only
+    # path — which reaches here without a typed response — is unaffected.
+    tip = getattr(response, "narrowing_tip", "")
+    if tip:
+        lines.append("\n─── Tip ───")
+        lines.append(tip)
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -522,20 +532,9 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             }
             if po.buyer:
                 row["Buyer"] = po.buyer.display_name
-            # Counts, not the child rows themselves — the same thing the
-            # bullets showed. That "lines: 2" is a COUNT where the user
-            # asked for the lines is a real defect, carried forward and
-            # NOT fixed here: this change is layout only, and fixing it
-            # inside a formatting change would hide it in the diff.
-            if po.lines:
-                row["Lines"] = len(po.lines)
-            if po.schedules:
-                row["Schedules"] = len(po.schedules)
-            if po.distributions:
-                row["Distributions"] = len(po.distributions)
             rows.append(row)
         cols = ["Order", "POHeaderId", "Status", "Supplier"]
-        for extra in ("Buyer", "Lines", "Schedules", "Distributions"):
+        for extra in ("Buyer",):
             if any(extra in r for r in rows):
                 cols.append(extra)
         lines.extend(
@@ -543,6 +542,77 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 "Purchase Orders", rows, cols, "No purchase orders found."
             )
         )
+        # Child rows below the table, one indented sub-table per collection —
+        # the same treatment supplier contacts and AR tax lines get. The
+        # parent table used to carry "Lines: 2" COUNTS where the user asked
+        # for the lines themselves (QA-01); a count is not an answer to "show
+        # its lines". Each child is a record, so it gets the table treatment,
+        # indented under its PO. `_render_records` chooses table vs vertical
+        # by row count, so a single line renders vertically on its own.
+        for po in response.purchase_orders:
+            if po.lines:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"PO {po.order_number} — lines",
+                            [
+                                {
+                                    "Line": ln.line_number,
+                                    "Description": ln.description,
+                                    "Category": ln.category,
+                                    "Qty": ln.quantity,
+                                    "Amount": ln.amount,
+                                }
+                                for ln in po.lines
+                            ],
+                            ["Line", "Description", "Category", "Qty", "Amount"],
+                            "",
+                        )
+                    )
+                )
+            if po.schedules:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"PO {po.order_number} — schedules",
+                            [
+                                {
+                                    "Schedule": sc.schedule_number,
+                                    "Ship To": sc.ship_to_location,
+                                    "Need-By": sc.requested_delivery_date,
+                                    "Ordered": sc.ordered_amount,
+                                    "Received": sc.received_amount,
+                                    "Billed": sc.billed_amount,
+                                }
+                                for sc in po.schedules
+                            ],
+                            [
+                                "Schedule", "Ship To", "Need-By",
+                                "Ordered", "Received", "Billed",
+                            ],
+                            "",
+                        )
+                    )
+                )
+            if po.distributions:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"PO {po.order_number} — distributions",
+                            [
+                                {
+                                    "Distribution": ds.distribution_number,
+                                    "Charge Account": ds.charge_account,
+                                    "%": ds.percentage,
+                                    "Amount": ds.amount,
+                                }
+                                for ds in po.distributions
+                            ],
+                            ["Distribution", "Charge Account", "%", "Amount"],
+                            "",
+                        )
+                    )
+                )
         return _with_truncation(lines, response)
 
     if isinstance(response, ReceivablesInvoiceResponse):
@@ -558,8 +628,6 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 "Customer": inv.bill_to_customer_name,
                 "Status": inv.status,
             }
-            if inv.lines:
-                row["Lines"] = len(inv.lines)
             if inv.dff:
                 row["DFF"] = inv.dff.context
             rows.append(row)
@@ -567,12 +635,38 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             "Transaction", "CustomerTransactionId", "Amount", "Currency",
             "Date", "Customer", "Status",
         ]
-        for extra in ("Lines", "DFF"):
+        for extra in ("DFF",):
             if any(extra in r for r in rows):
                 cols.append(extra)
         lines.extend(
             _render_records("AR Invoices", rows, cols, "No AR invoices found.")
         )
+        # Invoice lines below the table, one indented sub-table per invoice —
+        # the same treatment tax lines already get further down. The parent
+        # table used to carry "Lines: 2" COUNTS where the user asked for the
+        # lines themselves (QA-01). Tax lines still render under their line
+        # in the block below; this adds the missing line rows above them.
+        for inv in response.receivables_invoices:
+            if inv.lines:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"Invoice {inv.transaction_number} — lines",
+                            [
+                                {
+                                    "Line": ln.line_number,
+                                    "Description": ln.description,
+                                    "Qty": ln.quantity,
+                                    "Unit Price": ln.unit_selling_price,
+                                    "Amount": ln.amount,
+                                }
+                                for ln in inv.lines
+                            ],
+                            ["Line", "Description", "Qty", "Unit Price", "Amount"],
+                            "",
+                        )
+                    )
+                )
         # Tax lines nest two deep — line, then tax rows under it — which
         # a table cannot hold. Kept as a block BELOW the table rather
         # than flattened to a count.
@@ -1242,3 +1336,4 @@ def _format_projected_table(
             cells.append(("—" if v is None else str(v)).ljust(widths[f]))
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
+
