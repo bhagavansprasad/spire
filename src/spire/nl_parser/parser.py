@@ -482,6 +482,19 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "invoices and reports the paid leg, including the case where no invoice "
     "can be matched at all. A question naming ONE PO and asking whether it "
     "was paid is IN SCOPE.\n"
+    "A SINGLE LEG IS STILL THIS FILTER. A question naming one PO and asking "
+    "about only ONE stage — 'how much of PO 2144 was received', 'how much "
+    "has been invoiced on PO 701337', 'what's been paid on PO 162034', 'how "
+    "much is left to receive' — is this filter, exactly as the four-leg "
+    "question is. The lifecycle tool reconciles the order against its "
+    "schedules and AP invoices and returns ordered, received, invoiced and "
+    "paid together; a one-leg question wants one of those numbers answered "
+    "directly, which it does. Do NOT route it to 'by_id' with a schedule "
+    "include — that returns a generic PO description with the figure buried "
+    "in it and the received amount read from a schedule field that is often "
+    "empty (the lifecycle tool derives received correctly; the raw schedule "
+    "does not). 'received', 'invoiced' or 'paid' about ONE named PO is the "
+    "lifecycle question with a narrower emphasis, not a different query.\n"
     "Do not confuse this with the neighbouring filters. 'by_id' fetches the "
     "PO header alone by POHeaderId — use it only when the question wants "
     "header attributes and says nothing about receipt, invoicing or "
@@ -717,4 +730,5 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
 
