@@ -2360,3 +2360,195 @@ data, deterministically.
 - The `parser.py` carve-out (G15.1) is now doing nothing useful for the
   who-columns (the KG change is what fixed them) but is harmless and left
   in; it may help if the absent-column case is taken up.
+
+# Phase 2B — overnight QA campaign (2026-08-05)
+
+## G16. Twelve prompt sets, two runs, twelve sets analyzed — the bug census
+
+After the who-column work (G15) shipped, we ran the whole prompt-set suite
+overnight to find out what the system actually does across its full surface,
+rather than reasoning about it. This section records what was run, how it
+was analyzed, and what was found. The detailed, per-finding record —
+prompt, actual vs expected, curl verification, root cause, fix — lives in
+`docs/spire_overnight_findings.md`. This section is the narrative and the
+census.
+
+### G16.1 What was run
+
+A batch runner (`scripts/run_overnight.py` + `scripts/overnight_sets.yaml`)
+runs every set in `scripts/prompts/` as an isolated subprocess with a
+per-set timeout, writing each set's output to its own file plus a run log
+and summary. Two full runs:
+
+- **Run 1** (diagnostics off): 12 sets, ~1h38m. Two sets exit-1 —
+  `01_supplier` (transient Gemini 429 rate-limit, NOT a code bug) and
+  `qa_testcases` (a real crash, see AI-11).
+- **Run 2** (`show_all` on — tokens, Intent, plan, raw pod output): 12
+  sets, ~1h24m. Cleaner: only `qa_testcases` exit-1. Run 2 is the primary
+  analysis source (richer diagnostics let bugs be diagnosed from the raw
+  output without a curl in most cases); run 1 is the stability cross-check.
+
+Confirmed measurable from run 2: per-stage TOKENS (`[llm] stage=parse/
+synthesize in=/out=`), so LLM-involvement is countable (1 `[llm]` line =
+local synthesis, 2 = LLM synthesis). NOT measurable: the parse/fetch/synth
+TIMING split — `show_timings` still emits nothing (confirmed again; a
+separate defect, not addressed here).
+
+### G16.2 How it was analyzed
+
+Set by set, in order, one set fully closed before the next, never revisited.
+For each set: read every prompt's answer against intent (the runner's
+pass/refuse tally is NOT a verdict); flag suspects; verify the suspects with
+a curl against the pod (or a code trace); derive action items; close the
+set. Curl verification was used wherever a number looked wrong — and it
+earned its keep: three separate "this looks like a bug" suspicions
+(429 supplier count, a negative AR balance, a 165M exposure ranking with
+open=due) all turned out to be REAL pod data, cleared only by curling. The
+discipline held: "confirmed" means curled; otherwise "appears correct from
+logs."
+
+### G16.3 What was found — 11 bugs + 1 feature
+
+Full detail in the findings doc. The census, by theme:
+
+**The big four (real wrong / missing / crashing output):**
+- **AI-1 — child rows rendered as COUNTS, not rows.** "Show PO 2144 and its
+  lines" prints "Lines: 2" instead of the two lines. The rows ARE fetched;
+  the table collapses them via `len()`. Confirmed across PO lines,
+  schedules, distributions; AR invoice lines and tax lines; supplier
+  contacts. NOT single related records (a PO's buyer renders fine). The
+  synthesizer prose often carries the detail, but the table — what a user
+  scans — shows only the count. Known and deliberately deferred in-code
+  (a prior layout change chose not to hide a behaviour fix in a formatting
+  diff); now due. Root: `display_formatters.py` ~531/533/535/562.
+- **AI-4 — partial stated as the total.** Edge-traversal filters ("small
+  business suppliers") report "2 of 429" where 2 is really of the 25
+  suppliers examined, not of 429. The denominator lies. Pervasive across
+  EVERY edge-traversal filter (all classifications, business-unit/site,
+  invoice-amount, open-POs, no-recent-invoices). These are also the slowest
+  prompts in the suite (29-113s) — same root cause: a per-supplier child
+  walk over the 25 fetched.
+- **AI-7 — self-contradiction / false-empty.** "Show receipts for ABC App
+  Software at Santa Clara": prose says "All 25 have Site Santa Clara," then
+  the answer says "No receipts found" — 25 real receipts were fetched. The
+  final render reports empty despite the data.
+- **AI-10 + AI-11 — supplier sites broken two ways.** One phrasing
+  ("supplier sites for Lee Supplies") silently returns ADDRESSES instead of
+  sites (wrong resource, no error, no note — a resource-level violation of
+  the no-substitution rule). Another ("Get supplier sites for suppliers")
+  CRASHES on a missing required `business_unit` arg (the sole exit-1). Same
+  root: Site has no proper standalone KG fetcher (the long-known Site gap).
+
+**Refusal-quality bugs (message wrong / misdirected):**
+- **AI-5 — the "narrow by country/status/name" template over-applied.** It
+  is shown for refusals that are not narrowing problems at all: payment
+  terms (not a filter), ratings (do not exist), "everything about supplier
+  X" (a specific supplier named). The accurate reason sits in the
+  parenthetical but is not surfaced. Three wrong-template variants seen
+  (the narrowing template AND the aggregation "needs a total/ranking/trend"
+  template, each misapplied). The FIX DIRECTION is in the data: the
+  planner-guard refusals (05_refusals P7/P8, 08_lifecycle P25/P26) are
+  hand-crafted, accurate, and give concrete examples — the gold standard to
+  model parser messages on.
+- **AI-9 — mixed valid+invalid columns refused wholesale.** "supplier name
+  and credit rating" refuses everything, losing the valid "name". BUT this
+  is INCONSISTENT, and the inconsistency is the key finding: COL-03's honest
+  note WORKS for many unknown columns (07_alacarte P2: "supplier name" on an
+  Invoice correctly shows the 5 valid columns, names the invalid one, and
+  lists what is available). It fails only when specific phrasings trip the
+  model's upstream `unanswerable` flag before the deterministic split runs —
+  exactly the G15 limitation, now confirmed in the wild.
+- **AI-6 — specific question answered with a generic summary.** "How much of
+  PO 2144 was received?" returns a full PO description with the received
+  figures buried in prose, not a direct received-vs-ordered answer. No
+  dedicated "received" tool; it falls back to the generic PO display.
+
+**Minor / cleanup:**
+- **AI-2 — `[debug] shape = None` leaks into user output.** Trivial.
+- **AI-3 — address-list synthesis is token-heavy** (out≈3133). A
+  local-synthesis candidate; not wrong.
+
+**Feature proposal:**
+- **REC-1 — completeness advisory.** When a query samples a capped set:
+  deliver the results found, state honest denominators (AI-4's fix), AND
+  recommend narrowing filters (read deterministically from
+  `kg_entity_filter`) so a complete answer is cheap — never refuse, never
+  inflate. Generalizes to any capped-fetch query. AI-4 is the floor (the
+  message must not lie); REC-1 is the ceiling (honest message plus a
+  narrowing recommendation). REC-1 depends on AI-4. The pattern already
+  exists in the compare tools, which disclose "1,226 invoices not linked to
+  a PO and excluded" — REC-1 generalizes that honesty to the edge-traversal
+  path. A full 429-walk to make the count exact was considered and rejected:
+  ~7-8 min is unusable; the advisory gives a fast partial plus a path to
+  completeness.
+
+### G16.4 What was verified CORRECT (cleared, not bugs)
+
+Curling paid off — these all LOOKED wrong and are real:
+- Supplier count 429 — pod `totalResults` = 429.
+- ABC Corporation Americas open receivables −206,448.85 — pod reports it; a
+  real AR credit balance.
+- Exposure ranking's 165M with open=due for every account — pod returns
+  165,428,563.24 for both fields on Motique Gym; genuine demo data; the
+  ranking is correct.
+- `01_supplier` run-1 exit-1 — transient Gemini rate-limit, clean in run 2.
+- Negative / zero invoice amounts — faithful to the pod (credits,
+  adjustments, cancelled invoices).
+
+### G16.5 What is working well (preserve)
+
+The census is not all defects. The system's COMPUTED components are its
+strongest:
+- **PO lifecycle tool (08_lifecycle):** ~20 differently-phrased prompts
+  about the same PO return IDENTICAL facts (stage, risk, amounts,
+  responsible team). Facts are computed once in code; the LLM only narrates,
+  so rephrasing cannot change the answer. Honest tri-state paid status
+  ("cannot be determined" when no AP invoice matches — not falsely zero).
+  This is the architecture's principle (compute in code, do not let the LLM
+  derive) working, and it is the cleanest part of the system.
+- **Compare / aggregation tools:** invoiced-vs-ordered, exposure ranking,
+  receipt-method distribution, spend rankings — correct, full-set
+  (`truncated:False`), with honest exclusion notes.
+- **Currency refusal:** refuses to sum across 4 currencies and explains why.
+- **Column projection + who-column synonyms:** requested columns projected
+  exactly; and the who-column vocabulary resolves a WIDE range of phrasings
+  ("created by", "audit columns", "date created", "who details") — layer 3
+  (making the columns real in the KG) delivered much of layer 2 (synonyms)
+  for free, because the model maps phrasings to real columns once they
+  exist. Synonyms are further along than G15 implied.
+
+### G16.6 The shape of the bug distribution — the useful signal
+
+The defects cluster in two layers: the DISPLAY layer (AI-1) and the
+edge-traversal / message layer (AI-4, AI-5, AI-9, AI-10/11). The COMPUTED
+core (lifecycle, aggregations, compare) is consistently clean. So the
+architecture is sound; the work is in presentation and honest-labelling, not
+core logic. Two pieces of work dominate the value:
+- **AI-1** is the clearest single bug — one root cause (`len()` in the
+  display), one fix (render child rows), wide impact.
+- **AI-4 + REC-1** are the highest-value pair — they fix a whole CLASS of
+  misleading-count situations across every edge-traversal filter, and REC-1
+  also addresses the worst slowness.
+
+### G16.7 Test-suite organization (noted, deferred)
+
+Observations for a later suite-tidy pass, not acted on now:
+- `07_alacarte` should be renamed (e.g. `07_column_selection`) — the name is
+  opaque; it is a column-projection depth test, and it is where the
+  COL-03-note-works nuance surfaced. Do NOT merge it into `00_dipstick`:
+  dipstick is a breadth smoke-test, à la carte is feature-depth; the
+  distinction is what made the nuance visible.
+- Edge-traversal prompts are duplicated across `01_supplier` and `06_slow` —
+  genuine overlap worth consolidating.
+- `10_refusal_examples` is misnamed — all 19 prompts ran ok; it is a
+  success-path regression set, not refusals.
+
+### G16.8 Status
+
+Analysis complete; all 12 sets closed in `docs/spire_overnight_findings.md`.
+None of AI-1…AI-11 is fixed yet — this campaign was measurement, and the
+fixes are the next body of work. The requirements doc records them as
+committed work items (v1.7). Priority order proposed: AI-1 (clearest), then
+AI-4 + REC-1 (highest value), then AI-7 and AI-10/11 (the remaining big
+four), then the refusal-quality set (AI-5/AI-9/AI-6), then cleanup
+(AI-2/AI-3).
