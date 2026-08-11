@@ -105,6 +105,7 @@ REC-1) → C (one template fix) → D → singletons → the harder QA-06 behavi
 | AI-4 | 🔴 | verified | Edge-traversal filters state the partial as the total ("2 of 429" when 2 is of the 25 examined). Wrong denominator — misleading count. Also the slowest prompts (29-113s), same root cause. | EVERY edge-traversal filter: classification (small/woman/veteran/minority owned), business-unit/site, invoice-amount, open-POs, no-recent-invoices. Pervasive. |
 | AI-7 | 🔴 | verified (logs) | Self-contradiction: "All 25 have Site Santa Clara" then "No receipts found" — 25 real receipts fetched, then reported as none. | AR receipts with a client-side site filter. |
 | AI-10 + AI-11 | 🔴 | verified (logs) | "Supplier sites" is broken two ways: one phrasing silently returns ADDRESSES (wrong resource, AI-10); another CRASHES on a missing business_unit arg (AI-11, the sole exit-1). | Supplier sites listing. Root: Site has no proper KG fetcher. |
+| AI-12 | 🔴 | verified | Schedules sub-table "Received" column shows raw `ReceivedAmount` (0.0, which is 0/null pod-wide) as a fetched value, contradicting the prose's `ReceivedQuantity` ("1 of 1 received"). The lifecycle tool derives+labels this correctly; the QA-01 schedules renderer does not. | PO schedules sub-table (display path). New — post-fix verification read, 2026-08-08. |
 
 ### Refusal-quality bugs (message is wrong/misdirected)
 
@@ -1069,6 +1070,45 @@ Same root cause: the Site resource has no proper standalone fetcher (known KG ga
 **Severity:** 🔴 — a user-facing crash. Also the sole exit-1 cause for the set.
 
 **Status:** ✅ FIXED (commit 37522b1). validate_intent refuses a Site include at parse time — no crash. (AI-10, the sibling, remains deferred.)
+
+---
+
+### AI-12 🔴 verified (BUG) — Schedules sub-table shows raw ReceivedAmount (0.0) as fetched, contradicting the prose's ReceivedQuantity ("1 of 1 received")
+
+**Set:** 02_purchase_order (post-fix overnight run, 2026-08-08)
+**Prompt:** `Show PO 2144 and its schedules`
+(also visible on `Show PO 2144 and its distributions`, which re-renders the same schedules sub-table)
+
+**Actual output:**
+Prose: "…For the first schedule, 1 of 1 Ea was received and 1 of 1 Ea was billed…"
+Table:
+
+    PO 162352 — schedules:
+      Schedule | Ship To | Need-By    | Ordered | Received | Billed
+      ---------+---------+------------+---------+----------+--------
+      1        | Seattle | 2014-12-01 | 33000.0 |      0.0 | 33000.0
+      1        | Seattle | 2014-12-01 |  8250.0 |      0.0 | 8250.0
+
+(raw output: poschedule: 2 record(s) — each carries both ReceivedQuantity and ReceivedAmount as distinct fields)
+
+**Problem:** the prose and the table contradict each other on the received leg. The prose says "1 of 1 received" (reading ReceivedQuantity); the table's Received column shows 0.0 (reading ReceivedAmount). A user scanning the table sees a PO received in full per the prose but showing 0.0 received in the table. This is the QA-01 child-row renderer — the sub-table itself is correct (QA-01 HELD: it renders rows, not "Schedules: 2"), but one column populates from the wrong measure.
+
+**Expected:** the Received column must not present a raw ReceivedAmount that is structurally always 0 on this pod. Either (a) derive the received amount — Amount × ReceivedQuantity / Quantity — and label it derived, matching the lifecycle tool; or (b) show ReceivedQuantity in the column under a quantity label. Prose and table must agree.
+
+**Verification — endpoints reference (pod-wide measurement, 2026-07-28 entries):**
+- /purchaseOrderSchedules — "ReceivedAmount is 0 or null on EVERY row on this pod — checked across ~4,500 rows (offsets 0–4500). The received leg exists only as a QUANTITY. Any reconciliation reporting a received AMOUNT must DERIVE it: Amount * (ReceivedQuantity / Quantity)… Label derived figures; do not present them as fetched fields."
+- /purchaseOrderSchedules — confirms the schedule row carries ReceivedQuantity, ReceivedAmount, BilledQuantity, BilledAmount alongside ordered Quantity/Amount.
+So ReceivedAmount=0 is real and pod-wide; ReceivedQuantity=1 is the real received signal. The table is showing a fetched-but-meaningless zero. (Documented pod rule, not a single-row curl — the doc's own measurement supersedes a one-off curl here.)
+
+**Cross-check — the lifecycle tool already does this correctly.** QA-07 output for the same received leg reads: "Received 398.00 (derived from quantity)" with an explicit "Received: derived from quantity — the pod carries no received amount" note. The derive-and-label rule is already implemented on the lifecycle path; the QA-01 schedules renderer is the one place it was missed.
+
+**Root cause:** the schedules sub-table renderer in the display/synthesizer path emits the raw ReceivedAmount field as the "Received" column value. Because ReceivedAmount is 0/null pod-wide, the column is always 0 while the prose (correctly derived/quantity-based) says otherwise. Not a fetch defect — both fields are fetched correctly; a display-layer field-choice/labelling defect. Distinct from AI-1 (child-as-count); this is wrong-field-in-a-rendered-row.
+
+**Fix (defined, not built):** in the schedules sub-table renderer, replace the raw ReceivedAmount column with either the derived received amount (Amount × ReceivedQuantity/Quantity, labelled "Received (derived)") or ReceivedQuantity (labelled "Received (qty)"). Reuse the lifecycle tool's existing derivation so the two paths agree. Confirm/add a display-formatter test for the schedules sub-table. Display-path only; no KG or tool change.
+
+**Severity:** 🔴 — a prose/table contradiction on a money-adjacent figure. Lower blast radius than AI-1 (one column, one child type, prose carries the correct signal), but a user scanning the table is actively misled.
+
+**Status:** verified against the endpoints reference (pod-wide measurement). Fix direction defined, not yet built. New — surfaced by the post-fix verification read; not part of the original AI-1…AI-11 census. Working label during the read: N-1.
 
 ## Set qa_testcases — CLOSED
 
