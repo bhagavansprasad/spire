@@ -87,10 +87,46 @@ async def search_standard_receipts(
 
     capped = filtered[:limit]
     total = len(filtered)
-    truncated = len(items) >= OVERFETCH_LIMIT and len(capped) < len(filtered)
 
+    # AI-7: the site filter runs CLIENT-SIDE over a fetch capped at
+    # OVERFETCH_LIMIT, and the account can hold far more receipts than that
+    # (account 26360 has 1,386; site 'Santa Clara' alone 1,737). When the
+    # fetch hits the cap, matching rows can sit BEYOND the window — the newest
+    # 500 for an account may contain only a handful at the requested site
+    # while thousands more exist further back. len(filtered) then counts only
+    # what fell inside the window, so reporting it as the total claims a
+    # partial result is complete ("3 receipts, all Santa Clara" when there are
+    # 1,737). There is no authoritative total available: composite q= fails
+    # silently on this endpoint, so the pod cannot be asked for account AND
+    # site together. So whenever a client filter ran and the fetch was capped,
+    # the count is NOT authoritative — mark truncated and report total_available
+    # as None, and the synthesizer discloses a sample rather than a false total.
+    #
+    # The previous condition also required len(capped) < len(filtered), i.e. it
+    # only noticed truncation when the FILTERED list overflowed the display
+    # limit. That misses the real case: few matches in the window, so filtered
+    # is small and nothing looks truncated, while the true total is huge.
+    client_filtered = customer_site is not None
+    fetch_capped = len(items) >= OVERFETCH_LIMIT
+    truncated = client_filtered and fetch_capped
+
+    # Construct ToolResult DIRECTLY rather than via .build(): build() derives
+    # truncated purely from total_available > len(items) and forces it False
+    # whenever total_available is None. That is the wrong model for this case
+    # — here the count is UNKNOWN precisely because the fetch was capped and
+    # the site filter ran client-side (composite q= can't ask the pod for
+    # account AND site), so we must report truncated=True WITH
+    # total_available=None. build() cannot express that pairing; the dataclass
+    # constructor can. When not truncated, total is the real filtered count.
+    if truncated:
+        return ToolResult(
+            items=capped,
+            total_available=None,
+            limit_applied=limit,
+            truncated=True,
+        )
     return ToolResult.build(
         items=capped,
         limit_applied=limit,
-        total_available=total if not truncated else None,
+        total_available=total,
     )
