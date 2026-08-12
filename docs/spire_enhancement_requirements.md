@@ -14,6 +14,7 @@
 | **v1.5 revises** | COL-03 (2026-08-04) — substitution REMOVED. Case 2 (project a close match and state it) is struck; local substitution is now prohibited outright, not merely required to disclose. Decided after the 07-31 measurement was re-run: even disclosed substitution reproduces the `supplier-site`→`Address` failure when the guessed match is wrong. COL-03 is now a two-case rule — show what exists, name and menu what does not. Also extends OUT-04's scope note to the list and by-id read paths (the drifting-narration source). Full narrative in `docs/spire_enhancement_status.md` §G14. |
 | **v1.6 records** | COL-03 partial delivery (2026-08-04). The who/audit columns — the SME's actual vocabulary — now resolve on Supplier with real data (CreatedBy, CreationDate, LastUpdatedBy, LastUpdateDate), via COL-01/layer-3 (KG field rows), not via the note. The build forced a pivot: layer 1 (the note) was built and tested but is UNREACHABLE for a wholly-unknown column, because the model refuses before the Intent is built. Making the column real in the KG stops the refusal deterministically — no prompt tuning. Requirement text unchanged; this records delivery status. Full narrative in `docs/spire_enhancement_status.md` §G15. |
 | **v1.7 adds** | §6C — the overnight QA findings (2026-08-05). The full prompt-set suite was run twice and analyzed set-by-set, with pod curls verifying suspected numbers; 11 defects (QA-01…QA-11 → findings AI-1…AI-11) and 1 feature (QA-12 → REC-1) were identified and are recorded as committed work items. Detail in `docs/spire_overnight_findings.md`; narrative in `spire_enhancement_status.md` §G16. Priority order: QA-01 (child rows as counts, clearest), then QA-02 + QA-12 (honest denominators + completeness advisory, highest value), then QA-03/QA-04 (false-empty; supplier-sites), then the refusal-quality set (QA-05/QA-06/QA-07), then cleanup (QA-08/QA-09). **FIX PHASE COMPLETE (2026-08-06, merged to master):** 8 fixes + the QA-12 feature shipped across 5 commits (`8ad9b39`, `37522b1`, `4360035`, `b85eed1`, `eb2fd72`); QA-08 closed as not-a-bug; suite 862 passed, 1 xfailed. Deferred: AI-10 (sites→addresses), the "everything about X" refusal mis-routing, and POHeaderId→OrderNumber for the lifecycle tool. Per-item status in §6C below. |
+| **v1.8 records** | COL-02 field synonyms delivered (2026-08-12), on branch `col-02-multi-field-expansions`. `field_synonym` vocab_kind + 21 synonym rows across four groups: multi-field expansions (who/audit/creator → the four who-columns), legacy EBS (vendor/vendor name → Supplier, vendor number → SupplierNumber, trx → TransactionNumber), field-level (creation/updated dates, qty → Quantity, uom → UnitOfMeasure), and who-columns extended to PurchaseOrder/Invoice/ReceivablesInvoice. The expander runs AFTER the LLM and BEFORE validate_intent — a KG lookup, not a model judgement; determinism proven with a throwaway synonym the model cannot know. Two deviations recorded honestly: Group 4 needed TOOL projection changes (not a KG row alone — the synonym resolved but the fetchers omitted the columns), and parse-input-token measurement + the 06_slow/08_lifecycle isolated re-run were not done. Deferred with evidence: DFF/KFF (curl-confirmed no populated pod segments) and ambiguous terms price/amount/terms (need entity-scoped synonyms). Requirement text unchanged; this records delivery. Narrative in `spire_enhancement_status.md` §G18. |
 | **Related** | `docs/spire_plan.md`, `docs/spire_architecture.md`, `docs/spire_fusion_endpoints_reference.md`, `docs/spire_overnight_findings.md` |
 
 ---
@@ -799,6 +800,48 @@ already resolves synonyms deterministically for eight other categories.
   menu growth is visible in `input_tokens` and **shall** be reported.
 - Latency unchanged: no additional round-trip.
 - The `06_slow` and `08_lifecycle` sets show no routing regression.
+
+**Delivery status, 2026-08-12** (branch `col-02-multi-field-expansions`,
+unpushed). Substantially delivered; requirement text unchanged, this records
+how far it is met.
+
+BUILT and verified live:
+- `field_synonym` vocab_kind + 21 rows (the buildable subset of Appendix A):
+  multi-field expansions (who/audit/creator → the four who-columns), legacy
+  EBS (vendor/vendor name → Supplier, vendor number → SupplierNumber, trx →
+  TransactionNumber), field-level (creation/updated dates, qty → Quantity,
+  uom → UnitOfMeasure).
+- `expand_field_synonyms` in the parser (`nl_parser/vocabulary.py`, called in
+  `parser.py` after the compare early-return, before `validate_intent`): the
+  model passes the term through and code does the expansion — splits the
+  comma-joined value, dedupes, preserves order. A KG lookup, not a model
+  judgement. Determinism proven with a throwaway synonym ('zztest' →
+  CreatedBy,Supplier) the model cannot know; it expanded correctly, so the
+  expansion is code, not luck.
+- Who-columns extended to PurchaseOrder, Invoice, ReceivablesInvoice (Group 4):
+  12 `kg_entity_field` rows PLUS a projection fix in three fetchers.
+
+DEVIATIONS from the acceptance criteria, recorded honestly:
+- "Adding a synonym requires a KG row and no parser code change" held for
+  Groups 1–3 but NOT Group 4: the who-columns resolved via the KG row, but the
+  entity fetchers projected a fixed field list that omitted them, so the
+  columns rendered empty (em-dashes) until `_PROJECTED_FIELDS` was extended in
+  `purchase_order_by_id.py`, `invoices.py` and `receivables_invoice_by_id.py`.
+  The synonym layer needed no change; the executor/tool layer did.
+- Parse-input-token measurement before/after was NOT performed. The criterion
+  requires it; outstanding.
+- The `06_slow`/`08_lifecycle` regression re-run was NOT performed in
+  isolation; the full suite passes (862) but those two sets were not run alone.
+
+DEFERRED with reasons:
+- Ambiguous terms (price, amount, terms): 'price' is Price on PurchaseOrder but
+  UnitSellingPrice on ReceivablesInvoice; 'amount' is Ordered vs LineAmount;
+  'terms' has no PaymentTerms column in the KG. Global synonyms cannot map one
+  term to different columns per entity. Entity-scoped synonyms would unlock
+  these — a mechanism change (schema + expander), its own task.
+- DFF/KFF: curl-confirmed the pod's DFF children carry only `__FLEX_Context`
+  (null or a bare label), no populated segment columns, on two invoices.
+  Nothing to map. Pod configuration, not a Spire limitation.
 
 **Depends on:** COL-01. **Related:** PRF-06, PRF-02.
 

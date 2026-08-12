@@ -33,6 +33,7 @@ from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
 from spire.nl_parser.intent_validation import validate_intent
+from spire.nl_parser.vocabulary import expand_field_synonyms
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
 
@@ -723,9 +724,17 @@ def parse(
     if intent.compare is not None:
         return ParseResult.ok(intent)
 
+    # COL-02: expand field synonyms ('who columns' -> the four who fields)
+    # deterministically, AFTER the LLM and BEFORE validation, so the model
+    # never decides the expansion and validate_intent sees only real column
+    # names. A term with no synonym row (including a genuinely-unknown column)
+    # passes through unchanged and is reported by validate_intent (COL-03).
+    intent.fields = expand_field_synonyms(intent.fields, menu)
+
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
+    
     if refusal is not None:
         return ParseResult(refusal=refusal)
 

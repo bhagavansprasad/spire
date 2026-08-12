@@ -190,7 +190,11 @@ async def test_kg_table_row_counts_match_v1_1():
 
     The standard-receipts work added TWO entities (20->22), +25 fields
     (169->194), +1 edge (16->17), +1 edge tool (15->16), +2 entity tools
-    (8->10), +4 filter rows (21->25) and +4 vocab rows (93->97).
+    (8->10), +4 filter rows (21->25) and +4 vocab rows (93->97). COL-02
+    multi-field expansions add +6 vocab rows (97->103): who/audit columns,
+    creator details. COL-02 single-field synonyms add +15 vocab rows
+    (103->118): legacy EBS (vendor/vendor number/trx) and field-level
+    (creation/updated dates, qty, uom).
     StandardReceipt is the TOP-LEVEL /standardReceipts resource, ROOTED,
     with two fetchers of its own (search and aggregate-by-method) — hence
     +2 entity tools and no edge. AccountReceiptApplication is the
@@ -250,6 +254,15 @@ async def test_kg_table_row_counts_match_v1_1():
     'projection' (display-only; the creation-date FILTER already exists
     separately in kg_entity_filter). No other table moved.
 
+    COL-02 Group 4 (2026-08-12) extended the same four who-columns to
+    PurchaseOrder, Invoice and ReceivablesInvoice (kg_entity_field
+    198->210, +12 = 4 x 3 entities): CreatedBy, CreationDate,
+    LastUpdatedBy, LastUpdateDate. Curl-confirmed on /purchaseOrders,
+    /invoices and /receivablesInvoices — all four exist with real values.
+    Makes the existing 'who columns'/'audit columns' field_synonym resolve
+    on these entities too (the synonym is global; it needed the target
+    columns to exist).
+
     NOTE the counts in this test are one of FOUR places that must move
     together, not two as earlier notes implied: this dict,
     scripts/print_kg.py's expected_rows, and the two
@@ -258,10 +271,10 @@ async def test_kg_table_row_counts_match_v1_1():
     persona = load_persona("default_dev")
     expected = {
         "kg_entity": 22,
-        "kg_entity_field": 198,
+        "kg_entity_field": 210,
         "kg_edge": 17,
         "kg_pattern": 3,
-        "kg_vocabulary": 97,
+        "kg_vocabulary": 118,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 10,
         "kg_entity_filter": 24,

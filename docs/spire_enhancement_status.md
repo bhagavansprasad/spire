@@ -2687,3 +2687,95 @@ is corrected. `flag_matrix.sh` greps for the literal `[debug] shape` as its
 - **Stack fixes, commit in coherent units, one PR.** Eight fixes were built
   and verified on one branch, committed in five coherent commits (not one per
   micro-fix, not one giant commit), and merged as a single PR.
+
+---
+
+## G18 — COL-02 field synonyms shipped to a branch (2026-08-12)
+
+Built the field-synonym feature end to end on branch
+`col-02-multi-field-expansions` (unpushed). The core commitment held: the
+expansion is a KG lookup done in code AFTER the LLM, not a model judgement.
+
+### G18.1 What shipped — four groups
+
+Four groups, all committed, suite green (862 passed, 1 xfailed):
+- **Group 1** — multi-field expansions: who columns / who details / audit
+  columns / audit fields → the four who-columns; creator details / created
+  details → CreatedBy, CreationDate.
+- **Groups 2+3** — legacy EBS (vendor / vendor name → Supplier, vendor number →
+  SupplierNumber, trx / trx number → TransactionNumber) and field-level
+  (creation/created/date-created → CreationDate; last-updated / modified /
+  changed-on / update-date → LastUpdateDate; qty → Quantity; uom / unit of
+  measure → UnitOfMeasure).
+- **Group 4** — who-columns on PurchaseOrder / Invoice / ReceivablesInvoice.
+  This one needed TWO layers: 12 `kg_entity_field` rows AND a projection fix in
+  three fetchers. The KG row alone was not enough — the synonym resolved but the
+  fetchers projected a fixed field list that omitted the columns, so they
+  rendered empty (em-dashes) until `_PROJECTED_FIELDS` was extended in
+  `purchase_order_by_id.py`, `invoices.py` and `receivables_invoice_by_id.py`.
+  Curl-confirmed the who-columns exist with real values on all three endpoints
+  first; verified live after the fix (PO → CASEY.BROWN + timestamps; AR invoice
+  → FIN_IMPL + timestamps).
+
+### G18.2 The mechanism
+
+New `field_synonym` vocab_kind in `kg_vocabulary` (mirrors the existing
+`country` vocabulary — same load shape). `expand_field_synonyms` in
+`nl_parser/vocabulary.py`, called in `parser.py` after the aggregate/compare
+early-returns and before `validate_intent`. The model passes the term through
+(the `fields` prompt already instructs it to list unknown columns as written);
+code splits the comma-joined value, dedupes, preserves order. Expanding before
+`validate_intent` means validation sees only real column names — an
+unresolvable term still passes through and is reported by COL-03.
+
+### G18.3 Determinism — proven behaviorally
+
+The diagnostics do NOT expose a pre-expansion draft. `show_parser` shows the
+final Intent (there is no separate raw-LLM-draft print in `parser.py`), and
+`show_all` correctly enables it. So determinism could not be proven by
+inspecting an intermediate print — it was proven by behaviour: a throwaway
+synonym `'zztest' → CreatedBy,Supplier`, a string the model has no basis to
+expand, expanded correctly. That can only be the code. (The zztest row was
+removed after the probe.)
+
+### G18.4 Counts and discipline
+
+`kg_vocabulary` 103 → 118 (Groups 2+3, +15) then held; `kg_entity_field`
+198 → 210 (Group 4, +12). The count lives in FOUR places, all bumped together:
+the test dict, `print_kg.py`, and the seed banner inside `kg_schema.sql`. A
+separate commit fixed a flaky live-pod test (`test_customer_invoices_tool.py`)
+that pinned hardcoded balances which drift with pod data.
+
+### G18.5 Deferred, with evidence
+
+- **DFF/KFF.** Curl-confirmed on two AR invoices: the DFF children carry only
+  `__FLEX_Context` (null or a bare label) and no populated segment columns.
+  Nothing to map. Pod configuration, not a Spire limitation. Revisit only on a
+  pod with populated flexfields.
+- **Ambiguous terms (price, amount, terms).** 'price' is Price on PurchaseOrder
+  but UnitSellingPrice on ReceivablesInvoice; 'amount' is Ordered vs
+  LineAmount; 'terms' has no PaymentTerms column. Global synonyms cannot map one
+  term to different columns per entity. Entity-scoped synonyms — a mechanism
+  change — would unlock these; deferred as its own task.
+
+### G18.6 Outstanding to fully close COL-02
+
+Two acceptance criteria not yet met: (1) parse-input tokens measured
+before/after a synonym expansion (the number is already printed as `in=NNNN`),
+and (2) the `06_slow`/`08_lifecycle` sets run in isolation for a regression
+check (the full suite passes, but not those two alone). Until done, COL-02 is
+"substantially delivered," not fully.
+
+### G18.7 Also logged this session (findings doc)
+
+- **AI-12** 🔴 — schedules sub-table shows raw `ReceivedAmount` (0.0, 0/null
+  pod-wide) as a fetched column while prose narrates `ReceivedQuantity`. The
+  lifecycle tool derives+labels this correctly; the schedules renderer does
+  not. Display-path fix.
+- **AI-13** 🟡 — supplier list returns a different 25-row sample between
+  identical runs; raw `/suppliers` curl-confirmed stable at limit=25 and 200,
+  so the variance is Spire-side client-filter/sample, not the pod or parser.
+- **REC-2** 🟢 — replace the unbounded PO-list refusal with the
+  sample-and-disclose pattern (show 25 + honest total), consistent with
+  supplier lists; sampling must be over a bounded fetch. Relates to OUT-06 +
+  CSV-01.

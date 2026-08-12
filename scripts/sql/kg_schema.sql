@@ -149,7 +149,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'supplier_classification', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'supplier_classification', 'entity_synonym', 'relationship_phrase', 'field_synonym'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -412,6 +412,10 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Country',     'projection', 'str
 -- PurchaseOrder (P2: money projection fields)
 INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'Total',    'projection', 'numeric', 'PO total amount including tax. Display/projection only.');
 INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'TotalTax', 'projection', 'numeric', 'Tax portion of the PO total. Display/projection only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''CASEY.BROWN''). WHO column; projectable, display-only. Curl-confirmed on /purchaseOrders 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- PurchaseOrderLine (P2)
 INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'POLineId',    'canonical_id', 'numeric', 'System primary key for the line.');
@@ -476,6 +480,10 @@ INSERT INTO kg_entity_field VALUES ('PODistribution', 'StatusCode',           's
 -- server-side; it is the join key to PurchaseOrder.OrderNumber (a string,
 -- not POHeaderId) — consistent with invoices joining on SupplierNumber.
 INSERT INTO kg_entity_field VALUES ('Invoice', 'PurchaseOrderNumber', 'reference', 'string', 'PO number the invoice was raised against (e.g. "162034"). Join key to PurchaseOrder.OrderNumber. Filters server-side via q=PurchaseOrderNumber.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''ROGER.BOLTON''). WHO column; projectable, display-only. Curl-confirmed on /invoices 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- POSchedule (P5): received-vs-ordered. Fusion records what was actually
 -- received/billed on the schedule row, alongside the ordered Quantity and
@@ -506,6 +514,10 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'InvoiceStatus',      
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionType',      'projection',   'string',  'Transaction type (e.g. ''Invoice''). Distinguishes invoice vs credit memo within receivablesTransactions.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionSource',    'projection',   'string',  'Transaction source (e.g. ''Manual'', ''Receivables Import'').');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'BusinessUnit',         'projection',   'string',  'Owning business unit (e.g. ''UK Business Unit'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''JAMES.BIRD''). WHO column; projectable, display-only. Curl-confirmed on /receivablesInvoices 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- ReceivablesInvoiceLine (AR-P2)
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'CustomerTransactionLineId',   'canonical_id', 'numeric', 'System primary key for the line.');
@@ -626,7 +638,7 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (198 rows).
+PROMPT Seeded kg_entity_field (210 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -853,6 +865,46 @@ INSERT INTO kg_vocabulary VALUES ('country', 'CA', 'CA', 'ISO-2 code.');
 INSERT INTO kg_vocabulary VALUES ('country', 'Australia', 'AU', 'Full name.');
 INSERT INTO kg_vocabulary VALUES ('country', 'AU', 'AU', 'ISO-2 code.');
 INSERT INTO kg_vocabulary VALUES ('country', 'AUS', 'AU', '3-letter form; normalized to ISO-2.');
+
+-- field_synonym: a user term expands to one OR MORE real column names,
+-- comma-joined. The parser's expand_field_synonyms splits on comma AFTER
+-- the LLM, so the expansion is deterministic (COL-02 multi-field). The
+-- target columns must exist on the entity as kg_entity_field rows, or
+-- validate_intent will (correctly) report them as unresolved.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'who columns', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Audit/who columns -> the four who fields.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'who details', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'audit columns', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'audit fields', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'creator details', 'CreatedBy,CreationDate', 'Creator subset -> who created and when.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created details', 'CreatedBy,CreationDate', 'Synonym of creator details.');
+
+-- field_synonym (single-field): legacy EBS vocabulary (COL-02, Group 2).
+-- One term -> one real column (no comma). Only terms whose target is a
+-- projectable kg_entity_field column and unambiguous across entities are
+-- included; child-entity/filter/concept terms (vendor site, OU, shipment,
+-- dist, req, party, SLA) are NOT field synonyms and are omitted.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor', 'Supplier', 'Legacy EBS: vendor -> Supplier.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor name', 'Supplier', 'Legacy EBS: vendor name -> Supplier.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor number', 'SupplierNumber', 'Legacy EBS: vendor number -> SupplierNumber.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx', 'TransactionNumber', 'Legacy EBS: trx -> TransactionNumber (AR).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx number', 'TransactionNumber', 'Legacy EBS: trx number -> TransactionNumber (AR).');
+
+-- field_synonym (single-field): field-level synonyms (COL-02, Group 3).
+-- Only globally-safe mappings (same column name across the entities that
+-- carry them). Ambiguous terms are omitted: 'price' (Price on PO vs
+-- UnitSellingPrice on AR), 'amount' (Ordered on PO vs LineAmount on AR),
+-- and 'terms' (no PaymentTerms column in the KG). Those need entity-scoped
+-- synonyms, a separate mechanism change.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'creation date', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created date', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'date created', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'last updated', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'modified', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'changed on', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'update date', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'qty', 'Quantity', 'Field synonym -> Quantity (PO/AR lines).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'uom', 'UnitOfMeasure', 'Field synonym -> UnitOfMeasure (AR lines).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'unit of measure', 'UnitOfMeasure', 'Field synonym -> UnitOfMeasure (AR lines).');
 
 -- po_status
 INSERT INTO kg_vocabulary VALUES ('po_status', 'open',      'OPEN',       'Default conversational synonym.');
