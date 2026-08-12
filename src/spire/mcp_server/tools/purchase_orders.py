@@ -30,6 +30,16 @@ Unusually, BOTH bounds work server-side standalone (verified: `>=` and
 single-clause rule applies as everywhere else — so one bound goes to the
 server and the other is filtered client-side.
 
+UNFILTERED LIST (REC-2)
+Called with no filters at all, this is the "list all POs" case. It is a
+SAMPLE, not a full scan: with no filter, needs_client_filter is False, so
+fetch_limit stays at `limit` (25) — the fetch is bounded to one page, not
+the ~17k collection. The page is ordered by OrderNumber so the sample is
+reproducible run-to-run (see the orderBy note below), and total_available
+carries the honest total via totalResults. This mirrors how the Supplier
+default fetcher samples, and is why the planner no longer refuses an
+unfiltered PO query.
+
 Returns a ToolResult so callers can distinguish a complete result from
 a capped subset.
 """
@@ -138,6 +148,15 @@ async def search_purchase_orders(
     params: dict[str, str | int] = {"limit": fetch_limit}
     if server_clause:
         params["q"] = server_clause
+    else:
+        # Unfiltered list ("list all POs") — the REC-2 sample path. Order
+        # the page so the 25 rows are reproducible run-to-run; an unordered
+        # fetch returns a different sample each call (AI-13). OrderNumber
+        # sorts server-side (curl-confirmed 2026-08-12); it is a string, so
+        # the order is lexical ("1" before "162026"), not numeric — stable
+        # is what matters here, not numeric ordering. A server q= clause
+        # carries its own ordering, so only the no-clause path needs this.
+        params["orderBy"] = "OrderNumber:asc"
 
     response = await client.get(PURCHASE_ORDERS_PATH, params=params)
     items = response.get("items", [])

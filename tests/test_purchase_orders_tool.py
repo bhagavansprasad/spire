@@ -53,9 +53,18 @@ async def test_search_purchase_orders_by_supplier_name():
 async def test_search_purchase_orders_by_supplier_id():
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
-        seed = await search_purchase_orders(client, limit=1)
-        assert len(seed.items) == 1
-        sid = seed.items[0]["SupplierId"]
+        # Seed off a PO that HAS a supplier. The unfiltered list is ordered
+        # by OrderNumber (REC-2), whose first row is the pod's Incomplete
+        # OrderNumber "1" with SupplierId=None — using that as the seed would
+        # filter on a null id. Over-fetch a small page and pick the first row
+        # with a non-null SupplierId, so the seed is robust to ordering and to
+        # supplierless POs existing at all.
+        seed = await search_purchase_orders(client, limit=25)
+        sid = next(
+            (row["SupplierId"] for row in seed.items if row.get("SupplierId")),
+            None,
+        )
+        assert sid is not None, "no PO with a supplier in the first page"
 
         result = await search_purchase_orders(client, supplier_id=sid, limit=10)
     assert isinstance(result, ToolResult)

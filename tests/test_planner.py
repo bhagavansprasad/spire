@@ -784,9 +784,17 @@ def test_invoice_by_id_reaches_the_supplier_guard() -> None:
     assert "Intent contains filter types" not in msg
 
 
-def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
-    """PurchaseOrder + status/supplier hits the PO guard, which names the
-    supplier route — the actual answer to 'open POs for supplier X'."""
+def test_purchase_order_status_filter_is_refused() -> None:
+    """PurchaseOrder + status/supplier is refused.
+
+    REC-2 removed the old PO no-filter guard (an unfiltered PO list now
+    samples instead of refusing). status and supplier are still not
+    PurchaseOrder entity-level filters — the actual answer to "open POs for
+    supplier X" is to root at the supplier — so the query is now refused one
+    layer down, by _validate_intent_filters, with a NotImplementedError that
+    names the supported PurchaseOrder filters and the edge filters. The
+    refusal is preserved; only the mechanism and message changed.
+    """
     intent = Intent(
         target_entity="PurchaseOrder",
         filters=[
@@ -794,11 +802,12 @@ def test_purchase_order_status_filter_reaches_the_po_guard() -> None:
             {"type": "supplier", "value": "EIP Inc"},
         ],
     )
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(NotImplementedError) as exc_info:
         generate_plan(intent)
     msg = str(exc_info.value)
-    assert "PO id, a PO number, or a date bound" in msg
-    assert "EIP Inc" in msg
+    assert "can't filter PurchaseOrder by" in msg
+    assert "status" in msg and "supplier" in msg
+    assert "Supported PurchaseOrder filters" in msg
 
 
 def test_standard_receipt_unscoped_is_refused() -> None:

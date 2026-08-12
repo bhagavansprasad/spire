@@ -153,26 +153,22 @@ def generate_plan(
     # so a PO-rooted query without a PO id has nothing to fetch. Refuse
     # cleanly rather than crash. General PO listing is reached via the
     # supplier->PO edge today (and PO aggregates arrive in a later phase).
-    if intent.target_entity == "PurchaseOrder":
-        # A PO-rooted query needs SOMETHING selective, or the fetch pulls
-        # every PO on the pod. A PO id is one such thing; so is a date
-        # bound (P6: "POs created before 2015" is bounded and answerable).
-        # Same widening as the Invoice guard, which accepts a supplier OR
-        # a purchase order.
-        has_root_ref = any(
-            f.get("type") in (
-                "by_id", "created_before", "created_since", "lifecycle_status"
-            )
-            for f in intent.filters
-        )
-        if not has_root_ref:
-            raise ValueError(
-                "Purchase-order queries require a PO id, a PO number, or "
-                "a date bound. For example 'show PO 2144 and its lines', "
-                "'has PO 701337 been fully received, invoiced and paid', or "
-                "'POs created before 2015'. To list a supplier's POs, ask "
-                "about the supplier (e.g. 'open POs for supplier EIP Inc')."
-            )
+    # PurchaseOrder roots two ways. A selective filter (by_id, a date
+    # bound, a status) routes exactly as before. With NO filter the query
+    # is "list all POs" — REC-2: rather than refuse, fall through to the
+    # (PurchaseOrder,'none') fetcher, which returns a BOUNDED, ordered
+    # sample (25 rows) plus the honest total via totalResults. That fetcher
+    # keeps fetch_limit at `limit` when unfiltered, so the unfiltered path
+    # pulls ONE ordered page, never the ~17k-row full scan the old guard
+    # was protecting against. This makes PO lists consistent with how the
+    # Supplier default fetcher already samples.
+    #
+    # The prior guard raised here on the no-filter case. It predated the
+    # (PurchaseOrder,'none') tool row (added in P6 for the date filters);
+    # with that row present the unfiltered path is resolvable AND bounded,
+    # so the refusal is removed. The ReceivablesInvoice guard below stays:
+    # AR has no bounded list fetcher and its collection is 173k rows, so an
+    # unscoped AR root genuinely has nowhere safe to go.
 
     # ReceivablesInvoice is a valid root only for a single-invoice fetch
     # (by_id on CustomerTransactionId). Like PurchaseOrder it has no

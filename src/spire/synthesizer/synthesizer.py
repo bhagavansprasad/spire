@@ -137,6 +137,8 @@ from spire.planner.kg_db import _entity_level_filter_types
 from spire.synthesizer.p2p import (  # noqa: F401
     build_supplier_records,
     plain_supplier_bucket,
+    build_purchase_order_records,
+    plain_po_bucket,
     _filtered_supplier_list,
     build_narrowing_tip,
 )
@@ -582,6 +584,49 @@ def synthesize_response(
             truncation_notes=notes,
         )
 
+    # Plain PO list: no LLM (REC-2).
+    #
+    # The mirror of the plain-supplier branch above, and the reason "list
+    # all purchase orders" now samples instead of refusing. Before this,
+    # PurchaseOrder had no deterministic list path at all — every PO answer
+    # went through the LLM, which was fine when a PO query returned one or a
+    # handful of id-fetched rows, but a 25-row sample exposed two failures
+    # of letting the model emit the rows: it re-typed only 15 of the 25 it
+    # was handed, and its opening sentence then under-reported the match as
+    # "15 of 17,408". The records are data, not judgement — so build them
+    # here, and hand the summary to local_list_summary, exactly as the
+    # supplier path does. No model call, so the row count cannot drift and a
+    # supplierless PO cannot be mistaken for a hallucinated id.
+    #
+    # One bucket only (plain_po_bucket returns None otherwise): a PO query
+    # that also fetched lines / schedules / distributions still needs the
+    # hierarchy join and stays on the LLM path below.
+    po_bucket = (
+        plain_po_bucket(outputs) if target_entity == "PurchaseOrder" else None
+    )
+    if po_bucket is not None:
+        rows = outputs[po_bucket]
+        total_available, notes = _local_truncation(
+            po_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        return PurchaseOrderResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="purchase orders",
+                    # Exactly the columns build_purchase_order_records
+                    # renders on this path. The rows also carry StatusCode,
+                    # SupplierId, Ordered and the WHO columns, none of which
+                    # are described here unless displayed.
+                    displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                )
+            ),
+            purchase_orders=build_purchase_order_records(rows),
+            truncation_notes=notes,
+        )
+
     # Plain credit-memo list: no LLM, same reasoning as the supplier
     # branch above, with one difference worth stating.
     #
@@ -893,5 +938,6 @@ def synthesize_response(
     response = response.__class__(**rounded_dict)
 
     return response
+
 
 

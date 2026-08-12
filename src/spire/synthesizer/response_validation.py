@@ -297,7 +297,15 @@ def _validate_purchase_order(
     bad_sched: list[int] = []
     bad_dist: list[int] = []
     for po in response.purchase_orders:
-        if po.supplier_id not in valid["supplier_ids"]:
+        # supplier_id == 0 is the "no supplier" sentinel: a PO with a null
+        # SupplierId (e.g. an Incomplete PO) coerces to 0 at model build
+        # (PurchaseOrderResponse row.get("SupplierId") or 0). The collector
+        # never adds 0 to valid supplier_ids because the source SupplierId
+        # was None, so a supplierless PO would otherwise read as a
+        # hallucinated id. It is not one — skip the check when there is no
+        # supplier to validate. Surfaced by REC-2's unfiltered PO list,
+        # whose first row is the pod's Incomplete OrderNumber "1".
+        if po.supplier_id and po.supplier_id not in valid["supplier_ids"]:
             bad_sid.append(po.supplier_id)
         if po.buyer is not None and po.buyer.person_id not in valid["person_ids"]:
             bad_pid.append(po.buyer.person_id)

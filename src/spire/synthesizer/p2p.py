@@ -408,6 +408,77 @@ def plain_supplier_bucket(outputs: dict[str, list[dict]]) -> str | None:
     return None
 
 
+def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
+    """Executor PO rows -> PurchaseOrderRecord list, verbatim.
+
+    Pure: no LLM, no I/O. The mirror of build_supplier_records for the
+    plain PO-list path (REC-2). Every field the record needs is already on
+    the row — order number, status, supplier, and the buyer — so this is a
+    rename, not a reconstruction, and there is no cross-bucket join.
+
+    supplier_id uses `or 0`: a supplierless PO (e.g. the pod's Incomplete
+    OrderNumber "1", SupplierId null) coerces to 0, the same "no supplier"
+    sentinel the response validator now skips rather than flagging as a
+    hallucinated id.
+
+    buyer is populated from the SAME row (BuyerId / Buyer sit on the PO
+    header, not in a separate bucket), so it is deterministic here — unlike
+    the supplier path, where a buyer would require a join and is left to the
+    LLM. When BuyerId is null there is no buyer to name, so buyer stays None.
+
+    lines / schedules / distributions stay empty BY DESIGN: this path runs
+    only when the executor produced a single PO bucket, so no child rows
+    were fetched to put in them. A query that DOES fetch a PO's children
+    takes the LLM path, where the hierarchy join is still the model's job.
+    """
+    records: list[PurchaseOrderRecord] = []
+    for row in rows:
+        buyer_id = row.get("BuyerId")
+        buyer = (
+            BuyerInfo(
+                person_id=buyer_id,
+                display_name=row.get("Buyer") or "",
+            )
+            if buyer_id is not None
+            else None
+        )
+        records.append(
+            PurchaseOrderRecord(
+                po_header_id=row.get("POHeaderId") or 0,
+                order_number=str(row.get("OrderNumber") or ""),
+                status=row.get("Status") or row.get("StatusCode") or "",
+                supplier_name=row.get("Supplier") or "",
+                supplier_id=row.get("SupplierId") or 0,
+                buyer=buyer,
+            )
+        )
+    return records
+
+
+def plain_po_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the PO bucket when this is a PLAIN purchase-order list.
+
+    The mirror of plain_supplier_bucket. "Plain" means one bucket of PO
+    rows and nothing else, so every field the response needs — including
+    the buyer, which rides on the PO header — is already on those rows.
+    Returns None the moment there is more than one bucket, because a PO
+    query that also fetched lines / schedules / distributions needs the
+    hierarchy join, which stays with the LLM.
+
+    Deliberately conservative, same as the supplier version: returning None
+    too often costs tokens; returning a wrong bucket costs correctness.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "POHeaderId" in first and "OrderNumber" in first:
+        return name
+    return None
+
+
 def _filtered_supplier_list(
     outputs: dict[str, list[dict]],
 ) -> tuple[str, str] | None:
@@ -505,3 +576,4 @@ def build_narrowing_tip(
         f"Reading all {total:,} {entity_label} is slow. "
         f"Narrow with a filter: {filters_text}."
     )
+
