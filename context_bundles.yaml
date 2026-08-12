@@ -23,6 +23,8 @@ bundles:
   - docs/spire_lifecycle_sme_update.md
   - tests/spire_sme_validation_checklist.md
   - docs/spire_overnight_findings.md
+  - docs/cache_architecture.md
+  - docs/spire_test_plan.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
