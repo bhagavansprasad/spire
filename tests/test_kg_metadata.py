@@ -274,7 +274,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_entity_field": 210,
         "kg_edge": 17,
         "kg_pattern": 3,
-        "kg_vocabulary": 118,
+        "kg_vocabulary": 120,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 10,
         "kg_entity_filter": 24,
@@ -445,6 +445,7 @@ async def test_no_child_in_n_months_pattern_has_parseable_parameters():
     params = json.loads(params_str)
     param_names = {p["name"] for p in params}
     assert param_names == {"parent", "child_edge", "date_field", "months_param"}
+
 
 
 

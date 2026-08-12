@@ -69,6 +69,11 @@ class KGMenu:
     entity_descriptions: dict[str, str] = field(default_factory=dict)
     country_terms: dict[str, str] = field(default_factory=dict)
     field_synonyms: dict[str, str] = field(default_factory=dict)
+    # term -> canonical entity name (vocab_kind 'entity_synonym'). Loaded
+    # for code use (correct_include_from_prompt); the LLM sees these terms
+    # via its own prompt assembly, but the include CORRECTION below is
+    # deterministic, not model judgement.
+    entity_synonyms: dict[str, str] = field(default_factory=dict)
     entity_columns: dict[str, list[str]] = field(default_factory=dict)
     
     def is_known_entity(self, entity_name: str) -> bool:
@@ -146,6 +151,7 @@ def load_kg_menu() -> KGMenu:
     target_entities: set[str] = set()
     country_terms: dict[str, str] = {}
     field_synonyms: dict[str, str] = {}
+    entity_synonyms: dict[str, str] = {}
     entity_columns: dict[str, list[str]] = {}
     
     with _kg_cursor() as cursor:
@@ -191,6 +197,17 @@ def load_kg_menu() -> KGMenu:
         for term, canonical in cursor.fetchall():
             field_synonyms[term] = canonical
 
+        # Entity synonyms (term -> canonical entity name). Read into the menu
+        # so correct_include_from_prompt can consult them as data. 'sites' ->
+        # Site is what lets an unlistable-Site request reach the Site gate
+        # (AI-10/AI-11) instead of silently degrading to an Address include.
+        cursor.execute(
+            "SELECT term, canonical_value FROM kg_vocabulary "
+            "WHERE vocab_kind = 'entity_synonym' ORDER BY term"
+        )
+        for term, canonical in cursor.fetchall():
+            entity_synonyms[term] = canonical
+
         # Projectable columns per entity, from kg_entity_field. Lets the
         # LLM emit exact column names when the prompt asks for specific
         # fields (Phase 7 projection).
@@ -207,6 +224,7 @@ def load_kg_menu() -> KGMenu:
         entity_descriptions=entity_descriptions,
         country_terms=country_terms,
         field_synonyms=field_synonyms,
+        entity_synonyms=entity_synonyms,
         entity_columns=entity_columns,
     )
 
@@ -243,6 +261,74 @@ def expand_field_synonyms(fields: list[str], menu: KGMenu) -> list[str]:
                 seen.add(col)
                 expanded.append(col)
     return expanded
+
+
+import re as _re
+
+# Entity synonyms whose PRESENCE in the prompt should override a specific
+# wrong include the LLM is known to substitute. Today this is just the
+# site->address degradation: the parser prompt instructs the model to add
+# 'Address' for supplier-location phrasing, so "supplier sites for X" comes
+# back as include=['Address'] and silently returns addresses (AI-10). The
+# map says: when this synonym's term is in the prompt, the canonical entity
+# it names should replace the listed wrong entity in include. Data-driven so
+# a future synonym with the same shape is one row here, not new logic.
+_INCLUDE_OVERRIDE_WHEN_PRESENT: dict[str, str] = {
+    # canonical entity (from entity_synonyms) : the include entity it displaces
+    "Site": "Address",
+}
+
+
+def correct_include_from_prompt(
+    prompt: str, include: list[str], menu: KGMenu
+) -> list[str]:
+    """Deterministically correct the include list against the raw prompt.
+
+    The LLM chooses includes during generation, so a synonym it mis-maps is
+    already resolved to the wrong entity by the time we see the Intent —
+    there is no synonym token left in the include list to expand. This runs
+    AFTER the LLM and looks at the PROMPT instead: when an entity_synonym
+    term appears as a whole word in the prompt and that synonym is one whose
+    presence should override a known-wrong include
+    (_INCLUDE_OVERRIDE_WHEN_PRESENT), the wrong include entity is replaced by
+    the one the user actually named.
+
+    Concretely: "supplier sites for Lee Supplies" -> the LLM returns
+    include=['Address']; 'sites' is in the prompt and maps to Site; Site's
+    override target is Address; so Address becomes Site. The query then
+    reaches the Site gate, which refuses honestly (sites are not standalone-
+    listable on this pod) rather than returning addresses under the wrong
+    label. Terms not in the override map are left alone — 'contact',
+    'schedule' etc. already resolve correctly through the LLM.
+
+    Order-preserving; no duplicates introduced. A prompt that names neither a
+    mapped synonym nor the displaced entity is returned unchanged.
+    """
+    if not include:
+        return include
+    # Whole-word, case-insensitive presence test over the prompt.
+    tokens = set(_re.findall(r"[a-z]+", prompt.lower()))
+    lower_syn = {t.lower(): v for t, v in menu.entity_synonyms.items()}
+
+    # Which override-entities are triggered by a synonym present in the prompt?
+    triggered: dict[str, str] = {}  # displaced_entity -> replacement_entity
+    for term, canonical in lower_syn.items():
+        if term in tokens and canonical in _INCLUDE_OVERRIDE_WHEN_PRESENT:
+            displaced = _INCLUDE_OVERRIDE_WHEN_PRESENT[canonical]
+            triggered[displaced] = canonical
+
+    if not triggered:
+        return include
+
+    corrected: list[str] = []
+    seen: set[str] = set()
+    for entity in include:
+        replacement = triggered.get(entity, entity)
+        if replacement not in seen:
+            seen.add(replacement)
+            corrected.append(replacement)
+    return corrected
+
 
 
 

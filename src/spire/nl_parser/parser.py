@@ -33,7 +33,10 @@ from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
 from spire.nl_parser.intent_validation import validate_intent
-from spire.nl_parser.vocabulary import expand_field_synonyms
+from spire.nl_parser.vocabulary import (
+    expand_field_synonyms,
+    correct_include_from_prompt,
+)
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
 
@@ -731,6 +734,14 @@ def parse(
     # passes through unchanged and is reported by validate_intent (COL-03).
     intent.fields = expand_field_synonyms(intent.fields, menu)
 
+    # AI-10: correct an include the LLM mis-mapped from the raw prompt.
+    # 'supplier sites for X' comes back as include=['Address'] because the
+    # prompt steers supplier-location phrasing to Address; if the user said
+    # 'site(s)', that must be Site instead — which then reaches the Site
+    # gate and refuses honestly rather than returning addresses. Runs after
+    # the LLM, before validate_intent, deterministically from the KG.
+    intent.include = correct_include_from_prompt(prompt, intent.include, menu)
+
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
@@ -739,5 +750,6 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
 
 

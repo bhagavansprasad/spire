@@ -402,6 +402,23 @@ _OPERATION_EXAMPLES: dict[str, str] = {
     "CreditMemo": "credit memos for ABC Application Software",
     "CustomerAccount": "account balance for ABC Corporation Americas",
     "Address": "Suppliers with their addresses",
+    # A distinct key (set by the Site gate in intent_validation.py) so the
+    # site-listing refusal gets an address example, not the generic Supplier
+    # one. Its Solution lives in _OPERATION_SOLUTIONS below.
+    "SupplierSiteListing": "addresses for supplier 1252",
+}
+
+# Solution overrides for UNSUPPORTED_OPERATION, keyed on the same entity as
+# the examples. Most operation refusals (aggregations, comparisons) use the
+# generic _FALLBACK solution; a keyed entry here replaces it when the refusal
+# has a more specific route to offer. SupplierSiteListing points at the two
+# things that DO work — the BU filter and addresses — instead of the generic
+# "ask me for the records and do the rest your side".
+_OPERATION_SOLUTIONS: dict[str, str] = {
+    "SupplierSiteListing": (
+        "Ask for suppliers with a site in a named business unit, or for the "
+        "supplier's addresses."
+    ),
 }
 
 # Fallback per flavor, used when there is no entity-specific entry.
@@ -697,8 +714,18 @@ def _solution_and_example(refusal: Refusal, menu: KGMenu) -> tuple[str, str]:
 
     solution, example = _FALLBACK[flavor]
 
-    if flavor is RefusalFlavor.UNSUPPORTED_OPERATION and entity in _OPERATION_EXAMPLES:
-        example = _OPERATION_EXAMPLES[entity]
+    # The operation Example/Solution maps are keyed by our OWN internal
+    # markers as well as real entities. SupplierSiteListing is one such
+    # marker (the Site gate sets it): a legitimate internal key, not a
+    # model-invented type, so it must NOT go through _known_entity, which
+    # filters exactly for invented types and would drop it. Look these two
+    # maps up against the raw offending_entity; the reason line above still
+    # uses the filtered `entity`.
+    op_key = refusal.offending_entity
+    if flavor is RefusalFlavor.UNSUPPORTED_OPERATION and op_key in _OPERATION_EXAMPLES:
+        example = _OPERATION_EXAMPLES[op_key]
+    if flavor is RefusalFlavor.UNSUPPORTED_OPERATION and op_key in _OPERATION_SOLUTIONS:
+        solution = _OPERATION_SOLUTIONS[op_key]
 
     if flavor is RefusalFlavor.UNKNOWN_ENTITY and not entity:
         # The ONLY case where listing what exists is the actual answer: the

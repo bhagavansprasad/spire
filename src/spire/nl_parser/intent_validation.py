@@ -122,15 +122,17 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
     # different resource (contrast AI-10, where "sites" degrades to
     # addresses — a separate parser-mapping bug, not fixed here).
     if "Site" in intent.include:
+        # detail is the REASON ONLY — short, so it reads as one clean Reason
+        # line. The alternatives (BU filter / addresses) are NOT crammed in
+        # here; they are the Solution, and the Example is a real address
+        # query, both supplied by capability.py keyed on the distinct
+        # "SupplierSiteListing" entity below. Keying on that rather than the
+        # root ("Supplier") is what stops this refusal from inheriting the
+        # generic Supplier operation example ("active suppliers in US").
         return Refusal(
             flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
-            detail=(
-                "Supplier sites aren't available as a standalone listing "
-                "(there is no site-list fetcher; the only site tool filters "
-                "suppliers by business unit). Ask for suppliers with a site "
-                "in a named business unit, or for the supplier's addresses."
-            ),
-            offending_entity=entity,
+            detail="Supplier sites aren't available as a standalone listing.",
+            offending_entity="SupplierSiteListing",
         )
 
     # ── Step 4: split requested columns into resolvable vs unresolved ──
@@ -157,4 +159,5 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
         intent.unresolved_fields = unresolved
 
     return None
+
 
