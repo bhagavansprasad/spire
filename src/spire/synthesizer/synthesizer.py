@@ -139,6 +139,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     plain_supplier_bucket,
     build_purchase_order_records,
     plain_po_bucket,
+    build_po_with_children,
+    po_with_children_buckets,
     _filtered_supplier_list,
     build_narrowing_tip,
 )
@@ -624,6 +626,48 @@ def synthesize_response(
                 )
             ),
             purchase_orders=build_purchase_order_records(rows),
+            truncation_notes=notes,
+        )
+
+    # PO with its children: no LLM.
+    #
+    # "Show PO 2144 and its lines / schedules / distributions" produces a PO
+    # header bucket plus one or more child buckets. That multi-bucket shape
+    # used to fall through to the LLM (plain_po_bucket handles only the single
+    # bucket), which re-emitted every child row field by field and, for
+    # schedules, copied the pod's raw ReceivedAmount — 0 on every row — into a
+    # column beside prose that said "1 of 1 received" (AI-12). Building the
+    # nested record here removes both the tokens and the contradiction: the
+    # received amount is DERIVED from quantity in _build_schedule, and every
+    # child id comes straight from an executor row, so the response
+    # validator's child-id checks pass by construction.
+    #
+    # po_with_children_buckets returns None unless there is a PO header bucket
+    # AND at least one child bucket, so a plain PO list (handled above) and
+    # non-PO shapes are unaffected. There is no LLM summary here — the record
+    # tables and the truncation notes carry the answer, consistent with the
+    # other local branches.
+    po_child_buckets = (
+        po_with_children_buckets(outputs)
+        if target_entity == "PurchaseOrder"
+        else None
+    )
+    if po_child_buckets is not None:
+        po_rows = outputs[po_child_buckets["po"]]
+        total_available, notes = _local_truncation(
+            po_child_buckets["po"], po_rows, truncation_by_step, metadata_by_step
+        )
+        return PurchaseOrderResponse(
+            summary="\n".join(
+                local_list_summary(
+                    po_rows,
+                    entity_label="purchase orders",
+                    displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                )
+            ),
+            purchase_orders=build_po_with_children(outputs, po_child_buckets),
             truncation_notes=notes,
         )
 
