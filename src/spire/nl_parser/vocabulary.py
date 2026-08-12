@@ -68,8 +68,9 @@ class KGMenu:
     filter_types: set[str] = field(default_factory=set)
     entity_descriptions: dict[str, str] = field(default_factory=dict)
     country_terms: dict[str, str] = field(default_factory=dict)
+    field_synonyms: dict[str, str] = field(default_factory=dict)
     entity_columns: dict[str, list[str]] = field(default_factory=dict)
-
+    
     def is_known_entity(self, entity_name: str) -> bool:
         """True if the entity exists in the KG at all (valid or not as a
         target). Distinguishes UNKNOWN_ENTITY (not in KG) from
@@ -144,8 +145,9 @@ def load_kg_menu() -> KGMenu:
     entity_descriptions: dict[str, str] = {}
     target_entities: set[str] = set()
     country_terms: dict[str, str] = {}
+    field_synonyms: dict[str, str] = {}
     entity_columns: dict[str, list[str]] = {}
-
+    
     with _kg_cursor() as cursor:
         # All known entities + descriptions.
         cursor.execute(
@@ -174,8 +176,20 @@ def load_kg_menu() -> KGMenu:
             "SELECT term, canonical_value FROM kg_vocabulary "
             "WHERE vocab_kind = 'country' ORDER BY term"
         )
+        
         for term, canonical in cursor.fetchall():
             country_terms[term] = canonical
+
+        # Field synonyms (term -> comma-joined real column names). Mirrors
+        # country vocabulary, but the value may name several fields; the
+        # expander splits on comma. Deterministic multi-field expansion
+        # (COL-02) — the LLM passes the term through, code expands it.
+        cursor.execute(
+            "SELECT term, canonical_value FROM kg_vocabulary "
+            "WHERE vocab_kind = 'field_synonym' ORDER BY term"
+        )
+        for term, canonical in cursor.fetchall():
+            field_synonyms[term] = canonical
 
         # Projectable columns per entity, from kg_entity_field. Lets the
         # LLM emit exact column names when the prompt asks for specific
@@ -192,10 +206,43 @@ def load_kg_menu() -> KGMenu:
         filter_types=filter_types,
         entity_descriptions=entity_descriptions,
         country_terms=country_terms,
+        field_synonyms=field_synonyms,
         entity_columns=entity_columns,
     )
 
 
+def expand_field_synonyms(fields: list[str], menu: KGMenu) -> list[str]:
+    """Expand any field-synonym term in a projected-column list into its real
+    column names, deterministically.
+
+    A term like 'who columns' maps (in kg_vocabulary, vocab_kind
+    'field_synonym') to a comma-joined list of real columns; this splits it
+    and substitutes the columns in place. A term with no synonym row is kept
+    as-is — including genuinely-unknown columns, which validate_intent then
+    reports as unresolved (COL-03). Order is preserved and duplicates are
+    dropped so an expansion overlapping an explicitly-named column does not
+    repeat it.
+
+    Runs AFTER the LLM (so the model never decides the expansion) and BEFORE
+    validate_intent (so validation sees only real column names). Matching is
+    case-insensitive on the term; the substituted column names are emitted
+    exactly as authored in the KG.
+    """
+    expanded: list[str] = []
+    seen: set[str] = set()
+    # Case-insensitive lookup over the synonym terms.
+    lower_map = {term.lower(): value for term, value in menu.field_synonyms.items()}
+    for name in fields:
+        value = lower_map.get(name.lower())
+        if value is not None:
+            replacements = [c.strip() for c in value.split(",") if c.strip()]
+        else:
+            replacements = [name]
+        for col in replacements:
+            if col not in seen:
+                seen.add(col)
+                expanded.append(col)
+    return expanded
 
 
 

@@ -100,7 +100,7 @@ TABLES: list[dict] = [
         "sql": "SELECT vocab_kind, term, canonical_value, notes "
                "FROM kg_vocabulary ORDER BY vocab_kind, term",
         "clob_cols": set(),
-        "expected_rows": 97,
+        "expected_rows": 103,
     },
     {
         "name": "kg_pattern_binding",

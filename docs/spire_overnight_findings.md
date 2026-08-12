@@ -1143,3 +1143,67 @@ error despite initial appearance.
 **Net new: AI-11** (supplier-sites crash). Refusals otherwise sound.
 
 ---
+
+### AI-13 🟡 verified — Supplier list returns a different 25-row sample between identical runs
+
+**Set:** (not from the overnight run — surfaced during COL-02 multi-field-expansions verification, 2026-08-12)
+**Prompt:** `List active suppliers with supplier name and audit columns`
+(any active-supplier list prompt; the synonym is incidental)
+
+**Actual output:** two identical runs of the same prompt returned DIFFERENT
+supplier samples. First three rows identical (Lee Supplies, JGA, US Gas and
+Electric), then diverging:
+
+    Run 1: ...Allied Manufacturing, Midtown Computer Supplies, Consolidated...
+    Run 2: ...Staffing Services, Dell Inc., InterChina, Howell Engineering...
+
+Both report "Showing 25 of 284 suppliers", both HTTP 200, both a valid 25-row
+table. The parse was byte-identical (out=401 both runs) and the Intent
+identical, so the divergence is downstream of parse.
+
+**Expected:** identical prompt → identical rows, or an explicit statement that
+the sample is arbitrary. A user comparing two runs sees a different supplier
+set with no indication why.
+
+**Verification (curl, 2026-08-12):** the raw `/suppliers` endpoint is STABLE —
+the pod is NOT the source of variance.
+
+    # Two identical calls, limit=25, no q=
+    curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
+      "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers?limit=25&fields=Supplier" \
+      -w "\nHTTP %{http_code}\n"
+    # -> HTTP 200, 25 suppliers, first = Lee Supplies
+    # diff of the two supplier lists: IDENTICAL ORDER
+
+    # Repeated at limit=200:
+    # -> HTTP 200, 200 suppliers, diff: 200-ROW ORDER IDENTICAL
+
+So the raw endpoint returns a stable order at both limit=25 and limit=200,
+across repeated calls. The variance is therefore NOT the pod ordering (unlike
+`/standardReceipts`, which the reference documents as unordered — this endpoint
+differs) and NOT the parser/expander (identical Intents).
+
+**Root cause (suspected, not yet code-traced):** isolated to Spire's
+client-side supplier handling between fetch and render. The supplier path
+applies `Status='ACTIVE'` client-side (the pod's `q=Status` is unreliable — see
+endpoints reference 2026-05-22) over an over-fetch, then samples/truncates to
+25. A sample or truncation step that is not order-stable would produce a
+different 25 each run even though the underlying fetch is stable. Needs a code
+trace of the supplier fetch/filter/truncate path to confirm the exact step.
+
+**Fix (direction, not built):** make the supplier sample deterministic — apply
+a stable sort key (e.g. SupplierId) before the client-side ACTIVE-filter and
+the 25-row cut, so the same prompt yields the same rows. Relates to OUT-06's
+caution that a capped fetch must be ordered to be reproducible. Confirm against
+the fetch path first; do not assume the truncation step is the culprit without
+a trace.
+
+**Severity:** 🟡 — not wrong data (every row returned is a real active
+supplier), but a reproducibility defect: identical input gives different
+output with no disclosure. Affects EVERY supplier list, not just synonym
+queries. Pre-existing; not introduced by COL-02.
+
+**Status:** verified (pod stability curl-confirmed; Spire-side root cause
+suspected, code trace pending). New — surfaced during COL-02 verification, not
+part of the AI-1…AI-11 overnight census. Working label during the session:
+N-2.

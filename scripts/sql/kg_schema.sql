@@ -149,7 +149,7 @@ CREATE TABLE kg_vocabulary (
   notes             VARCHAR2(1000),
   CONSTRAINT pk_kg_vocabulary PRIMARY KEY (vocab_kind, term),
   CONSTRAINT chk_kg_vocabulary_kind
-    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'supplier_classification', 'entity_synonym', 'relationship_phrase'))
+    CHECK (vocab_kind IN ('country', 'po_status', 'supplier_status', 'supplier_business_relationship', 'supplier_site_bu', 'supplier_classification', 'entity_synonym', 'relationship_phrase', 'field_synonym'))
 );
 
 CREATE TABLE kg_pattern_binding (
@@ -853,6 +853,18 @@ INSERT INTO kg_vocabulary VALUES ('country', 'CA', 'CA', 'ISO-2 code.');
 INSERT INTO kg_vocabulary VALUES ('country', 'Australia', 'AU', 'Full name.');
 INSERT INTO kg_vocabulary VALUES ('country', 'AU', 'AU', 'ISO-2 code.');
 INSERT INTO kg_vocabulary VALUES ('country', 'AUS', 'AU', '3-letter form; normalized to ISO-2.');
+
+-- field_synonym: a user term expands to one OR MORE real column names,
+-- comma-joined. The parser's expand_field_synonyms splits on comma AFTER
+-- the LLM, so the expansion is deterministic (COL-02 multi-field). The
+-- target columns must exist on the entity as kg_entity_field rows, or
+-- validate_intent will (correctly) report them as unresolved.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'who columns', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Audit/who columns -> the four who fields.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'who details', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'audit columns', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'audit fields', 'CreatedBy,CreationDate,LastUpdatedBy,LastUpdateDate', 'Synonym of who columns.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'creator details', 'CreatedBy,CreationDate', 'Creator subset -> who created and when.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created details', 'CreatedBy,CreationDate', 'Synonym of creator details.');
 
 -- po_status
 INSERT INTO kg_vocabulary VALUES ('po_status', 'open',      'OPEN',       'Default conversational synonym.');
