@@ -117,7 +117,13 @@ async def test_get_customer_transactions_open_only_is_balance_descending():
     # Non-empty: this account has open invoices; an empty result here means
     # the sort is NOT surfacing them (the default-order page is all paid).
     assert balances, "expected open invoices; orderBy likely not applied"
-    # Descending: the fetcher returns rows sorted by balance desc.
+    # Descending: the fetcher returns rows sorted by balance desc. This is
+    # the invariant that proves orderBy=TotalBalanceAmount:desc is applied —
+    # it holds regardless of the live balance values.
     assert balances == sorted(balances, reverse=True)
-    # Top open balances on this anchor account (from live discovery).
-    assert balances[:5] == [216378, 206008, 198286, 56412, 39969]
+    # NOTE: an exact-values assertion (top-5 balances from live discovery)
+    # was removed 2026-08-12 — those are live pod data that drift as invoices
+    # are created/paid/updated, so pinning them made the test fail on data
+    # change, not on a code regression. The non-empty + descending assertions
+    # above fully cover the behaviour this test guards (that the sort surfaces
+    # open rows in balance-descending order).
