@@ -9,6 +9,13 @@
 # and distributions. PO 162034 (Lee Supplies) has invoice 162034inv — note
 # PO 162352 has NO invoices, so it cannot anchor the invoices-by-PO prompt.
 
+# — unbounded PO list: sample-and-disclose (REC-2) —
+# No longer a refusal. Returns a bounded, ordered 25-row sample plus the
+# honest total (via totalResults, ~17k), mirroring how supplier lists
+# behave. The fetch is capped to one ordered page, never the full
+# collection. Synthesized locally — no LLM.
+List all purchase orders
+
 # — PO detail + lines (P2) —
 Show PO 2144 and its lines
 What is purchase order 2144 about?
@@ -45,3 +52,4 @@ How does invoiced compare to ordered for Lee Supplies?
 # — PO date bound (P6 commit 2, prompt 20) —
 # An absolute date satisfies the PO root requirement — no PO id needed.
 Purchase orders created before 2015
+

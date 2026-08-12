@@ -34,10 +34,7 @@ show me purchase order line items
 # fetch would pull every invoice on the pod.
 recent invoices
 
-# — PO queries need an id or a date bound —
-# An unfiltered PO listing has no bounded fetcher.
-List all purchase orders
-
 # — relative date windows are not supported —
 # Must refuse rather than let the LLM compute a cutoff itself.
 Purchase orders older than 6 months
+
