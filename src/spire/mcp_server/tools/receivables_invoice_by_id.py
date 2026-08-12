@@ -57,6 +57,10 @@ _PROJECTED_FIELDS = [
     "TransactionType",
     "TransactionSource",
     "BusinessUnit",
+    "CreatedBy",
+    "CreationDate",
+    "LastUpdatedBy",
+    "LastUpdateDate",
 ]
 
 

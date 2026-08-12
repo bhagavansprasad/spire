@@ -48,6 +48,10 @@ _PROJECTED_FIELDS = [
     "PaidStatus",
     "ApprovalStatus",
     "PurchaseOrderNumber",
+    "CreatedBy",
+    "CreationDate",
+    "LastUpdatedBy",
+    "LastUpdateDate",
 ]
 
 

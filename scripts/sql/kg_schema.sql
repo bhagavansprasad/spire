@@ -412,6 +412,10 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Country',     'projection', 'str
 -- PurchaseOrder (P2: money projection fields)
 INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'Total',    'projection', 'numeric', 'PO total amount including tax. Display/projection only.');
 INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'TotalTax', 'projection', 'numeric', 'Tax portion of the PO total. Display/projection only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''CASEY.BROWN''). WHO column; projectable, display-only. Curl-confirmed on /purchaseOrders 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- PurchaseOrderLine (P2)
 INSERT INTO kg_entity_field VALUES ('PurchaseOrderLine', 'POLineId',    'canonical_id', 'numeric', 'System primary key for the line.');
@@ -476,6 +480,10 @@ INSERT INTO kg_entity_field VALUES ('PODistribution', 'StatusCode',           's
 -- server-side; it is the join key to PurchaseOrder.OrderNumber (a string,
 -- not POHeaderId) — consistent with invoices joining on SupplierNumber.
 INSERT INTO kg_entity_field VALUES ('Invoice', 'PurchaseOrderNumber', 'reference', 'string', 'PO number the invoice was raised against (e.g. "162034"). Join key to PurchaseOrder.OrderNumber. Filters server-side via q=PurchaseOrderNumber.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''ROGER.BOLTON''). WHO column; projectable, display-only. Curl-confirmed on /invoices 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- POSchedule (P5): received-vs-ordered. Fusion records what was actually
 -- received/billed on the schedule row, alongside the ordered Quantity and
@@ -506,6 +514,10 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'InvoiceStatus',      
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionType',      'projection',   'string',  'Transaction type (e.g. ''Invoice''). Distinguishes invoice vs credit memo within receivablesTransactions.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'TransactionSource',    'projection',   'string',  'Transaction source (e.g. ''Manual'', ''Receivables Import'').');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'BusinessUnit',         'projection',   'string',  'Owning business unit (e.g. ''UK Business Unit'').');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'CreatedBy',      'projection', 'string',   'User who created the record (e.g. ''JAMES.BIRD''). WHO column; projectable, display-only. Curl-confirmed on /receivablesInvoices 2026-08-12.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'CreationDate',   'projection', 'iso_date', 'When the record was created. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
+INSERT INTO kg_entity_field VALUES ('ReceivablesInvoice', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
 -- ReceivablesInvoiceLine (AR-P2)
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'CustomerTransactionLineId',   'canonical_id', 'numeric', 'System primary key for the line.');
@@ -626,7 +638,7 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (198 rows).
+PROMPT Seeded kg_entity_field (210 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge

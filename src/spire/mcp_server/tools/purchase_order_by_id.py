@@ -78,6 +78,10 @@ _PROJECTED_FIELDS = [
     "BillToLocation",
     "OrderDate",
     "Description",
+    "CreatedBy",
+    "CreationDate",
+    "LastUpdatedBy",
+    "LastUpdateDate",
 ]
 
 

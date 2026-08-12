@@ -254,6 +254,15 @@ async def test_kg_table_row_counts_match_v1_1():
     'projection' (display-only; the creation-date FILTER already exists
     separately in kg_entity_filter). No other table moved.
 
+    COL-02 Group 4 (2026-08-12) extended the same four who-columns to
+    PurchaseOrder, Invoice and ReceivablesInvoice (kg_entity_field
+    198->210, +12 = 4 x 3 entities): CreatedBy, CreationDate,
+    LastUpdatedBy, LastUpdateDate. Curl-confirmed on /purchaseOrders,
+    /invoices and /receivablesInvoices — all four exist with real values.
+    Makes the existing 'who columns'/'audit columns' field_synonym resolve
+    on these entities too (the synonym is global; it needed the target
+    columns to exist).
+
     NOTE the counts in this test are one of FOUR places that must move
     together, not two as earlier notes implied: this dict,
     scripts/print_kg.py's expected_rows, and the two
@@ -262,7 +271,7 @@ async def test_kg_table_row_counts_match_v1_1():
     persona = load_persona("default_dev")
     expected = {
         "kg_entity": 22,
-        "kg_entity_field": 198,
+        "kg_entity_field": 210,
         "kg_edge": 17,
         "kg_pattern": 3,
         "kg_vocabulary": 118,
