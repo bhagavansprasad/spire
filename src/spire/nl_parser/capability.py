@@ -271,6 +271,19 @@ _IDENTIFIER_GUIDANCE: dict[str, tuple[str, str]] = {
         "Give me the supplier name.",
         "supplier sites for Lee Supplies",
     ),
+    # Address and StandardReceipt are scoped by ONE OF TWO things, not a
+    # single id — so the solution names both options. The planner guards for
+    # these entities raise MISSING_IDENTIFIER; without an entry here the
+    # message would fall to the generic identifier fallback and lose the
+    # "supplier OR country" / "customer OR site" nuance the guards enforce.
+    "Address": (
+        "Name the supplier, or give me a country.",
+        "addresses for supplier 1252",
+    ),
+    "StandardReceipt": (
+        "Name the customer, or give me a site.",
+        "receipts for ABC Application Software",
+    ),
     # Child records are identified by their PARENT, which is what the user
     # has to supply — naming a tax-line id would be no help to anyone.
     "ReceivablesTaxLine": (
@@ -705,8 +718,15 @@ def capability_message(refusal: Refusal, menu: KGMenu) -> str:
     """Build the user-facing refusal message: three labelled lines.
 
         Reason:   ...
+
         Solution: ...
+
         Example:  ...
+
+    A blank line separates each label so the refusal reads as three distinct
+    points rather than one wrapped block — the parts are what the reader acts
+    on. Joined with a blank line for every refusal (parser and planner guard
+    alike), so the spacing is uniform wherever a refusal is shown.
 
     Kept under the original name so the runners need no change.
     """
@@ -718,7 +738,7 @@ def capability_message(refusal: Refusal, menu: KGMenu) -> str:
         lines.append(f"Solution: {solution}")
     if example:
         lines.append(f"Example:  {example}")
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
 def capabilities_sentence(menu: KGMenu) -> str:
@@ -744,4 +764,5 @@ def capabilities_sentence(menu: KGMenu) -> str:
 # Backward-compatible alias: the previous private name, in case anything
 # outside this module imported it.
 _capabilities_sentence = capabilities_sentence
+
 

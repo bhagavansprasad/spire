@@ -21,6 +21,8 @@ from datetime import date
 
 import pytest
 
+from spire.nl_parser.result import RefusalError, RefusalFlavor
+
 from spire.planner.planner import (
     Intent,
     Plan,
@@ -770,18 +772,26 @@ def test_generate_plan_raises_on_unknown_filter_type() -> None:
 
 
 def test_invoice_by_id_reaches_the_supplier_guard() -> None:
-    """Invoice + by_id hits the supplier guard (ValueError with a worked
-    example), NOT the filter-validation dump."""
+    """Invoice + by_id (no supplier) hits the supplier guard.
+
+    The guard now raises a structured RefusalError (MISSING_IDENTIFIER,
+    entity Invoice) instead of a bare ValueError — plan_node routes it into
+    state["refusal"] and it renders through capability_message, the same
+    readable shape a parser decline gets. The user-facing wording (name the
+    supplier, "invoices for Lee Supplies") lives in _IDENTIFIER_GUIDANCE
+    keyed on the entity, so the assertions check the structured fields, not
+    a message substring. What matters is that this reaches the entity guard,
+    not the filter-validation dump.
+    """
     intent = Intent(
         target_entity="Invoice",
         filters=[{"type": "by_id", "value": "LEE-01-1006-111"}],
     )
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         generate_plan(intent)
-    msg = str(exc_info.value)
-    assert "require a supplier" in msg
-    assert "Lee Supplies" in msg          # a prompt the user can type
-    assert "Intent contains filter types" not in msg
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.MISSING_IDENTIFIER
+    assert refusal.offending_entity == "Invoice"
 
 
 def test_purchase_order_status_filter_is_refused() -> None:
@@ -817,11 +827,11 @@ def test_standard_receipt_unscoped_is_refused() -> None:
     tool refuses to run unscoped — so the planner promised something the
     tool would not honour, and the user saw a raw exception."""
     intent = Intent(target_entity="StandardReceipt")
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         generate_plan(intent)
-    msg = str(exc_info.value)
-    assert "require a customer or a site" in msg
-    assert "ABC Application Software" in msg      # something typeable
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.MISSING_IDENTIFIER
+    assert refusal.offending_entity == "StandardReceipt"
 
 
 def test_standard_receipt_with_customer_name_plans() -> None:

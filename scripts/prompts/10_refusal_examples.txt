@@ -1,3 +1,4 @@
+
 # Refusal examples — every prompt Spire suggests when it declines.
 #
 # WHAT THIS IS
@@ -56,6 +57,7 @@ Show invoice lines for invoice 300000248096352
 Suppliers with their addresses
 What is the risk rating on PO 701337 and why?
 account balance for ABC Corporation Americas
+addresses for supplier 1252
 active suppliers in US
 credit memos for ABC Application Software
 invoices for Lee Supplies
