@@ -461,9 +461,10 @@ def plain_po_bucket(outputs: dict[str, list[dict]]) -> str | None:
     The mirror of plain_supplier_bucket. "Plain" means one bucket of PO
     rows and nothing else, so every field the response needs — including
     the buyer, which rides on the PO header — is already on those rows.
-    Returns None the moment there is more than one bucket, because a PO
-    query that also fetched lines / schedules / distributions needs the
-    hierarchy join, which stays with the LLM.
+    Returns None the moment there is more than one bucket: a PO query that
+    also fetched lines / schedules / distributions is the "PO with children"
+    shape, handled locally by po_with_children_buckets +
+    build_po_with_children — not here, and no longer on the LLM.
 
     Deliberately conservative, same as the supplier version: returning None
     too often costs tokens; returning a wrong bucket costs correctness.
@@ -477,6 +478,184 @@ def plain_po_bucket(outputs: dict[str, list[dict]]) -> str | None:
     if "POHeaderId" in first and "OrderNumber" in first:
         return name
     return None
+
+
+def _derived_received_amount(row: dict) -> float | None:
+    """Received AMOUNT for a schedule row, derived from quantity.
+
+    ReceivedAmount is 0 or null on every schedule row on this pod (curl-
+    confirmed across ~4,500 rows) — the received leg exists only as a
+    QUANTITY. So a received amount must be prorated from the ordered amount
+    by the received fraction, exactly as Oracle's own BilledAmount is
+    derived, and exactly as the lifecycle tool already does it. Presenting
+    raw ReceivedAmount (0.0) beside a prose line that says "1 of 1 received"
+    is the AI-12 contradiction this replaces.
+
+    amount * (received_quantity / ordered_quantity), guarded: a null amount,
+    a null received quantity, or a zero/absent ordered quantity all yield
+    None rather than a wrong number or a ZeroDivisionError.
+    """
+    amount = row.get("Amount")
+    ordered_q = row.get("Quantity")
+    received_q = row.get("ReceivedQuantity")
+    if amount is None or received_q is None or not ordered_q:
+        return None
+    return amount * (received_q / ordered_q)
+
+
+def _build_line(row: dict) -> LineInfo:
+    return LineInfo(
+        po_line_id=row.get("POLineId") or 0,
+        line_number=row.get("LineNumber") or 0,
+        description=row.get("Description") or "",
+        category=row.get("Category") or "",
+        quantity=row.get("Quantity"),
+        amount=row.get("Ordered"),
+    )
+
+
+def _build_schedule(row: dict) -> ScheduleInfo:
+    # received_amount is DERIVED (see _derived_received_amount); every other
+    # figure is copied as-is. ordered_amount is the schedule's Amount (the
+    # ordered figure on this resource), ordered_quantity its Quantity.
+    return ScheduleInfo(
+        line_location_id=row.get("LineLocationId") or 0,
+        schedule_number=row.get("ScheduleNumber") or 0,
+        ship_to_location=row.get("ShipToLocation") or "",
+        requested_delivery_date=row.get("RequestedDeliveryDate") or "",
+        ordered_quantity=row.get("Quantity"),
+        ordered_amount=row.get("Amount"),
+        received_quantity=row.get("ReceivedQuantity"),
+        billed_quantity=row.get("BilledQuantity"),
+        received_amount=_derived_received_amount(row),
+        billed_amount=row.get("BilledAmount"),
+    )
+
+
+def _build_distribution(row: dict) -> DistributionInfo:
+    # amount is the ex-tax Ordered figure, NOT Total (inc-tax): the line and
+    # schedule tables beside it show ex-tax (Ordered / Amount), so a Total
+    # here would silently mix tax bases down one column. Matches the figure
+    # the LLM path showed before this branch existed.
+    return DistributionInfo(
+        po_distribution_id=row.get("PODistributionId") or 0,
+        distribution_number=row.get("DistributionNumber") or 0,
+        charge_account=row.get("POChargeAccount") or "",
+        accrual_account=row.get("POAccrualAccount") or "",
+        variance_account=row.get("POVarianceAccount") or "",
+        percentage=row.get("Percentage"),
+        amount=row.get("Ordered"),
+    )
+
+
+# Signature fields that identify each PO child bucket by CONTENT, not by the
+# plan's output_name (which the parser sets and could rename). A distribution
+# row is the only one carrying PODistributionId; a schedule the only one with
+# LineLocationId but no PODistributionId; a line has POLineId but neither. The
+# order of these checks matters — distribution before schedule before line —
+# because a distribution row also carries POLineId and a schedule also carries
+# POLineId, so the most-specific key must be tested first.
+def _classify_po_child(rows: list[dict]) -> str | None:
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "PODistributionId" in first:
+        return "distributions"
+    if "LineLocationId" in first:
+        return "schedules"
+    if "POLineId" in first and "LineNumber" in first:
+        return "lines"
+    return None
+
+
+def po_with_children_buckets(outputs: dict[str, list[dict]]) -> dict[str, str] | None:
+    """Map roles -> bucket names for a "PO plus its children" result.
+
+    Returns e.g. {"po": "po", "schedules": "poschedule"} when the executor
+    produced a PO header bucket AND at least one child bucket (lines,
+    schedules, distributions). Returns None otherwise — for the single-bucket
+    plain-list case (plain_po_bucket owns that) or anything not PO-shaped.
+
+    Buckets are matched by content signature, not output_name, so a rename in
+    the plan cannot mis-route. The PO bucket is the one carrying POHeaderId +
+    OrderNumber but no child key; children are classified by _classify_po_child.
+
+    This is what lets the PO-with-children path synthesize locally instead of
+    on the LLM: once the buckets are identified, build_po_with_children
+    assembles the nested record deterministically.
+    """
+    po_name: str | None = None
+    child_map: dict[str, str] = {}
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            continue
+        role = _classify_po_child(rows)
+        if role is not None:
+            # First bucket of a given child role wins; a second is ignored
+            # (the executor produces one bucket per child type).
+            child_map.setdefault(role, name)
+            continue
+        first = rows[0]
+        if "POHeaderId" in first and "OrderNumber" in first:
+            po_name = name
+    if po_name is None or not child_map:
+        return None
+    result = {"po": po_name}
+    result.update(child_map)
+    return result
+
+
+def build_po_with_children(
+    outputs: dict[str, list[dict]], buckets: dict[str, str]
+) -> list[PurchaseOrderRecord]:
+    """Assemble PO records with nested lines/schedules/distributions, no LLM.
+
+    The child lists are FLAT under each PO — lines, schedules and
+    distributions are siblings, matching how the models are shaped and how
+    the display renders three sub-tables. So this attaches every line /
+    schedule / distribution belonging to a PO (matched on POHeaderId) to that
+    PO's list; it does not build a line->schedule->distribution tree. Received
+    amounts are derived in _build_schedule.
+
+    Every id on every child comes straight from an executor row, so the
+    response validator's child-id cross-checks (po_line_ids,
+    line_location_ids, po_distribution_ids) all pass by construction.
+    """
+    po_rows = outputs.get(buckets["po"], [])
+    line_rows = outputs.get(buckets.get("lines", ""), [])
+    sched_rows = outputs.get(buckets.get("schedules", ""), [])
+    dist_rows = outputs.get(buckets.get("distributions", ""), [])
+
+    def _for_po(rows: list[dict], po_header_id: int) -> list[dict]:
+        return [r for r in rows if r.get("POHeaderId") == po_header_id]
+
+    records: list[PurchaseOrderRecord] = []
+    for po in po_rows:
+        ph = po.get("POHeaderId")
+        buyer_id = po.get("BuyerId")
+        buyer = (
+            BuyerInfo(person_id=buyer_id, display_name=po.get("Buyer") or "")
+            if buyer_id is not None
+            else None
+        )
+        records.append(
+            PurchaseOrderRecord(
+                po_header_id=ph or 0,
+                order_number=str(po.get("OrderNumber") or ""),
+                status=po.get("Status") or po.get("StatusCode") or "",
+                supplier_name=po.get("Supplier") or "",
+                supplier_id=po.get("SupplierId") or 0,
+                buyer=buyer,
+                lines=[_build_line(r) for r in _for_po(line_rows, ph)],
+                schedules=[_build_schedule(r) for r in _for_po(sched_rows, ph)],
+                distributions=[
+                    _build_distribution(r) for r in _for_po(dist_rows, ph)
+                ],
+            )
+        )
+    return records
+
+
 
 
 def _filtered_supplier_list(

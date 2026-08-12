@@ -129,10 +129,22 @@ def generate_plan(
             f.get("type") in ("supplier", "purchase_order") for f in intent.filters
         )
         if not has_supplier:
-            raise ValueError(
-                "Invoice queries require a supplier. Name the supplier by "
-                "number (e.g. 'invoices for supplier 1252') or by name "
-                "(e.g. 'invoices for Lee Supplies')."
+            # MISSING_IDENTIFIER: the record type is named but not scoped.
+            # Structured raise -> plan_node -> state["refusal"] -> the same
+            # readable shape a parser decline gets. Words come from
+            # _IDENTIFIER_GUIDANCE["Invoice"] in capability.py.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="Invoice root has no supplier reference",
+                    offending_entity="Invoice",
+                )
             )
 
     # Address queries require a supplier or a country. Without one the
@@ -142,10 +154,20 @@ def generate_plan(
             f.get("type") in ("supplier", "country") for f in intent.filters
         )
         if not has_addr_filter:
-            raise ValueError(
-                "Address queries require a supplier or a country. For "
-                "example 'addresses for supplier 1252' or 'US supplier "
-                "addresses'."
+            # MISSING_IDENTIFIER: needs a supplier or a country to scope.
+            # _IDENTIFIER_GUIDANCE["Address"] carries the two-option wording.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="Address root has no supplier or country scope",
+                    offending_entity="Address",
+                )
             )
 
     # PurchaseOrder is a valid root only for a single-PO fetch (by_id).
@@ -183,11 +205,33 @@ def generate_plan(
             f.get("type") == "by_id" for f in intent.filters
         )
         if not has_root_ref:
-            raise ValueError(
-                "AR-invoice queries require a CustomerTransactionId. For "
-                "example 'show the AR invoice with CustomerTransactionId "
-                "300000248096352 and its lines'. To list a customer's "
-                "invoices, ask about the customer account."
+            # A ReceivablesInvoice root with no id is a MISSING_IDENTIFIER
+            # decline — the user named the record type but not WHICH one.
+            # Raise it structured so plan_node routes it into state["refusal"]
+            # and it renders through capability_message, the same readable
+            # Reason/Solution/Example shape a parser decline gets. The words
+            # come from _IDENTIFIER_GUIDANCE["ReceivablesInvoice"] in
+            # capability.py (transaction number / CustomerTransactionId, with
+            # a worked example), keyed on the entity below — so no message
+            # string lives here. detail stays blunt for logs/tests.
+            # Local import breaks a module-load cycle: result.py imports
+            # Intent via planner.planner, so a top-level result import here
+            # would import-cycle. By call time both modules are fully loaded.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail=(
+                        "ReceivablesInvoice root has no identifier; "
+                        "by_id on CustomerTransactionId is required"
+                    ),
+                    offending_entity="ReceivablesInvoice",
+                )
             )
 
 
@@ -211,11 +255,20 @@ def generate_plan(
             for f in intent.filters
         )
         if not has_scope:
-            raise ValueError(
-                "Receipt queries require a customer or a site. For example "
-                "'receipts for ABC Application Software', or 'receipts at "
-                "Santa Clara'. The top-level receipts collection is too "
-                "large to list unscoped."
+            # MISSING_IDENTIFIER: needs a customer or a site to scope.
+            # _IDENTIFIER_GUIDANCE["StandardReceipt"] holds the wording.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="StandardReceipt root has no customer or site scope",
+                    offending_entity="StandardReceipt",
+                )
             )
 
     # Validate AFTER the entity guards. Unknown filter types still raise

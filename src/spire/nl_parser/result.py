@@ -131,6 +131,33 @@ class Refusal:
     offending_fields: list[str] = field(default_factory=list)
 
 
+class RefusalError(Exception):
+    """A planner guard declining a prompt, carrying a structured Refusal.
+
+    The parser produces a Refusal and returns it (parse_node routes it into
+    state["refusal"]). The planner guards, by contrast, run mid-plan and can
+    only signal by raising — so historically they raised a bare ValueError
+    whose string was printed verbatim, bypassing capability_message and its
+    readable Reason/Solution/Example shape.
+
+    RefusalError closes that gap: a guard raises RefusalError(refusal), and
+    plan_node routes exc.refusal into the SAME state["refusal"] channel the
+    parser uses, so the guard's decline renders identically to a parser
+    decline — one refusal system, one message shape. The wrapped Refusal
+    carries the flavor (MISSING_IDENTIFIER for the "which record?" guards)
+    and the offending_entity; the words come from the KG-sourced guidance
+    maps in capability.py, keyed on that entity, so no message text lives in
+    the guard.
+
+    Caught in plan_node BEFORE the (ValueError, NotImplementedError) catch,
+    which remains for the guards not yet converted to this path.
+    """
+
+    def __init__(self, refusal: Refusal) -> None:
+        self.refusal = refusal
+        super().__init__(refusal.detail)
+
+
 @dataclass
 class ParseResult:
     """The outcome of parsing one prompt: an Intent XOR a Refusal.
@@ -187,4 +214,5 @@ class ParseResult:
                 offending_fields=list(offending_fields or []),
             )
         )
+
 

@@ -146,19 +146,6 @@ async def test_search_standard_receipts_with_site_filter(resolver):
     assert items[0]["CustomerSite"] == "Santa Clara"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: search_standard_receipts can never report truncated=True. "
-        "It computes `truncated` locally, then passes "
-        "total_available=None when truncated is True — and "
-        "ToolResult.build derives truncated from total_available, so a "
-        "None total forces truncated=False. The detection is thrown "
-        "away. A user gets a capped 25-row slice of 500+ with nothing "
-        "saying so. Fix belongs in the tool or in ToolResult (which "
-        "currently cannot express 'truncated, total unknown')."
-    ),
-    strict=True,
-)
 @pytest.mark.asyncio
 async def test_search_standard_receipts_truncation(resolver):
     """Hitting the over-fetch cap with more matches than `limit` must
@@ -183,3 +170,4 @@ async def test_search_standard_receipts_truncation(resolver):
 
     assert len(result.items) == 25
     assert result.truncated is True
+

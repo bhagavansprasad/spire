@@ -34,6 +34,7 @@ from langgraph.graph import END, StateGraph
 from spire.executor.executor import execute_plan
 from spire.nl_parser.parser import parse as parse_prompt
 from spire.planner.planner import generate_plan
+from spire.nl_parser.result import RefusalError
 from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
 
 
@@ -102,6 +103,14 @@ def plan_node(state: GraphState) -> dict:
     try:
         plan = generate_plan(state["intent"])
         return {"plan": plan}
+    except RefusalError as exc:
+        # A guard that has been converted to the structured path. Route the
+        # wrapped Refusal into the SAME channel parse_node uses for a parser
+        # decline, so run_graph renders it through capability_message — the
+        # readable Reason/Solution/Example shape — instead of printing a raw
+        # guard string. No plan_refusal flag: that flag drives the legacy
+        # "REFUSED (planner guard): ..." render, which this path replaces.
+        return {"refusal": exc.refusal}
     except (ValueError, NotImplementedError) as exc:
         # Spire DECLINING, not Spire breaking — both carry a message
         # written for the user, naming what is missing and giving an
@@ -401,4 +410,5 @@ def _maybe_save_png(compiled) -> None:
 
 # Module-level compiled graph (compilation is cheap and reusable).
 GRAPH = build_graph()
+
 

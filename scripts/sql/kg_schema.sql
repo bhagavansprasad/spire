@@ -1008,6 +1008,15 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'shipment schedule', 'POSche
 
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contact', 'Contact', 'Supplier contact person.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'contacts', 'Contact', 'Supplier contact people.');
+-- AI-10: 'site'/'sites' must resolve to the Site entity. Without these
+-- rows the parser could not map the word and degraded 'supplier sites
+-- for X' to an Address include, silently returning addresses instead of
+-- sites. With them, 'sites' resolves to Site and reaches the parser's
+-- Site gate (AI-11), which refuses honestly: sites are not available as
+-- a standalone listing on this pod (the only Site tool filters suppliers
+-- by business unit). An honest refusal replaces a wrong resource.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'site',  'Site', 'Supplier site (assignment point). Not standalone-listable; see the Site gate.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'sites', 'Site', 'Plural form.');
 
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distribution', 'PODistribution', 'PO distribution account line.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distributions', 'PODistribution', 'PO distribution account lines.');
