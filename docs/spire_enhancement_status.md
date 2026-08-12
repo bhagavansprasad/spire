@@ -16,7 +16,7 @@ open. Design sections live here while their phase is in progress and are
 pruned back to decisions-only once the phase merges — otherwise twelve
 phases of design detail bury the status table above them.
 
-**Last updated:** 2026-08-12 (all P0 census bugs closed; REC-2 + readable planner refusals shipped — see §G19)
+**Last updated:** 2026-08-12 (cache architecture design authored for PRF-03/PRF-04 — see §G20)
 
 ---
 
@@ -2866,3 +2866,76 @@ note); AI-13 (25-row sample variance); REC-1 (completeness advisory, builds
 on AI-4). And the broader **"only local synthesizing" goal**: the
 supplier+contacts path and other multi-bucket shapes still fall through to
 the LLM. AI-12's PO-with-children work is the template for converting them.
+
+## G20 — Cache architecture design authored for PRF-03/PRF-04 (2026-08-12)
+
+Design only — no code. The intent-cache work already required by PRF-03
+(exact-match) and PRF-04 (semantic, conditional) is now specified as a
+single cheapest-first pipeline in `docs/cache_architecture.md`, rather than
+two loosely-related requirements. This section records the design and its
+status; the design detail itself lives in that doc, not here, because the
+phase is not yet open.
+
+**The shape.** Three stages, each an exit; a prompt leaves at the earliest
+stage that can answer it.
+
+- **Stage 1 = PRF-03.** Exact cache. Key is `hash(module + persona +
+  normalised_prompt)`. Normalisation is meaning-preserving only (lowercase,
+  trim, collapse whitespace).
+- **Stage 2 = PRF-04, retrieval half.** Filter the vector store by scope
+  first, then top-k (k=1 initially, held as config) against a tunable
+  threshold (defaults 0.90 accept / 0.75 reject).
+- **Stage 3 = PRF-04, safety half.** Grey-zone matches (0.75–0.90) are
+  confirmed by a cheap two-prompt yes/no verify carrying no context, before
+  the cached intent is reused.
+
+**The two decisions worth recording** (both extend PRF-04's original text).
+
+1. **Scope = module + persona.** This is the pair that selects the context
+   bundle, so it is the honest identity of "which context produced this
+   intent." Folding it into the key before hashing makes a wrong-meaning
+   collision structurally impossible — the same words under a different
+   module or persona land on a different entry. Chosen deliberately over
+   aggressive normalisation: we accept more cache misses and more LLM calls
+   to remove collision risk entirely. This was the user's explicit
+   priority — no risk, even at the cost of hit rate.
+
+2. **Stage 3 verify answers PRF-04's stated risk.** PRF-04 names the failure
+   mode precisely: a near-miss retrieval yields a *confidently incorrect
+   intent*, worse than a slow correct one. Similarity distance alone cannot
+   distinguish "close wording" from "same meaning." The verify call gives
+   the grey zone a deterministic gate — meaning is confirmed by the model on
+   two short strings, at a few hundred tokens rather than the full context.
+   The accept band and the verify's "no" branch both fall back to the real
+   parser, satisfying PRF-04's "provable fallback on low confidence."
+
+**Write-back.** Automatic. Every confirmed hit and every miss writes the
+intent to both stores, keyed by scope, so the cache learns real phrasings
+from use. The guardrails are the high accept threshold and the verify step,
+not a human reviewer.
+
+**Deferred, with note.**
+
+- **Context-version stamp.** PRF-02/PRF-03 already require invalidation on KG
+  rebuild. The bundle-change case is additional and not yet covered: editing
+  `context_bundles.yaml` can change the intent a prompt should produce, but
+  the cache would keep serving intents built from the old bundle (silent
+  staleness). Fix is to stamp each entry with a context version, bump on
+  bundle change, and have Stages 1–2 ignore or flush stale-version entries.
+  Noted in the design doc; not built.
+- **Near-miss recording.** Storing confirmed "not the same" pairs to avoid
+  re-verifying a losing pair. Deferred to a later pass.
+
+**Status against the gate.** This is design, not a green light. PRF-04 is
+conditional and stays conditional: its acceptance criteria — zero TST-01
+routing regressions, every cache hit attributable and auditable, and
+measured benefit *beyond* PRF-02 and PRF-03 — still gate adoption. PRF-02
+(prompt caching for the KG menu, the 78%-of-tokens item) is a different
+mechanism and is not addressed by this design. Sequence is unchanged: phase
+6 for PRF-02/PRF-03, phase 11 for PRF-04.
+
+**Also this session (unrelated to the cache).** Docs branch
+`docs/cache-architecture` merged to master — the design doc plus overview
+and per-stage diagrams. Four source files (pipeline.py, capability.py,
+result.py, planner.py) carry uncommitted changes from separate work, held
+back deliberately for their own commit.
