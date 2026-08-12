@@ -24,6 +24,43 @@ Status: `open` · `verified` (confirmed real, fix defined, not yet built) ·
 
 ---
 
+## Session update — 2026-08-12: all P0 bugs closed
+
+Every P0 defect from this census is now either fixed-and-committed this
+session or confirmed already-fixed by prior work. Verified live on the pod
+and green across the full suite (863 passed).
+
+- **AI-1** (child-as-count) — confirmed fixed across PO lines, schedules,
+  distributions, AR invoice lines, and supplier contacts. Renders as rows.
+- **AI-4** (edge-traversal denominator) — confirmed fixed on
+  has_invoice_over_amount and has_no_recent_invoices: "Examined 25 of 301;
+  of those 25, N match", honest denominator + narrowing tip.
+- **AI-7** (receipts self-contradiction) — the original field-name mismatch
+  was fixed earlier; a second facet (client-side site filter over a capped
+  fetch reporting a partial as complete) was fixed this session via
+  truncated=True / total_available=None + "unknown total in source"
+  disclosure. xfail test un-marked.
+- **AI-9** (mixed valid+invalid columns) — confirmed fixed: returns the
+  valid column, notes the invalid one, lists available columns. No wholesale
+  refusal.
+- **AI-10** (sites → addresses) — fixed: site/sites entity_synonyms +
+  deterministic correct_include_from_prompt route to Site, which hits the
+  AI-11 gate and refuses honestly (now readable).
+- **AI-11** (sites crash) — confirmed already fixed (Site gate).
+- **AI-12** (schedules Received = 0.0) — fixed: PO-with-children now
+  synthesizes locally, Received amount derived from quantity.
+
+Also shipped this session: **REC-2** (PO-list sample-and-disclose) and
+**readable planner-guard refusals** (four MISSING_IDENTIFIER guards now
+render Reason/Solution/Example via a structured RefusalError).
+
+Still open (not P0 bugs): AI-3 (address-list token cost, efficiency),
+AI-5/AI-6 (refined into the above), AI-13 (sample variance), REC-1
+(completeness advisory), and the "only local synthesizing" goal — the
+supplier+contacts and other multi-bucket paths still use the LLM.
+
+---
+
 **Analysis complete: all 12 sets closed.** 11 distinct action items (AI-1
 through AI-11) + 1 feature proposal (REC-1). Below, grouped by theme and
 ordered by priority.
@@ -101,18 +138,18 @@ REC-1) → C (one template fix) → D → singletons → the harder QA-06 behavi
 
 | ID | Sev | Status | Summary | Scope |
 |----|-----|--------|---------|-------|
-| AI-1 | 🔴 | verified | Child rows rendered as COUNTS, not rows ("Lines: 2" for "show PO and its lines"). Data is fetched; the table collapses it to a count. Prose often carries the detail, but the table (what users scan) lies. | PO lines, schedules, distributions; AR invoice lines, tax lines; supplier contacts. (NOT single records like buyer.) |
-| AI-4 | 🔴 | verified | Edge-traversal filters state the partial as the total ("2 of 429" when 2 is of the 25 examined). Wrong denominator — misleading count. Also the slowest prompts (29-113s), same root cause. | EVERY edge-traversal filter: classification (small/woman/veteran/minority owned), business-unit/site, invoice-amount, open-POs, no-recent-invoices. Pervasive. |
-| AI-7 | 🔴 | verified (logs) | Self-contradiction: "All 25 have Site Santa Clara" then "No receipts found" — 25 real receipts fetched, then reported as none. | AR receipts with a client-side site filter. |
-| AI-10 + AI-11 | 🔴 | verified (logs) | "Supplier sites" is broken two ways: one phrasing silently returns ADDRESSES (wrong resource, AI-10); another CRASHES on a missing business_unit arg (AI-11, the sole exit-1). | Supplier sites listing. Root: Site has no proper KG fetcher. |
-| AI-12 | 🔴 | verified | Schedules sub-table "Received" column shows raw `ReceivedAmount` (0.0, which is 0/null pod-wide) as a fetched value, contradicting the prose's `ReceivedQuantity` ("1 of 1 received"). The lifecycle tool derives+labels this correctly; the QA-01 schedules renderer does not. | PO schedules sub-table (display path). New — post-fix verification read, 2026-08-08. |
+| AI-1 | 🔴 | ✅ fixed | Child rows rendered as COUNTS, not rows ("Lines: 2" for "show PO and its lines"). Data is fetched; the table collapses it to a count. Prose often carries the detail, but the table (what users scan) lies. | PO lines, schedules, distributions; AR invoice lines, tax lines; supplier contacts. (NOT single records like buyer.) |
+| AI-4 | 🔴 | ✅ fixed | Edge-traversal filters state the partial as the total ("2 of 429" when 2 is of the 25 examined). Wrong denominator — misleading count. Also the slowest prompts (29-113s), same root cause. | EVERY edge-traversal filter: classification (small/woman/veteran/minority owned), business-unit/site, invoice-amount, open-POs, no-recent-invoices. Pervasive. |
+| AI-7 | 🔴 | ✅ fixed | Self-contradiction: "All 25 have Site Santa Clara" then "No receipts found" — 25 real receipts fetched, then reported as none. | AR receipts with a client-side site filter. |
+| AI-10 + AI-11 | 🔴 | ✅ fixed | "Supplier sites" is broken two ways: one phrasing silently returns ADDRESSES (wrong resource, AI-10); another CRASHES on a missing business_unit arg (AI-11, the sole exit-1). | Supplier sites listing. Root: Site has no proper KG fetcher. |
+| AI-12 | 🔴 | ✅ fixed | Schedules sub-table "Received" column shows raw `ReceivedAmount` (0.0, which is 0/null pod-wide) as a fetched value, contradicting the prose's `ReceivedQuantity` ("1 of 1 received"). The lifecycle tool derives+labels this correctly; the QA-01 schedules renderer does not. | PO schedules sub-table (display path). New — post-fix verification read, 2026-08-08. |
 
 ### Refusal-quality bugs (message is wrong/misdirected)
 
 | ID | Sev | Status | Summary |
 |----|-----|--------|---------|
 | AI-5 | 🟡 | verified | "Narrow by country/status/name" template over-applied to refusals that aren't narrowing problems (payment terms, ratings that don't exist, "everything about supplier X"). Real reason is in the parenthetical but not surfaced. 3 wrong-template variants seen. Fix: model parser messages on the accurate planner-guard style. |
-| AI-9 | 🔴 | verified | Mixed valid+invalid column requests refused WHOLESALE (loses the valid columns), e.g. "supplier name and credit rating". BUT inconsistent — COL-03's honest note WORKS for many unknown columns (07_alacarte P2); it fails only when specific phrasings trip the model's upstream unanswerable flag (G15 limitation). |
+| AI-9 | 🔴 | ✅ fixed | Mixed valid+invalid column requests refused WHOLESALE (loses the valid columns), e.g. "supplier name and credit rating". BUT inconsistent — COL-03's honest note WORKS for many unknown columns (07_alacarte P2); it fails only when specific phrasings trip the model's upstream unanswerable flag (G15 limitation). |
 | AI-6 | 🟡 | verified | Specific question ("how much of PO 2144 was received?") answered with a generic PO summary; the answer is buried in prose, not stated directly. No dedicated "received" tool. |
 
 ### Minor / cleanup
@@ -127,7 +164,7 @@ REC-1) → C (one template fix) → D → singletons → the harder QA-06 behavi
 | ID | Sev | Status | Summary |
 |----|-----|--------|---------|
 | REC-1 | ⭐ | proposed | **Completeness advisory.** When a query samples a capped set: deliver the results found, state honest denominators (AI-4's fix), AND recommend narrowing filters (read from the KG) so a complete answer is cheap. Never refuse, never inflate. Generalizes to any capped-fetch query. AI-4 is the floor (message must not lie); REC-1 is the ceiling (honest message + narrowing rec). REC-1 depends on AI-4. |
-| REC-2 | 🟢 | proposal | Replace the unbounded PO-list refusal with the sample pattern (show 25 + honest total), consistent with how supplier lists already behave. Sampling must be over a BOUNDED fetch — never the full ~15k. | Planner PO-list guard + PO fetch path. Raised 2026-08-12. |
+| REC-2 | 🟢 | ✅ shipped | Replace the unbounded PO-list refusal with the sample pattern (show 25 + honest total), consistent with how supplier lists already behave. Sampling must be over a BOUNDED fetch — never the full ~15k. | Planner PO-list guard + PO fetch path. Raised 2026-08-12. |
 
 ### Verified correct (checked, NOT bugs — do not re-investigate)
 
@@ -557,7 +594,7 @@ pending a pod curl. Not yet fixed. Singleton — not merged into AI-4/Cluster B.
 
 **Severity:** 🔴 — a contradictory/false-empty answer. The user is told no receipts exist when 25 do.
 
-**Status:** ✅ FIXED (commit 8ad9b39). Root cause confirmed in code: a field-name mismatch (receipts= vs standard_receipts=) silently dropped the records via Pydantic. Not the client-side filter machinery.
+**Status:** ✅ FIXED (commit 8ad9b39, field-name mismatch) + ✅ FIXED (2026-08-12, truncation disclosure). The original self-contradiction was a field-name mismatch (receipts= vs standard_receipts=) dropping records via Pydantic. A SECOND facet surfaced this session: the site filter runs client-side over a fetch capped at OVERFETCH_LIMIT, so when the account holds more receipts than the window (account 26360: 1,386; Santa Clara: 1,737), the few matches in the newest page were reported as the complete set. The true account+site total is unobtainable (composite q= fails silently on this endpoint), so the tool now returns truncated=True with total_available=None (constructed directly — ToolResult.build cannot express truncated-with-unknown-total), and the synthesizer discloses "unknown total in source; N examined". An xfail(strict) test that documented this exact bug now passes; its marker was removed. Verified live.
 
 ---
 
@@ -958,7 +995,7 @@ This set is the strongest evidence that the dedicated computed tools
 
 **Severity:** 🔴 — silent wrong-resource substitution. The user asked for X and got Y with no indication. This is exactly the "no substitution" principle (from COL-03) being violated at the resource level.
 
-**Status:** ⏸️ DEFERRED. The AI-11 crash (sibling) is fixed (commit 37522b1); AI-10's silent sites→addresses substitution is a parser-mapping bug needing a separate parser change.
+**Status:** ✅ FIXED (2026-08-12). site/sites are now entity_synonyms for Site (kg_vocabulary 118->120), and correct_include_from_prompt (vocabulary.py, called in the parser after the LLM, before validate) deterministically replaces the mis-mapped Address include with Site when the prompt contains "site(s)". Site has no standalone-listing fetcher, so the query now reaches the AI-11 Site gate, which refuses honestly instead of returning addresses. The gate's message was also made readable: a short reason plus a tailored Solution (BU filter / addresses) and Example (addresses for supplier 1252), keyed on a distinct SupplierSiteListing marker so it does not inherit the generic Supplier operation guidance. A wrong resource became a correct, readable refusal. Verified live.
 
 ## Set 10_refusal_examples — CLOSED
 
@@ -1109,7 +1146,9 @@ So ReceivedAmount=0 is real and pod-wide; ReceivedQuantity=1 is the real receive
 
 **Severity:** 🔴 — a prose/table contradiction on a money-adjacent figure. Lower blast radius than AI-1 (one column, one child type, prose carries the correct signal), but a user scanning the table is actively misled.
 
-**Status:** verified against the endpoints reference (pod-wide measurement). Fix direction defined, not yet built. New — surfaced by the post-fix verification read; not part of the original AI-1…AI-11 census. Working label during the read: N-1.
+**Status:** ✅ FIXED (2026-08-12). Root fix: the PO-with-children path ("show PO X and its schedules/lines/distributions") now synthesizes LOCALLY (build_po_with_children + po_with_children_buckets in p2p.py), removing the LLM that copied the raw ReceivedAmount. The schedule Received column shows a DERIVED amount (Amount * ReceivedQuantity / Quantity, guarded), matching the prose and Oracle's own BilledAmount proration; distribution amount uses ex-tax Ordered for consistency with the line/schedule tables. Every child id comes from an executor row, so the response validator passes by construction. Verified live on PO 2144: Received now 33000.0 / 8250.0 (fully received), no synthesize call. Original note follows.
+
+Verified against the endpoints reference (pod-wide measurement); working label during the read: N-1.
 
 ## Set qa_testcases — CLOSED
 
@@ -1266,7 +1305,9 @@ whatever refusals remain).
 This is a consistency/UX improvement that turns a refusal into a more useful
 answer.
 
-**Status:** proposal (design agreed 2026-08-12; not built). Bigger than a KG-row
+**Status:** ✅ SHIPPED (2026-08-12, branch rec-2-po-list-sample, merged to master). "list all purchase orders" now returns a bounded, ordered 25-row sample plus the honest total (17,408 via totalResults), mirroring the supplier list. The unfiltered fetch is capped to one ordered page (orderBy=OrderNumber:asc, curl-confirmed server-side), never the full collection, so the guard's performance protection is preserved as sample-and-disclose. Records are built locally (build_purchase_order_records) — no LLM. Follow-on fixes surfaced and shipped in the same effort: a supplierless PO (Incomplete OrderNumber "1", SupplierId null->0) was mis-flagged as a hallucinated id by the response validator (now skipped), and the LLM emitted only 15 of 25 rows (now deterministic). Original note follows.
+
+Bigger than a KG-row
 change — touches the planner PO-list guard, the PO fetch/sample path, and ideally
 CSV-01. Should be its own branch with curl-confirmation that `totalResults=true`
 + a bounded ordered page behaves on `/purchaseOrders`, plus the message rewrite.

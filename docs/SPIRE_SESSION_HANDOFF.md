@@ -10,102 +10,140 @@ env.
 
 ---
 
-## MY FOCUS LAST SESSION: COL-02 field synonyms (SHIPPED to a branch)
+## LAST SESSION (2026-08-12): all P0 census bugs closed + REC-2 + readable refusals
 
-Built the field-synonym feature end to end, on branch
-`col-02-multi-field-expansions` (NOT yet pushed / PR'd). Four groups, all
-committed, suite green (862 passed, 1 xfailed).
+Every P0 defect from the v1.7 overnight census (AI-1…AI-12) is now closed —
+either fixed-and-committed this session or confirmed already-fixed by prior
+work. Verified live on the pod at each step; full suite green (**863 passed,
+18 deselected**).
 
-### What shipped (on the branch, not master)
+### Shipped and committed this session
 
-- **Mechanism:** new `field_synonym` vocab_kind in `kg_vocabulary`.
-  `expand_field_synonyms` in the parser runs AFTER the LLM produces the Intent
-  and BEFORE `validate_intent` — the model passes the term through, code does
-  the expansion (splits the comma-joined value, dedupes, preserves order). This
-  is the whole point: a KG lookup, not a model judgement.
-- **Group 1** — multi-field expansions: who columns / who details / audit
-  columns / audit fields → the four who-columns; creator details / created
-  details → CreatedBy, CreationDate.
-- **Groups 2+3** — legacy EBS (vendor / vendor name → Supplier, vendor number →
-  SupplierNumber, trx / trx number → TransactionNumber) and field-level
-  (creation/created/date-created → CreationDate; last-updated/modified/changed-
-  on/update-date → LastUpdateDate; qty → Quantity; uom / unit of measure →
-  UnitOfMeasure).
-- **Group 4** — who-columns extended to PurchaseOrder, Invoice,
-  ReceivablesInvoice: 12 `kg_entity_field` rows PLUS a projection fix in three
-  fetchers (`purchase_order_by_id.py`, `invoices.py`,
-  `receivables_invoice_by_id.py`). The KG row alone was NOT enough — the
-  synonym resolved but the fetchers projected a fixed field list that omitted
-  the columns, rendering them empty (em-dashes) until `_PROJECTED_FIELDS` was
-  extended.
-- **Test fix** (separate commit) — dropped stale hardcoded live-pod balances
-  from `test_customer_invoices_tool.py` (they drift with pod data).
+- **REC-2** (branch `rec-2-po-list-sample`) — "list all purchase orders" no
+  longer refuses. The planner's no-filter PO guard is gone; the unfiltered
+  path falls through to the (PurchaseOrder,'none') fetcher, which returns a
+  bounded, ordered 25-row sample (`orderBy=OrderNumber:asc`, curl-confirmed
+  server-side) plus the honest total via `totalResults` (17,408). Records built
+  locally (`build_purchase_order_records`) — no LLM. Two follow-on bugs fixed
+  in the same effort: a supplierless PO (Incomplete OrderNumber "1", SupplierId
+  null→0) was mis-flagged as a hallucinated id (0 is now the "no supplier"
+  sentinel, skipped in `response_validation.py`); and the LLM emitted only 15 of
+  25 rows (plain-PO path now deterministic).
 
-Counts now: `kg_vocabulary` 118, `kg_entity_field` 210.
+- **Readable planner-guard refusals** (branch `readable-planner-refusals`) —
+  the four entity guards (ReceivablesInvoice, Invoice, Address, StandardReceipt)
+  raised dense ValueError strings. Each now raises a structured
+  `RefusalError(Refusal(MISSING_IDENTIFIER, entity))`; `plan_node` routes it into
+  the same `state["refusal"]` channel the parser uses, so it renders through
+  `capability_message` as Reason/Solution/Example (blank-line separated). A lazy
+  import inside each guard breaks a planner→result→planner module-load cycle.
+  `RefusalError` lives in `nl_parser/result.py`.
 
-### Determinism — proven, not assumed
+- **AI-12** — PO-with-children ("show PO X and its lines/schedules/
+  distributions") now synthesizes LOCALLY (`build_po_with_children` +
+  `po_with_children_buckets` in `p2p.py`, plus a branch in `synthesizer.py`),
+  removing the LLM that copied the pod's raw `ReceivedAmount` (0/null pod-wide).
+  Schedule Received is now DERIVED: `Amount * (ReceivedQuantity / Quantity)`,
+  guarded. Distribution amount uses ex-tax `Ordered`.
 
-The diagnostics do NOT show a pre-expansion draft (there is no such print;
-`show_parser` shows the final Intent). So determinism was proven behaviorally:
-a throwaway synonym `'zztest' → CreatedBy,Supplier` — a string the model has no
-basis to expand — expanded correctly, so the expansion is code, not the LLM.
-(zztest row was removed after.)
+- **AI-10** — "supplier sites for X" used to silently return addresses.
+  `site`/`sites` are now `entity_synonym`s for Site (`kg_vocabulary` 118→120),
+  and `correct_include_from_prompt` (`vocabulary.py`, run after the LLM, before
+  `validate_intent`) deterministically replaces the mis-mapped Address include
+  with Site when the raw prompt contains "site(s)". Site has no standalone-list
+  fetcher, so it hits the Site gate (`intent_validation.py`) and refuses
+  readably — short reason + tailored Solution/Example keyed on a distinct
+  `SupplierSiteListing` marker (`capability.py`).
 
-### Deferred WITH evidence (do not re-attempt blindly)
+- **AI-7 (second facet)** — the receipts site filter runs client-side over a
+  fetch capped at `OVERFETCH_LIMIT`; when the account holds more than the window
+  (account 26360: 1,386; Santa Clara: 1,737) the few matches in the newest page
+  were reported as complete. True account+site total is unobtainable (composite
+  `q=` fails silently here), so `standard_receipts.py` now returns
+  `truncated=True` / `total_available=None` — constructed DIRECTLY, since
+  `ToolResult.build` can't express truncated-with-unknown-total — and the
+  synthesizer discloses "unknown total in source; N examined". An xfail(strict)
+  test documenting the bug now passes; marker removed.
 
-- **Ambiguous terms — price, amount, terms.** 'price' is Price on
-  PurchaseOrder but UnitSellingPrice on ReceivablesInvoice; 'amount' is Ordered
-  vs LineAmount; 'terms' has no PaymentTerms column in the KG. Global synonyms
-  can't map one term to different columns per entity. Would need ENTITY-SCOPED
-  synonyms — a mechanism change (schema + expander), its own task.
-- **DFF/KFF.** Curl-confirmed on two invoices: the DFF children carry only
-  `__FLEX_Context` (null or a bare label), no populated segment columns. Nothing
-  to map. Pod configuration, not a Spire limitation.
+- **Docs** — findings/status/requirements all updated (summary table cells,
+  detail Status lines, §G19, requirements v1.9).
 
-### Outstanding on COL-02 (small — to fully close the requirement)
+### Confirmed already-fixed (finding predated the fix — no code change)
 
-Two acceptance criteria NOT yet met:
-1. **Parse-input tokens** measured before/after — the requirement says measure
-   and report; not done. (The number is already printed: `in=NNNN` on the parse
-   line — just capture before vs after a synonym expansion.)
-2. **`06_slow` / `08_lifecycle` regression re-run** in isolation — full suite
-   passes, but those two sets were not run specifically.
+- **AI-1** child-as-rows: PO lines/schedules/distributions, AR invoice lines,
+  supplier contacts — all render as rows.
+- **AI-4** honest edge-traversal denominators ("Examined 25 of 301; of those
+  25, N match") on has_invoice_over_amount and has_no_recent_invoices.
+- **AI-9** partial-column note (returns valid column, names invalid, lists
+  available) — no wholesale refusal.
+- **AI-11** Site gate refuses a Site include at parse time.
 
-Until those two are done, COL-02 is "substantially delivered", not fully.
+### NOT committed / branch hygiene note
+
+All work this session was committed, but several commits landed on branch
+`readable-planner-refusals` rather than dedicated branches, and two earlier
+branches ended up merged to master directly. **Check `git branch` and the log
+before pushing** — the human will want the branches/PRs sorted. REC-2's tool
+work is committed (`d1779ec` era); the readable-refusals + AI-12 + AI-10 + AI-7
++ docs commits are on `readable-planner-refusals`.
 
 ---
 
 ## Likely NEXT (pick with the human)
 
-1. **Close COL-02 fully** — do the two outstanding measurements above (small),
-   then it's genuinely done, not "with asterisks".
-2. **Push the branch + raise PR** — it's at a natural boundary; merge COL-02.
-3. **Entity-scoped synonyms** — the mechanism change that unlocks price/amount/
-   terms. Design work.
-4. **REC-2 (logged this session)** — replace the unbounded PO-list refusal with
-   the sample-and-disclose pattern (show 25 + honest total), consistent with how
-   supplier lists already behave. Sampling must be over a BOUNDED fetch, never
-   the full ~15k. Relates to OUT-06 + CSV-01. Its own branch.
-5. **Other roadmap** — the two P2P read-path conversions (invoice lists, PO
-   lists — "still on the model" per status §G12.6), or the GL/AP future modules
-   (planned in `spire_plan.md`, not started).
+1. **Branch/PR hygiene** — sort out what's on `readable-planner-refusals` vs
+   master, push, raise PRs. Do this before more feature work.
+2. **"Only local synthesizing" goal** — the human wants NO LLM in the
+   synthesizer. Still on the LLM: **supplier+contacts** (confirmed this session,
+   `synthesize out=2032`), and other multi-bucket shapes. AI-12's
+   PO-with-children work is the exact template (a `build_*` + a
+   `*_buckets` detector + a no-LLM branch before the fall-through).
+3. **P0 FEATURES still unbuilt** (distinct from the P0 bugs, which are done):
+   **COL-01** (projectable field coverage), **CSV-01** (export full result to a
+   file — REC-2 makes this the natural companion: small→show all, large→sample,
+   "all"→export). The SME's original column ask. §2A in the requirements doc.
+4. **Entity-scoped synonyms** — unlocks price/amount/terms (COL-02 deferred
+   these). Schema + expander change. Design work.
+5. **GL / AP modules** — planned in `spire_plan.md`, not started.
 
-Recommendation: **1 then 2** — close the two small COL-02 gaps, then PR the
-whole feature.
+Recommendation: **1 then 2** — clean up the branches, then start converting the
+next LLM synthesizer path (supplier+contacts) to local, since the human asked
+for all-local and the template is fresh.
 
 ---
 
-## New findings logged this session (in spire_overnight_findings.md)
+## Still open (NOT P0 bugs)
 
-- **AI-12** 🔴 — schedules sub-table shows raw `ReceivedAmount` (0.0, 0/null
-  pod-wide) as a fetched column while prose narrates `ReceivedQuantity` ("1 of 1
-  received"). The lifecycle tool derives+labels this correctly; the QA-01
-  schedules renderer does not. Display-path fix.
+- **AI-3** 🟢 — address-list synthesis token-heavy. Local-synthesis candidate
+  (folds into the goal above).
 - **AI-13** 🟡 — supplier list returns a different 25-row sample between
-  identical runs. Raw `/suppliers` curl-confirmed STABLE (limit=25 and 200,
-  identical order); variance is Spire-side client-filter/sample, not the pod or
-  parser.
-- **REC-2** 🟢 — PO-list-as-sample proposal (see NEXT #4).
+  identical runs. Pod curl-confirmed STABLE; variance is Spire-side
+  client-filter/sample.
+- **REC-1** ⭐ — completeness advisory; builds on AI-4 (already done).
+- **COL-02** two acceptance criteria never closed: parse-input-token
+  before/after measurement, and 06_slow/08_lifecycle isolated re-run.
+
+---
+
+## Reference
+
+- REC-2: `planner.py` (guard removed), `purchase_orders.py` (orderBy),
+  `p2p.py` + `synthesizer.py` (local build), `response_validation.py`
+  (supplier_id 0 sentinel).
+- Refusals: `RefusalError` in `nl_parser/result.py`; guards in `planner.py`;
+  catch in `graph/pipeline.py` `plan_node`; render in `nl_parser/capability.py`
+  (`capability_message`, `_IDENTIFIER_GUIDANCE`, `_OPERATION_SOLUTIONS`).
+- AI-10: `correct_include_from_prompt` + `entity_synonyms` in
+  `nl_parser/vocabulary.py`, called in `nl_parser/parser.py`; Site gate in
+  `nl_parser/intent_validation.py`.
+- AI-12: `build_po_with_children`, `po_with_children_buckets`,
+  `_derived_received_amount` in `synthesizer/p2p.py`.
+- AI-7: `standard_receipts.py` (direct ToolResult construction).
+- Endpoints reference: `docs/spire_fusion_endpoints_reference.md` — updated
+  2026-08-12 with `orderBy=OrderNumber:asc` server-side + totalResults 17,406.
+- Canonical living docs: this handoff, `spire_enhancement_requirements.md`,
+  `spire_enhancement_status.md`, `docs/spire_overnight_findings.md`,
+  `docs/spire_plan.md`.
 
 ---
 
@@ -117,42 +155,27 @@ whole feature.
 2. **Ask permission before generating code or significant content.**
 3. **Plain-text numbered options with a recommendation, and say why.** No
    widgets for choices.
-4. **Re-share the current full file before editing it** — files drift; ask for
-   the current version, don't trust an earlier upload. When a file changes,
-   deliver the COMPLETE updated file, never a patch/diff. (This session: the
-   human preferred me to patch and share whole files directly — worked well.)
+4. **Deliver the COMPLETE updated file, never a patch/diff.** Re-share/re-read
+   the current full file before editing — files drift; don't trust an earlier
+   upload. (The human prefers you to patch and hand back whole files directly.)
 5. **Output to `t.txt`** — pipe through `tee` so it shows live AND saves
    (`command | tee t.txt`). `>` overwrite, `>>` append. Never a bare `> t.txt`.
 6. **Git discipline:** one branch per logical change, PR-based merges, named
    files in `git add` (never `-A`), heredoc commit messages
-   (`git commit -F- <<'EOF'`). Docs-only may go straight to master.
+   (`git commit -F- <<'EOF'`). Docs-only may go straight to master. CHECK you
+   are on the intended branch before committing.
 7. **Curl the pod before writing code** for any endpoint/field, and read
    `docs/spire_fusion_endpoints_reference.md` BEFORE curling. Update that doc
    when a new pod quirk is found. Creds are in the shell env.
 8. **"Confirmed/verified" means actually curled/run.** A claim from reading
    code or logs is NOT a finding — say "appears correct from logs" until
-   verified. Measurement over argument.
+   verified. Measurement over argument — when a fix isn't visible, instrument
+   with a debug print and read the runtime values before theorizing.
 9. **pytest:** always `-q`. Full suite before any commit touching source;
    targeted tests during work.
 10. **KG rebuild:** `python scripts/rebuild_kg.py` (never the .sh). When adding
     KG rows, bump expected counts in `scripts/print_kg.py` AND
-    `tests/test_kg_metadata.py` AND the seed banner inside `kg_schema.sql`
-    together — the count lives in FOUR places.
+    `tests/test_kg_metadata.py` together.
 11. **Restart the MCP server after ANY change under `src/spire/mcp_server/`** —
-    it holds the old module until restarted. (KG-only changes do NOT need a
-    restart.)
-
----
-
-## Reference
-
-- Feature branch: `col-02-multi-field-expansions` (unpushed).
-- Synonym rows: `scripts/sql/kg_schema.sql` (search `field_synonym`).
-- Expander: `expand_field_synonyms` in `src/spire/nl_parser/vocabulary.py`;
-  called in `src/spire/nl_parser/parser.py` after the compare early-return,
-  before `validate_intent`.
-- Requirement: COL-02 in `docs/spire_enhancement_requirements.md`; delivery
-  note appended there.
-- Findings: `docs/spire_overnight_findings.md` (AI-12, AI-13, REC-2).
-- Canonical living docs: this handoff, `spire_enhancement_requirements.md`,
-  `spire_enhancement_status.md`, `docs/spire_plan.md`.
+    it holds the old module until restarted. (KG-only and other src changes do
+    NOT need a restart.)
