@@ -29,7 +29,7 @@ optimisation, decisions before the work that depends on them.
 | 0 | **Output contract** — what an answer looks like and how many kinds there are | Three outcomes where there should be two · prose where facts are wanted · claims about fields not shown · a model asked to do arithmetic | OUT-01 to OUT-05 | **P0** | 2A |
 | 0 | **Column resolution** — the user names a column and does not get it | Requested columns silently dropped · no field synonyms · fields absent from the KG · no way to export a full result | COL-01 to COL-03, CSV-01 | **P0** | 2A |
 | 1 | **Defects** — shipped behaviour that misleads the user | Unreadable refusals · no guidance on over-broad queries · silent 25-row truncation | UX-01 to UX-04 | P1–P2 | 2, 8 |
-| 2 | **Plumbing** — infrastructure that makes later work possible | Quiet default output · per-component debug flags · per-stage instrumentation · test layers | UX-05, OBS-01 to OBS-05, TST-01 to TST-04 | P1–P2 | 1, 3, 4 |
+| 2 | **Plumbing** — infrastructure that makes later work possible | Quiet default output · per-component debug flags · per-stage instrumentation · test layers · prompt→Intent validation and determinism | UX-05, OBS-01 to OBS-05, TST-01 to TST-05 | P1–P2 | 1, 3, 4 |
 | 3 | **Optimisation** — known cost, unproven remedy | Token cost · 20-second latency · code-built responses · caching · vocabulary in the KG | PRF-01 to PRF-08 | P1–P3 | 5, 6, 7, 8, 11 |
 | 4 | **Open questions** — no right answer yet | LLM planner vs KG planner · single vs multi-agent · how to expose tools to copilots · multi-backend scope | DEC-01 to DEC-03 | Decision | — |
 | 5 | **New surfaces** — new front doors onto the same engine | REST interface · copilot interface · configuration and query UI | API-01 to API-05 | P2–P3 | 9, 10, 12 |
@@ -1182,6 +1182,55 @@ that survives a cursory read.
 - Per-prompt outcome is recorded, not only the aggregate.
 
 **Depends on:** OBS-05 for machine-readable output.
+
+---
+### TST-05 — Prompt→Intent validation and determinism suite · P1
+
+A test suite **shall** assert, for a corpus of prompts, that the parser
+produces the **complete expected Intent** — target entity, filters, AND
+resolved fields/columns — and **shall** assert that the same prompt produces
+the **identical Intent across repeated runs**. It **shall not** plan, execute
+tools, or contact Oracle Fusion; validation stops at the Intent, before any
+pod read.
+
+**Rationale.** The parser is one of only two LLM boundaries, and an LLM is
+non-deterministic by nature. Most expensive defects to date have been
+parse-stage — a synonym silently unexpanded, a field dropped, a valid prompt
+refused, a column list resolved one way on one run and differently on the
+next. TST-01 asserts entity and filter type only; it does not assert the
+resolved field set, and it does not assert stability. Field resolution
+(synonyms, multi-field expansions, who/DFF/KFF columns) is exactly where the
+current column work lives, and its whole value depends on resolving the same
+way every time. A suite that pins the full Intent AND proves it is
+reproducible converts "it worked when I tried it" into a standing guarantee.
+
+**What it validates**
+
+- **Correctness** — for each prompt, the produced Intent matches the expected
+  Intent field-for-field: `target_entity`, `filters` (type and value), and
+  `fields` (the resolved column list, including expansions).
+- **Determinism** — each prompt is parsed N times (N ≥ 3); every run **shall**
+  produce a byte-identical Intent. Any variance across runs fails the case,
+  and the differing Intents are reported side by side.
+
+**Acceptance criteria**
+
+- Each case declares: prompt, expected `target_entity`, expected `filters`,
+  expected resolved `fields`.
+- The resolved field list is asserted, not only entity and filter (this is
+  what distinguishes TST-05 from TST-01).
+- Each prompt is parsed N ≥ 3 times; any Intent difference across runs fails
+  the case, with the divergent Intents shown.
+- Runs without pod access; stops at Intent, before plan/execute.
+- Includes the synonym and multi-field-expansion corpus (vendor→Supplier,
+  "audit columns"→the four who-columns, etc.) as first-class cases.
+- Includes negative cases: prompts that must be refused produce the expected
+  refusal Intent, asserted the same way.
+
+**Depends on:** none. **Extends:** TST-01 (which covers entity + filter only).
+**Note:** requires LLM access; like TST-01, excluded from per-commit runs. The
+determinism check makes this suite the primary guard for any change to parser
+prompts or the field-synonym vocabulary.
 
 ---
 

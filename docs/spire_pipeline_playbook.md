@@ -94,8 +94,10 @@ frozen*, the endpoints reference says *pod truth* — this playbook says
 - B5.1 Teach the parser to produce the Intent
 - B5.2 Vocabulary additions (terms → canonical values)
 - B5.3 "Do NOT refuse" instruction blocks (aggregation / comparison)
-- B5.4 Parser-level test
-
+- B5.4 Parser-level test — assert the full Intent (entity, filters, fields)
+  and its determinism across repeated runs (→ F2.1, TST-05); a new synonym or
+  expansion is not done until its prompt→Intent case passes and is stable
+  
 ### B6. Server wrapper
 - B6.1 Expose the tool via the MCP server
 - B6.2 Tool signature and registration
@@ -153,8 +155,17 @@ single home both ends point to.
 > The file taxonomy below is read off the repo tree — confirm against the
 > actual `scripts/` convention and correct if the split differs.
 
-### F1. Prompt sets as artifact (authoring)
-- F1.1 Where they live (`scripts/prompt_set_<module>.txt`, per module)
+### F2. Prompt sets as harness (running)
+- F2.1 `01_test_prompts_parser.txt` — parser-only (Intent correctness) [→ TST-05]
+  - F2.1.1 Full-Intent assertion — entity, filters, AND resolved fields (not
+    just entity+filter); the field list is pinned, so synonym/expansion
+    resolution is under test
+  - F2.1.2 Determinism check — each prompt parsed N ≥ 3 times; every run must
+    yield a byte-identical Intent; any drift fails and prints the divergents
+  - F2.1.3 Stops at the Intent — no plan, no execute, no pod; validation
+    happens before the database is ever read
+  - F2.1.4 Synonym / multi-field-expansion corpus lives here as first-class
+    cases (vendor→Supplier, "audit columns"→who-columns, DFF/KFF)
 - F1.2 Writing a new prompt — phrasing and the NL variations to cover
 - F1.3 The prompt catalog table (# → type → tool → columns returned)
 - F1.4 Adding vs. updating — a new prompt vs. a changed one
