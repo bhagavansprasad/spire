@@ -127,6 +127,7 @@ REC-1) → C (one template fix) → D → singletons → the harder QA-06 behavi
 | ID | Sev | Status | Summary |
 |----|-----|--------|---------|
 | REC-1 | ⭐ | proposed | **Completeness advisory.** When a query samples a capped set: deliver the results found, state honest denominators (AI-4's fix), AND recommend narrowing filters (read from the KG) so a complete answer is cheap. Never refuse, never inflate. Generalizes to any capped-fetch query. AI-4 is the floor (message must not lie); REC-1 is the ceiling (honest message + narrowing rec). REC-1 depends on AI-4. |
+| REC-2 | 🟢 | proposal | Replace the unbounded PO-list refusal with the sample pattern (show 25 + honest total), consistent with how supplier lists already behave. Sampling must be over a BOUNDED fetch — never the full ~15k. | Planner PO-list guard + PO fetch path. Raised 2026-08-12. |
 
 ### Verified correct (checked, NOT bugs — do not re-investigate)
 
@@ -1207,3 +1208,67 @@ queries. Pre-existing; not introduced by COL-02.
 suspected, code trace pending). New — surfaced during COL-02 verification, not
 part of the AI-1…AI-11 overnight census. Working label during the session:
 N-2.
+
+---
+
+### REC-2 🟢 proposal — Replace the unbounded PO-list refusal with the sample-and-disclose pattern
+
+**Set:** (design item — raised 2026-08-12, not from the overnight run)
+**Prompt:** `list all purchase orders` (and any unbounded PO list, e.g. `purchase orders with qty`)
+
+**Current behaviour:** a hard planner-guard refusal —
+
+    REFUSED (planner guard): Purchase-order queries require a PO id, a PO
+    number, or a date bound. For example 'show PO 2144 and its lines'...
+
+**The inconsistency.** Large collections are handled two different ways:
+- `/suppliers` (~287 rows): "list active suppliers" SAMPLES — shows 25, discloses
+  "Showing 25 of 287", honest denominator (OUT-06). Verified live 2026-08-12.
+- `/purchaseOrders` (~15,000 rows): "list all purchase orders" REFUSES outright.
+Same user intent ("list them all"), two different behaviours, with no rule the
+user can see. A user who gets a supplier sample and a PO refusal cannot tell why.
+
+**Why the guard exists (the real constraint).** It is not arbitrary. An
+UNBOUNDED PO fetch is genuinely expensive — `/purchaseOrders` is ~15k rows and
+the reference notes ~200 is the practical page limit before it is slow. Suppliers
+at ~287 is one cheap page; a full PO fetch is minutes. The guard protects against
+the slow FETCH, not merely the large display.
+
+**Proposal.** Make PO-list behave like supplier-list — sample and disclose —
+WITHOUT ever doing the expensive full fetch:
+- Fetch ONE bounded, ORDERED page of POs (not the full 15k).
+- Show the first 25; disclose the true total via `totalResults=true` (confirmed
+  to work on Fusion collections — reference 2026-07-19).
+- Order the page (e.g. by OrderNumber) so the sample is reproducible — avoids the
+  run-to-run row variance seen on unordered fetches (AI-13).
+- Keep the guard's INTENT (never fetch the whole collection); express it as
+  "sample + disclose" instead of "refuse".
+
+This turns a refusal into a useful answer and makes POs consistent with suppliers,
+while preserving the performance protection the guard was actually about.
+
+**Two sub-parts, related to existing requirements:**
+1. **Message readability** — the current refusal is a dense multi-sentence
+   paragraph (the QA-05/AI-5 readability concern). If the sample pattern replaces
+   the refusal, this message largely disappears for this case; the general
+   "refusals must be readable" point still stands for the refusals that remain.
+2. **File-export fallback (CSV-01)** — for a user who genuinely wants ALL POs, the
+   full set exports to a file while 25 show inline. Coherent large-result rule:
+   small → show all; large → sample + disclose; very large / "all" → sample +
+   export. CSV-01 is already a speced-but-unbuilt P0.
+
+**Depends on / relates to:** OUT-06 (honest denominators + ordered capped fetch —
+the sampling must be over a bounded, ordered fetch), CSV-01 (the export fallback),
+AI-13 (order the page for reproducibility), QA-05/AI-5 (refusal readability for
+whatever refusals remain).
+
+**Severity:** 🟢 — not a defect; the current refusal is honest and intentional.
+This is a consistency/UX improvement that turns a refusal into a more useful
+answer.
+
+**Status:** proposal (design agreed 2026-08-12; not built). Bigger than a KG-row
+change — touches the planner PO-list guard, the PO fetch/sample path, and ideally
+CSV-01. Should be its own branch with curl-confirmation that `totalResults=true`
++ a bounded ordered page behaves on `/purchaseOrders`, plus the message rewrite.
+
+---

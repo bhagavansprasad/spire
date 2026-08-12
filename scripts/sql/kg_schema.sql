@@ -866,6 +866,34 @@ INSERT INTO kg_vocabulary VALUES ('field_synonym', 'audit fields', 'CreatedBy,Cr
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'creator details', 'CreatedBy,CreationDate', 'Creator subset -> who created and when.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created details', 'CreatedBy,CreationDate', 'Synonym of creator details.');
 
+-- field_synonym (single-field): legacy EBS vocabulary (COL-02, Group 2).
+-- One term -> one real column (no comma). Only terms whose target is a
+-- projectable kg_entity_field column and unambiguous across entities are
+-- included; child-entity/filter/concept terms (vendor site, OU, shipment,
+-- dist, req, party, SLA) are NOT field synonyms and are omitted.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor', 'Supplier', 'Legacy EBS: vendor -> Supplier.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor name', 'Supplier', 'Legacy EBS: vendor name -> Supplier.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor number', 'SupplierNumber', 'Legacy EBS: vendor number -> SupplierNumber.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx', 'TransactionNumber', 'Legacy EBS: trx -> TransactionNumber (AR).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx number', 'TransactionNumber', 'Legacy EBS: trx number -> TransactionNumber (AR).');
+
+-- field_synonym (single-field): field-level synonyms (COL-02, Group 3).
+-- Only globally-safe mappings (same column name across the entities that
+-- carry them). Ambiguous terms are omitted: 'price' (Price on PO vs
+-- UnitSellingPrice on AR), 'amount' (Ordered on PO vs LineAmount on AR),
+-- and 'terms' (no PaymentTerms column in the KG). Those need entity-scoped
+-- synonyms, a separate mechanism change.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'creation date', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created date', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'date created', 'CreationDate', 'Field synonym -> CreationDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'last updated', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'modified', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'changed on', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'update date', 'LastUpdateDate', 'Field synonym -> LastUpdateDate.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'qty', 'Quantity', 'Field synonym -> Quantity (PO/AR lines).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'uom', 'UnitOfMeasure', 'Field synonym -> UnitOfMeasure (AR lines).');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'unit of measure', 'UnitOfMeasure', 'Field synonym -> UnitOfMeasure (AR lines).');
+
 -- po_status
 INSERT INTO kg_vocabulary VALUES ('po_status', 'open',      'OPEN',       'Default conversational synonym.');
 INSERT INTO kg_vocabulary VALUES ('po_status', 'active',    'OPEN',       'Synonym for open.');

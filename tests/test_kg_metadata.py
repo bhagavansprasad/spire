@@ -192,7 +192,9 @@ async def test_kg_table_row_counts_match_v1_1():
     (169->194), +1 edge (16->17), +1 edge tool (15->16), +2 entity tools
     (8->10), +4 filter rows (21->25) and +4 vocab rows (93->97). COL-02
     multi-field expansions add +6 vocab rows (97->103): who/audit columns,
-    creator details.
+    creator details. COL-02 single-field synonyms add +15 vocab rows
+    (103->118): legacy EBS (vendor/vendor number/trx) and field-level
+    (creation/updated dates, qty, uom).
     StandardReceipt is the TOP-LEVEL /standardReceipts resource, ROOTED,
     with two fetchers of its own (search and aggregate-by-method) — hence
     +2 entity tools and no edge. AccountReceiptApplication is the
@@ -263,7 +265,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_entity_field": 198,
         "kg_edge": 17,
         "kg_pattern": 3,
-        "kg_vocabulary": 103,
+        "kg_vocabulary": 118,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 10,
         "kg_entity_filter": 24,
