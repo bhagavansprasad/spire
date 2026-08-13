@@ -316,6 +316,13 @@ _SYSTEM_PROMPT_PREAMBLE = (
     "1262') cannot root a Supplier query — there is no supplier-number "
     "filter — so if only a number is given and no name, this is out of "
     "scope; do not emit a 'by_id' or other invented filter.\n"
+    "- 'who details' / 'who columns' / 'audit columns' / 'audit fields' / "
+    "'creator details' / 'created details' -> these name AUDIT/WHO COLUMNS, "
+    "not contacts. Put the phrase in 'fields' (it is expanded to the real "
+    "column names downstream); do NOT add 'Contact' to include and do NOT "
+    "treat 'who' here as a contacts request. The word 'who' means a contacts "
+    "request ONLY in 'who are the contacts for X'; paired with "
+    "'details'/'columns'/'fields' it is a COLUMN request.\n"
     "- 'suppliers with their addresses' / 'list suppliers with their "
     "address' / 'suppliers and their addresses' -> target_entity "
     "'Supplier' (NOT Address) with 'Address' added to include. This roots "
@@ -750,6 +757,7 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
+
 
 
 
