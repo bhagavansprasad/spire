@@ -615,6 +615,27 @@ curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
   "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers"
 ```
 
+**Cheap inactive COUNT (2026-08-13).** Add `totalResults=true&limit=1` to the
+same `q=InactiveDate IS NOT NULL` query to get the inactive total in one call
+without over-fetching:
+
+```bash
+curl -s --compressed -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" --get \
+  --data-urlencode "q=InactiveDate IS NOT NULL" \
+  --data-urlencode "onlyData=true" --data-urlencode "limit=1" \
+  --data-urlencode "totalResults=true" \
+  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/suppliers"
+# → totalResults = 2 on 2026-08-13
+```
+
+Then `active = all − inactive`. On 2026-08-13 this gave 333 − 2 = 331, which
+matched a full client-side `Status` count exactly (`{'ACTIVE': 331,
+'INACTIVE': 2}`). **Caveat (from the definition above): some ACTIVE suppliers
+can carry a FUTURE InactiveDate**, so on another pod `InactiveDate IS NOT NULL`
+may over-count inactives and this subtraction would understate active — here the
+two methods agreed, but when the number matters, cross-check with the
+client-side `Status` count rather than trusting the subtraction alone.
+
 ### 6.2 Supplier name fragment — server-side works
 
 `q=Supplier LIKE '%Lee%'` **worked** (single clause). Two "Lee" suppliers
@@ -1786,6 +1807,7 @@ would have been guessed wrong, and two of those fail silently.
 | 2026-08-03 | `customer_transactions` | `TransactionId`, `TransactionNumber`, `TransactionClass`, `TransactionDate`, `PaymentScheduleDueDate`, `TotalOriginalAmount`, `TotalBalanceAmount`, `InstallmentStatus`. |
 | 2026-08-02 | `/suppliers` vs `/invoices` — **ordering stability** | **`/suppliers` returns the same rows across runs. `/invoices` does not.** Byte-diffing the same eight prompts twice, minutes apart: seven outputs identical, the invoice one returned entirely different rows — same structure, same count, different data (2013–2016 dates on one run, 2023–2024 on the next). This confirms on a SECOND endpoint the ordering hypothesis previously open for `/standardReceipts`. Consequence: an aggregate computed over a 25-row sample is not merely wrong, it is DIFFERENTLY wrong on each run, and the same question answered twice gives two answers with no error either time. |
 | 2026-08-03 | `receivablesInvoiceLineTaxLines` | Endpoint name confirmed. It is NOT `receivablesTaxLines` — a curl against that path returns empty. Reinforces the CAUTION in section 9: the tax row's own `CustomerTransactionLineId` is the TAX line's PK; the join key to its invoice line is **`ParentCustomerTransactionLineId`**. |
+| 2026-08-13 | /suppliers | **Population now 333** — 331 ACTIVE, 2 INACTIVE (was 429 in the v1.7 census, 301 in the 2026-08-12 overnight run; the population moves, so confirm rather than assume). Counted client-side by `Status` over a full `fields=SupplierNumber,Status&limit=500` fetch (`{'ACTIVE': 331, 'INACTIVE': 2}`) — `q=Status='ACTIVE'` still returns 0 (see §6.1). The 2 inactive also surface via `q=InactiveDate IS NOT NULL&totalResults=true` (= 2), matching the client-side count exactly. Also confirmed: `TaxpayerCountryCode` is on the default supplier body, populated but **nullable** (4/5 sampled = 'US', supplier 1256 US Gas and Electric = null). |
 
 **Method note.** These were found only after `--show-raw-output` stopped
 truncating each row at six fields. It had been capping silently, and on

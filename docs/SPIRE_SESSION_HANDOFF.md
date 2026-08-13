@@ -10,140 +10,132 @@ env.
 
 ---
 
-## LAST SESSION (2026-08-12): all P0 census bugs closed + REC-2 + readable refusals
+## LAST SESSION (2026-08-13): overnight re-run analyzed, all 12 sets triaged, consolidated issue register + fix plan produced
 
-Every P0 defect from the v1.7 overnight census (AI-1…AI-12) is now closed —
-either fixed-and-committed this session or confirmed already-fixed by prior
-work. Verified live on the pod at each step; full suite green (**863 passed,
-18 deselected**).
+Ran a full overnight batch of all 12 prompt sets and read them line-by-line
+against two acceptance rules the human set this pass:
 
-### Shipped and committed this session
+1. **No LLM synthesis anywhere** — synthesis must be deterministic/local; every
+   `stage=synthesize` call is a finding to convert.
+2. **Refusal format** — every refusal must render as Reason / Solution / Example
+   (blank-line separated) then `(refusal: <code> — <detail>)`. Any deviation is
+   a finding.
 
-- **REC-2** (branch `rec-2-po-list-sample`) — "list all purchase orders" no
-  longer refuses. The planner's no-filter PO guard is gone; the unfiltered
-  path falls through to the (PurchaseOrder,'none') fetcher, which returns a
-  bounded, ordered 25-row sample (`orderBy=OrderNumber:asc`, curl-confirmed
-  server-side) plus the honest total via `totalResults` (17,408). Records built
-  locally (`build_purchase_order_records`) — no LLM. Two follow-on bugs fixed
-  in the same effort: a supplierless PO (Incomplete OrderNumber "1", SupplierId
-  null→0) was mis-flagged as a hallucinated id (0 is now the "no supplier"
-  sentinel, skipped in `response_validation.py`); and the LLM emitted only 15 of
-  25 rows (plain-PO path now deterministic).
+### The overnight run (clean mechanically)
+- `run_overnight.py --timeout 5400`, output in `overnight_20260812/`. All 12
+  sets exit 0, ~67 min, no crashes/timeouts. **254 prompts, 56 `stage=synthesize`
+  calls.** Exit 0 = ran, NOT correct — the value was in reading the answers.
+- Bundle for analysis: concatenated to `overnight_20260812_bundle.txt`.
 
-- **Readable planner-guard refusals** (branch `readable-planner-refusals`) —
-  the four entity guards (ReceivablesInvoice, Invoice, Address, StandardReceipt)
-  raised dense ValueError strings. Each now raises a structured
-  `RefusalError(Refusal(MISSING_IDENTIFIER, entity))`; `plan_node` routes it into
-  the same `state["refusal"]` channel the parser uses, so it renders through
-  `capability_message` as Reason/Solution/Example (blank-line separated). A lazy
-  import inside each guard breaks a planner→result→planner module-load cycle.
-  `RefusalError` lives in `nl_parser/result.py`.
+### What the read found — 14 OPEN issues, flat-numbered
+All findings (this run + the still-open prior ones) were consolidated into ONE
+flat serial series (1..25), open first then fixed, in
+**`docs/spire_consolidated_issues_and_plan.md`** (NEW — the working register and
+plan). Old AI-nn/REC-nn IDs kept only as "(was: …)" breadcrumbs + a mapping
+table. The per-finding detail for the 12 new ones is also being written into
+`docs/spire_overnight_findings.md` in that doc's block format.
 
-- **AI-12** — PO-with-children ("show PO X and its lines/schedules/
-  distributions") now synthesizes LOCALLY (`build_po_with_children` +
-  `po_with_children_buckets` in `p2p.py`, plus a branch in `synthesizer.py`),
-  removing the LLM that copied the pod's raw `ReceivedAmount` (0/null pod-wide).
-  Schedule Received is now DERIVED: `Amount * (ReceivedQuantity / Quantity)`,
-  guarded. Distribution amount uses ex-tax `Ordered`.
+Open issues 1–14, grouped into 5 themes (the fix plan is keyed to these):
+- **Theme A — eliminate LLM synthesis (make it local):** #1 (run-wide, 56 calls,
+  absorbs old AI-3), #3 (invoice-list narration drift — the "-163.16" mispairing,
+  3 sets), #5 (empty/not-found answers go to the LLM), #8 (join summary miscounts
+  its own table — "14 vs 15 suppliers, 54 vs 62 POs"), #12 synth half.
+- **Theme B — refusal correctness & format:** #6 (dismissive "do the rest your
+  side" Solution on `unsupported_operation`, 5 instances; absorbs old AI-5
+  misdirection), #9 (single supplier by numeric ID FALSELY refused when columns
+  requested — it resolves everywhere else), #11 (PO-filter planner guard still
+  emits the OLD dense string, not the structured format), #13 (old AI-9/COL-03
+  wholesale-refusal limitation).
+- **Theme C — column/field resolution (this IS the P0 COL-01/02 workstream):**
+  #7 ("country" reported unavailable + silently swapped for an Address column —
+  TaxpayerCountryCode exists), #12 ("who details" misparsed → Contact join →
+  em-dash projection + fabricated miscount, 21k tokens, worst answer in the run),
+  #13.
+- **Theme D — parser robustness & PO reference:** #4 (PO 2144 resolves as
+  POHeaderId in one path, OrderNumber in another → false "not found"), #10
+  ("What is outstanding on PO 701337?" blows the parser token ceiling,
+  out=7984/MAX_TOKENS → false unparseable refusal — the known runaway-generation
+  mode).
+- **Theme E — count/sample consistency:** #2 (301 vs 299 supplier count — likely
+  scope-labelling, all=301/active=299), #14 (old AI-13 sample variance).
 
-- **AI-10** — "supplier sites for X" used to silently return addresses.
-  `site`/`sites` are now `entity_synonym`s for Site (`kg_vocabulary` 118→120),
-  and `correct_include_from_prompt` (`vocabulary.py`, run after the LLM, before
-  `validate_intent`) deterministically replaces the mis-mapped Address include
-  with Site when the raw prompt contains "site(s)". Site has no standalone-list
-  fetcher, so it hits the Site gate (`intent_validation.py`) and refuses
-  readably — short reason + tailored Solution/Example keyed on a distinct
-  `SupplierSiteListing` marker (`capability.py`).
+Fixed/closed and retained for traceability as #15–#25 (old AI-1,4,6,7,10,11,12,
+REC-1,REC-2 fixed; AI-2/AI-8 not-a-bug).
 
-- **AI-7 (second facet)** — the receipts site filter runs client-side over a
-  fetch capped at `OVERFETCH_LIMIT`; when the account holds more than the window
-  (account 26360: 1,386; Santa Clara: 1,737) the few matches in the newest page
-  were reported as complete. True account+site total is unobtainable (composite
-  `q=` fails silently here), so `standard_receipts.py` now returns
-  `truncated=True` / `total_available=None` — constructed DIRECTLY, since
-  `ToolResult.build` can't express truncated-with-unknown-total — and the
-  synthesizer discloses "unknown total in source; N examined". An xfail(strict)
-  test documenting the bug now passes; marker removed.
+### 4 issues are SUSPECTED, not verified — curls owed (Phase 0)
+Per "confirmed = curled", these have conclusive run evidence but need a pod curl
+to pin the data before fixing: **#2** (all/active supplier totals), **#4** (PO
+2144 id-type), **#7** (TaxpayerCountryCode populated), **#9** (SupplierNumber
+1252 exists). Curl commands are in each issue block in the consolidated doc.
 
-- **Docs** — findings/status/requirements all updated (summary table cells,
-  detail Status lines, §G19, requirements v1.9).
-
-### Confirmed already-fixed (finding predated the fix — no code change)
-
-- **AI-1** child-as-rows: PO lines/schedules/distributions, AR invoice lines,
-  supplier contacts — all render as rows.
-- **AI-4** honest edge-traversal denominators ("Examined 25 of 301; of those
-  25, N match") on has_invoice_over_amount and has_no_recent_invoices.
-- **AI-9** partial-column note (returns valid column, names invalid, lists
-  available) — no wholesale refusal.
-- **AI-11** Site gate refuses a Site include at parse time.
-
-### NOT committed / branch hygiene note
-
-All work this session was committed, but several commits landed on branch
-`readable-planner-refusals` rather than dedicated branches, and two earlier
-branches ended up merged to master directly. **Check `git branch` and the log
-before pushing** — the human will want the branches/PRs sorted. REC-2's tool
-work is committed (`d1779ec` era); the readable-refusals + AI-12 + AI-10 + AI-7
-+ docs commits are on `readable-planner-refusals`.
+### Not done yet
+- **`qa_testcases` (34 prompts) not triaged** — confirmed it RAN (1 synth, 34
+  parses) but not read answer-by-answer. If it surfaces anything it's issue 26+.
+- A stray **`ReadTimeout` on `get_purchase_order_by_id`** appeared on a
+  *different* box (`/home/uday/venv/…`, 13:24 interactive, NOT the overnight
+  run). Almost certainly transient pod lag; reproduce the PO-by-id prompt once
+  before deciding if it's a real timeout-handling gap (would be Theme D).
 
 ---
 
-## Likely NEXT (pick with the human)
+## NEXT STEP: fix the reported issues (start Phase 1)
 
-1. **Branch/PR hygiene** — sort out what's on `readable-planner-refusals` vs
-   master, push, raise PRs. Do this before more feature work.
-2. **"Only local synthesizing" goal** — the human wants NO LLM in the
-   synthesizer. Still on the LLM: **supplier+contacts** (confirmed this session,
-   `synthesize out=2032`), and other multi-bucket shapes. AI-12's
-   PO-with-children work is the exact template (a `build_*` + a
-   `*_buckets` detector + a no-LLM branch before the fall-through).
-3. **P0 FEATURES still unbuilt** (distinct from the P0 bugs, which are done):
-   **COL-01** (projectable field coverage), **CSV-01** (export full result to a
-   file — REC-2 makes this the natural companion: small→show all, large→sample,
-   "all"→export). The SME's original column ask. §2A in the requirements doc.
-4. **Entity-scoped synonyms** — unlocks price/amount/terms (COL-02 deferred
-   these). Schema + expander change. Design work.
-5. **GL / AP modules** — planned in `spire_plan.md`, not started.
+Fix plan (in `docs/spire_consolidated_issues_and_plan.md`), sequenced
+cheapest-risk-first, one branch/PR per logical change, suite green before each:
 
-Recommendation: **1 then 2** — clean up the branches, then start converting the
-next LLM synthesizer path (supplier+contacts) to local, since the human asked
-for all-local and the template is fresh.
+- **Phase 0 — curls only** (no code): settle the 4 suspected issues (#2,#4,#7,#9).
+- **Phase 1 — Theme C field-synonyms & projection safety:** #7 country→
+  TaxpayerCountryCode + stop the Address injection; #12 "who details"→WHO columns
+  + guard projection against columns absent from rows (kills the em-dash); #13
+  advance COL-01/02. Mechanism = the existing COL-02 expander (KG lookup, not
+  model judgement). **Smallest, most deterministic, high payoff — start here.**
+- **Phase 2 — Theme B refusals:** #6 rewrite `unsupported_operation` Solutions +
+  finish AI-5; #11 route the PO-filter guard through RefusalError; #9 re-route
+  single-supplier-by-id-with-columns to the by-id lookup.
+- **Phase 3 — Theme D parser/PO:** #10 degenerate-parse trigger + parse cap; #4
+  cross-try POHeaderId/OrderNumber. (`--show-parser` repro first.)
+- **Phase 4 — Theme A eliminate LLM synthesis (largest, staged):** convert one
+  shape per PR using the #21 (AI-12) template — empty/not-found (#5) → address
+  lists → invoice lists (#3) → single cases → joins (#8) → lifecycle last. Goal:
+  0 `stage=synthesize` on a fresh overnight.
+- **Phase 5 — Theme E:** #2 label scopes; #14 deterministic sample order.
 
----
-
-## Still open (NOT P0 bugs)
-
-- **AI-3** 🟢 — address-list synthesis token-heavy. Local-synthesis candidate
-  (folds into the goal above).
-- **AI-13** 🟡 — supplier list returns a different 25-row sample between
-  identical runs. Pod curl-confirmed STABLE; variance is Spire-side
-  client-filter/sample.
-- **REC-1** ⭐ — completeness advisory; builds on AI-4 (already done).
-- **COL-02** two acceptance criteria never closed: parse-input-token
-  before/after measurement, and 06_slow/08_lifecycle isolated re-run.
+**Recommendation: Phase 0 then Phase 1.** Curl the 4 suspected items first
+(quick, unblocks them, honours "confirmed = curled"), then start Theme C
+synonyms — small deterministic wins that also advance the P0 COL workstream, and
+the expander mechanism is proven.
 
 ---
 
 ## Reference
 
-- REC-2: `planner.py` (guard removed), `purchase_orders.py` (orderBy),
-  `p2p.py` + `synthesizer.py` (local build), `response_validation.py`
-  (supplier_id 0 sentinel).
+- **Consolidated register + plan (USE THIS):** `docs/spire_consolidated_issues_and_plan.md`
+  — flat 1..25 numbering, mapping table, theme map, phased plan, per-issue curl
+  commands.
+- Findings detail (house block format): `docs/spire_overnight_findings.md`.
+- COL-02 expander (the mechanism Theme C reuses): `field_synonym` vocab_kind +
+  synonym rows; expander runs AFTER the LLM, BEFORE validate_intent — a KG
+  lookup. `expand_field_synonyms` / vocabulary in `nl_parser/vocabulary.py`.
+- Local-synthesis template (Theme A): `build_po_with_children` +
+  `po_with_children_buckets` in `synthesizer/p2p.py`, branch in `synthesizer.py`
+  (this is how #21/AI-12 was closed).
 - Refusals: `RefusalError` in `nl_parser/result.py`; guards in `planner.py`;
   catch in `graph/pipeline.py` `plan_node`; render in `nl_parser/capability.py`
   (`capability_message`, `_IDENTIFIER_GUIDANCE`, `_OPERATION_SOLUTIONS`).
-- AI-10: `correct_include_from_prompt` + `entity_synonyms` in
-  `nl_parser/vocabulary.py`, called in `nl_parser/parser.py`; Site gate in
-  `nl_parser/intent_validation.py`.
-- AI-12: `build_po_with_children`, `po_with_children_buckets`,
-  `_derived_received_amount` in `synthesizer/p2p.py`.
-- AI-7: `standard_receipts.py` (direct ToolResult construction).
-- Endpoints reference: `docs/spire_fusion_endpoints_reference.md` — updated
-  2026-08-12 with `orderBy=OrderNumber:asc` server-side + totalResults 17,406.
+- Endpoints/pod quirks authority: `docs/spire_fusion_endpoints_reference.md`
+  (read BEFORE curling; update when a new quirk is found).
+- Overnight tooling: `scripts/run_overnight.py` + `scripts/overnight_sets.yaml`
+  (12 sets); `scripts/run_prompt_set.py` for a single set.
 - Canonical living docs: this handoff, `spire_enhancement_requirements.md`,
   `spire_enhancement_status.md`, `docs/spire_overnight_findings.md`,
-  `docs/spire_plan.md`.
+  `docs/spire_consolidated_issues_and_plan.md`, `docs/spire_plan.md`.
+
+### Pod quirks to keep in mind (from prior sessions)
+- Composite `q=` fails silently (HTTP 200, totalResults 0) — single-clause `q=`
+  only.
+- `expand=sites` silently ignored on bulk fetches.
+- `/standardReceipts` has no default ordering (paginated fetches non-reproducible).
+- The KG always rebuilds from scratch (`python scripts/rebuild_kg.py`).
 
 ---
 
@@ -157,7 +149,7 @@ for all-local and the template is fresh.
    widgets for choices.
 4. **Deliver the COMPLETE updated file, never a patch/diff.** Re-share/re-read
    the current full file before editing — files drift; don't trust an earlier
-   upload. (The human prefers you to patch and hand back whole files directly.)
+   upload.
 5. **Output to `t.txt`** — pipe through `tee` so it shows live AND saves
    (`command | tee t.txt`). `>` overwrite, `>>` append. Never a bare `> t.txt`.
 6. **Git discipline:** one branch per logical change, PR-based merges, named
@@ -170,7 +162,7 @@ for all-local and the template is fresh.
 8. **"Confirmed/verified" means actually curled/run.** A claim from reading
    code or logs is NOT a finding — say "appears correct from logs" until
    verified. Measurement over argument — when a fix isn't visible, instrument
-   with a debug print and read the runtime values before theorizing.
+   with a debug print and read runtime values before theorizing.
 9. **pytest:** always `-q`. Full suite before any commit touching source;
    targeted tests during work.
 10. **KG rebuild:** `python scripts/rebuild_kg.py` (never the .sh). When adding
