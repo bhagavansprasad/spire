@@ -22,24 +22,33 @@ lower blast radius · 🟡 minor / cosmetic · 🟢 note (efficiency or future w
 
 ---
 
+> **On `not-reproducible`:** this status means the issue's symptom could NOT be
+> triggered in the prompts tested on current code — NOT that it is proven fixed.
+> Several of these were resolved by intervening work; the register was stale.
+> But #11 was a cautionary case: it was marked not-reproducible because the
+> symptom wasn't triggered, then reproduced later via a prompt not initially
+> tried ("purchase orders for supplier X") and turned out to be a live bug now
+> fixed. So treat every not-reproducible as "not seen in testing" and re-open it
+> if its symptom surfaces in an overnight run — that transcript is the repro.
+
 ## Mapping table (old ID → new number)
 
 | New | Old ID | Status | One line |
 |----:|--------|--------|----------|
 | 1 | new + AI-3 | open | LLM still used for synthesis across the run (no-LLM-synth goal) |
-| 2 | new | verified | Supplier count 301 vs 299 — scope labelling (pod now 333/331/2) |
-| 3 | new | open | LLM synth narration makes unreliable specific claims over correct tables |
-| 4 | new | verified | Same PO ref resolves as POHeaderId in one path, OrderNumber in another |
+| 2 | new | not-reproducible | Supplier count contradiction gone; curl-confirmed 338/336/2, both scopes labelled |
+| 3 | new | fixed | Plain invoice lists built locally (build_invoice_records); no LLM, no drift |
+| 4 | new | fixed | Lifecycle tool cross-tries POHeaderId when OrderNumber misses; PO 2144 resolves |
 | 5 | new | open | "Not found"/empty answers are LLM-synthesized instead of a local template |
-| 6 | new + AI-5 | open | Refusal Solution line off-template (dismissive "do the rest your side"; and the "narrow by…" misdirection) |
+| 6 | new + AI-5 | fixed | unsupported_operation Solution rewritten constructively; verified live |
 | 7 | new | verified | "Country" reported unavailable and silently replaced with Address column |
-| 8 | new | open | LLM synth summary miscounts its own table (14 vs 15 suppliers, 54 vs 62 POs) |
+| 8 | new | fixed | Suppliers-with-open-POs built locally; count exact (43), no LLM |
 | 9 | new | reclassified (feature) | No supplier-by-number lookup — refusal is correct; missing capability, not a bug |
-| 10 | new | open | Parser runs to token ceiling on "What is outstanding on PO 701337?" |
-| 11 | new | not-reproducible | Planner dense-string refusal — parser now self-declares structured; dense path dormant |
+| 10 | new | not-reproducible | Parser runs clean on PO 701337 (out=366, 5/5 runs); no token-ceiling runaway |
+| 11 | new | fixed | CORRECTION (was not-reproducible): reproduced via "POs for supplier X"; _validate_intent_filters now raises structured RefusalError |
 | 12 | new | fixed | "who details" now routes to WHO columns (fields), not a Contact join |
 | 13 | AI-9 / COL-03 | not-reproducible | Wholesale refusal on wholly-unknown columns (G15) — could not be triggered on current code |
-| 14 | AI-13 | open (suspected root) | Supplier list returns a different 25-row sample between identical runs |
+| 14 | AI-13 | not-reproducible | Two identical "list all suppliers" runs returned the same 25 rows (diff clean) |
 | 15 | AI-1 | fixed | Child rows rendered as counts, not rows |
 | 16 | AI-4 | fixed | Partial result stated as the total (wrong denominator) |
 | 17 | AI-6 | fixed | Specific question answered with a generic summary |
@@ -99,11 +108,20 @@ Order (cheapest-risk first): address lists → invoice lists → single cases �
 joins → lifecycle. Each verified by re-running its set: zero synth calls,
 unchanged answers.
 
-**Status:** open. Absorbs old AI-3 (address-list sub-case). Concrete harms are #3, #8, #12.
+**Progress (2026-08-13):** two shapes converted to local this pass — the
+supplier+open-PO **join** (#8) and plain **invoice lists** (#3) — each verified
+live with no `stage=synthesize` and exact/correct output. Remaining shapes still
+LLM-synthesized: address lists, other multi-bucket joins (e.g. supplier+contacts),
+lifecycle narration, and empty/not-found (#5, unverified). A fresh overnight is
+needed to recount `stage=synthesize` and enumerate exactly what is left.
+
+**Status:** open — IN PROGRESS. Absorbs old AI-3 (address-list sub-case). Two
+shapes done (#3, #8); the rest deferred to a **follow-up branch** after this PR
+merges. Umbrella goal (0 synth calls on a fresh overnight) not yet met.
 
 ---
 
-## 2 🔴 verified — Supplier count contradiction within one run (301 vs 299) — (was: new)
+## 2 🟢 not-reproducible — Supplier count contradiction within one run (301 vs 299) — (was: new)
 
 **Set:** 00_dipstick (and reinforced in 01_supplier, 04_columns).
 
@@ -149,11 +167,23 @@ hides the scope.
 total source. Confirmed path: label scopes explicitly ("333 suppliers total" vs
 "331 active suppliers") — no number changes.
 
-**Status:** verified (curled 2026-08-13 — labelling, not a count error). Phase 5 / Theme E.
+**Repro (2026-08-13) — contradiction NOT reproducible on current code.** "List all
+suppliers" now says "Showing 25 of 338 suppliers" and "338 total in source" — the
+count and list totals AGREE (the 301-vs-299 contradiction is gone). "List active
+suppliers" says "Showing 25 of 336 suppliers. All 25 have Status ACTIVE" — and
+336 is the correct active total (curl-confirmed 338 total − 2 inactive = 336
+active). The two scopes are distinguishable and both totals are correct. Reading
+search_suppliers confirmed why: branch 3 returns total_available=len(filtered),
+the true filtered count.
+
+**Status:** not-reproducible (2026-08-13). Curl-confirmed the numbers are correct
+(338/336/2) and the intra-run contradiction is gone; active and all queries carry
+distinct, correct totals. Population moved (301→338) since the run. Watch-item: a
+re-appearing intra-run mismatch is the repro. Phase 5 / Theme E.
 
 ---
 
-## 3 🔴 open — LLM synth narration makes unreliable specific claims over correct tables — (was: new)
+## 3 🟢 fixed — Plain invoice lists now built locally, not LLM-narrated — (was: new)
 
 **Set:** 01_supplier (3 instances), confirmed again in 04_columns and 07_alacarte.
 
@@ -181,14 +211,25 @@ answer (prose vs its own rows). No pod curl.
 **Root cause:** invoice lists are LLM-synthesized (see #1); free-form narration
 is not constrained to the rows.
 
-**Fix:** the invoice-list local builder from #1 — fixed summary line + table,
-any total/min/max/count computed from records, truncation from `totalResults`.
+**Fix (applied 2026-08-13):** added `build_invoice_records` + `plain_invoice_bucket`
+in synthesizer/p2p.py and a synthesizer branch before the LLM fallthrough. A
+single invoice bucket is now built locally; the summary comes from
+`local_list_summary` (fixed count line + honest truncation), NOT LLM prose — so no
+cherry-picked highlights, no min/max over a truncated window, no LLM-computed
+breakdowns. Multi-bucket invoice shapes (lines/tax/DFF) return None from the
+detector and are unaffected.
 
-**Status:** open. The harm behind #1 for the invoice-list shape.
+**Verified live (2026-08-13):** "invoices for supplier US Gas and Electric" — no
+`stage=synthesize` (was out=3825, ~10k tokens; now parse-only 9.4k), 25-invoice
+table intact, summary "Showing 25 of 183 invoices" + honest truncation. Updated
+the invoice schema-selection test (single-bucket list is now local → asserts no
+LLM call). Full suite green (863).
+
+**Status:** fixed (2026-08-13, Theme A). The invoice-list shape of #1 is now local.
 
 ---
 
-## 4 🔴 verified — Same PO reference resolves as POHeaderId in one path, OrderNumber in another (false "not found") — (was: new)
+## 4 🟢 fixed — PO reference resolves as POHeaderId in one path, OrderNumber in another (false "not found") — (was: new)
 
 **Set:** 02_purchase_order.
 
@@ -217,14 +258,19 @@ Supplier **EIP Inc** (matches the resolving path). `q=OrderNumber='2144'` →
 the lifecycle tool (keyed on OrderNumber) returns a false "not found." No
 ambiguity — nothing else owns OrderNumber 2144 — so a cross-try fallback is safe.
 
-**Root cause:** the lifecycle-status lookup does not fall back across id types
-before returning not-found; a bare "PO 2144" routes to whichever tool the intent
-picks.
+**Fix (applied 2026-08-13):** added a local `_try_header_id_lookup` in
+po_lifecycle.py; on an OrderNumber miss it cross-tries the number as a POHeaderId,
+and if that resolves, adopts the real OrderNumber (schedules/invoices/payments all
+key on it) and discloses the resolution in a note. A genuinely unknown number
+still returns found=False (the 999999 test still passes). Requires MCP restart
+(mcp_server/ file).
 
-**Fix:** cross-try id types (or resolve once to canonical POHeaderId for all
-downstream tools). Re-run both prompts; both resolve 2144.
+**Verified live (2026-08-13):** "How much of PO 2144 was received?" now resolves —
+found=True, order_number 162352 (EIP Inc), full lifecycle, with the note "'2144'
+is a POHeaderId, not an order number; resolved to OrderNumber '162352'". Lifecycle
+tests green (92); full suite green (863).
 
-**Status:** verified (curled 2026-08-13). Phase 3 / Theme D.
+**Status:** fixed (2026-08-13, Theme D). Real reproducible bug, verified end-to-end.
 
 ---
 
@@ -250,11 +296,15 @@ records. Log-evidenced.
 **Fix:** add the branch before any LLM path. Cheap, independent of the invoice-
 list conversion. A clean subset of #1 worth doing first.
 
-**Status:** open.
+**Status:** open — UNVERIFIED. We did not confirm this reproduces on current code:
+attempts to find an empty-result prompt hit refusals (→ #11) or non-empty results
+instead. It may already be handled locally, or may be live. Deferred to the
+**follow-up branch** with #1; first step there is to find a genuinely-empty result
+and check whether it still calls `stage=synthesize`.
 
 ---
 
-## 6 🟠 open — Refusal "Solution" line off-template — (was: new + AI-5)
+## 6 🟢 fixed — Refusal "Solution" line off-template — (was: new + AI-5)
 
 **Set:** 05_refusals (2), 03_ar (1), 08_lifecycle (2) — the `unsupported_operation`
 class, run-wide (5 instances); plus the old AI-5 "narrow by country/status/name"
@@ -292,7 +342,23 @@ X and Y" is refused as unsupported, but both POs' lifecycle records are
 individually retrievable — a side-by-side compare could be built; at minimum the
 Solution should point to asking per-PO.
 
-**Status:** open. Absorbs old AI-5.
+**Fix (applied 2026-08-13):** rewrote the `UNSUPPORTED_OPERATION` fallback Solution
+in capability.py from "Ask me for the records themselves and do the rest your
+side" to "Ask for the underlying records and I'll return them for you to total or
+average" — same honest meaning (Spire can't compute these; it can return the
+records), constructive tone, on-template. All ~5 instances inherit this one shared
+fallback, so one change fixes them.
+
+**Verified live (2026-08-13):** "What is the average invoice amount per supplier?"
+now shows the new constructive Solution + a correct entity-matched Example. Full
+suite green (863).
+
+**Status:** fixed (2026-08-13, Theme B). NOTE the AI-5 `unsupported_filter`
+"narrow by…" half was assessed separately and reads correctly on current code
+(the unsupported_filter refusals now carry sensible per-entity guidance via
+_FILTER_GUIDANCE — see #11); the dismissive-Solution defect this issue centred on
+is fixed. The "compare two POs' lifecycle" capability gap remains a separate
+question for the owner (not a bug).
 
 ---
 
@@ -342,7 +408,7 @@ of Theme C. Re-run both prompts. Handle the null case (1256) explicitly.
 
 ---
 
-## 8 🔴 open — LLM synth summary miscounts its own table (14 vs 15 suppliers, 54 vs 62 POs) — (was: new)
+## 8 🟢 fixed — Suppliers-with-open-POs now built locally; count exact — (was: new)
 
 **Set:** 06_slow, prompt "suppliers with open purchase orders" (LLM synth out=5190).
 
@@ -361,11 +427,21 @@ is internal (prose vs its own rows). No pod curl. (Run Summary reports 66 raw
 
 **Root cause:** join is LLM-synthesized; the summary is free text, not computed.
 
-**Fix:** convert the "suppliers with open POs" join to a local builder (a Theme A
-join shape). Derive the count line and buyer list from rows. Re-run; summary
-matches table; no synth call.
+**Fix (applied 2026-08-13):** added `_supplier_with_open_pos` (detector) +
+`build_suppliers_with_open_pos` (builder) in synthesizer/p2p.py and a synthesizer
+branch before the LLM fallthrough. The builder groups the open-PO bucket by
+SupplierId, sets open_po_count=len(group) and distinct buyers per supplier; the
+summary total is sum(open_po_count), so the count is exact by construction. The
+denominator is honest (across the examined suppliers, not pod-wide), mirroring
+_filtered_supplier_list.
 
-**Status:** open. Instance of #1 (join) and its strongest justification.
+**Verified live (2026-08-13):** "suppliers with open purchase orders" — no
+`stage=synthesize` (was out=7488, ~30k tokens; now parse-only 9.4k), total now
+**43** (per-supplier counts sum to 43 exactly), per-supplier Open POs + Buyers
+render correctly. The LLM's old 42 was an undercount (Consolidated Supplies was 11,
+correctly 12). Synthesizer tests green (62); full suite green (863).
+
+**Status:** fixed (2026-08-13, Theme A). The join shape of #1; count exact.
 
 ---
 
@@ -422,7 +498,7 @@ route to, and the refusal is correct.
 
 ---
 
-## 10 🔴 open — Parser runs to token ceiling on "What is outstanding on PO 701337?" (degenerate parse, false refusal) — (was: new)
+## 10 🟢 not-reproducible — Parser runs to token ceiling on "What is outstanding on PO 701337?" (degenerate parse, false refusal) — (was: new)
 
 **Set:** 08_lifecycle.
 
@@ -450,11 +526,22 @@ as in the prior incident) and/or add a "what is outstanding" → outstanding-
 amounts mapping; add a parse-time cap that degrades to a narrowing prompt rather
 than a hard refusal. Re-run; 701337 outstanding amounts returned.
 
-**Status:** open (parser defect; internally evidenced, not out-of-scope).
+**Repro (2026-08-13) — did NOT reproduce; runaway is gone.** "What is outstanding
+on PO 701337?" now parses at **out=366** and resolves to the correct lifecycle
+answer (837.00 remaining to receive/invoice, awaiting receipt). Run 5× to check
+for intermittency: **5/5 runs identical at out=366**, no MAX_TOKENS, no false
+refusal. The degenerate generation the issue describes does not fire — likely
+resolved by intervening parser-prompt restructuring (the instruction-placement fix
+class).
+
+**Status:** not-reproducible (2026-08-13, 5 clean runs). Stronger evidence than a
+single pass — the parse is deterministic at out=366. NOT marked fixed: runaway
+generation is probabilistic and no code change addressed it here; if it recurs on
+a different phrasing that transcript is the repro.
 
 ---
 
-## 11 🟢 not-reproducible — Planner dense-string refusal; parser now self-declares structured (dense path dormant) — (was: new)
+## 11 🟢 fixed — Planner unsupported-filter refusal rendered as a dense string, not Reason/Solution/Example — (was: new; CORRECTED from not-reproducible)
 
 **Set:** 08_lifecycle, prompt "Open POs for supplier JGA."
 
@@ -469,48 +556,50 @@ format every other refusal uses.
 **Verification:** the `REFUSED (planner guard):` prefix is the pre-conversion
 shape. Cross-check `planner.py` guards and `nl_parser/capability.py`. No pod curl.
 
-**Repro attempt (2026-08-13) — did NOT reproduce.** Two unsupported-filter prompts
-both refused at **stage=parse** with the correct structure, never reaching the
-planner:
-- "List purchase orders over 5000 dollars." → Reason/Solution/Example +
-  "(refusal: unsupported_filter — Filtering purchase orders by amount is not
-  supported.)"
-- "Show customer accounts with account number 1234." → same structure +
-  "(refusal: unsupported_filter — CustomerAccount cannot be filtered by account
-  number.)"
-Token usage shows a parse call only, no planner error. The **parser now
-self-declares** these refusals during parsing and renders them through
-`capability_message`, so the planner's `_validate_intent_filters` dense-string
-path is not reached for these cases. `_FILTER_GUIDANCE` covers all seven relevant
-entities, so the structured render is complete.
+**⚠️ CORRECTION (2026-08-13).** This issue was briefly marked `not-reproducible`
+after two unsupported-filter prompts ("POs over 5000", "customer accounts with
+account number 1234") both refused cleanly at `stage=parse` — the parser
+self-declared them, so they never reached the planner validator, and it looked
+like the dense path was shadowed/dormant. **That conclusion was wrong.** It was an
+artefact of the specific prompts tried: the parser catches SOME unsupported
+filters but not all. **"purchase orders for supplier Staples" reaches
+`_validate_intent_filters` and reproduced the dense string exactly:**
+`REFUSED (planner guard): plan: Spire can't filter PurchaseOrder by 'supplier'. …`.
+Lesson recorded in the top caveat: "not-reproducible" means "not triggered in the
+prompts tested", not "fixed".
 
-**IMPORTANT — dormant, not removed.** The dense-string path still EXISTS:
-`_validate_intent_filters` (plan_builders.py) raises a bare `NotImplementedError`,
-which `plan_node` renders as `plan: {exc}` (the flat string) rather than through
-`capability_message`. It is currently *shadowed* by the parser, not fixed. If a
-query ever parses into an Intent with an unsupported filter the parser did NOT
-catch (e.g. a filter valid on one entity emitted for another), it would still dump
-the dense string.
+**Root cause (confirmed):** `_validate_intent_filters` (plan_builders.py) raised a
+bare `NotImplementedError` with a pre-built dense string; `plan_node`'s
+`(ValueError, NotImplementedError)` branch dumps that flat as `plan: {exc}`,
+bypassing `capability_message`. The parser shadows it for the filters it catches
+first, but any filter that parses through to the planner (e.g. `supplier` on a
+PurchaseOrder root) hits it.
 
-**Hardening (deferred — see Status):** convert `_validate_intent_filters` to raise
-`RefusalError(UNSUPPORTED_FILTER)` like the four sibling entity guards, so the
-planner path also renders structured. Cost: the exception TYPE is load-bearing —
-~10 assertions across `test_planner.py` and `test_graph_pipeline.py` assert
-`NotImplementedError` and would flip to `RefusalError`. Coverage is confirmed
-(`_FILTER_GUIDANCE`), so no new guidance rows needed. Alternative: leave the type
-and route only `plan_node`'s NotImplementedError render through `capability_message`
-(zero type-test churn, preserves the deliberate NotImplementedError/ValueError
-split).
+**Fix (applied 2026-08-13):** converted `_validate_intent_filters` to raise
+`RefusalError(Refusal(flavor=UNSUPPORTED_FILTER, offending_entity=target_entity,
+offending_filters=[...]))` like the four sibling entity guards. `plan_node`'s
+existing `RefusalError` branch routes it into `state["refusal"]`, so it renders
+through `capability_message` (wording from `_FILTER_GUIDANCE`, which covers all 7
+entities). Only `plan_node` caught the type; the aggregation-op
+`NotImplementedError`s elsewhere are untouched. Removed the now-dead
+`_ENTITY_EXAMPLE_PROMPT` import. Updated 8 planner tests to assert the structured
+refusal (flavor/offending_entity/offending_filters); the user-facing wording
+guarantee is covered by test_nl_parser_capability.py.
 
-**Root cause:** legacy path — `_validate_intent_filters` raises a bare
-`NotImplementedError` that bypasses `capability_message`. Now shadowed by the
-parser's own structured refusal.
+**Verified live (2026-08-13):** "purchase orders for supplier Staples" now renders
+Reason ("I can look up purchase orders, but not by supplier.") / Solution / Example
++ `(refusal: unsupported_filter — PurchaseOrder cannot be filtered by 'supplier')`.
+Planner/pipeline/aggregation tests green (136); full suite green (863).
 
-**Status:** not-reproducible (2026-08-13). Parser shadows the planner dense-string
-path; that path still exists (plan_builders `_validate_intent_filters`) and should
-be hardened if it resurfaces or as cleanup. **NOT marked `fixed`** — the emitter is
-still live, just unreached. Watch-item: a `plan: Spire can't filter …` dense line
-in an overnight run is the repro to fix against.
+**Status:** fixed (2026-08-13, Theme B). Was mislabeled not-reproducible; a prompt
+not initially tried reproduced it as a live bug, now fixed structurally (the dense
+emitter is gone, not merely shadowed).
+
+**Separate note (not this issue):** whether "POs for supplier X" should *refuse at
+all* — other supplier-scoped queries (invoices for supplier X) work via edge
+traversal, so PO-by-supplier could route through the supplier→PO edge instead of
+refusing. That is a capability/routing question for the owner (like #7/#9), not
+part of the refusal-rendering fix.
 
 ---
 
@@ -616,7 +705,7 @@ against. Old AI-9/COL-03.
 
 ---
 
-## 14 🟡 open (suspected root) — Supplier list returns a different 25-row sample between identical runs — (was: AI-13)
+## 14 🟢 not-reproducible — Supplier list returns a different 25-row sample between identical runs — (was: AI-13)
 
 The supplier list returns a different 25-row sample across identical runs. Pod
 curl (prior session) confirmed the pod is stable; the variance is Spire-side
@@ -636,7 +725,17 @@ different page per run.
 mindful of the representativeness trade-off. Confirm identical output across
 repeated runs.
 
-**Status:** open (suspected root).
+**Repro (2026-08-13) — did NOT reproduce.** Ran "List all suppliers" twice
+back-to-back and diffed the 25 returned rows: **identical** (same suppliers, same
+order: 1252, 1254, 1256, 1253, 1255, …). The run-to-run sample variance the issue
+describes did not manifest.
+
+**Status:** not-reproducible (2026-08-13, two identical runs). NOT marked fixed:
+two consecutive runs isn't proof of always-deterministic (the fetch has no explicit
+orderBy; the pod could reorder under different load), and per the representativeness
+trade-off noted below, forcing an order isn't obviously desirable. If a differing
+sample appears in an overnight run, that is the repro. The candidate fix
+(deterministic sample key) is retained below for that case.
 
 ---
 
