@@ -71,6 +71,7 @@ from spire.synthesizer.lifecycle import (  # noqa: F401
     _lifecycle_shape,
     _validate_po_lifecycle,
     build_lifecycle_response,
+    build_lifecycle_summary,
 )
 from spire.synthesizer.p2p import (  # noqa: F401
     AddressRecord,
@@ -450,39 +451,17 @@ def synthesize_response(
     shape = _aggregation_shape(outputs)
     _log.debug("[debug] shape = %s", shape)
     if lifecycle_record is not None:
-        # Summary-only, like the supplier-record path: the model writes
-        # the prose and code assembles every value. See
-        # POLifecycleSummaryResponse for why.
-        if llm is None:
-            from spire.config import build_llm
-
-            llm = build_llm(_TEMPERATURE)
-        summary_llm = llm.with_structured_output(
-            POLifecycleSummaryResponse, include_raw=True
-        )
-        result = summary_llm.invoke(
-            [
-                ("system", _build_system_prompt("POLifecycle")),
-                (
-                    "human",
-                    _build_synthesis_prompt(
-                        outputs, truncation_by_step, metadata_by_step
-                    ),
-                ),
-            ]
-        )
-        if isinstance(result, dict) and "parsed" in result:
-            from spire.config import log_usage
-
-            log_usage(result.get("raw"), stage="synthesize")
-            parsed = result["parsed"]
-        else:
-            parsed = result
-        if isinstance(parsed, dict):
-            parsed = POLifecycleSummaryResponse(**parsed)
-        return build_lifecycle_response(
-            lifecycle_record, parsed.summary, parsed.truncation_notes
-        )
+        # No LLM: the tool already computed every value (ordered/received/
+        # invoiced/paid, stage, risk, reasons, recommended_action), and the
+        # response model copies them verbatim — the model's only job was the
+        # summary prose. build_lifecycle_summary composes that prose locally
+        # from the same fields, so the answer is reproducible and cannot
+        # drift from the structured fields. Measured before this: synthesize
+        # in=1654 out=737 just to restate computed values. The trade is one
+        # consistent framing instead of emphasis-shifted prose; all data
+        # remains in the POLifecycleResponse fields below.
+        summary = build_lifecycle_summary(lifecycle_record)
+        return build_lifecycle_response(lifecycle_record, summary, [])
 
     if shape is not None:
         # Local first: the aggregation tools have already done the
