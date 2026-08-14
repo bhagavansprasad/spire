@@ -146,6 +146,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     _filtered_supplier_list,
     _supplier_with_open_pos,
     build_suppliers_with_open_pos,
+    _supplier_with_contacts,
+    build_suppliers_with_contacts,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -635,6 +637,57 @@ def synthesize_response(
             suppliers=records,
             truncation_notes=notes,
             narrowing_tip=tip,
+        )
+
+    # Suppliers with their contacts (join): no LLM.
+    #
+    # "contacts for Lee Supplies" (one supplier) and "contacts for suppliers
+    # in US" (many) both produce a supplier bucket + a contact bucket. This
+    # used to fall to the model — the multi-supplier case cost ~22k tokens
+    # and the model asserted which contacts were administrative in free text.
+    # Contacts now carry a stamped SupplierId (supplier_contacts tool), so
+    # build_suppliers_with_contacts groups them here and reads the admin flag
+    # deterministically. The summary states the contact count and names the
+    # administrative contacts computed from the flag, not model prose.
+    supplier_contacts = (
+        _supplier_with_contacts(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_contacts is not None:
+        supplier_bucket, contact_bucket = supplier_contacts
+        supplier_rows = outputs[supplier_bucket]
+        contact_rows = outputs[contact_bucket]
+        records = build_suppliers_with_contacts(supplier_rows, contact_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_contacts = sum(len(r.contacts) for r in records)
+        admin_names = [
+            c.contact_name
+            for r in records
+            for c in r.contacts
+            if c.is_administrative and c.contact_name
+        ]
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        contact_word = "contact" if total_contacts == 1 else "contacts"
+        if examined == 1:
+            summary = f"{records[0].supplier_name} has {total_contacts} {contact_word}."
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_contacts} {contact_word} "
+                "between them."
+            )
+        if admin_names:
+            label = "administrative contact" if len(admin_names) == 1 else "administrative contacts"
+            summary += f" {', '.join(admin_names)} — {label}."
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
         )
 
     # Plain PO list: no LLM (REC-2).
