@@ -34,10 +34,10 @@ lower blast radius · 🟡 minor / cosmetic · 🟢 note (efficiency or future w
 | 6 | new + AI-5 | open | Refusal Solution line off-template (dismissive "do the rest your side"; and the "narrow by…" misdirection) |
 | 7 | new | verified | "Country" reported unavailable and silently replaced with Address column |
 | 8 | new | open | LLM synth summary miscounts its own table (14 vs 15 suppliers, 54 vs 62 POs) |
-| 9 | new | verified | Single supplier by numeric ID falsely refused when columns requested |
+| 9 | new | reclassified (feature) | No supplier-by-number lookup — refusal is correct; missing capability, not a bug |
 | 10 | new | open | Parser runs to token ceiling on "What is outstanding on PO 701337?" |
-| 11 | new | open | Planner-guard refusal renders the old dense string, not Reason/Solution/Example |
-| 12 | new | open | "who details" misparsed → Contact join → em-dash projection + fabricated miscount |
+| 11 | new | not-reproducible | Planner dense-string refusal — parser now self-declares structured; dense path dormant |
+| 12 | new | fixed | "who details" now routes to WHO columns (fields), not a Contact join |
 | 13 | AI-9 / COL-03 | not-reproducible | Wholesale refusal on wholly-unknown columns (G15) — could not be triggered on current code |
 | 14 | AI-13 | open (suspected root) | Supplier list returns a different 25-row sample between identical runs |
 | 15 | AI-1 | fixed | Child rows rendered as counts, not rows |
@@ -369,7 +369,7 @@ matches table; no synth call.
 
 ---
 
-## 9 🔴 verified — Single supplier by numeric ID falsely refused when columns requested — (was: new)
+## 9 🟡 reclassified (feature) — No supplier-by-number lookup; refusal is correct, capability is missing — (was: new)
 
 **Set:** 07_alacarte.
 
@@ -387,20 +387,38 @@ same resolution the invoice-for-1252 path uses — not a refusal.
 conclusive internally. (Optional confirm SupplierNumber 1252 exists via curl.)
 
 **Curl result (2026-08-13):** SupplierNumber **1252 = Lee Supplies**, returned by
-the pod (surfaced in the #7 curl). So 1252 is a real, resolvable supplier and the
-refusal text is provably false. Nothing further to curl — the remaining work is a
-**code trace of the routing** (list-validator vs by-id lookup), not a data question.
+the pod (surfaced in the #7 curl). So 1252 is a real supplier — but see below: it
+does NOT follow that Supplier can be *rooted* by a number.
 
-**Root cause (candidate):** "show supplier <N> with <columns>" is routed to the
-Supplier *list* intent, whose validator rejects a numeric-ID-only filter (a
-list-safety rule), instead of the single-supplier by-id lookup that already
-supports it.
+**Repro (2026-08-13) — refusal is CORRECT, not false.** `Show supplier 1252 with
+supplier name, number, and address` returns a well-formed structured refusal:
+  (refusal: unsupported_filter — There is no filter to query a supplier by its
+  number. Suppliers can only be queried by name fragment.)
+KG confirms: the only id-type filter is `by_id`, and it is PurchaseOrder/AR-invoice
+ONLY (Supplier's filter set excludes by_id; planner code ~line 5414). So there is
+genuinely no supplier-by-number path to "route to" — the original premise
+(falsely refused, re-route to a by-id lookup) is **wrong**.
 
-**Fix:** route single-supplier-by-id-with-columns to the by-id lookup, then
-project; don't send it through the list-filter validator. Correct the refusal
-detail text too. Re-run; resolves with columns, no refusal.
+The premise confusion: 1252 DOES resolve elsewhere, but only as a *filter value*
+on Invoice/Address ("invoices for supplier 1252"), never as a Supplier ROOT.
+"Appears as a filter value" ≠ "Supplier can be rooted by number." The original
+finding conflated the two.
 
-**Status:** verified (curled 2026-08-13 — 1252 real; refusal is false, root cause is routing). Phase 2 / Theme B.
+**Reclassified:** this is a FEATURE request (add a supplier-by-number lookup), not
+a bug. The refusal is honest and correctly formatted. There IS a real
+user-visible inconsistency (Invoice accepts 1252 as a supplier ref, Supplier does
+not) — that is the case FOR building it — but building it needs: a KG by-number
+filter + fetcher on Supplier, a planner path, a parser-prompt allowance, count
+bumps (print_kg + test_kg_metadata), and — if a new MCP tool — an MCP restart. A
+scope decision for the requirements owner / Venu. **Batch with #7** (tax-vs-address
+country), also a scope call.
+
+Smaller alternative if the feature is declined: enrich the refusal to name the
+resolved supplier ("this looks like Lee Supplies — try that name").
+
+**Status:** reclassified (feature) — pending owner decision; batched with #7. The
+original routing premise was incorrect: no supplier-by-number lookup exists to
+route to, and the refusal is correct.
 
 ---
 
@@ -436,7 +454,7 @@ than a hard refusal. Re-run; 701337 outstanding amounts returned.
 
 ---
 
-## 11 🟠 open — Planner-guard refusal renders the old dense string, not Reason/Solution/Example — (was: new)
+## 11 🟢 not-reproducible — Planner dense-string refusal; parser now self-declares structured (dense path dormant) — (was: new)
 
 **Set:** 08_lifecycle, prompt "Open POs for supplier JGA."
 
@@ -451,18 +469,52 @@ format every other refusal uses.
 **Verification:** the `REFUSED (planner guard):` prefix is the pre-conversion
 shape. Cross-check `planner.py` guards and `nl_parser/capability.py`. No pod curl.
 
-**Root cause:** this guard raises the legacy dense string / `ValueError` rather
-than `RefusalError(Refusal(...))`, bypassing `capability_message`.
+**Repro attempt (2026-08-13) — did NOT reproduce.** Two unsupported-filter prompts
+both refused at **stage=parse** with the correct structure, never reaching the
+planner:
+- "List purchase orders over 5000 dollars." → Reason/Solution/Example +
+  "(refusal: unsupported_filter — Filtering purchase orders by amount is not
+  supported.)"
+- "Show customer accounts with account number 1234." → same structure +
+  "(refusal: unsupported_filter — CustomerAccount cannot be filtered by account
+  number.)"
+Token usage shows a parse call only, no planner error. The **parser now
+self-declares** these refusals during parsing and renders them through
+`capability_message`, so the planner's `_validate_intent_filters` dense-string
+path is not reached for these cases. `_FILTER_GUIDANCE` covers all seven relevant
+entities, so the structured render is complete.
 
-**Fix:** route it through the `RefusalError` → `state["refusal"]` →
-`capability_message` path with a tailored message; audit remaining guards for
-others still emitting the dense string. Re-run; structured format.
+**IMPORTANT — dormant, not removed.** The dense-string path still EXISTS:
+`_validate_intent_filters` (plan_builders.py) raises a bare `NotImplementedError`,
+which `plan_node` renders as `plan: {exc}` (the flat string) rather than through
+`capability_message`. It is currently *shadowed* by the parser, not fixed. If a
+query ever parses into an Intent with an unsupported filter the parser did NOT
+catch (e.g. a filter valid on one entity emitted for another), it would still dump
+the dense string.
 
-**Status:** open.
+**Hardening (deferred — see Status):** convert `_validate_intent_filters` to raise
+`RefusalError(UNSUPPORTED_FILTER)` like the four sibling entity guards, so the
+planner path also renders structured. Cost: the exception TYPE is load-bearing —
+~10 assertions across `test_planner.py` and `test_graph_pipeline.py` assert
+`NotImplementedError` and would flip to `RefusalError`. Coverage is confirmed
+(`_FILTER_GUIDANCE`), so no new guidance rows needed. Alternative: leave the type
+and route only `plan_node`'s NotImplementedError render through `capability_message`
+(zero type-test churn, preserves the deliberate NotImplementedError/ValueError
+split).
+
+**Root cause:** legacy path — `_validate_intent_filters` raises a bare
+`NotImplementedError` that bypasses `capability_message`. Now shadowed by the
+parser's own structured refusal.
+
+**Status:** not-reproducible (2026-08-13). Parser shadows the planner dense-string
+path; that path still exists (plan_builders `_validate_intent_filters`) and should
+be hardened if it resurfaces or as cleanup. **NOT marked `fixed`** — the emitter is
+still live, just unreached. Watch-item: a `plan: Spire can't filter …` dense line
+in an overnight run is the repro to fix against.
 
 ---
 
-## 12 🔴 open — "who details" misparsed → Contact join → em-dash projection + fabricated miscount (out=6082, most expensive call in run) — (was: new)
+## 12 🟢 fixed — "who details" now routes to WHO columns (fields), not a Contact join — (was: new)
 
 **Set:** 11_column_vocabulary, prompt "List active suppliers with supplier name and who details."
 
@@ -490,7 +542,28 @@ C, same expander as #7); guard the projection against columns absent from rows;
 convert supplier-list-with-columns synthesis to local (Theme A). Re-run; four
 columns render, no join, no em-dashes, no synth.
 
-**Status:** open. Spans Themes A and C.
+**Fix (applied 2026-08-13):** added an explicit parser-prompt rule steering "who
+details" / "who columns" / "audit columns" / "audit fields" / "creator details" /
+"created details" to `fields` (not a Contact include); the existing COL-02 synonym
+then expands them to the four WHO columns. Only "who are the contacts for X" still
+means a Contact include. File: `src/spire/nl_parser/parser.py` (prompt) — no MCP
+restart (parser is not under mcp_server/).
+
+**Verified live (2026-08-13):** "List active suppliers with supplier name and who
+details." now parses to `fields=[Supplier, CreatedBy, CreationDate, LastUpdateDate,
+LastUpdatedBy]`, **no include**, **no synth** — four columns render, no Contact
+fetch, no em-dash, no fabricated count. 9637 tokens (was ~21032). Regression guard:
+"Get supplier contacts for Lee Supplies." still routes to `include: ['Contact']`
+and returns 18 contacts — the genuine Contact path is unchanged. Parser tests green
+(127). Root cause was corrected: the synonym already existed and expanded to four
+real Supplier fields; the bug was the prompt capturing "who" as a Contact include
+before the fields-path expander could run.
+
+**Status:** fixed (2026-08-13, Theme C). The em-dash (b) and fabricated-count (c)
+sub-defects were downstream of the phantom Contact projection and are resolved by
+the routing fix — no separate projection-guard needed for this case. The general
+Theme A goal (convert supplier+contacts *join* synthesis to local) remains separate
+and is tracked under #1/#8.
 
 ---
 
