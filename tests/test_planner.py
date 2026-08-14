@@ -709,43 +709,52 @@ def test_validate_intent_filters_accepts_empty_list() -> None:
 
 
 def test_validate_intent_filters_raises_on_single_unknown_type() -> None:
-    """An unknown filter type raises NotImplementedError naming the type."""
+    """An unknown filter type raises RefusalError(UNSUPPORTED_FILTER) naming
+    the rejected type in offending_filters. (The user-facing wording — the
+    supported filters and an example — is added by capability_message and is
+    covered by test_nl_parser_capability.py, not here.)"""
     filters = [{"type": "is_strategic_supplier", "value": True}]
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         _validate_intent_filters(filters, "Supplier")
-    assert "is_strategic_supplier" in str(exc_info.value)
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.UNSUPPORTED_FILTER
+    assert refusal.offending_entity == "Supplier"
+    assert "is_strategic_supplier" in refusal.offending_filters
 
 
 def test_validate_intent_filters_lists_all_unknown_types_at_once() -> None:
-    """If multiple unknown filter types are present, the error message
-    lists ALL of them — the user shouldn't have to fix one at a time."""
+    """If multiple unknown filter types are present, offending_filters lists
+    ALL of them — the user shouldn't have to fix one at a time."""
     filters = [
         {"type": "country", "value": "US"},          # known
         {"type": "is_strategic_supplier", "value": True},   # unknown
         {"type": "has_open_PO", "value": True},      # known
         {"type": "is_diversity_supplier", "value": True},   # unknown
     ]
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         _validate_intent_filters(filters, "Supplier")
-    msg = str(exc_info.value)
-    assert "is_strategic_supplier" in msg
-    assert "is_diversity_supplier" in msg
+    offending = exc_info.value.refusal.offending_filters
+    assert "is_strategic_supplier" in offending
+    assert "is_diversity_supplier" in offending
 
 
-def test_validate_intent_filters_error_message_names_supported_types() -> None:
-    """The error message must point the caller at what IS supported,
-    so the gap is actionable, not just a 'no'."""
+def test_validate_intent_filters_refusal_is_structured() -> None:
+    """The refusal is structured (flavor + entity + offending_filters) so
+    plan_node can route it through capability_message. Pointing the user at
+    what IS supported is capability_message's job (from _FILTER_GUIDANCE),
+    covered in test_nl_parser_capability.py — the exception itself no longer
+    carries that prose."""
     filters = [{"type": "is_strategic_supplier", "value": True}]
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         _validate_intent_filters(filters, "Supplier")
-    msg = str(exc_info.value)
-    assert "country" in msg          # entity-level support listed
-    assert "has_open_PO" in msg      # edge-traversal support listed
-    assert "has_no_recent_invoices" in msg  # F2: now also supported
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.UNSUPPORTED_FILTER
+    assert refusal.offending_entity == "Supplier"
+    assert refusal.offending_filters == ["is_strategic_supplier"]
 
 
 def test_generate_plan_raises_on_unknown_filter_type() -> None:
-    """End-to-end: generate_plan must propagate the validation error."""
+    """End-to-end: generate_plan must propagate the validation refusal."""
     intent = Intent(
         target_entity="Supplier",
         filters=[
@@ -755,9 +764,9 @@ def test_generate_plan_raises_on_unknown_filter_type() -> None:
         ],
         include=["Buyer"],
     )
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         generate_plan(intent)
-    assert "is_strategic_supplier" in str(exc_info.value)
+    assert "is_strategic_supplier" in exc_info.value.refusal.offending_filters
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -800,10 +809,12 @@ def test_purchase_order_status_filter_is_refused() -> None:
     REC-2 removed the old PO no-filter guard (an unfiltered PO list now
     samples instead of refusing). status and supplier are still not
     PurchaseOrder entity-level filters — the actual answer to "open POs for
-    supplier X" is to root at the supplier — so the query is now refused one
-    layer down, by _validate_intent_filters, with a NotImplementedError that
-    names the supported PurchaseOrder filters and the edge filters. The
-    refusal is preserved; only the mechanism and message changed.
+    supplier X" is to root at the supplier — so the query is refused one
+    layer down, by _validate_intent_filters, now with a structured
+    RefusalError(UNSUPPORTED_FILTER) naming the rejected filters. The
+    user-facing "supported PurchaseOrder filters" wording is added by
+    capability_message (from _FILTER_GUIDANCE); the refusal is preserved,
+    only the mechanism and rendering changed.
     """
     intent = Intent(
         target_entity="PurchaseOrder",
@@ -812,12 +823,13 @@ def test_purchase_order_status_filter_is_refused() -> None:
             {"type": "supplier", "value": "EIP Inc"},
         ],
     )
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         generate_plan(intent)
-    msg = str(exc_info.value)
-    assert "can't filter PurchaseOrder by" in msg
-    assert "status" in msg and "supplier" in msg
-    assert "Supported PurchaseOrder filters" in msg
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.UNSUPPORTED_FILTER
+    assert refusal.offending_entity == "PurchaseOrder"
+    assert "status" in refusal.offending_filters
+    assert "supplier" in refusal.offending_filters
 
 
 def test_standard_receipt_unscoped_is_refused() -> None:
@@ -856,30 +868,33 @@ def test_standard_receipt_with_site_alone_plans() -> None:
 
 def test_unguarded_entity_still_validates_with_an_example() -> None:
     """An entity with no guard falls through to validation — which must
-    still name what IS supported and give something typeable."""
+    still refuse structurally, naming what was rejected. What IS supported,
+    and a typeable example, are added by capability_message (from
+    _FILTER_GUIDANCE), covered in test_nl_parser_capability.py."""
     intent = Intent(
         target_entity="CustomerAccount",
         filters=[{"type": "account_number", "value": "300000047368512"}],
     )
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(RefusalError) as exc_info:
         generate_plan(intent)
-    msg = str(exc_info.value)
-    assert "account_number" in msg              # what was rejected
-    assert "by_customer_name" in msg            # what works instead
-    assert "For example:" in msg                # something typeable
+    refusal = exc_info.value.refusal
+    assert refusal.flavor is RefusalFlavor.UNSUPPORTED_FILTER
+    assert refusal.offending_entity == "CustomerAccount"
+    assert "account_number" in refusal.offending_filters
 
 
 def test_validation_message_carries_no_internal_jargon() -> None:
     """The old message opened with 'Intent contains filter types not
-    supported for entity ...' and printed Python list reprs. Nothing a
-    user can act on."""
-    with pytest.raises(NotImplementedError) as exc_info:
+    supported for entity ...' and printed Python list reprs. The structured
+    refusal's detail must stay clean too — a blunt, readable line, no
+    internal jargon, no Python reprs."""
+    with pytest.raises(RefusalError) as exc_info:
         _validate_intent_filters(
             [{"type": "is_strategic_supplier", "value": True}], "Supplier"
         )
-    msg = str(exc_info.value)
-    assert "Intent contains filter types" not in msg
-    assert msg.startswith("Spire can't filter Supplier by")
+    detail = exc_info.value.refusal.detail
+    assert "Intent contains filter types" not in detail
+    assert detail == "Supplier cannot be filtered by 'is_strategic_supplier'"
 
 
 def test_validation_still_precedes_plan_building() -> None:
@@ -890,7 +905,7 @@ def test_validation_still_precedes_plan_building() -> None:
         target_entity="Supplier",
         filters=[{"type": "is_diversity_supplier", "value": True}],
     )
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(RefusalError):
         generate_plan(intent)
 
 
