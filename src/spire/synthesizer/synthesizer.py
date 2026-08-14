@@ -142,6 +142,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_po_with_children,
     po_with_children_buckets,
     _filtered_supplier_list,
+    _supplier_with_open_pos,
+    build_suppliers_with_open_pos,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -586,6 +588,53 @@ def synthesize_response(
             truncation_notes=notes,
         )
 
+    # Suppliers with their open POs (join): no LLM.
+    #
+    # #8. "suppliers with open purchase orders" fetches a supplier bucket and
+    # a joined open-PO bucket, then shows each supplier's open-PO count and
+    # buyers. plain_supplier_bucket returns None on the two-bucket shape, so
+    # this used to fall to the model — which re-typed the whole table and
+    # miscounted its own total (prose said 42 open POs over a table summing
+    # to 43). build_suppliers_with_open_pos does the join here: every count
+    # is len(group), and the total is the sum of those counts, so the number
+    # is exact by construction. The denominator is honest — the open-PO
+    # figure is across the EXAMINED suppliers (the sample), not the pod-wide
+    # supplier total, mirroring _filtered_supplier_list.
+    supplier_open_pos = (
+        _supplier_with_open_pos(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_open_pos is not None:
+        supplier_bucket, po_bucket = supplier_open_pos
+        supplier_rows = outputs[supplier_bucket]
+        po_rows = outputs[po_bucket]
+        records = build_suppliers_with_open_pos(supplier_rows, po_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_open = sum(r.open_po_count or 0 for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        po_word = "open purchase order" if total_open == 1 else "open purchase orders"
+        summary = (
+            f"Showing {examined} of {total_text} suppliers. "
+            f"These {examined} suppliers have {total_open} {po_word} between them."
+        )
+        supplier_filters = _entity_level_filter_types().get("Supplier", set())
+        tip = build_narrowing_tip(
+            {ft for ft in supplier_filters if ft != "by_id"},
+            total_available,
+            entity_label="suppliers",
+        )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+            narrowing_tip=tip,
+        )
+
     # Plain PO list: no LLM (REC-2).
     #
     # The mirror of the plain-supplier branch above, and the reason "list
@@ -982,6 +1031,7 @@ def synthesize_response(
     response = response.__class__(**rounded_dict)
 
     return response
+
 
 
 
