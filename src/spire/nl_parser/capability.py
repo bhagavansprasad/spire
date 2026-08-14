@@ -441,7 +441,7 @@ _FALLBACK: dict[RefusalFlavor, tuple[str, str]] = {
         "List active suppliers with supplier name, supplier number, and status",
     ),
     RefusalFlavor.UNSUPPORTED_OPERATION: (
-        "Ask me for the records themselves and do the rest your side.",
+        "Ask for the underlying records and I'll return them for you to total or average.",
         "receipts for ABC Application Software",
     ),
     RefusalFlavor.UNKNOWN_ENTITY: (

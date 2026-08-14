@@ -32,7 +32,6 @@ from spire.planner.registries import (
     _AGGREGATION_TOOLS,
     _COMPARISON_PARAMS,
     _COMPARISON_TOOLS,
-    _ENTITY_EXAMPLE_PROMPT,
     _FILTER_SOURCE_NAME_SUFFIX,
     _FILTER_SOURCE_NONEMPTY_SUFFIX,
     _OUTPUT_NAME_BY_ENTITY,
@@ -161,10 +160,21 @@ def _build_comparison_plan(compare: dict[str, Any]) -> Plan:
 def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) -> None:
     """Verify every filter in the intent has a known handler for the target entity.
 
-    Raises NotImplementedError naming the unsupported types, what IS
-    supported for this entity, and — where one is known — a prompt the
-    user can actually type. The exception TYPE is load-bearing: callers
-    and tests distinguish it from the ValueError the entity guards raise.
+    Raises RefusalError(UNSUPPORTED_FILTER) naming the entity and the
+    unsupported filter type(s). plan_node routes the wrapped Refusal into
+    state["refusal"], so it renders through capability_message — the same
+    Reason/Solution/Example shape every other refusal uses — instead of the
+    legacy dense "plan: Spire can't filter ..." dump. The user-facing
+    wording (the supported filters, an example) comes from
+    _FILTER_GUIDANCE[entity] in capability.py; `detail` stays blunt for
+    logs and tests, and `offending_filters` carries the rejected types.
+
+    (Previously this raised NotImplementedError with a pre-built dense
+    string. plan_node's NotImplementedError branch dumped that string flat,
+    bypassing capability_message — the #11 defect. The only caller that
+    distinguished the type was plan_node, whose RefusalError branch already
+    handles the structured path; the aggregation-op NotImplementedError
+    raises elsewhere are unaffected.)
 
     Called AFTER the entity guards in generate_plan. Those guards give a
     better-aimed message for the cases they cover, and several
@@ -190,24 +200,24 @@ def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) 
         return
 
     named = ", ".join(repr(u) for u in unknown)
-    supported = sorted(entity_level)
-    parts = [f"Spire can't filter {target_entity} by {named}."]
-    if supported:
-        parts.append(
-            f"Supported {target_entity} filters: {', '.join(supported)}."
+    # UNSUPPORTED_FILTER: the entity is valid but one of its filters is not.
+    # Raise structured so plan_node routes it into state["refusal"] and it
+    # renders through capability_message (Reason/Solution/Example, sourced
+    # from _FILTER_GUIDANCE[entity]) — the readable shape every other
+    # refusal gets, not the legacy dense dump. detail stays blunt for
+    # logs/tests; offending_filters names the rejected types. Local import
+    # mirrors the entity guards in planner.py and avoids a module-load
+    # cycle (result.py imports Intent via planner.planner).
+    from spire.nl_parser.result import Refusal, RefusalError, RefusalFlavor
+
+    raise RefusalError(
+        Refusal(
+            flavor=RefusalFlavor.UNSUPPORTED_FILTER,
+            detail=f"{target_entity} cannot be filtered by {named}",
+            offending_entity=target_entity,
+            offending_filters=[str(u) for u in unknown],
         )
-    else:
-        parts.append(
-            f"{target_entity} has no filters of its own; it is reached by "
-            "traversal from another entity."
-        )
-    example = _ENTITY_EXAMPLE_PROMPT.get(target_entity)
-    if example:
-        parts.append(f"For example: {example!r}.")
-    parts.append(
-        f"Filters that work across entities: {', '.join(sorted(edge_filters))}."
     )
-    raise NotImplementedError(" ".join(parts))
 
 
 def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
@@ -573,5 +583,6 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
+
 
 

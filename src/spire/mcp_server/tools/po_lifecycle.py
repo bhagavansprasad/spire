@@ -130,6 +130,8 @@ POD QUIRKS THIS RELIES ON (all curl-verified 2026-07-29)
 
 from __future__ import annotations
 
+import httpx
+
 from datetime import date, datetime
 from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.pagination import page_all
@@ -857,6 +859,50 @@ def _recommend_action(
     return "None — the order is complete and reconciled."
 
 
+# Single-PO path; formatted with a POHeaderId per call.
+_PO_BY_ID_PATH_TEMPLATE = PURCHASE_ORDERS_PATH + "/{po_header_id}"
+
+
+async def _try_header_id_lookup(client: FusionClient, value: str) -> dict | None:
+    """Resolve `value` as a POHeaderId via the single-record PO path.
+
+    Used only when the OrderNumber lookup misses: a bare "PO 2144" is a
+    POHeaderId (2144 -> OrderNumber 162352 on this pod), not an order
+    number, so an OrderNumber-only lookup falsely reports not-found.
+
+    Returns the PO header dict (projected on _PO_FIELDS) or None. Handles
+    BOTH not-found shapes: the real pod 404s on an unknown id, while some
+    fetches/mocks return an empty-items envelope — both map to None.
+
+    Kept local (rather than importing purchase_order_by_id._try_header_id)
+    so it projects _PO_FIELDS, the field set the rest of this tool needs.
+    Cross-ref that module if either resolver changes.
+    """
+    path = _PO_BY_ID_PATH_TEMPLATE.format(po_header_id=value)
+    params = {"onlyData": "true", "fields": ",".join(_PO_FIELDS)}
+    try:
+        response = await client.get(path, params=params)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return None
+        raise
+    if not response:
+        return None
+    # Single-record path returns the header directly; some pods/mocks wrap
+    # it in {"items": [...]}. Handle both.
+    if "items" in response:
+        items = response.get("items", [])
+        if not items:
+            return None
+        source = items[0]
+    else:
+        source = response
+    # No POHeaderId in the body means it did not resolve to a real PO.
+    if source.get("POHeaderId") is None:
+        return None
+    return source
+
+
 async def get_purchase_order_lifecycle_status(
     client: FusionClient,
     po_number: str,
@@ -899,14 +945,29 @@ async def get_purchase_order_lifecycle_status(
     po_items = po_response.get("items", [])
 
     if not po_items:
-        return {
-            "shape": _SHAPE,
-            "found": False,
-            "order_number": po_number,
-            "notes": [
-                f"no purchase order found with OrderNumber '{po_number}'"
-            ],
-        }
+        # OrderNumber miss. The value may be a POHeaderId — "PO 2144" is
+        # POHeaderId 2144 (= OrderNumber 162352) on this pod. Cross-try by
+        # header id before declaring not-found. If it resolves, adopt its
+        # real OrderNumber and continue: schedules, invoices and payments
+        # below all key on OrderNumber, so the rest of the function must
+        # run on the canonical value, not the header id.
+        header = await _try_header_id_lookup(client, po_number)
+        if header is None:
+            return {
+                "shape": _SHAPE,
+                "found": False,
+                "order_number": po_number,
+                "notes": [
+                    f"no purchase order found with OrderNumber '{po_number}'"
+                ],
+            }
+        resolved = str(header.get("OrderNumber") or "").strip()
+        notes.append(
+            f"'{po_number}' is a POHeaderId, not an order number; "
+            f"resolved to OrderNumber '{resolved}'"
+        )
+        po_number = resolved
+        po_items = [header]
 
     if len(po_items) > 1:
         notes.append(

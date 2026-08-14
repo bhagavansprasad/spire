@@ -139,9 +139,13 @@ from spire.synthesizer.p2p import (  # noqa: F401
     plain_supplier_bucket,
     build_purchase_order_records,
     plain_po_bucket,
+    build_invoice_records,
+    plain_invoice_bucket,
     build_po_with_children,
     po_with_children_buckets,
     _filtered_supplier_list,
+    _supplier_with_open_pos,
+    build_suppliers_with_open_pos,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -586,6 +590,53 @@ def synthesize_response(
             truncation_notes=notes,
         )
 
+    # Suppliers with their open POs (join): no LLM.
+    #
+    # #8. "suppliers with open purchase orders" fetches a supplier bucket and
+    # a joined open-PO bucket, then shows each supplier's open-PO count and
+    # buyers. plain_supplier_bucket returns None on the two-bucket shape, so
+    # this used to fall to the model — which re-typed the whole table and
+    # miscounted its own total (prose said 42 open POs over a table summing
+    # to 43). build_suppliers_with_open_pos does the join here: every count
+    # is len(group), and the total is the sum of those counts, so the number
+    # is exact by construction. The denominator is honest — the open-PO
+    # figure is across the EXAMINED suppliers (the sample), not the pod-wide
+    # supplier total, mirroring _filtered_supplier_list.
+    supplier_open_pos = (
+        _supplier_with_open_pos(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_open_pos is not None:
+        supplier_bucket, po_bucket = supplier_open_pos
+        supplier_rows = outputs[supplier_bucket]
+        po_rows = outputs[po_bucket]
+        records = build_suppliers_with_open_pos(supplier_rows, po_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_open = sum(r.open_po_count or 0 for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        po_word = "open purchase order" if total_open == 1 else "open purchase orders"
+        summary = (
+            f"Showing {examined} of {total_text} suppliers. "
+            f"These {examined} suppliers have {total_open} {po_word} between them."
+        )
+        supplier_filters = _entity_level_filter_types().get("Supplier", set())
+        tip = build_narrowing_tip(
+            {ft for ft in supplier_filters if ft != "by_id"},
+            total_available,
+            entity_label="suppliers",
+        )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+            narrowing_tip=tip,
+        )
+
     # Plain PO list: no LLM (REC-2).
     #
     # The mirror of the plain-supplier branch above, and the reason "list
@@ -626,6 +677,47 @@ def synthesize_response(
                 )
             ),
             purchase_orders=build_purchase_order_records(rows),
+            truncation_notes=notes,
+        )
+
+    # Plain invoice list: no LLM (#3).
+    #
+    # "invoices for supplier X" produces a single invoice bucket. It used to
+    # go to the model, which re-typed all 25 rows field by field (dropping a
+    # field silently was possible) plus a date-range/amount-range summary —
+    # ~4k output tokens for a flat list. plain_invoice_bucket returns None on
+    # any multi-bucket invoice shape (invoice + lines / tax / DFF), so those
+    # are unaffected; a plain list is built here by build_invoice_records and
+    # summarised by local_list_summary, consistent with the supplier and PO
+    # plain-list branches. No range prose — the table carries the amounts and
+    # dates, and a locally computed range is surface the sibling paths don't
+    # add.
+    invoice_bucket = (
+        plain_invoice_bucket(outputs) if target_entity == "Invoice" else None
+    )
+    if invoice_bucket is not None:
+        rows = outputs[invoice_bucket]
+        total_available, notes = _local_truncation(
+            invoice_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        return InvoiceResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="invoices",
+                    # Exactly the columns build_invoice_records renders. The
+                    # rows also carry ApprovalStatus, PaidStatus,
+                    # PurchaseOrderNumber and the WHO columns, none described
+                    # here unless displayed.
+                    displayed_fields=[
+                        "InvoiceNumber", "InvoiceAmount", "InvoiceCurrency",
+                        "InvoiceDate", "Supplier",
+                    ],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                )
+            ),
+            invoices=build_invoice_records(rows),
             truncation_notes=notes,
         )
 
@@ -982,6 +1074,7 @@ def synthesize_response(
     response = response.__class__(**rounded_dict)
 
     return response
+
 
 
 

@@ -408,6 +408,87 @@ def plain_supplier_bucket(outputs: dict[str, list[dict]]) -> str | None:
     return None
 
 
+def _supplier_with_open_pos(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, po_bucket) for the "suppliers with open POs" join.
+
+    The shape is exactly two buckets: a supplier list (rows with SupplierId
+    and Supplier) and a PO list (rows with POHeaderId and SupplierId). Each
+    supplier's open-PO count and buyers come from joining the PO bucket onto
+    the supplier rows by SupplierId — the join plain_supplier_bucket
+    deliberately leaves out, so it used to fall to the LLM (which miscounted
+    its own table, 42 vs 43). Building it here makes the count exact.
+
+    Returns None unless there are exactly two buckets of the right shapes,
+    so plain lists and other joins are unaffected. Conservative by design:
+    a wrong match costs correctness, a miss only costs tokens.
+    """
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    po_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "POHeaderId" in first and "SupplierId" in first:
+            po_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or po_bucket is None:
+        return None
+    return supplier_bucket, po_bucket
+
+
+def build_suppliers_with_open_pos(
+    supplier_rows: list[dict], po_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + PO rows -> SupplierRecords with open_po_count + buyers.
+
+    Pure: no LLM, no I/O. Groups po_rows by SupplierId, then for each
+    supplier sets open_po_count to that group's size and buyers to the
+    distinct buyers on those POs (BuyerId/Buyer sit on each PO row, so no
+    separate bucket). Buyers dedupe by person_id, in first-seen order;
+    a PO with no BuyerId contributes no buyer.
+
+    This is the deterministic version of the cross-bucket join
+    build_supplier_records leaves empty by design — every count is
+    len(group), never a model estimate.
+    """
+    by_supplier: dict[int, list[dict]] = {}
+    for po in po_rows:
+        sid = po.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(po)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        buyers: list[BuyerInfo] = []
+        seen: set = set()
+        for po in group:
+            bid = po.get("BuyerId")
+            if bid is None or bid in seen:
+                continue
+            seen.add(bid)
+            buyers.append(
+                BuyerInfo(person_id=bid, display_name=po.get("Buyer") or "")
+            )
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                open_po_count=len(group),
+                buyers=buyers,
+            )
+        )
+    return records
+
+
 def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
     """Executor PO rows -> PurchaseOrderRecord list, verbatim.
 
@@ -476,6 +557,63 @@ def plain_po_bucket(outputs: dict[str, list[dict]]) -> str | None:
         return None
     first = rows[0]
     if "POHeaderId" in first and "OrderNumber" in first:
+        return name
+    return None
+
+
+def build_invoice_records(rows: list[dict]) -> list[InvoiceRecord]:
+    """Executor invoice rows -> InvoiceRecord list, verbatim.
+
+    Pure: no LLM, no I/O. The mirror of build_supplier_records and
+    build_purchase_order_records for the plain invoice-list path (#3).
+    Every field the record needs — number, date, amount, currency,
+    supplier name and number — is already on the row, so this is a rename,
+    not a reconstruction, and there is no cross-bucket join. Previously an
+    invoice list was the model's job: it re-emitted every row field by
+    field (the expensive half that can silently drop a field), plus a
+    date-range/amount-range summary. The record table is now built here;
+    the summary comes from local_list_summary like the sibling paths.
+
+    invoice_id uses `or 0` and amount `or 0.0` so a null coerces cleanly
+    rather than failing schema validation; a genuinely null-amount invoice
+    (the pod has some at 0) reads as 0.0, which is what it is.
+    """
+    records: list[InvoiceRecord] = []
+    for row in rows:
+        records.append(
+            InvoiceRecord(
+                invoice_id=row.get("InvoiceId") or 0,
+                invoice_number=str(row.get("InvoiceNumber") or ""),
+                invoice_date=str(row.get("InvoiceDate") or ""),
+                invoice_amount=row.get("InvoiceAmount") or 0.0,
+                invoice_currency=str(row.get("InvoiceCurrency") or ""),
+                supplier_name=row.get("Supplier") or "",
+                supplier_number=str(row.get("SupplierNumber") or ""),
+            )
+        )
+    return records
+
+
+def plain_invoice_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the invoice bucket when this is a PLAIN invoice list.
+
+    The mirror of plain_supplier_bucket / plain_po_bucket. "Plain" means
+    one bucket of invoice rows and nothing else, so every field the
+    response needs is already on those rows. Returns None the moment there
+    is more than one bucket: an invoice query that also fetched lines, tax
+    lines or a DFF is a multi-bucket shape and stays on its own path (or
+    the LLM), not here.
+
+    Deliberately conservative, same as the siblings: returning None too
+    often costs tokens; returning a wrong bucket costs correctness.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "InvoiceId" in first and "InvoiceNumber" in first:
         return name
     return None
 
@@ -755,4 +893,5 @@ def build_narrowing_tip(
         f"Reading all {total:,} {entity_label} is slow. "
         f"Narrow with a filter: {filters_text}."
     )
+
 
