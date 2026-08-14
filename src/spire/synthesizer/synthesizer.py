@@ -204,6 +204,35 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
 }
 
 
+# Human labels for the empty-result summary, matching the entity_label
+# strings the local list branches already use ("suppliers", "purchase
+# orders", …). Keeps "No <label> found" consistent with the non-empty
+# wording for the same entity.
+_ENTITY_LABEL: dict[str, str] = {
+    "Supplier": "suppliers",
+    "Invoice": "invoices",
+    "Address": "addresses",
+    "PurchaseOrder": "purchase orders",
+    "ReceivablesInvoice": "AR invoices",
+    "CustomerAccount": "customer accounts",
+    "CreditMemo": "credit memos",
+    "StandardReceipt": "receipts",
+}
+
+
+def _all_buckets_empty(outputs: dict[str, list[dict]]) -> bool:
+    """True when the executor produced no rows in any bucket.
+
+    A genuinely empty result — every bucket is an empty list, or there are
+    no buckets. Used to short-circuit the "nothing found" case to a local
+    response instead of paying an LLM to write "no rows found" over zero
+    rows (#5).
+    """
+    if not outputs:
+        return True
+    return all(not rows for rows in outputs.values())
+
+
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
 # its result, not by target_entity (an aggregation Intent carries an
 # aggregate block instead of a target entity). The executor puts that
@@ -385,6 +414,24 @@ def synthesize_response(
     comparison_shape = _comparison_shape(outputs)
     if comparison_shape is not None:
         return _build_comparison_response(outputs, comparison_shape)
+
+    # Empty result: nothing found -> local "no results", no LLM (#5).
+    #
+    # Count and comparison have returned above; aggregation and lifecycle
+    # below always carry a row (a ranking object, a reconciliation record),
+    # so _all_buckets_empty is False for them and this does not steal their
+    # path. For a plain entity target with zero rows in every bucket there
+    # is nothing to synthesize — an LLM call to write "no suppliers found"
+    # over an empty list is pure waste (measured out=125 on "suppliers named
+    # Zzzqqx"). Build the empty response of the right type with a local
+    # summary that matches the non-empty wording for the entity.
+    if _all_buckets_empty(outputs) and target_entity in SYNTHESIS_SCHEMAS:
+        empty_schema = SYNTHESIS_SCHEMAS[target_entity]
+        label = _ENTITY_LABEL.get(target_entity, "records")
+        return empty_schema(
+            summary=f"No {label} found matching the criteria.",
+            truncation_notes=[],
+        )
 
     # Feature 7: an aggregation produces a ranking, not an entity list.
     # It has no target_entity (the Intent carried an aggregate block
