@@ -139,6 +139,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     plain_supplier_bucket,
     build_purchase_order_records,
     plain_po_bucket,
+    build_invoice_records,
+    plain_invoice_bucket,
     build_po_with_children,
     po_with_children_buckets,
     _filtered_supplier_list,
@@ -675,6 +677,47 @@ def synthesize_response(
                 )
             ),
             purchase_orders=build_purchase_order_records(rows),
+            truncation_notes=notes,
+        )
+
+    # Plain invoice list: no LLM (#3).
+    #
+    # "invoices for supplier X" produces a single invoice bucket. It used to
+    # go to the model, which re-typed all 25 rows field by field (dropping a
+    # field silently was possible) plus a date-range/amount-range summary —
+    # ~4k output tokens for a flat list. plain_invoice_bucket returns None on
+    # any multi-bucket invoice shape (invoice + lines / tax / DFF), so those
+    # are unaffected; a plain list is built here by build_invoice_records and
+    # summarised by local_list_summary, consistent with the supplier and PO
+    # plain-list branches. No range prose — the table carries the amounts and
+    # dates, and a locally computed range is surface the sibling paths don't
+    # add.
+    invoice_bucket = (
+        plain_invoice_bucket(outputs) if target_entity == "Invoice" else None
+    )
+    if invoice_bucket is not None:
+        rows = outputs[invoice_bucket]
+        total_available, notes = _local_truncation(
+            invoice_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        return InvoiceResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="invoices",
+                    # Exactly the columns build_invoice_records renders. The
+                    # rows also carry ApprovalStatus, PaidStatus,
+                    # PurchaseOrderNumber and the WHO columns, none described
+                    # here unless displayed.
+                    displayed_fields=[
+                        "InvoiceNumber", "InvoiceAmount", "InvoiceCurrency",
+                        "InvoiceDate", "Supplier",
+                    ],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                )
+            ),
+            invoices=build_invoice_records(rows),
             truncation_notes=notes,
         )
 

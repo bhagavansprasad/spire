@@ -561,6 +561,63 @@ def plain_po_bucket(outputs: dict[str, list[dict]]) -> str | None:
     return None
 
 
+def build_invoice_records(rows: list[dict]) -> list[InvoiceRecord]:
+    """Executor invoice rows -> InvoiceRecord list, verbatim.
+
+    Pure: no LLM, no I/O. The mirror of build_supplier_records and
+    build_purchase_order_records for the plain invoice-list path (#3).
+    Every field the record needs — number, date, amount, currency,
+    supplier name and number — is already on the row, so this is a rename,
+    not a reconstruction, and there is no cross-bucket join. Previously an
+    invoice list was the model's job: it re-emitted every row field by
+    field (the expensive half that can silently drop a field), plus a
+    date-range/amount-range summary. The record table is now built here;
+    the summary comes from local_list_summary like the sibling paths.
+
+    invoice_id uses `or 0` and amount `or 0.0` so a null coerces cleanly
+    rather than failing schema validation; a genuinely null-amount invoice
+    (the pod has some at 0) reads as 0.0, which is what it is.
+    """
+    records: list[InvoiceRecord] = []
+    for row in rows:
+        records.append(
+            InvoiceRecord(
+                invoice_id=row.get("InvoiceId") or 0,
+                invoice_number=str(row.get("InvoiceNumber") or ""),
+                invoice_date=str(row.get("InvoiceDate") or ""),
+                invoice_amount=row.get("InvoiceAmount") or 0.0,
+                invoice_currency=str(row.get("InvoiceCurrency") or ""),
+                supplier_name=row.get("Supplier") or "",
+                supplier_number=str(row.get("SupplierNumber") or ""),
+            )
+        )
+    return records
+
+
+def plain_invoice_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the invoice bucket when this is a PLAIN invoice list.
+
+    The mirror of plain_supplier_bucket / plain_po_bucket. "Plain" means
+    one bucket of invoice rows and nothing else, so every field the
+    response needs is already on those rows. Returns None the moment there
+    is more than one bucket: an invoice query that also fetched lines, tax
+    lines or a DFF is a multi-bucket shape and stays on its own path (or
+    the LLM), not here.
+
+    Deliberately conservative, same as the siblings: returning None too
+    often costs tokens; returning a wrong bucket costs correctness.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    if "InvoiceId" in first and "InvoiceNumber" in first:
+        return name
+    return None
+
+
 def _derived_received_amount(row: dict) -> float | None:
     """Received AMOUNT for a schedule row, derived from quantity.
 

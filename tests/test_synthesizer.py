@@ -454,16 +454,16 @@ def test_synthesize_response_empty_suppliers_passes() -> None:
 
 
 def test_synthesize_response_invoice_entity_selects_invoice_schema(invoice_outputs) -> None:
-    response = InvoiceResponse(
-        summary="Two invoices.",
-        invoices=[InvoiceRecord(invoice_id=9001, invoice_number="INV-9001", invoice_date="2022-01-10", invoice_amount=1500.0, invoice_currency="USD", supplier_name="Lee Supplies", supplier_number="1252")],
-    )
-    llm = _mock_llm(response)
+    # A plain single-bucket invoice list is built locally (#3) — no LLM.
+    # Records come from build_invoice_records over the executor rows, and
+    # with_structured_output is never called, matching the supplier and PO
+    # plain-list paths.
+    llm = _mock_llm(None)
     result = synthesize_response(invoice_outputs, target_entity="Invoice", llm=llm)
     assert isinstance(result, InvoiceResponse)
-    llm.with_structured_output.assert_called_once_with(InvoiceResponse, include_raw=True)
+    llm.with_structured_output.assert_not_called()
     assert result.invoices[0].invoice_id == 9001
-
+    assert result.invoices[1].invoice_id == 9002
 
 def test_synthesize_response_po_entity_selects_po_schema(po_outputs) -> None:
     response = PurchaseOrderResponse(
