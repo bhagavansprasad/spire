@@ -38,7 +38,7 @@ lower blast radius · 🟡 minor / cosmetic · 🟢 note (efficiency or future w
 | 10 | new | open | Parser runs to token ceiling on "What is outstanding on PO 701337?" |
 | 11 | new | open | Planner-guard refusal renders the old dense string, not Reason/Solution/Example |
 | 12 | new | open | "who details" misparsed → Contact join → em-dash projection + fabricated miscount |
-| 13 | AI-9 / COL-03 | open (limitation) | Wholesale refusal on wholly-unknown columns (G15) — inconsistent partial-column note |
+| 13 | AI-9 / COL-03 | not-reproducible | Wholesale refusal on wholly-unknown columns (G15) — could not be triggered on current code |
 | 14 | AI-13 | open (suspected root) | Supplier list returns a different 25-row sample between identical runs |
 | 15 | AI-1 | fixed | Child rows rendered as counts, not rows |
 | 16 | AI-4 | fixed | Partial result stated as the total (wrong denominator) |
@@ -494,7 +494,7 @@ columns render, no join, no em-dashes, no synth.
 
 ---
 
-## 13 🔴 open (limitation) — Wholesale refusal on wholly-unknown columns; partial-column note inconsistent — (was: AI-9 / COL-03)
+## 13 🟢 not-reproducible — Wholesale refusal on wholly-unknown columns; partial-column note inconsistent — (was: AI-9 / COL-03)
 
 **Set:** originally 03_ar/04_columns; a standing G15 limitation.
 
@@ -511,6 +511,20 @@ one and menu the available columns — never a wholesale refusal.
 **Verification:** documented in the findings doc (G15); reproduced by the
 specific phrasings. No pod curl.
 
+**Repro attempt (2026-08-13) — did NOT reproduce.** Both cited phrasings ran
+cleanly on current code (after the #12 parser fix), COL-03 handling them exactly
+as Expected:
+- "List suppliers with supplier name and credit rating." → Intent built (target
+  Supplier, fields=['Supplier']); query ran; note: "credit rating isn't available
+  on Supplier" + the eight real columns offered. Valid column preserved, no
+  wholesale refusal, no synth (9670 tokens).
+- "List suppliers with their credit rating." (unknown column ONLY, nothing valid
+  to anchor) → Intent still built; ran; same honest note + "(25 matched; no
+  requested column was available.)". No unanswerable flag.
+
+The upstream-unanswerable-flag path this issue describes did not fire in either
+run. COL-03 covers the cited cases.
+
 **Root cause:** the model refuses on an unknown column before the Intent exists;
 making the column real in the KG (a synonym or field row) stops the refusal
 deterministically — the COL-01/COL-02 approach.
@@ -518,9 +532,14 @@ deterministically — the COL-01/COL-02 approach.
 **Fix:** continue the COL-01/COL-02 direction — add field rows/synonyms so
 intended columns resolve (closes the common cases via #7, #12); for genuinely
 absent columns, ensure the note path is reached rather than the upstream refusal.
-Part of Theme C.
+Part of Theme C. (Conditional — only if the failure resurfaces; see Status.)
 
-**Status:** open (limitation). Old AI-9/COL-03.
+**Status:** not-reproducible (2026-08-13). The intermittent wholesale-refusal path
+could not be triggered on current code; COL-03 handles the cited phrasings. NOT
+marked `fixed` — the failure is probabilistic (LLM generation), and two clean runs
+can't prove an always-clean path. Watch-item: if a wholesale refusal on unknown
+columns resurfaces in an overnight run, that transcript is the repro to fix
+against. Old AI-9/COL-03.
 
 ---
 
