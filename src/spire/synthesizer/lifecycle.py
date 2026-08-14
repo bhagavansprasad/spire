@@ -282,6 +282,92 @@ def _build_lifecycle_setup_notes(record: dict) -> list[str]:
             )
     return notes
 
+
+def _fmt_money(amount, currency) -> str:
+    """Format an amount with its currency code, or 'unknown' for None."""
+    if amount is None:
+        return "unknown"
+    cur = f" {currency}" if currency else ""
+    return f"{amount:,.2f}{cur}"
+
+
+def build_lifecycle_summary(record: dict) -> str:
+    """Compose the lifecycle summary deterministically from the record.
+
+    Replaces the LLM summary for the single-PO lifecycle answer. Every
+    value is copied from the tool's already-computed fields — ordered /
+    received / invoiced / paid, the lifecycle stage, the risk and the
+    recommended action — so the summary is reproducible and cannot drift
+    from the structured fields below it.
+
+    The trade vs the model: one consistent framing rather than
+    emphasis-shifted prose (a 'why stuck' vs 'summarise' variant). All the
+    data stays in the structured POLifecycleResponse fields (legs, risk,
+    reasons, recommended_action, exceptions); only the prose framing is
+    fixed. Consistent with the other local summaries.
+
+    paid is stated as "not yet determined" when paid_state is 'unknown' —
+    never as 0, matching _build_lifecycle_legs.
+    """
+    if not record.get("found"):
+        return (
+            f"No purchase order found for '{record.get('order_number') or ''}'."
+        )
+
+    order = record.get("order_number") or ""
+    supplier = record.get("supplier")
+    currency = record.get("currency")
+    stage = record.get("lifecycle_stage") or ""
+
+    who = f" ({supplier})" if supplier else ""
+    parts: list[str] = [f"PO {order}{who}" + (f" — {stage}." if stage else ".")]
+
+    # The four legs. Paid is null-not-zero when unknown.
+    paid_unknown = record.get("paid_state") == "unknown"
+    ordered = _fmt_money(record.get("ordered"), currency)
+    received = _fmt_money(record.get("received"), currency)
+    invoiced = _fmt_money(record.get("invoiced"), currency)
+    paid = (
+        "not yet determined" if paid_unknown
+        else _fmt_money(record.get("paid"), currency)
+    )
+    leg_line = (
+        f"Ordered {ordered}; received {received}; "
+        f"invoiced {invoiced}; paid {paid}."
+    )
+    if record.get("received_is_derived"):
+        leg_line += " (Received is derived from quantities.)"
+    parts.append(leg_line)
+
+    # Outstanding, when anything remains and is known.
+    remaining_bits: list[str] = []
+    rr = record.get("remaining_to_receive")
+    ri = record.get("remaining_to_invoice")
+    rp = record.get("remaining_to_pay")
+    if rr:
+        remaining_bits.append(f"{_fmt_money(rr, currency)} to receive")
+    if ri:
+        remaining_bits.append(f"{_fmt_money(ri, currency)} to invoice")
+    if rp:
+        remaining_bits.append(f"{_fmt_money(rp, currency)} to pay")
+    if remaining_bits:
+        parts.append("Outstanding: " + ", ".join(remaining_bits) + ".")
+
+    # Risk and recommended action, copied verbatim.
+    risk = record.get("risk")
+    if risk:
+        reasons = record.get("risk_reasons") or []
+        if reasons:
+            parts.append(f"Risk: {risk} — {'; '.join(reasons)}.")
+        else:
+            parts.append(f"Risk: {risk}.")
+    action = record.get("recommended_action")
+    if action:
+        parts.append(f"Recommended action: {action}")
+
+    return " ".join(parts)
+
+
 def build_lifecycle_response(
     record: dict, summary: str, truncation_notes: list[str]
 ) -> POLifecycleResponse:
@@ -449,3 +535,4 @@ LIFECYCLE_SYSTEM_PROMPT = (
         "tax, freight or price variance. Report the difference; do not "
         "call it a problem and do not guess its cause."
 )
+

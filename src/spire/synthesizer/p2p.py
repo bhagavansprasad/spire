@@ -489,6 +489,89 @@ def build_suppliers_with_open_pos(
     return records
 
 
+def _supplier_with_contacts(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, contact_bucket) for the "suppliers + contacts" join.
+
+    Two buckets: a supplier list (rows with SupplierId and Supplier) and a
+    contact list (rows with SupplierContactId). Contacts now carry their
+    parent SupplierId (stamped by the supplier_contacts tool), so they can
+    be grouped back to their supplier here instead of by the LLM — the join
+    that used to fall through to synthesis for both the single-supplier
+    ("contacts for Lee Supplies") and multi-supplier ("contacts for
+    suppliers in US") shapes.
+
+    Returns None unless there are exactly two buckets of the right shapes,
+    so plain lists and other joins are unaffected. Conservative by design.
+    """
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    contact_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "SupplierContactId" in first:
+            contact_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or contact_bucket is None:
+        return None
+    return supplier_bucket, contact_bucket
+
+
+def build_suppliers_with_contacts(
+    supplier_rows: list[dict], contact_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + contact rows -> SupplierRecords with nested contacts.
+
+    Pure: no LLM, no I/O. Groups contact_rows by their stamped SupplierId,
+    then attaches each supplier's contacts as ContactInfo, with
+    is_administrative read from AdministrativeContactFlag. The deterministic
+    version of the join build_supplier_records leaves empty by design.
+
+    is_administrative coerces the pod's flag: it may arrive as the string
+    "Y"/"N" or a bool; only a truthy "Y"/True marks the primary contact.
+    """
+    by_supplier: dict[int, list[dict]] = {}
+    for c in contact_rows:
+        sid = c.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(c)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        contacts: list[ContactInfo] = []
+        for c in group:
+            flag = c.get("AdministrativeContactFlag")
+            is_admin = flag is True or (
+                isinstance(flag, str) and flag.strip().upper() == "Y"
+            )
+            contacts.append(
+                ContactInfo(
+                    supplier_contact_id=c.get("SupplierContactId") or 0,
+                    contact_name=c.get("ContactName") or "",
+                    email=c.get("Email") or "",
+                    job_title=c.get("JobTitle") or "",
+                    is_administrative=is_admin,
+                )
+            )
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                contacts=contacts,
+            )
+        )
+    return records
+
+
 def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
     """Executor PO rows -> PurchaseOrderRecord list, verbatim.
 

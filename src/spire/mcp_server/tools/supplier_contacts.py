@@ -6,9 +6,13 @@ optional job title, a status, and an administrative-contact flag marking
 the primary contact.
 
 Like the other supplier children (sites, businessClassifications), the
-contact body does NOT carry the parent SupplierId — the join key is the
-URL path. So this is a per-supplier child call: one HTTP call per
-supplier, mirroring supplier_sites / supplier_classifications.
+contact body from Fusion does NOT carry the parent SupplierId — the join
+key lives in the URL path. So this is a per-supplier child call: one HTTP
+call per supplier, mirroring supplier_sites / supplier_classifications.
+To preserve the join key past the executor's unwrap, this tool STAMPS the
+parent SupplierId onto every returned contact row (see the projection
+below), so a multi-supplier contacts query can group contacts back to
+their supplier locally instead of via the LLM.
 
 This is an include-only expansion (used by the HAS_CONTACT edge to attach
 a supplier's contacts to a supplier fetch), not a filter. There is no
@@ -84,7 +88,20 @@ async def get_supplier_contacts(
         raise
 
     items = response.get("items", [])
-    projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
+    # Stamp the parent SupplierId onto each contact row. The contact body
+    # itself does NOT carry it (the child endpoint knows the parent only
+    # from the path), so without this the join key is lost the moment the
+    # executor unwraps the ToolResult to a flat items list — a multi-supplier
+    # "contacts for suppliers in US" could not group contacts back to their
+    # supplier. Stamping the scalar we already hold (supplier_id) onto every
+    # row is the documented fix for exactly this unwrap.
+    projected = [
+        {
+            **{k: item.get(k) for k in _PROJECTED_FIELDS},
+            "SupplierId": supplier_id,
+        }
+        for item in items
+    ]
 
     return ToolResult.build(
         items=projected,

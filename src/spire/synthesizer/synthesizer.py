@@ -71,6 +71,7 @@ from spire.synthesizer.lifecycle import (  # noqa: F401
     _lifecycle_shape,
     _validate_po_lifecycle,
     build_lifecycle_response,
+    build_lifecycle_summary,
 )
 from spire.synthesizer.p2p import (  # noqa: F401
     AddressRecord,
@@ -146,6 +147,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     _filtered_supplier_list,
     _supplier_with_open_pos,
     build_suppliers_with_open_pos,
+    _supplier_with_contacts,
+    build_suppliers_with_contacts,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -200,6 +203,35 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "CreditMemo": CreditMemoListResponse,
     "StandardReceipt": StandardReceiptResponse,
 }
+
+
+# Human labels for the empty-result summary, matching the entity_label
+# strings the local list branches already use ("suppliers", "purchase
+# orders", …). Keeps "No <label> found" consistent with the non-empty
+# wording for the same entity.
+_ENTITY_LABEL: dict[str, str] = {
+    "Supplier": "suppliers",
+    "Invoice": "invoices",
+    "Address": "addresses",
+    "PurchaseOrder": "purchase orders",
+    "ReceivablesInvoice": "AR invoices",
+    "CustomerAccount": "customer accounts",
+    "CreditMemo": "credit memos",
+    "StandardReceipt": "receipts",
+}
+
+
+def _all_buckets_empty(outputs: dict[str, list[dict]]) -> bool:
+    """True when the executor produced no rows in any bucket.
+
+    A genuinely empty result — every bucket is an empty list, or there are
+    no buckets. Used to short-circuit the "nothing found" case to a local
+    response instead of paying an LLM to write "no rows found" over zero
+    rows (#5).
+    """
+    if not outputs:
+        return True
+    return all(not rows for rows in outputs.values())
 
 
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
@@ -384,6 +416,24 @@ def synthesize_response(
     if comparison_shape is not None:
         return _build_comparison_response(outputs, comparison_shape)
 
+    # Empty result: nothing found -> local "no results", no LLM (#5).
+    #
+    # Count and comparison have returned above; aggregation and lifecycle
+    # below always carry a row (a ranking object, a reconciliation record),
+    # so _all_buckets_empty is False for them and this does not steal their
+    # path. For a plain entity target with zero rows in every bucket there
+    # is nothing to synthesize — an LLM call to write "no suppliers found"
+    # over an empty list is pure waste (measured out=125 on "suppliers named
+    # Zzzqqx"). Build the empty response of the right type with a local
+    # summary that matches the non-empty wording for the entity.
+    if _all_buckets_empty(outputs) and target_entity in SYNTHESIS_SCHEMAS:
+        empty_schema = SYNTHESIS_SCHEMAS[target_entity]
+        label = _ENTITY_LABEL.get(target_entity, "records")
+        return empty_schema(
+            summary=f"No {label} found matching the criteria.",
+            truncation_notes=[],
+        )
+
     # Feature 7: an aggregation produces a ranking, not an entity list.
     # It has no target_entity (the Intent carried an aggregate block
     # instead), so select the schema from the data shape. The executor
@@ -401,39 +451,17 @@ def synthesize_response(
     shape = _aggregation_shape(outputs)
     _log.debug("[debug] shape = %s", shape)
     if lifecycle_record is not None:
-        # Summary-only, like the supplier-record path: the model writes
-        # the prose and code assembles every value. See
-        # POLifecycleSummaryResponse for why.
-        if llm is None:
-            from spire.config import build_llm
-
-            llm = build_llm(_TEMPERATURE)
-        summary_llm = llm.with_structured_output(
-            POLifecycleSummaryResponse, include_raw=True
-        )
-        result = summary_llm.invoke(
-            [
-                ("system", _build_system_prompt("POLifecycle")),
-                (
-                    "human",
-                    _build_synthesis_prompt(
-                        outputs, truncation_by_step, metadata_by_step
-                    ),
-                ),
-            ]
-        )
-        if isinstance(result, dict) and "parsed" in result:
-            from spire.config import log_usage
-
-            log_usage(result.get("raw"), stage="synthesize")
-            parsed = result["parsed"]
-        else:
-            parsed = result
-        if isinstance(parsed, dict):
-            parsed = POLifecycleSummaryResponse(**parsed)
-        return build_lifecycle_response(
-            lifecycle_record, parsed.summary, parsed.truncation_notes
-        )
+        # No LLM: the tool already computed every value (ordered/received/
+        # invoiced/paid, stage, risk, reasons, recommended_action), and the
+        # response model copies them verbatim — the model's only job was the
+        # summary prose. build_lifecycle_summary composes that prose locally
+        # from the same fields, so the answer is reproducible and cannot
+        # drift from the structured fields. Measured before this: synthesize
+        # in=1654 out=737 just to restate computed values. The trade is one
+        # consistent framing instead of emphasis-shifted prose; all data
+        # remains in the POLifecycleResponse fields below.
+        summary = build_lifecycle_summary(lifecycle_record)
+        return build_lifecycle_response(lifecycle_record, summary, [])
 
     if shape is not None:
         # Local first: the aggregation tools have already done the
@@ -635,6 +663,57 @@ def synthesize_response(
             suppliers=records,
             truncation_notes=notes,
             narrowing_tip=tip,
+        )
+
+    # Suppliers with their contacts (join): no LLM.
+    #
+    # "contacts for Lee Supplies" (one supplier) and "contacts for suppliers
+    # in US" (many) both produce a supplier bucket + a contact bucket. This
+    # used to fall to the model — the multi-supplier case cost ~22k tokens
+    # and the model asserted which contacts were administrative in free text.
+    # Contacts now carry a stamped SupplierId (supplier_contacts tool), so
+    # build_suppliers_with_contacts groups them here and reads the admin flag
+    # deterministically. The summary states the contact count and names the
+    # administrative contacts computed from the flag, not model prose.
+    supplier_contacts = (
+        _supplier_with_contacts(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_contacts is not None:
+        supplier_bucket, contact_bucket = supplier_contacts
+        supplier_rows = outputs[supplier_bucket]
+        contact_rows = outputs[contact_bucket]
+        records = build_suppliers_with_contacts(supplier_rows, contact_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_contacts = sum(len(r.contacts) for r in records)
+        admin_names = [
+            c.contact_name
+            for r in records
+            for c in r.contacts
+            if c.is_administrative and c.contact_name
+        ]
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        contact_word = "contact" if total_contacts == 1 else "contacts"
+        if examined == 1:
+            summary = f"{records[0].supplier_name} has {total_contacts} {contact_word}."
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_contacts} {contact_word} "
+                "between them."
+            )
+        if admin_names:
+            label = "administrative contact" if len(admin_names) == 1 else "administrative contacts"
+            summary += f" {', '.join(admin_names)} — {label}."
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
         )
 
     # Plain PO list: no LLM (REC-2).
