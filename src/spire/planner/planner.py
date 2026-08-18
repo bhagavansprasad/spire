@@ -170,27 +170,53 @@ def generate_plan(
                 )
             )
 
-    # PurchaseOrder is a valid root only for a single-PO fetch (by_id).
-    # It has no unfiltered default fetcher (no (PurchaseOrder,'none') row),
-    # so a PO-rooted query without a PO id has nothing to fetch. Refuse
-    # cleanly rather than crash. General PO listing is reached via the
-    # supplier->PO edge today (and PO aggregates arrive in a later phase).
-    # PurchaseOrder roots two ways. A selective filter (by_id, a date
-    # bound, a status) routes exactly as before. With NO filter the query
-    # is "list all POs" — REC-2: rather than refuse, fall through to the
-    # (PurchaseOrder,'none') fetcher, which returns a BOUNDED, ordered
-    # sample (25 rows) plus the honest total via totalResults. That fetcher
-    # keeps fetch_limit at `limit` when unfiltered, so the unfiltered path
-    # pulls ONE ordered page, never the ~17k-row full scan the old guard
-    # was protecting against. This makes PO lists consistent with how the
-    # Supplier default fetcher already samples.
+    # PurchaseOrder roots two ways. A FILTERED PO intent routes onward
+    # exactly as before: the KG's PurchaseOrder root filters (by_id,
+    # created_before, created_since, lifecycle_status) scope the fetch, and
+    # any OTHER filter (status, supplier — not PO entity-level filters) is
+    # refused one layer down by _validate_intent_filters with a structured
+    # UNSUPPORTED_FILTER naming the rejected filters. This guard must NOT
+    # intercept that case — an intent that HAS filters is not "missing an
+    # identifier", it has the wrong ones, which is a different refusal.
     #
-    # The prior guard raised here on the no-filter case. It predated the
-    # (PurchaseOrder,'none') tool row (added in P6 for the date filters);
-    # with that row present the unfiltered path is resolvable AND bounded,
-    # so the refusal is removed. The ReceivablesInvoice guard below stays:
-    # AR has no bounded list fetcher and its collection is 173k rows, so an
-    # unscoped AR root genuinely has nowhere safe to go.
+    # Only a truly FILTER-LESS PO intent is ambiguous, and two very
+    # different requests land there identically (filters=[]): an explicit
+    # "list purchase orders" (a valid bounded sample-and-disclose, #23) and
+    # a PO query whose identifier was dropped ("Is PO N complete?" losing
+    # the number, #32). intent.list_all separates them — the parser sets it
+    # True (deterministically, from the raw prompt) ONLY for an explicit
+    # list request.
+    #
+    # So: a filter-less PO intent falls through to the bounded
+    # (PurchaseOrder,'none') fetcher ONLY when list_all is True. Otherwise
+    # refuse MISSING_IDENTIFIER rather than dumping 25 of ~17k unrelated POs
+    # (#32 fault b). This is the safety net: even when the parser drops the
+    # id, the miss fails safe to a refusal, not a table dump. An explicit
+    # list still lists; every filtered PO query still routes through.
+    if intent.target_entity == "PurchaseOrder":
+        if not intent.filters and not intent.list_all:
+            # MISSING_IDENTIFIER: filter-less and not an explicit list.
+            # Structured raise -> plan_node -> state["refusal"] -> the
+            # readable Reason/Solution/Example shape. Words come from
+            # _IDENTIFIER_GUIDANCE["PurchaseOrder"] in capability.py, keyed
+            # on the entity below. Local import breaks a module-load cycle
+            # (result.py imports Intent via planner.planner).
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail=(
+                        "PurchaseOrder root has no identifier and no "
+                        "explicit list request"
+                    ),
+                    offending_entity="PurchaseOrder",
+                )
+            )
 
     # ReceivablesInvoice is a valid root only for a single-invoice fetch
     # (by_id on CustomerTransactionId). Like PurchaseOrder it has no

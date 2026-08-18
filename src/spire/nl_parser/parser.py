@@ -571,6 +571,81 @@ def _build_system_prompt(menu: KGMenu) -> str:
     return _SYSTEM_PROMPT_PREAMBLE + "\n" + _format_menu(menu)
 
 
+import re
+
+# #32 fault (b): the signal that tells an explicit "list purchase orders"
+# request (a valid bounded sample-and-disclose, #23) apart from a PO query
+# whose identifier the parser dropped ("Is PO N complete?" losing the
+# number, #32). Both produce a filter-less PurchaseOrder intent, but only
+# the explicit list should list; the dropped-identifier case must refuse.
+#
+# This is computed DETERMINISTICALLY in Python from the raw prompt, AFTER
+# the LLM parse and with ZERO LLM-visible text — the parser prompt is at
+# its token ceiling and any added prompt/schema text tips specific
+# phrasings into degenerate (MAX_TOKENS) generation. A post-parse string
+# check sidesteps that entirely. Same code-side, prompt-untouched pattern
+# as expand_field_synonyms / correct_include_from_prompt in parse().
+
+# A PO number token: a run of digits, optionally with a letter prefix like
+# "US164932". Used to DISQUALIFY a "list" phrasing that actually names one
+# PO ("list the lines on PO 2144") — that is not a bare list-all request.
+_PO_NUMBER_RE = re.compile(r"\bpo\s*[#:]?\s*[a-z]*\d+\b", re.IGNORECASE)
+# A bare number that isn't obviously a year — a weak signal a specific
+# record is named. Kept conservative: only digit runs of 3+.
+_BARE_NUMBER_RE = re.compile(r"\b\d{3,}\b")
+
+_LIST_VERBS = (
+    "list ",
+    "show all",
+    "show me all",
+    "all purchase orders",
+    "every purchase order",
+)
+
+
+def _is_explicit_po_list(prompt: str) -> bool:
+    """True when the prompt is an explicit "list all purchase orders" request.
+
+    Deterministic, raw-prompt-string only — no LLM, no prompt/schema text.
+    Requires BOTH a generic purchase-order mention AND a list/show-all verb,
+    AND that the prompt does NOT name a specific PO. The last clause is what
+    keeps "list the lines on PO 2144" (names one PO) from counting as a
+    list-all request. Scoped by the caller to PurchaseOrder-rooted intents.
+    """
+    p = prompt.lower().strip()
+
+    # Must mention purchase orders generically ("purchase order(s)" or a
+    # standalone "pos"/"po"). A bare "po" only counts as a word, so
+    # "deposit" or "position" don't trip it.
+    tokens = p.replace("?", " ").replace(",", " ").split()
+    mentions_pos = (
+        "purchase order" in p
+        or "purchase orders" in p
+        or "pos" in tokens
+        or "po" in tokens
+    )
+    if not mentions_pos:
+        return False
+
+    # Must carry a list/show-all verb.
+    has_list_verb = any(v in p for v in _LIST_VERBS)
+    if not has_list_verb:
+        return False
+
+    # Must NOT name a specific PO. If a PO number is present, this is a
+    # question about one order, not a bare list — even if it says "list".
+    if _PO_NUMBER_RE.search(p):
+        return False
+    # A stray 3+ digit run that isn't a plausible year (2000–2099) is also
+    # a specific-record signal; be conservative and disqualify.
+    for m in _BARE_NUMBER_RE.finditer(p):
+        n = m.group()
+        if not (len(n) == 4 and n.startswith("20")):
+            return False
+
+    return True
+
+
 def parse(
     prompt: str,
     llm: Any | None = None,
@@ -719,6 +794,15 @@ def parse(
             flavor=RefusalFlavor.UNPARSEABLE,
             detail=f"The model's Intent was malformed: {exc}",
         )
+
+    # #32 fault (b): set list_all deterministically from the raw prompt,
+    # code-side (no LLM-visible text — the prompt is at its token ceiling).
+    # Scoped to PurchaseOrder-rooted intents so nothing else is affected.
+    # The planner uses this to allow an explicit PO list (list_all=True) to
+    # sample-and-disclose, while a filter-less PO intent WITHOUT it (a
+    # dropped-identifier query) refuses instead of dumping the table.
+    if intent.target_entity == "PurchaseOrder":
+        intent.list_all = _is_explicit_po_list(prompt)
 
     # Feature 7: an aggregation intent is validated by the planner's
     # aggregation-op registry, not by the entity/filter KG menu (its
