@@ -10,141 +10,110 @@ env.
 
 ---
 
-## LAST SESSION (2026-08-14): worked the 14 overnight issues — 8 fixed, 4 verified not-reproducible, 2 owner-parked; Theme A (local synthesis) converted for every KNOWN shape. NOT yet measured end-to-end.
+## WHERE WE ARE (2026-08-14): overnight ran, was analyzed prompt-by-prompt, findings doc merged. NEXT = fix the issues.
 
-Two acceptance rules drove the pass:
-1. **No LLM synthesis anywhere** — every `stage=synthesize` call is a finding to
-   convert to a local/deterministic builder.
-2. **Refusal format** — Reason / Solution / Example then `(refusal: <code> —
-   <detail>)`.
+The measurement overnight is **done and analyzed**. Do NOT re-run it — analyze
+was the task, and it's complete. Results:
 
-### What landed on master (two PRs, both merged)
+- **Synth calls 56 → 5** across 254 prompts (`overnight_20260814/`,
+  `grep -rh "stage=synthesize" | wc -l`). Per-set: 00(1) 01(1) 10(2) 11(1); every
+  other set 0. **03_ar = 0** — AR (the suspected hiding place) is fully local.
+- The **5** are two shapes only: **Shape A** address-as-target lists ("addresses
+  for supplier N", `target=Address`, 3 calls) and **Shape B** single PO + buyer
+  ("Show PO N and its buyer", 2 calls, output already correct). Both are small
+  single-shape conversions.
+- Count is **trustworthy, not a floor**: `06_slow` exited 1 on ONE pod-timeout
+  prompt (register #30), 14/15 ran, not a synth path.
 
-**PR #130 (branch fix-12-who-details-routing) — merged (cf38f1a):**
-- **#12 FIXED** — "who details" was misrouted to a Contact join (em-dash
-  projection, fabricated miscount, 21k tokens). Parser rule routes who/audit
-  columns to `fields`. Verified: fields=[Supplier,CreatedBy,CreationDate,
-  LastUpdateDate,LastUpdatedBy], no synth, 9.6k tokens.
-- **#4 FIXED** — PO 2144 resolved as POHeaderId in one path, OrderNumber in
-  another → false "not found". Lifecycle tool now cross-tries POHeaderId on an
-  OrderNumber miss, adopts the real OrderNumber, discloses it. 999999 still
-  found=False. (mcp_server change — needed MCP restart.)
-- **#6 FIXED** — dismissive `unsupported_operation` Solution ("do the rest your
-  side") → "Ask for the underlying records and I'll return them for you to total
-  or average." One shared fallback string in capability.py.
-- **#8 FIXED** — suppliers-with-open-POs join was LLM-synthesized and miscounted
-  its own table (said 42, table summed to 43). Local `_supplier_with_open_pos` +
-  `build_suppliers_with_open_pos`; count now exact (43). No synth.
-- **#3 FIXED** — plain invoice lists were LLM-narrated. Local
-  `build_invoice_records` + `plain_invoice_bucket`. No synth. Updated the invoice
-  schema-selection test to assert the local path.
-- **#11 FIXED (CORRECTED from not-reproducible)** — planner unsupported-filter
-  refusal emitted the OLD dense "REFUSED (planner guard): plan: ..." string. I
-  first mislabeled this not-reproducible (the parser shadows it for the filters
-  it catches). Then "purchase orders for supplier Staples" reproduced it — it
-  reaches `_validate_intent_filters`. Converted that to raise
-  `RefusalError(UNSUPPORTED_FILTER, offending_entity, offending_filters)`;
-  plan_node routes it through capability_message. Removed dead
-  `_ENTITY_EXAMPLE_PROMPT` import. Updated 8 planner tests to assert the
-  structured refusal.
-- **Doc pass** — spire_overnight_findings.md updated with all statuses + a top
-  caveat that "not-reproducible" means "not triggered in the prompts tested",
-  NOT "proven fixed".
+**The findings doc is already merged and complete:** `docs/spire_overnight_findings.md`
+now holds the full register (1–35), with the 10 new issues (#26–#35) **grouped by
+fix-theme at the top**, the 2026-08-14 status folded into #1/#5/#6/#7/#9, and a
+verbatim per-set evidence appendix. `spire_enhancement_status.md` §OVN and the six
+touched requirements (OUT-04, OUT-06, COL-02, COL-03, UX-01, UX-03) are updated too.
+Read the register before starting — it has the full Expected/Verification/Fix/Status
+for each issue.
 
-**PR #131 (branch theme-a-contacts-join) — merged (cc68f7a):**
-- **Contacts join FIXED (local)** — "contacts for Lee Supplies" (single) and
-  "contacts for suppliers in US" (multi) were LLM-synthesized (~2k / ~22k
-  tokens). THREE layers: (1) supplier_contacts TOOL now stamps parent SupplierId
-  onto each contact row (the child body lacks it; the executor unwrap dropped the
-  path key) — mcp_server change, MCP restart; (2) `_supplier_with_contacts` +
-  `build_suppliers_with_contacts` in p2p.py group by SupplierId, read
-  is_administrative from the flag; (3) synthesizer dispatch branch. Verified live:
-  single + multi group correctly, no synth.
-- **#5 FIXED (local)** — empty/not-found results were sent to the LLM (out=125 on
-  "suppliers named Zzzqqx"). Added `_all_buckets_empty` + `_ENTITY_LABEL` map +
-  a short-circuit after count/comparison, before the entity cascade → local "No
-  <entity> found matching the criteria." No synth.
-- **Lifecycle narration FIXED (local)** — single-PO lifecycle was LLM-synthesized
-  (summary-only; the response model already copies every value verbatim). Added
-  `build_lifecycle_summary(record)` + `_fmt_money` in lifecycle.py; synthesizer
-  swaps the LLM call for the local summary. paid reads "not yet determined" when
-  paid_state is unknown (never 0); outstanding lines omitted when a leg is
-  complete. Verified across 3 cases: partial (701337), not-found (999999),
-  fully-received (2144→162352) — all parse-only.
-- **Address lists** — probed "suppliers with their addresses": ALREADY LOCAL
-  (build_supplier_records handles nested addresses; plain_supplier_bucket fires).
-  No work needed.
+### The 10 new issues, and what re-verified
 
-### Issues NOT fixed (correctly, not neglect)
-- **#2, #10, #13, #14 — not-reproducible.** #2 curl-confirmed 338/336/2 and the
-  intra-run contradiction is gone. #10 parser runs clean 5/5 at out=366 (no
-  runaway). #13/#14 didn't reproduce. CAVEAT: "not-reproducible" = "not triggered
-  in prompts tested", not proven fixed. #11 is the cautionary tale (was
-  mislabeled, then reproduced).
-- **#7 — OWNER DECISION.** country: TaxpayerCountryCode (on supplier body,
-  nullable) vs Address.CountryCode. Verified real; the fix is a semantics choice
-  for the requirements owner (Venu), not code we can decide.
-- **#9 — OWNER DECISION (feature).** supplier-by-number lookup doesn't exist; the
-  refusal is CORRECT. Building it is a scope call, not a bug fix.
+**Fixes holding across the full set:** #3 (invoice lists local), #4 (PO 2144
+id-type), #6 (unsupported_operation Solution — but AI-5 half re-opened, see below),
+#12 (who/audit → fields), #21 (PO-with-children), #23 (sample-and-disclose),
+lifecycle `build_lifecycle_summary` (zero synth across 28 variants).
+
+**New issues, grouped by the fix that closes them:**
+
+- **Projection layer (COL-02) — biggest cluster, one resolver fix closes four:**
+  **#34 🔴** projection on a multi-step plan binds the wrong step-output → em-dash
+  on a value that provably exists (OrderNumber 162352 shown as "—"; no curl gate).
+  **#31 🟡** single-step join field (invoice PurchaseOrderNumber) em-dash is
+  ambiguous, null-vs-unresolved (curl owed). **#7/#28 🟠** `country`→Address
+  substitution re-confirmed + new `state`/`city` siblings (`TaxpayerCountryCode` on
+  body, nullable). Plus #12's projection guard.
+- **Partial results over capped fetches (OUT-06):** **#27 🔴** credit-memo "total
+  value" sums 25 of 2,249, labelled as the total (twice) — silently wrong aggregate.
+  **#35 🟡** `top N` dropped on the credit-memo list path. **#33 🟡** classification
+  filter examines 25 of 341 (discloses sampling, still can't answer). **#26 🟡**
+  truncation note says "examined for filtering" when no client filter ran.
+- **Parser robustness (new):** **#32 🔴 — TOP FINDING.** Parser drops the PO
+  identifier on some lifecycle phrasings ("Is PO 162034 complete?"); the planner's
+  fallback for a filter-less PurchaseOrder intent is *list-all* → 25 of 17,447
+  unrelated POs, silent, no error. 162034 is real; other phrasings answer it fine.
+- **Refusal (UX-01):** **#29 🟡** refusal detail-text is non-deterministic (parser
+  words it, not a fixed lookup). **#6** AI-5 `unsupported_filter` "narrow by…"
+  re-opened (emitted for untracked attributes where narrowing can't help).
+- **Performance:** **#30 🟡** "top N suppliers" compare fetches the whole PO
+  universe (17,447) → pod timeout; named/single compare is bounded and fine.
 
 ---
 
-## THE OPEN QUESTION — measure whether Theme A is actually DONE
+## NEXT STEP: fix the issues, harm-first and cheap-first
 
-Theme A (#1) = **0 `stage=synthesize` across all 254 prompts.** Starting point
-was 56. We converted every shape NAMED in the findings doc (invoice lists, the
-open-PO join, contacts join, empty results, lifecycle) plus confirmed address
-lists already-local. **BUT the current count is UNMEASURED** — we converted
-shape-by-shape from the doc, not from a fresh measurement. The doc's shape list
-was never proven exhaustive.
+Recommended order (rationale: stop silent-wrong-answers first, then the cluster
+that closes the most, then the rest). One branch per logical change, PR-based;
+docs-only straight to master.
 
-**Most likely place remaining synth hides (NOT probed this session):** AR shapes
-— receivables invoices, standard receipts, customer accounts — and credit-memo
-narration. If the count isn't 0, start there.
+1. **#32 fault (b) — planner fail-safe guard.** SMALLEST high-impact fix. A
+   filter-less PurchaseOrder intent with no explicit "list" request must raise a
+   structured refusal, NOT `search_purchase_orders {}`. It must distinguish an
+   explicit "list purchase orders" (valid sample-and-disclose) from a
+   dropped-identifier query. This alone stops the 25-of-17,447 dump regardless of
+   the parser. Then (a) strengthen parser extraction for "Is PO N complete?" /
+   "…blocking?" / "…outstanding?" to route to the lifecycle tool.
+2. **Projection cluster (COL-02):** #34 first (no curl gate — bind projection
+   per-column to the step-output that holds it), then #7/#28 synonyms
+   (`country`/`state`/`city` → TaxpayerCountryCode / nested Address, render null
+   cleanly, no Address injection), then #31 after its curl. One resolver change
+   closes #34/#31/#7/#12-guard.
+3. **Partial results:** #27 (aggregate over ALL credit memos like the exposure
+   path does over 500, OR refuse to print a total over a truncated sample) + #35
+   (thread top_n into the credit-memo list path) + #33.
+4. **Refusal determinism:** #29 (source detail-text from a fixed capability table
+   keyed on (code, entity/attribute)) + #6 AI-5 re-open (name the missing
+   attribute instead of "narrow by…").
+5. **Theme A last two shapes:** #1 Shape A (`build_address_records` + dispatch),
+   Shape B (local join+narration). Re-measure for 0.
+6. **#30** bounded top-N compare (select top-N first, then fetch their POs);
+   **#26** branch note wording; **#5** collapse the double-negation.
 
-### NEXT STEP (what the human wants): run a fresh overnight to VERIFY the fixes and MEASURE the synth count
+### Curls owed BEFORE coding the gated items (Phase-0 style, read the endpoints doc first)
+- **#31** do EIP invoices carry `PurchaseOrderNumber` on the pod (null vs unread)?
+- **#27** does `list_receivables_credit_memos` aggregate server-side?
+- **#33** is supplier classification server-filterable (composite `q=` fails here)?
 
-This is the ONE justified overnight — its purpose is measurement, not new
-findings. Run it SEQUENTIALLY (the human explicitly chose sequential over
-parallel: the shared demo pod makes parallel results noisy, and this run needs a
-trustworthy count).
+### Acceptance rules (unchanged)
+1. **No LLM synthesis anywhere** — every `stage=synthesize` is a finding.
+2. **Refusal format** — Reason / Solution / Example then `(refusal: <code> — <detail>)`,
+   and now (per #29) the detail-text must be a fixed lookup, not parser free-text.
+3. **"Confirmed" = curled or run**, never inferred from code/logs. Re-run the
+   affected set after each fix: zero new synth, unchanged answers, the specific
+   discrepancy gone.
 
-```
-python scripts/run_overnight.py --timeout 5400
-```
-
-~90 min, output in overnight_<YYYYMMDD>/. Then:
-
-```
-# per-set — which sets still synthesize
-grep -rc "stage=synthesize" overnight_$(date +%Y%m%d)/ | grep -v ":0"
-# total — THE answer to "how many prompts still use LLM synthesis"
-grep -rh "stage=synthesize" overnight_$(date +%Y%m%d)/ | wc -l
-```
-
-Also check `_summary.txt` for any TIMED OUT / ERROR sets — an incomplete set
-means those prompts didn't run and the count is a floor, not final.
-
-**Interpreting the total:**
-- **0** → local synthesis fully achieved; Theme A / #1 DONE. Also spot-check a
-  few refusals still render Reason/Solution/Example. Then it's finished.
-- **N > 0** → N prompts still synthesize. Find the shapes:
-  `grep -rB8 "stage=synthesize" overnight_$(date +%Y%m%d)/ | grep -iE "prompt:|Intent:|target_entity"`
-  Convert each on a FRESH branch off master (same pattern: detector +
-  local builder in p2p.py/ar.py + synthesizer dispatch branch; the tool-stamp
-  trick if a join key is missing). Re-measure.
-
-Beyond the count, this overnight also re-verifies the 8 fixes hold across the
-full set and that nothing regressed.
-
-### Also owed (smaller)
-- **Doc updates after the measurement:** spire_overnight_findings.md — flip #5
-  → fixed, update #1 with all conversions + the final measured count; note
-  contacts/lifecycle as done. (Only mark #1 fixed once the count is actually 0.)
-- **No regression test** locks in `build_lifecycle_summary`, the contacts
-  builder, or #5 — additive, worth adding.
-- **qa_testcases (34 prompts)** was never triaged answer-by-answer (prior
-  session). If the overnight surfaces anything there it's a new issue.
+### Owed (smaller)
+- **Regression tests** locking `build_lifecycle_summary`, the contacts builder, and
+  #5 (empty-result) are still not written — additive, worth adding as you touch
+  each path.
+- When a fix lands, update `docs/spire_overnight_findings.md` (flip the issue to
+  fixed with commit ref) and `spire_enhancement_status.md` §OVN.
 
 ---
 

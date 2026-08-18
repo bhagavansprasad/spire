@@ -148,6 +148,8 @@ information and communicates it poorly.
 
 ### UX-01 — Structured refusal messages · P1
 
+> **2026-08-14 evidence (register #29, #6):** refusal STRUCTURE is uniform and correct run-wide, but (a) the detail-text is non-deterministic — the same prompt refuses with different wording across sets because the parser LLM words the detail instead of a fixed capability lookup (#29); and (b) the AI-5 `unsupported_filter` "narrow by…" Solution is RE-OPENED — it is emitted for untracked attributes where narrowing can't help (#6).
+
 Spire **shall** present every refusal in three distinct, visually separated
 parts:
 
@@ -198,6 +200,8 @@ is unsupported. The refusal is right; the response is unhelpful.
 ---
 
 ### UX-03 — Truncation disclosure · P1
+
+> **2026-08-14 evidence (register #26, #33):** truncation disclosure fires, but the wording "N examined for filtering" is emitted even when no client filter ran (server-filtered path) (#26); and attribute/classification filters disclose "examined 25 of 341" yet still can't answer the filter query correctly (#33). Wording should branch on whether a client filter ran.
 
 Where a result set is truncated, Spire **shall** state the number of rows
 returned and the total number available, and **shall** qualify any
@@ -415,6 +419,8 @@ their question.
 
 ### OUT-04 — Synthesize locally; go to the model only where required · P0
 
+> **2026-08-14 evidence (`overnight_20260814/`, register #1):** measured LLM synth 56 → 5 across 254 prompts; AR = 0. Two shapes remain — address-as-target lists and single-PO+buyer. This requirement is near-met on read paths; the two builders are tracked in the register.
+
 *Added v1.3, 2026-08-03. Proven on two entities before being written
 down. Supersedes part of OUT-02.*
 
@@ -563,6 +569,8 @@ commas, so ten contacts rendered as a line no reader could parse —
 ---
 
 ### OUT-06 — An answer shall state how much of the data it covers · P0
+
+> **2026-08-14 evidence (register #27, #33, #35, #26):** this requirement is VIOLATED on the credit-memo path — "total value of credit memos" sums 25 of 2,249 and labels it the total (#27), and `top N` is dropped (#35). Contrast: ranking paths aggregate-before-capping and disclose "of 500" correctly. Fix = aggregate-all or refuse to print a total over a truncated sample; branch the truncation-note wording on whether a client filter ran (#26).
 
 *Added v1.4, 2026-08-04. Built before being written down, like OUT-04
 and OUT-05. **NOT YET AGREED WITH THE SME** — this records behaviour that
@@ -764,6 +772,8 @@ the failure rather than fixing it.
 
 ### COL-02 — Field synonym resolution · P0
 
+> **2026-08-14 evidence (register #7/#28, #31, #34):** concrete COL-02 gaps found. `country`/`state`/`city` have no synonym → `TaxpayerCountryCode`/nested-Address, so they are wrongly reported unavailable and an Address column is injected (#7/#28). Separately, the projection resolver mis-binds join/multi-step fields → em-dash on present values (#34) and null-vs-unresolved ambiguity (#31). One resolver fix closes all of these plus #12's guard.
+
 `kg_vocabulary` **shall** gain a `field_synonym` vocab_kind mapping
 business and Oracle-jargon terms to canonical field names.
 
@@ -850,6 +860,8 @@ DEFERRED with reasons:
 ---
 
 ### COL-03 — Partial column resolution and disclosure · P0
+
+> **2026-08-14 note:** still the SME's original P0 and still not started. The 2026-08-14 projection findings (#31/#34) are adjacent — the same resolver work should land COL-03's partial-resolution disclosure at the same time.
 
 *Revised 2026-07-31 after measurement. The first draft was written around
 silent dropping; the dominant defect is wholesale refusal. The requirement

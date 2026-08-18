@@ -27,7 +27,7 @@ phases of design detail bury the status table above them.
 | 0 | (four pre-existing defects, not in the requirements doc) | ✅ Done | Merged. See handoff 2026-07-30 evening. |
 | 1 | UX-05, OBS-01, OBS-02 | ✅ Done | Merged in two branches. Design and results below — prune to decisions-only before Phase 2 grows its own section. |
 | 2 | UX-01, UX-02, UX-03 | 🟨 UX-01 done | UX-01 merged (`phase-2-refusal-messages`, `phase-2-refusal-tests`). UX-02 (narrowing guidance) and UX-03 (truncation disclosure) not started — **deferred behind 2A**. |
-| **2A** | **OUT-01 to OUT-05, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | OUT-04/05 **merged for all of AR + Supplier**. OUT-01 to OUT-03 partly delivered by them. **COL-01/02/03 and CSV-01 NOT STARTED** — the SME's original request. §G, §G10, §G11, §G12. |
+| **2A** | **OUT-01 to OUT-05, COL-03, COL-01, COL-02, CSV-01** | 🟨 **Open — P0** | OUT-04/05 **merged for all of AR + Supplier**. OUT-01 to OUT-03 partly delivered by them. **COL-01/02/03 and CSV-01 NOT STARTED** — the SME's original request. §G, §G10, §G11, §G12. **2026-08-14 overnight surfaced concrete COL-02/OUT-04 defects — see §OVN below: projection cluster (register #7/#28, #31, #34), partial-total (#27/#33/#35), and the parser list-dump #32.** |
 | 3 | OBS-03, OBS-04, OBS-05 | ⬜ Not started | |
 | 4 | TST-02, TST-03, TST-01 | ⬜ Not started | |
 | 5 | PRF-01 | ⬜ Not started | See "Orthogonal work" below — a related refactor has already happened. |
@@ -83,6 +83,7 @@ unchanged by anything done so far:
 | Mean wall-clock per answered prompt | 16.0 s |
 | Mean total tokens per prompt | 12,230 |
 | Parse input tokens per prompt | 8,667 mean (superseded — see below) |
+| **LLM synth calls / 254 prompts (Theme A)** | **56 → 5** (measured 2026-08-14, `overnight_20260814/`; two shapes left) |
 
 **Superseded by Phase 0 (2026-07-30):** parse input tokens moved to a
 range, **~8,805–8,819**, varying with question length, after the risk-only
@@ -2939,3 +2940,102 @@ mechanism and is not addressed by this design. Sequence is unchanged: phase
 and per-stage diagrams. Four source files (pipeline.py, capability.py,
 result.py, planner.py) carry uncommitted changes from separate work, held
 back deliberately for their own commit.
+
+---
+---
+
+# §OVN — 2026-08-14 overnight (measurement + 10 new findings)
+
+Fresh **sequential** overnight of all 12 sets (`overnight_20260814/`), read
+prompt-by-prompt against three checks: refusal-format consistency, synthesis
+local-vs-LLM, and prose-vs-rows discrepancy. Full detail lives in
+`docs/spire_overnight_findings.md` (register #26–#35 + folded #1/#5/#6/#7/#9 +
+a verbatim per-set appendix). This section is the status-tracker digest.
+
+## What this run measured (Theme A / OUT-04)
+
+- **Synth calls 56 → 5**, `grep -rh "stage=synthesize" overnight_20260814/ | wc -l`.
+  Per-set: 00(1) 01(1) 10(2) 11(1); every other set 0.
+- **03_ar = 0.** AR (receivables, receipts, customer accounts, credit memos) is
+  fully local — the suspected hiding place had none. OUT-04 for AR is effectively
+  complete on the read paths tested.
+- The **5** are two shapes only:
+  - **Shape A — address-as-target list** ("addresses for supplier N",
+    `target=Address`), 3 calls. Needs `build_address_records` + dispatch branch;
+    distinct from the already-local Supplier-with-addresses path.
+  - **Shape B — single PO + buyer** ("Show PO N and its buyer"), 2 calls. Output
+    already correct; needs a local join+narration builder.
+- Count is **trustworthy, not a floor**: `06_slow` exited 1 on ONE pod-timeout
+  prompt (register #30), 14/15 ran, and it wasn't a synth path.
+
+## Fixes re-verified holding across the full set
+
+#3 (invoice lists local — no "-163.16" drift), #4 (PO 2144 id-type resolves,
+discloses OrderNumber 162352), #6 (unsupported_operation Solution constructive —
+but see re-open below), #12 (who/audit → fields), #21 (PO-with-children local),
+#23 (unbounded list → sample-and-disclose). Lifecycle (`build_lifecycle_summary`)
+holds across all 28 answered variants in 08_lifecycle with zero synth.
+
+## New findings, grouped by the phase/requirement that fixes them
+
+**Projection safety (Phase 2A · COL-02) — the largest cluster.** One resolver fix
+closes four register items:
+- **#34 🔴** projection on a multi-step plan binds to the wrong step-output →
+  em-dash on a value that provably exists (OrderNumber 162352 rendered as "—"). No
+  curl gate.
+- **#31 🟡** single-step join field (invoice `PurchaseOrderNumber`) renders em-dash
+  ambiguously — null vs unresolved indistinguishable. Curl owed (are these EIP
+  invoices actually PO-less?).
+- **#7/#28 🟠** `country`→Address substitution re-confirmed; new `state`/`city`
+  siblings. `TaxpayerCountryCode` is on the body (nullable). This IS the COL-02
+  synonym gap.
+- #12's projection guard against columns absent from the row is the same fix.
+
+**Partial results over capped fetches (Phase 2A · OUT-06 / UX-03).** The ranking
+paths aggregate-before-capping correctly (exposure "of 500", spend "of 41/66") —
+proving the machinery exists; these paths don't use it:
+- **#27 🔴** credit-memo "total value" sums 25 of 2,249, labelled as the total
+  (reproduced twice). A silently-wrong aggregate — highest-severity display bug.
+- **#35 🟡** `top N` dropped on the credit-memo list path (invoice path honours it).
+- **#33 🟡** classification filter examines 25 of 341; discloses sampling but the
+  true match count is unknowable.
+- **#26 🟡** truncation note says "examined for filtering" when only a server
+  filter ran (correct wording appears elsewhere when a client filter runs).
+
+**Parser robustness & safe fallback (Phase 3 · new).**
+- **#32 🔴 — the top finding.** Parser drops the PO identifier on some lifecycle
+  phrasings ("Is PO 162034 complete?"); the planner's fallback for a filter-less
+  PurchaseOrder intent is *list-all* → 25 of 17,447 unrelated POs, silent, no
+  error. Fix (b) — a planner guard that fails to a refusal instead of a dump — is
+  small and independent of the parser, and must distinguish an explicit "list
+  purchase orders" (valid) from a dropped-identifier query. Do this FIRST.
+
+**Refusal correctness (Phase 2 · UX-01).**
+- **#29 🟡** refusal *detail-text* is non-deterministic — the same prompt refuses
+  with different wording across sets (parser LLM words the detail instead of a
+  fixed capability lookup). Breaks refusal reproducibility/testability.
+- **#6 AI-5 half RE-OPENED.** `unsupported_filter` refusals for untracked attributes
+  (ratings, payment terms) still emit "Narrow by country, status or name" — a
+  narrowing that can't help. Same "marked fixed, then reproduced" pattern as #11.
+
+**Performance (Phase 5-adjacent).**
+- **#30 🟡** "top N suppliers" compare fetches the entire PO universe (17,447) before
+  narrowing → pod timeout. Named/single compare is bounded and fine. Select top-N
+  first, then fetch their POs.
+
+## Recommended fix order (harm-first, cheap-first)
+
+1. **#32 fault (b)** — planner fail-safe guard. Small, stops a silent-wrong-answer.
+2. **Projection cluster** (#34, then #7/#28 synonyms, then #31 after its curl) —
+   one COL-02 resolver change closes four.
+3. **#27** credit-memo total (aggregate-all or honest refusal) + #35 top_n + #33.
+4. **#29 / #6** refusal determinism + AI-5 re-open.
+5. **Theme A last two shapes** (#1 Shape A, Shape B) — re-measure for 0.
+6. **#30** bounded top-N compare; **#26** note wording; **#5** double-negation collapse.
+
+## Curls owed before coding (Phase 0-style)
+
+- **#31** do EIP invoices carry `PurchaseOrderNumber` on the pod (null vs unread)?
+- **#27** does `list_receivables_credit_memos` aggregate server-side?
+- **#33** is supplier classification server-filterable (composite `q=` fails here)?
+
