@@ -128,6 +128,18 @@ class Intent:
     # (an empty include already produces the right plan).
     balance_only: bool = False
 
+    # #32 fault (b): True only when the user explicitly asked to LIST/show
+    # all purchase orders ("list purchase orders", "show all POs") — a
+    # genuine bounded sample-and-disclose (#23). The parser sets it ONLY on
+    # that wording. generate_plan uses it to tell an explicit PO list apart
+    # from a PO query whose identifier the parser dropped ("Is PO N
+    # complete?" losing the number): both arrive as a filter-less
+    # PurchaseOrder intent, but only the explicit list should list — the
+    # dropped-identifier case must refuse, not dump 25 of ~17k unrelated
+    # POs. Defaults False so the SAFE direction (refuse when unscoped and
+    # not an explicit list) is the default. Consumed only in generate_plan.
+    list_all: bool = False
+
 
 @dataclass
 class Step:
