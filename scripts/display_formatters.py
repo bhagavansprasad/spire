@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Shared display formatters for the Spire pipeline runners.
@@ -1232,6 +1233,48 @@ def _unresolved_columns_note(
     return note
 
 
+def _pick_projection_bucket(
+    outputs: dict[str, list[dict]], fields: list[str]
+) -> str:
+    """Choose which output bucket to project, by requested-column presence.
+
+    #34: on a multi-step plan the target-entity output (e.g. ``po``,
+    carrying OrderNumber) is typically NOT the last bucket — an included
+    entity (``buyers``) is. The previous code always took the LAST bucket
+    (``list(outputs.keys())[-1]``), so a requested column that lived in an
+    earlier bucket rendered as an em dash against a bucket that never held
+    it (OrderNumber 162352 shown as "—").
+
+    Score each bucket by how many of the requested ``fields`` appear in its
+    first dict record; return the highest-scoring bucket. Ties and a
+    zero-score (no bucket clearly holds the requested columns) fall back to
+    the LAST bucket — the prior behavior — so single-bucket projections and
+    the address-flatten path are unchanged. Selection only; the caller does
+    the rendering.
+    """
+    names = list(outputs.keys())
+    if not names:
+        return ""
+    wanted = list(fields or [])
+    if not wanted:
+        return names[-1]
+    best_name = names[-1]  # default preserves prior single-bucket behavior
+    best_score = -1
+    for name in names:
+        first = next(
+            (r for r in outputs[name] if isinstance(r, dict)), {}
+        )
+        score = sum(1 for f in wanted if f in first)
+        # >= (not >) so that on a TIE or an all-zero score the LAST bucket
+        # wins — exactly the prior list(outputs.keys())[-1] behavior. A
+        # bucket with a strictly higher score (the one that actually holds
+        # the requested columns) still beats a later zero-scoring bucket.
+        if score >= best_score:
+            best_score = score
+            best_name = name
+    return best_name
+
+
 def _format_projected_table(
     outputs: dict[str, list[dict]],
     fields: list[str],
@@ -1260,7 +1303,13 @@ def _format_projected_table(
     if not outputs:
         return "Answer:\nNo records found."
 
-    bucket_name = list(outputs.keys())[-1]
+    # #34: pick the bucket that actually holds the requested columns, not
+    # just the last one — otherwise a present value (OrderNumber 162352 in
+    # the `po` bucket) renders as an em dash against a later bucket
+    # (`buyers`) that never carried it. Falls back to the last bucket when
+    # no bucket clearly holds the columns, so single-bucket and
+    # address-flatten paths are unchanged.
+    bucket_name = _pick_projection_bucket(outputs, fields)
     rows = outputs[bucket_name]
 
     # Self-gating address flatten: only if some row carries an addresses list.
@@ -1336,4 +1385,5 @@ def _format_projected_table(
             cells.append(("—" if v is None else str(v)).ljust(widths[f]))
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
+
 
