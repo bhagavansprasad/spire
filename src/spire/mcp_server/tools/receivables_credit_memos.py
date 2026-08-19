@@ -1,3 +1,4 @@
+
 """Receivables credit memos tool: recent AR credit memos (top-level list).
 
 Credit memos are a top-level resource at /receivablesCreditMemos — unlike
@@ -104,8 +105,10 @@ async def list_receivables_credit_memos(
 
 def compute_total_credit(
     items: list[dict],
+    total_available: int | None = None,
 ) -> tuple[float | None, str | None]:
-    """Total the credit memos — but ONLY within a single currency.
+    """Total the credit memos — but ONLY within a single currency, and ONLY
+    when the rows are the whole population, not a truncated sample.
 
     Returns (total, note). Exactly one is None.
 
@@ -124,6 +127,25 @@ def compute_total_credit(
     give, and this returns None plus a note saying why. Callers must
     render the note instead of the number, not alongside it.
 
+    WHY TRUNCATION ALSO WITHHOLDS THE TOTAL (#27)
+    ``items`` is the capped page the fetch returned (default 25), NOT the
+    whole collection. Summing it and presenting the figure as "the total
+    value of credit memos" is a partial sum labelled as complete — the
+    #27 defect ("Total credit value: X" over 25 of 2,244). ``total_available``
+    is the pod's own count (totalResults); when it exceeds the rows in
+    hand, the sample is truncated and there is no honest population total
+    to give from these rows alone. Return None plus a note that says so and
+    points at a bounded alternative, exactly as the currency case does.
+    A single sampled outlier (one -220,000 memo) makes the sample-sum not
+    even representative, so this is withheld, not estimated.
+
+    Checked AFTER currency: a multi-currency sample is disqualified by the
+    currency note regardless of truncation, which keeps that (already-live)
+    path unchanged. ``total_available=None`` disables the truncation guard
+    (an unknown count is treated as "not known to be truncated"), so
+    callers that cannot supply a count keep the prior single-currency
+    behavior.
+
     THE SIGN IS DELIBERATE, AND STAYS
     EnteredAmount is normally negative (a credit), but the pod carries at
     least one POSITIVE, Incomplete memo. The single-currency total is the
@@ -135,11 +157,17 @@ def compute_total_credit(
     Args:
         items: Credit-memo rows as projected by
             list_receivables_credit_memos.
+        total_available: the pod's count for the whole collection
+            (totalResults). When it exceeds len(items) the rows are a
+            truncated sample and no total is given. None disables the
+            truncation guard.
 
     Returns:
-        (total, None)  when every row shares one currency (or there are
-                       no rows: the total is 0.0).
-        (None, note)   when the rows span two or more currencies.
+        (total, None)  when every row shares one currency AND the rows are
+                       the whole set (or there are no rows: the total is
+                       0.0).
+        (None, note)   when the rows span two or more currencies, OR the
+                       rows are a truncated sample of a larger collection.
     """
     currencies = {
         item.get("CreditMemoCurrency")
@@ -153,6 +181,15 @@ def compute_total_credit(
             f"({listed}). A single sum across them would be a figure in no "
             "currency at all."
         )
+    if total_available is not None and total_available > len(items):
+        return None, (
+            f"Not totalled: these are the {len(items)} most recent of "
+            f"{total_available} credit memos. A sum over only the sampled "
+            "rows would misstate the full set — ask for a bounded set "
+            "(e.g. a date range or a single customer) and I'll total that."
+        )
     total = sum((item.get("EnteredAmount") or 0) for item in items)
     return float(total), None
+
+
 

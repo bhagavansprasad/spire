@@ -1,3 +1,4 @@
+
 """FastMCP server for Spire.
 
 Loads the 'default_dev' persona at startup and exposes Fusion-backed
@@ -669,9 +670,15 @@ async def list_receivables_credit_memos(limit: int = 25) -> dict:
         result = await _list_receivables_credit_memos(client, limit=limit)
         payload = result.to_dict()
         items = payload.get("items", [])
-        # Currency-aware: returns a total OR a note, never both. See
-        # compute_total_credit for why a plain sum was wrong.
-        total_credit, total_credit_note = _compute_total_credit(items)
+        # Currency-aware AND truncation-aware: returns a total OR a note,
+        # never both. total_available is the pod's own count (totalResults);
+        # passing it lets compute_total_credit withhold a total when these
+        # rows are only a capped sample of a larger set (#27), the same way
+        # it withholds across currencies. See compute_total_credit for why a
+        # plain sum over a truncated sample was wrong.
+        total_credit, total_credit_note = _compute_total_credit(
+            items, total_available=payload.get("total_available")
+        )
         payload["total_credit"] = total_credit
         payload["total_credit_note"] = total_credit_note
         # The executor unwraps a ToolResult to its `items` list and discards
@@ -1242,4 +1249,6 @@ async def aggregate_standard_receipts_by_method(
         
 if __name__ == "__main__":
     mcp.run(transport="http", host=DEFAULT_HOST, port=DEFAULT_PORT)
+
+
 
