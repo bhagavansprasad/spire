@@ -8,10 +8,13 @@ default_dev:
     # username: "Jared.White"
     # password: "jO#R5G8g"
 
-    base_url: "https://fa-etaj-saasfademo1.ds-fa.oraclepdemos.com"
-    username: "Dean.White"
-    password: "H?tr0cob"
+    # base_url: "https://fa-etaj-saasfademo1.ds-fa.oraclepdemos.com"
+    # username: "Dean.White"
+    # password: "H?tr0cob"
 
+    base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
+    username: "Liam.Noah"
+    password: "_0BRaTad"
 
     auth_type: "basic"
   oracle:
