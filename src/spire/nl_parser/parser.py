@@ -696,6 +696,7 @@ def parse(
     prompt: str,
     llm: Any | None = None,
     menu: KGMenu | None = None,
+    system_prompt: str | None = None,
 ) -> ParseResult:
     """Parse a natural-language prompt into a ParseResult.
 
@@ -731,7 +732,8 @@ def parse(
         llm = build_llm(_TEMPERATURE)
 
     structured_llm = llm.with_structured_output(DraftIntent, include_raw=True)
-    system_prompt = _build_system_prompt(menu)
+    if system_prompt is None:
+        system_prompt = _build_system_prompt(menu)
 
     result = structured_llm.invoke(
         [("system", system_prompt), ("human", prompt)]

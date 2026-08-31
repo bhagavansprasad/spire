@@ -105,3 +105,9 @@ refuse ||| suppliers with the highest quality score
 target:Supplier ||| show me suppliers
 refuse ||| recent invoices
 target:Supplier ||| everything about supplier 1252
+
+# ---------- 17. SELECTIVE LOADING (module isolation proof) ----------
+filter:has_open_PO ||| MODULES=supplier ||| suppliers with open purchase orders
+filter:status ||| MODULES=supplier ||| List active suppliers
+target:Invoice ||| MODULES=payables,supplier ||| invoices for supplier 1252
+aggregate ||| MODULES=supplier,modes ||| top 10 suppliers by spend in 2022
