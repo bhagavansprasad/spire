@@ -45,9 +45,9 @@ TABLES: list[dict] = [
                    "Started at 5 (Supplier, Invoice, PurchaseOrder, Buyer, "
                    "Address); now 22.",
         "columns": ["entity_name", "canonical_id_field", "display_name_field",
-                    "endpoint_path", "description"],
+                    "endpoint_path", "description", "module"],
         "sql": "SELECT entity_name, canonical_id_field, display_name_field, "
-               "endpoint_path, description FROM kg_entity "
+               "endpoint_path, description, module FROM kg_entity "
                "ORDER BY entity_name",
         "clob_cols": {"description"},
         "expected_rows": 22,

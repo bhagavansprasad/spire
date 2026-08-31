@@ -104,7 +104,78 @@ async def test_kg_entity_has_twentytwo_rows():
         "StandardReceipt", "Supplier"
     ]
 
+@pytest.mark.asyncio
+async def test_kg_entity_module_mapping():
+    """Every entity carries its correct Fusion module.
 
+    Phase 1 (parser context modularization) added a `module` column to
+    kg_entity: the KG's source of truth for which Fusion module an entity
+    belongs to, read by the selective-load harness and the Phase-2 router.
+    The CHECK constraint guarantees the value is one of the four modules, but
+    NOT that it is the RIGHT one — this test pins the actual mapping so a
+    mis-assignment (e.g. a PO tagged 'receivables') fails loudly instead of
+    silently mis-scoping router context.
+
+    Children take the module of the endpoint they hang off (a PO line is
+    procurement, a tax line is receivables). See
+    docs/features/parser_context_modularization.md §4.3.
+    """
+    expected = {
+        # payables
+        "Invoice": "payables",
+        # procurement
+        "PurchaseOrder": "procurement",
+        "PurchaseOrderLine": "procurement",
+        "PODistribution": "procurement",
+        "POSchedule": "procurement",
+        "Buyer": "procurement",
+        # receivables
+        "ReceivablesInvoice": "receivables",
+        "ReceivablesInvoiceLine": "receivables",
+        "ReceivablesTaxLine": "receivables",
+        "ReceivablesInvoiceTransactionDFF": "receivables",
+        "CreditMemo": "receivables",
+        "AccountCreditMemo": "receivables",
+        "CustomerAccount": "receivables",
+        "CustomerTransaction": "receivables",
+        "StandardReceipt": "receivables",
+        "AccountReceipt": "receivables",
+        "AccountReceiptApplication": "receivables",
+        # supplier
+        "Supplier": "supplier",
+        "Address": "supplier",
+        "Site": "supplier",
+        "Classification": "supplier",
+        "Contact": "supplier",
+    }
+
+    persona = load_persona("default_dev")
+    async with OracleClient(persona) as oc:
+        rows = await oc.fetch_all(
+            "SELECT entity_name, module FROM kg_entity ORDER BY entity_name"
+        )
+    actual = {row[0]: row[1] for row in rows}
+
+    # Collect every discrepancy before asserting (same discipline as the
+    # row-count test) so one run surfaces all of them.
+    missing = sorted(set(expected) - set(actual))
+    unexpected = sorted(set(actual) - set(expected))
+    wrong = sorted(
+        f"{name}: expected {expected[name]!r}, got {actual[name]!r}"
+        for name in expected
+        if name in actual and actual[name] != expected[name]
+    )
+
+    problems = []
+    if missing:
+        problems.append(f"entities missing from kg_entity: {missing}")
+    if unexpected:
+        problems.append(f"unexpected entities in kg_entity: {unexpected}")
+    if wrong:
+        problems.append("wrong module:\n  " + "\n  ".join(wrong))
+
+    assert not problems, "entity->module mapping drifted:\n" + "\n".join(problems)
+    
 @pytest.mark.asyncio
 async def test_kg_table_row_counts_match_v1_1():
     """All 9 KG tables match the current row counts.

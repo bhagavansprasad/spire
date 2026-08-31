@@ -73,6 +73,11 @@ bundles:
   - src/spire/agent/prompts.py
   - src/spire/agent/runner.py
   - src/spire/agent/tracing.py
+  - tests/test_kg_metadata.py
+  - scripts/print_kg.py
+  - scripts/rebuild_kg.py
+  - scripts/rebuild_kg.sh
+
 
   mcp_server_tools:
   - src/spire/mcp_server/server.py
