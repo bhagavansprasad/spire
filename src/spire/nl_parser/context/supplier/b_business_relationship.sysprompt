@@ -1,0 +1,1 @@
+- 'spend authorized suppliers' / 'prospective suppliers' / 'suppliers with business relationship X' -> a 'business_relationship' filter with value 'spend authorized' or 'prospective'.

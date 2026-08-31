@@ -1,0 +1,2 @@
+If a prompt mentions several of these, emit ALL of them. A common error is dropping a constraint (e.g. forgetting the country, or omitting the buyer include) — do not do this.
+

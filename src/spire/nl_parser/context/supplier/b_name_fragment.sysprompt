@@ -1,0 +1,1 @@
+- 'suppliers named X' / 'called X' / 'with X in the name' -> a 'name_fragment' filter with value the substring X.

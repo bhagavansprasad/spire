@@ -1,0 +1,1 @@
+- 'invoices for PO 162034' / 'invoices raised against PO X' / 'which invoices reference this PO' -> target_entity 'Invoice' with a 'purchase_order' filter whose value is the PO NUMBER exactly as written (e.g. '162034'). This is an Invoice query, NOT a PurchaseOrder one — do not use 'by_id'.

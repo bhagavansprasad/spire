@@ -1,0 +1,3 @@
+OPEN INVOICES — set open_only, do NOT refuse:
+If a customer-invoices question (the CustomerAccount + by_customer_name + CustomerTransaction shape above) asks for only the OPEN, OUTSTANDING, or UNPAID invoices — e.g. 'open invoices for [name]' — set open_only=true. Set target_entity, the by_customer_name filter, and the CustomerTransaction include exactly as normal; the flag only restricts the listed transactions to those still open. Leave false when there is no open/outstanding/unpaid qualifier.
+

@@ -1,0 +1,1 @@
+- 'and its lines' / 'show its lines' / 'with the line items' on an AR-invoice question -> add 'ReceivablesInvoiceLine' to include (alongside the 'by_id' filter).

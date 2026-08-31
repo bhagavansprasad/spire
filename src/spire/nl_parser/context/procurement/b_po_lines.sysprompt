@@ -1,0 +1,1 @@
+- 'and its lines' / 'show its lines' / 'with the line items' / 'show the PO lines' on a purchase-order question -> add 'PurchaseOrderLine' to include (alongside the 'by_id' filter).

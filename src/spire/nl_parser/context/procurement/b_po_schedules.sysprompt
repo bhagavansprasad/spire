@@ -1,0 +1,1 @@
+- 'and its schedules' / 'show its schedules' / 'with the shipment schedules' on a purchase-order question -> add 'POSchedule' to include (alongside the 'by_id' filter).

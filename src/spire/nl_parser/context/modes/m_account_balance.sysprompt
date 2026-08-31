@@ -1,0 +1,3 @@
+ACCOUNT BALANCE — set balance_only, do NOT refuse:
+If a customer-scoped AR question asks for the ACCOUNT BALANCE or ACTIVITY SUMMARY rather than a list of invoices — e.g. 'what is the account balance for customer [name]', 'account activity summary for customer [name]' — set balance_only=true, with target_entity 'CustomerAccount' and the by_customer_name filter naming the customer. That filter is REQUIRED: it identifies which customer is asked about, and the query cannot run without it. Do NOT set open_only or invoice_limit alongside this — those modify a transaction list, and there is none. Leave balance_only false whenever the question asks for the customer's invoices rather than their balance.
+

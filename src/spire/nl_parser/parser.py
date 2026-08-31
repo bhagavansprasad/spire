@@ -39,6 +39,8 @@ from spire.nl_parser.vocabulary import (
 )
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
+from pathlib import Path
+
 
 # Model and determinism come from spire.config (single source of truth).
 _MODEL_NAME = GEMINI_MODEL
@@ -523,6 +525,50 @@ _SYSTEM_PROMPT_PREAMBLE = (
 )
 
 
+# --- modular context assembly (Phase 1) -----------------------------------
+# The preamble text now lives as .sysprompt block files under context/,
+# grouped by Fusion module. Production assembles the preamble by reading the
+# manifest and joining the blocks in recorded order — done ONCE at import and
+# cached in _ASSEMBLED_PREAMBLE. The literal _SYSTEM_PROMPT_PREAMBLE above is
+# retained as the byte-equality oracle for
+# tests/test_parser_context_assembly.py; it is not sent to the model.
+
+_CONTEXT_DIR = Path(__file__).resolve().parent / "context"
+
+
+def _load_preamble_from_files() -> str:
+    """Assemble the parser preamble from the modular .sysprompt blocks.
+
+    Reads context/order.manifest and concatenates each listed block, in order,
+    with no separators (blocks carry their own trailing newlines). Fails loudly
+    if the manifest or any listed block is missing — a partial preamble must
+    never be silently sent to the model.
+    """
+    manifest_path = _CONTEXT_DIR / "order.manifest"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"parser context manifest missing: {manifest_path}"
+        )
+    parts: list[str] = []
+    for line in manifest_path.read_text(encoding="utf-8").splitlines():
+        rel = line.strip()
+        if not rel:
+            continue
+        block_path = _CONTEXT_DIR / rel
+        if not block_path.is_file():
+            raise FileNotFoundError(
+                f"parser context block listed in manifest but missing: "
+                f"{block_path}"
+            )
+        parts.append(block_path.read_text(encoding="utf-8"))
+    return "".join(parts)
+
+
+# Assembled once at import, reused for every parse (same cost profile as the
+# old module-level literal).
+_ASSEMBLED_PREAMBLE = _load_preamble_from_files()
+
+
 def _format_menu(menu: KGMenu) -> str:
     """Render the KG menu as the allowed-vocabulary block of the prompt."""
     lines: list[str] = []
@@ -568,7 +614,7 @@ def _format_menu(menu: KGMenu) -> str:
 
 
 def _build_system_prompt(menu: KGMenu) -> str:
-    return _SYSTEM_PROMPT_PREAMBLE + "\n" + _format_menu(menu)
+    return _ASSEMBLED_PREAMBLE + "\n" + _format_menu(menu)
 
 
 import re

@@ -1,0 +1,1 @@
+- 'and its distributions' / 'show the distribution accounts' / 'what accounts is it booked to' on a purchase-order question -> add BOTH 'POSchedule' AND 'PODistribution' to include, in that order (alongside the 'by_id' filter). Distributions hang off schedules, so the schedule hop is always needed to reach them.

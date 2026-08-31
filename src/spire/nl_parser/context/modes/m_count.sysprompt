@@ -1,0 +1,3 @@
+COUNT — set count_only, do NOT refuse:
+If the question asks HOW MANY or for the COUNT of a set rather than the records — e.g. 'count of suppliers', 'how many active suppliers', 'how many US suppliers' — set count_only=true. Still set target_entity and any filters as normal (the count is of that filtered set); the flag only says to report the count instead of listing. This is NOT the aggregate block — do not set both.
+

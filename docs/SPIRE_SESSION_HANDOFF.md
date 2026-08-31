@@ -1,186 +1,260 @@
-# Paste this into the new window
+# Handoff — Parser Context Modularization, PHASE 1 (Fusion-Module Axis)
 
-You are continuing work on **Spire** — an AI-native natural-language query
-system over Oracle Fusion Cloud (P2P + AR). Deterministic KG pipeline: parse →
-plan → execute → synthesize. The two LLM boundaries are the parser (words →
-Intent) and the synthesizer (records → prose); everything between is a KG
-lookup, never a model judgement. Repo `github.com/bhagavansprasad/spire`,
-working dir `~/pocs/spire`, pod `fa-esll-dev37-saasfademo1`, creds in the shell
-env.
+Paste this into the new window to continue. **Read the design doc first, in
+full:** `docs/features/parser_context_modularization.md` (v2 — Fusion-module
+axis). This handoff summarizes; the doc is authoritative.
 
 ---
 
-## WHERE WE ARE (2026-08-14): overnight ran, was analyzed prompt-by-prompt, findings doc merged. NEXT = fix the issues.
+## What Spire is
 
-The measurement overnight is **done and analyzed**. Do NOT re-run it — analyze
-was the task, and it's complete. Results:
+AI-native NL query over Oracle Fusion Cloud (P2P + AR). Deterministic KG
+pipeline: **parse → plan → execute → synthesize**. Two LLM boundaries — the
+parser (words → Intent) and the synthesizer (records → prose); everything
+between is a KG lookup.
 
-- **Synth calls 56 → 5** across 254 prompts (`overnight_20260814/`,
-  `grep -rh "stage=synthesize" | wc -l`). Per-set: 00(1) 01(1) 10(2) 11(1); every
-  other set 0. **03_ar = 0** — AR (the suspected hiding place) is fully local.
-- The **5** are two shapes only: **Shape A** address-as-target lists ("addresses
-  for supplier N", `target=Address`, 3 calls) and **Shape B** single PO + buyer
-  ("Show PO N and its buyer", 2 calls, output already correct). Both are small
-  single-shape conversions.
-- Count is **trustworthy, not a floor**: `06_slow` exited 1 on ONE pod-timeout
-  prompt (register #30), 14/15 ran, not a synth path.
-
-**The findings doc is already merged and complete:** `docs/spire_overnight_findings.md`
-now holds the full register (1–35), with the 10 new issues (#26–#35) **grouped by
-fix-theme at the top**, the 2026-08-14 status folded into #1/#5/#6/#7/#9, and a
-verbatim per-set evidence appendix. `spire_enhancement_status.md` §OVN and the six
-touched requirements (OUT-04, OUT-06, COL-02, COL-03, UX-01, UX-03) are updated too.
-Read the register before starting — it has the full Expected/Verification/Fix/Status
-for each issue.
-
-### The 10 new issues, and what re-verified
-
-**Fixes holding across the full set:** #3 (invoice lists local), #4 (PO 2144
-id-type), #6 (unsupported_operation Solution — but AI-5 half re-opened, see below),
-#12 (who/audit → fields), #21 (PO-with-children), #23 (sample-and-disclose),
-lifecycle `build_lifecycle_summary` (zero synth across 28 variants).
-
-**New issues, grouped by the fix that closes them:**
-
-- **Projection layer (COL-02) — biggest cluster, one resolver fix closes four:**
-  **#34 🔴** projection on a multi-step plan binds the wrong step-output → em-dash
-  on a value that provably exists (OrderNumber 162352 shown as "—"; no curl gate).
-  **#31 🟡** single-step join field (invoice PurchaseOrderNumber) em-dash is
-  ambiguous, null-vs-unresolved (curl owed). **#7/#28 🟠** `country`→Address
-  substitution re-confirmed + new `state`/`city` siblings (`TaxpayerCountryCode` on
-  body, nullable). Plus #12's projection guard.
-- **Partial results over capped fetches (OUT-06):** **#27 🔴** credit-memo "total
-  value" sums 25 of 2,249, labelled as the total (twice) — silently wrong aggregate.
-  **#35 🟡** `top N` dropped on the credit-memo list path. **#33 🟡** classification
-  filter examines 25 of 341 (discloses sampling, still can't answer). **#26 🟡**
-  truncation note says "examined for filtering" when no client filter ran.
-- **Parser robustness (new):** **#32 🔴 — TOP FINDING.** Parser drops the PO
-  identifier on some lifecycle phrasings ("Is PO 162034 complete?"); the planner's
-  fallback for a filter-less PurchaseOrder intent is *list-all* → 25 of 17,447
-  unrelated POs, silent, no error. 162034 is real; other phrasings answer it fine.
-- **Refusal (UX-01):** **#29 🟡** refusal detail-text is non-deterministic (parser
-  words it, not a fixed lookup). **#6** AI-5 `unsupported_filter` "narrow by…"
-  re-opened (emitted for untracked attributes where narrowing can't help).
-- **Performance:** **#30 🟡** "top N suppliers" compare fetches the whole PO
-  universe (17,447) → pod timeout; named/single compare is bounded and fine.
+- Repo: `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`
+- Pod: `fa-etaj-saasfademo1` (user `Dean.White`), creds in shell env
+  - Prior pod (`fa-esll-dev37`) expired; the endpoints reference may still cite
+    the old URL — update when touched.
+- LLM: Gemini (`gemini-2.5-flash`) via Vertex AI. `LLM_MAX_OUTPUT_TOKENS = 8000`,
+  hardcoded in `src/spire/config.py` (no env override).
 
 ---
 
-## NEXT STEP: fix the issues, harm-first and cheap-first
+## The organizing principle (design doc §0)
 
-Recommended order (rationale: stop silent-wrong-answers first, then the cluster
-that closes the most, then the rest). One branch per logical change, PR-based;
-docs-only straight to master.
+**The Oracle Fusion module is THE axis of organization for Spire.** Tools,
+parser context, and prompts all partition along the same four modules. Adding a
+Fusion module means adding its tool group + context module + prompts as one unit.
+Everything derives from the module.
 
-1. **#32 fault (b) — planner fail-safe guard.** SMALLEST high-impact fix. A
-   filter-less PurchaseOrder intent with no explicit "list" request must raise a
-   structured refusal, NOT `search_purchase_orders {}`. It must distinguish an
-   explicit "list purchase orders" (valid sample-and-disclose) from a
-   dropped-identifier query. This alone stops the 25-of-17,447 dump regardless of
-   the parser. Then (a) strengthen parser extraction for "Is PO N complete?" /
-   "…blocking?" / "…outstanding?" to route to the lifecycle tool.
-2. **Projection cluster (COL-02):** #34 first (no curl gate — bind projection
-   per-column to the step-output that holds it), then #7/#28 synonyms
-   (`country`/`state`/`city` → TaxpayerCountryCode / nested Address, render null
-   cleanly, no Address injection), then #31 after its curl. One resolver change
-   closes #34/#31/#7/#12-guard.
-3. **Partial results:** #27 (aggregate over ALL credit memos like the exposure
-   path does over 500, OR refuse to print a total over a truncated sample) + #35
-   (thread top_n into the credit-memo list path) + #33.
-4. **Refusal determinism:** #29 (source detail-text from a fixed capability table
-   keyed on (code, entity/attribute)) + #6 AI-5 re-open (name the missing
-   attribute instead of "narrow by…").
-5. **Theme A last two shapes:** #1 Shape A (`build_address_records` + dispatch),
-   Shape B (local join+narration). Re-measure for 0.
-6. **#30** bounded top-N compare (select top-N first, then fetch their POs);
-   **#26** branch note wording; **#5** collapse the double-negation.
+The four modules and their root entities:
 
-### Curls owed BEFORE coding the gated items (Phase-0 style, read the endpoints doc first)
-- **#31** do EIP invoices carry `PurchaseOrderNumber` on the pod (null vs unread)?
-- **#27** does `list_receivables_credit_memos` aggregate server-side?
-- **#33** is supplier classification server-filterable (composite `q=` fails here)?
+| Module | Root entities |
+|---|---|
+| **payables** | Invoice |
+| **procurement** | PurchaseOrder |
+| **receivables** | ReceivablesInvoice, CreditMemo, CustomerAccount, StandardReceipt |
+| **supplier** | Supplier, Address |
 
-### Acceptance rules (unchanged)
-1. **No LLM synthesis anywhere** — every `stage=synthesize` is a finding.
-2. **Refusal format** — Reason / Solution / Example then `(refusal: <code> — <detail>)`,
-   and now (per #29) the detail-text must be a fixed lookup, not parser free-text.
-3. **"Confirmed" = curled or run**, never inferred from code/logs. Re-run the
-   affected set after each fix: zero new synth, unchanged answers, the specific
-   discrepancy gone.
-
-### Owed (smaller)
-- **Regression tests** locking `build_lifecycle_summary`, the contacts builder, and
-  #5 (empty-result) are still not written — additive, worth adding as you touch
-  each path.
-- When a fix lands, update `docs/spire_overnight_findings.md` (flip the issue to
-  fixed with commit ref) and `spire_enhancement_status.md` §OVN.
+Tools already follow this axis. This work brings **parser context** and
+**prompts** onto it.
 
 ---
 
-## Reference
+## The task: PHASE 1 only
 
-- Findings register (house block format): `docs/spire_overnight_findings.md` —
-  updated this session; has the not-reproducible caveat and #11 correction.
-- Local-synthesis templates (Theme A, all now on master): supplier joins =
-  `_supplier_with_open_pos`/`build_suppliers_with_open_pos` and
-  `_supplier_with_contacts`/`build_suppliers_with_contacts` in `synthesizer/p2p.py`;
-  plain lists = `build_invoice_records`/`plain_invoice_bucket`; empty =
-  `_all_buckets_empty` + `_ENTITY_LABEL` in `synthesizer/synthesizer.py`;
-  lifecycle = `build_lifecycle_summary` in `synthesizer/lifecycle.py`. Dispatch
-  branches live before the LLM fallthrough in `synthesize_response`.
-- Refusals: `RefusalError` in `nl_parser/result.py`; `_validate_intent_filters`
-  in `planner/plan_builders.py` now raises structured UNSUPPORTED_FILTER; catch
-  in `graph/pipeline.py` plan_node; render in `nl_parser/capability.py`
-  (`capability_message`, `_FILTER_GUIDANCE`, `_OPERATION_SOLUTIONS`).
-- Overnight tooling: `scripts/run_overnight.py` + `scripts/overnight_sets.yaml`
-  (12 sets, SEQUENTIAL); `scripts/run_prompt_set.py` for a single set.
-- Endpoints/pod quirks authority: `docs/spire_fusion_endpoints_reference.md`
-  (read BEFORE curling; update when a new quirk is found).
+Implement **Phase 1** from the design doc (§4). **Phase 2 (the router) is
+deferred — do not start it.**
 
-### Pod quirks to keep in mind
-- Composite `q=` fails silently (HTTP 200, totalResults 0) — single-clause only.
-- `q=Status='ACTIVE'` returns 0 on suppliers — count Status client-side.
-- Supplier population FLUCTUATES on this demo pod (333→338 within one session;
-  ~336 ACTIVE / 2 INACTIVE). Don't treat a count drift as a bug.
-- Contact rows do NOT carry parent SupplierId from Fusion — the tool now stamps
-  it (see contacts fix). Same for sites/classifications (join key is the path).
-- `expand=sites` silently ignored on bulk fetches.
-- `/standardReceipts` has no default ordering (paginated fetches non-reproducible).
-- The KG always rebuilds from scratch (`python scripts/rebuild_kg.py`).
-- Executor unwraps ToolResult to an items list and DISCARDS top-level keys —
-  scalars must be stamped onto each row to survive (the contacts SupplierId fix).
+### Why this exists
+
+The parser system prompt — `_SYSTEM_PROMPT_PREAMBLE` in
+`src/spire/nl_parser/parser.py`, **one string literal, lines 48–~520**
+(`_format_menu` at 526, `_build_system_prompt` at 570, `parse` at 574) — is an
+**all-module monolith**, ~8000 tokens, shipped on every parse. Two costs:
+1. Testing is expensive (full all-module context every check).
+2. No module isolation — can't test/edit/bisect one module's parser behavior.
+
+These cost ~5 hours on issue #32. Phase 1 fixes the *organization and tooling*.
+
+### Phase 1 deliverables (design doc §4.2)
+
+**A. Split the monolith into two tiers of context files** under
+`src/spire/nl_parser/context/`:
+
+```
+Tier 1 — ALWAYS loaded (not Fusion modules; the shared base):
+  core.txt       role, output/Intent contract, global rules, entity roster
+  refusals.txt   refusal format + capability guidance
+                 (always-on: you can't know a prompt will be refused pre-parse)
+
+Tier 2 — selected by the router in Phase 2; ALL loaded in Phase 1:
+  payables.txt      AP invoice queries
+  procurement.txt   PO / purchasing / lifecycle queries
+  receivables.txt   AR invoices, credit memos, receipts, customers
+  supplier.txt      suppliers, sites, contacts, classifications, addresses
+  columns.txt       column-projection rules (cross-cutting CONCERN)
+```
+
+`_build_system_prompt` reads and joins the files in fixed order, then appends the
+KG menu. **In Phase 1 it joins ALL of them.**
+
+**B. THE CRITICAL GUARDRAIL — string-equality (§4.1).** The assembled all-files
+preamble must be **byte-for-byte string-equal** to the current
+`_SYSTEM_PROMPT_PREAMBLE`, enforced by a test. Phase 1 changes *where the text
+lives*, not *what production sends*. **Until string-equality holds, the split is
+not done.** NEVER reword prose in this split — it is pure relocation. Any
+semantic change to production behavior is out of scope (that is Phase 2).
+
+**C. Entity→module mapping in the KG (§4.3).** Add a `module` field per entity
+(Invoice→payables, PurchaseOrder→procurement, CreditMemo/ReceivablesInvoice/
+CustomerAccount/StandardReceipt→receivables, Supplier/Address→supplier). The KG
+is Spire's source of truth; the mapping belongs there, read by tools, context
+selection, and the Phase-2 router alike.
+- Bump row-count tripwires in `scripts/print_kg.py` AND `tests/test_kg_metadata.py`
+  together; rebuild with `python scripts/rebuild_kg.py`.
+
+**D. Selective-load test harness (§7)** — extend
+`scripts/score_parser_prompts.py`:
+- `EXPECT=<expectation> ||| MODULES=procurement ||| <prompt>` → assemble Tier 1 +
+  named Tier-2 files only (cheap; bisects one module).
+- `MODULES` absent → assemble ALL files (the **fidelity oracle**).
+- Richer `EXPECT` grammar: `list_all`, `filter:lifecycle_status`, `no_filters`,
+  `refuse[:flavor]`, alongside existing `target:`, `filter:`, `combo:`, `count`,
+  `aggregate`.
+
+**E. Capture #32 fault (a)** as a tracked KNOWN-FAIL case on `MODULES=all` (§7.3):
+```
+filter:lifecycle_status ||| MODULES=all ||| Is PO 162034 complete?
+```
+
+### What already exists — build on, don't reinvent (§2)
+
+- `scripts/score_parser_prompts.py` — parse-only scorer (`EXPECT=... ||| prompt`),
+  the harness's **execution engine**. Extend it (module selection + richer
+  expectations).
+- `scripts/prompts/scorer/parser_stress.txt` — ~60-prompt corpus, the **format to
+  extend**.
+- Tools already group by module; prompt sets `01_supplier`, `02_purchase_order`,
+  `03_ar` already align; `04_columns`, `05_refusals`, `10_refusal_examples`,
+  `11_column_vocabulary` are cross-cutting and **stay as-is** (§6).
+
+### The fidelity caveat (§7.4) — keep the harness honest
+
+A subset-context (`MODULES=<subset>`) run **DIAGNOSES** which module drives a
+behavior. The **full assembly VERIFIES** production-equivalent behavior. A slim
+context can false-pass. Assert every tracked correctness expectation on the full
+assembly. (In Phase 2, fidelity becomes: router-selected == full assembly.)
+
+### Hard boundary
+
+**Do NOT change the LLM prompt text semantically.** Phase 1 is pure relocation
+guarded by string-equality. Do NOT build the Phase-2 router. If you find yourself
+editing prose to change what the model does, stop — that's out of scope.
 
 ---
 
-## Working style (STRICT — the human relies on this)
+## Phase 2 (deferred — context only)
 
-1. **Short, interactive, ONE step at a time.** Brief statements, short
-   sentences. One command at a time; verify before proceeding. Do not
-   batch-generate. Do not throw 100+ lines to read.
-2. **Ask permission before generating code or significant content.**
-3. **Plain-text numbered options with a recommendation, and say why.** No
-   widgets for choices.
-4. **Deliver the COMPLETE updated file, never a patch/diff.** Re-share/re-read
-   the current full file before editing — files drift; don't trust an earlier
-   upload.
-5. **Output to `t.txt`** — pipe through `tee` so it shows live AND saves
-   (`command | tee t.txt`). `>` overwrite, `>>` append. Never a bare `> t.txt`.
-6. **Git discipline:** one branch per logical change, PR-based merges, named
-   files in `git add` (never `-A`), heredoc commit messages
-   (`git commit -F- <<'EOF'`). Docs-only may go straight to master. CHECK you
-   are on the intended branch before committing.
-7. **Curl the pod before writing code** for any endpoint/field, and read
-   `docs/spire_fusion_endpoints_reference.md` BEFORE curling. Update that doc
-   when a new pod quirk is found. Creds are in the shell env.
-8. **"Confirmed/verified" means actually curled/run.** A claim from reading
-   code or logs is NOT a finding — say "appears correct from logs" until
-   verified. Measurement over argument — when a fix isn't visible, instrument
-   with a debug print and read runtime values before theorizing.
-9. **pytest:** always `-q`. Full suite before any commit touching source;
-   targeted tests during work.
-10. **KG rebuild:** `python scripts/rebuild_kg.py` (never the .sh). When adding
-    KG rows, bump expected counts in `scripts/print_kg.py` AND
-    `tests/test_kg_metadata.py` together.
-11. **Restart the MCP server after ANY change under `src/spire/mcp_server/`** —
-    it holds the old module until restarted. (KG-only and other src changes do
-    NOT need a restart.)
+Phase 2 (design doc §5) scopes context to the targeting module(s) at runtime via
+a **tiny first-pass LLM classifier**: reads the raw prompt, returns the module
+set (union for cross-module prompts like "suppliers with open POs"), falls back
+to **all modules** when unsure (degrades to Phase-1 behavior, proven safe).
+Verified against the full-assembly oracle (router-selected == full). **This is a
+separate later effort. Do not start it.**
+
+The chicken-and-egg (you must know the module before parsing, but parsing
+determines the module) is real and exists **only at the parser boundary** —
+downstream (plan/execute/synthesize) the KG already derives the module
+deterministically from `target_entity`. That's why the router is a *pre-parse*
+classifier with an all-modules fallback.
+
+---
+
+## Where issue #32 stands (context, not tasks)
+
+Three High-severity issues fixed and merged in the prior session:
+- **#32 fault (b)** (PR #132) — filter-less PurchaseOrder intent refuses instead
+  of dumping. Signal (`Intent.list_all`) set in deterministic Python code
+  (`_is_explicit_po_list`), system prompt byte-for-byte unchanged.
+- **#34** (PR #133) — projection reads the bucket holding the requested column,
+  not the last (`_pick_projection_bucket` in `scripts/display_formatters.py`).
+- **#27** (merged) — credit-memo total withheld over a truncated sample
+  (`compute_total_credit` gained a `total_available` guard).
+
+**#32 fault (a)** — "Is PO N complete?" (Procurement) deterministically drops the
+PO id. **Measured facts:** NOT a token-cap problem (short, valid, *wrong* parses
+at 8000); NOT a KG-definition problem (the lifecycle target exists; explicit
+phrasings reach it). A classification miss in the all-module monolith; adding
+prompt text induced **MAX_TOKENS runaway (proven 3×)** — the monolith has no
+headroom. De-risked by the (b) guard (fails safe to a refusal). Severity high,
+tracked. **This framework is (a)'s home:** the `procurement.txt` file makes those
+rules editable/testable in isolation; the harness bisects which module (or added
+text) misclassifies "complete?"; any fix (a code-side injection, or reweighting
+`procurement.txt`) is verified on the full assembly.
+
+**Lesson (applies to all parser work): add parser signals in CODE, not prompt.**
+The monolith is fragile; LLM-visible additions tip phrasings into runaway.
+
+---
+
+## Phase 1 acceptance criteria (§4.2 / §9)
+
+1. Seven context files under `context/`; assembled all-files preamble
+   **string-equal** to the pre-split literal (test-enforced).
+2. Production parses **unchanged** (same intents on the existing corpus).
+3. KG carries an entity→`module` mapping; tripwires bumped; KG rebuilt.
+4. Harness runs a case against a **named module subset** at a fraction of the
+   full token cost; richer `EXPECT` grammar supported.
+5. **#32 fault (a)** captured as a tracked KNOWN-FAIL on `MODULES=all`.
+6. Full `pytest -q` green before any source commit.
+
+---
+
+## Recommended first steps (in the new window)
+
+1. **Read** the design doc in full.
+2. **Propose the carve** of the literal (lines 48–520) into the seven files —
+   show where each block goes and how string-equality will be proven. **Get
+   agreement on boundaries before writing any file.**
+3. **Split behind the string-equality test FIRST** (pure relocation, offline-
+   verifiable). Land it before anything else.
+4. **Then** the KG `module` mapping; **then** the harness (module selection +
+   richer expectations); **then** the #32a KNOWN-FAIL case.
+5. One branch per logical step, PR-based. Full `pytest -q` before any source
+   commit.
+
+---
+
+## Open questions to resolve during implementation (§11)
+
+1. Exact carve of the literal; where prose that references multiple modules goes
+   (duplicate into each module, or hoist to `core`).
+2. Module dependency rules; how the harness enforces "Tier 1 always included."
+3. Corpus expectation grammar; migrate `parser_stress.txt` without losing
+   coverage.
+4. KG `module` field shape — one module per entity (cleanest); confirm no ROOT
+   entity legitimately spans two (includes are the router's job, not
+   multi-module entities).
+5. (Phase 2) classifier confidence threshold for the all-modules fallback.
+6. Menu handling — keep the KG menu a separate always-on append (likely) or fold
+   into `core`.
+
+---
+
+## Working style (STRICT)
+
+1. Short, interactive, ONE step at a time. One command at a time; verify before
+   proceeding. No batch-generating, no 100+ line dumps.
+2. Ask permission before generating code or significant content.
+3. Plain-text numbered options with a recommendation and reason. No widgets.
+4. Deliver the COMPLETE updated file, never a patch. Read the current full file
+   (from provided bundle context) before editing — files drift.
+5. Output via `tee` to `t.txt`; `>` overwrite, `>>` append. Never a bare
+   `> t.txt`.
+6. Git: one branch per logical change, PR-based, named files in `git add`
+   (never `-A`), heredoc commit messages. Docs-only may go straight to master.
+   Check the branch before committing.
+7. Curl the pod before writing code for any endpoint/field; read the endpoints
+   reference first. (This work is mostly offline.)
+8. "Confirmed" = actually run, never inferred. Instrument before theorizing.
+9. pytest always `-q`; full suite before any source commit.
+10. KG rebuild: `python scripts/rebuild_kg.py` (never the `.sh`); bump
+    `print_kg.py` + `test_kg_metadata.py` tripwires together when KG changes.
+11. Restart the MCP server after any change under `src/spire/mcp_server/`
+    (this work does not touch it).
+12. Read files from provided bundle context before asking for a paste. Always
+    already in `~/pocs/spire` (no `cd`).
+
+---
+
+## The single most important thing
+
+**String-equality is the guardrail.** The split must produce a preamble
+byte-for-byte identical to today's literal, test-enforced. That is what makes
+Phase 1 safe — it cannot change production behavior. Do the split behind that
+test before anything else, and never let a "cleanup" of the prose sneak a
+semantic change into a relocation that is supposed to change nothing but file
+layout.

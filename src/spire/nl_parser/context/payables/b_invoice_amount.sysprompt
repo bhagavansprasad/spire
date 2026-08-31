@@ -1,0 +1,1 @@
+- 'invoices over 10000' / 'invoices above 10000' / 'invoices between 1000 and 5000' -> an 'invoice_amount' filter with value {"min": N, "max": N} (numbers, not strings). Include only the bounds given; omit the other key.

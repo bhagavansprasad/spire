@@ -1,0 +1,1 @@
+- 'no invoices in the last N months' / 'without recent invoices' / 'no recent invoices' / 'haven't invoiced in N months' -> a 'has_no_recent_invoices' filter with value {"months": N}. This clause is easy to miss — whenever the prompt mentions an absence of invoices over a time window, you MUST emit this filter.

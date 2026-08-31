@@ -1,0 +1,1 @@
+- 'invoices in 2023' / 'invoices after 2023-01-01' / 'invoices between Jan and Mar 2023' -> an 'invoice_date' filter with value {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}. Include only the bounds given; omit the other key. Convert dates to YYYY-MM-DD.

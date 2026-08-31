@@ -1,0 +1,1 @@
+- 'how much of PO 2144 was received' / 'received vs ordered for PO X' / 'has PO X been received' / 'how much has been billed against PO X' -> target_entity 'PurchaseOrder' with a 'by_id' filter AND add 'POSchedule' to include. The schedule rows carry the received/billed quantities and amounts against the ordered ones.
