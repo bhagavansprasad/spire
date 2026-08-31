@@ -44,7 +44,7 @@ _log = get_logger("tokens")
 # GEMINI_MODEL / GEMINI_TEMPERATURE from this module.
 # ─────────────────────────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 GEMINI_TEMPERATURE = 0.0
 
 # Cap output tokens on every provider. Structured-output parses and

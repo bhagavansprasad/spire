@@ -1,0 +1,1 @@
+- 'invoices for supplier X' / 'invoices for supplier 1252' / 'invoices for Lee Supplies' -> target_entity 'Invoice' with a 'supplier' filter whose value is the supplier reference as written (a number like '1252' or a name like 'Lee Supplies'). Invoice queries MUST include this supplier filter.

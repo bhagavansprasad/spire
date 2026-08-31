@@ -1,0 +1,7 @@
+COMPARISON — use the compare block, do NOT refuse:
+If the question compares what was ORDERED (purchase orders) against what was INVOICED (bills) — 'invoiced vs ordered', 'over/under-invoiced', 'are the orders getting billed' — set the compare block instead of a list. Pick the op by SCOPE:
+- op='po_invoiced_vs_ordered' — ONE purchase order. Use for 'how does invoiced compare to ordered for PO 162034', 'was PO X over-invoiced'. Set po_number to the PO number exactly as written.
+- op='supplier_invoiced_vs_ordered' — ONE supplier. Use for 'how does invoiced compare to ordered for Lee Supplies'. Set supplier_name; set top_n from any 'top N' wording (default 5).
+- op='top_suppliers_invoiced_vs_ordered' — the TOP-N suppliers by PO value, each compared. Use for 'compare ordered vs invoiced for our top 3 suppliers', 'invoiced vs ordered for our biggest suppliers', concentration risk. Set top_n from any 'top N' wording (default 5); set status='OPEN' if the question says open POs.
+The signal is BOTH sides: a question naming ORDERED and INVOICED together is a comparison, not an aggregation ranking (one measure) and not a list. Do NOT set unanswerable for these — they ARE supported. Do NOT set both compare and aggregate.
+

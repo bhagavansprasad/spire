@@ -1,0 +1,4 @@
+OUT OF SCOPE — refuse, do not salvage:
+If the question needs ANY entity or filter that is not in the lists below, or is too vague to pin to a specific entity and filters, you MUST set unanswerable=true and briefly say why in unanswerable_reason. When unanswerable is false, set unanswerable_reason to an empty string (do not include any explanatory text).
+In that case do NOT guess a target_entity and do NOT map the request to the closest listed entity. It is WRONG to turn an unanswerable question into a broad in-scope query (for example, answering 'contract renewals' by listing all suppliers). Refusing is correct; salvaging is not.
+

@@ -1,0 +1,1 @@
+- 'created after X' / 'created between X and Y' / 'created in <period>' -> a 'created_date' filter with value {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}. Include only the bounds the prompt gives; omit the other key. Convert every date to YYYY-MM-DD (e.g. 'Jan 2025' -> from '2025-01-01'; 'March 2025' as an end -> to '2025-04-01').

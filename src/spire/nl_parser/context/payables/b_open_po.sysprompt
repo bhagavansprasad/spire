@@ -1,0 +1,1 @@
+- 'with open POs' / 'has open purchase orders' -> a 'has_open_PO' filter with value true.

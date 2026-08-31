@@ -92,7 +92,10 @@ CREATE TABLE kg_entity (
   display_name_field    VARCHAR2(64),
   endpoint_path         VARCHAR2(512)  NOT NULL,
   description           VARCHAR2(2000),
-  CONSTRAINT pk_kg_entity PRIMARY KEY (entity_name)
+  module                VARCHAR2(32)   NOT NULL,
+  CONSTRAINT pk_kg_entity PRIMARY KEY (entity_name),
+  CONSTRAINT chk_kg_entity_module
+    CHECK (module IN ('payables', 'procurement', 'receivables', 'supplier'))
 );
 
 CREATE TABLE kg_entity_field (
@@ -216,67 +219,78 @@ PROMPT Tables created.
 INSERT INTO kg_entity VALUES (
   'Supplier', 'SupplierId', 'Supplier',
   '/fscmRestApi/resources/11.13.18.05/suppliers',
-  'A vendor or service provider in Fusion''s supplier master. SupplierId is the system primary key used for joins to POs; SupplierNumber is the human-readable identifier used for joins to invoices. Country is on the child Address resource, not on Supplier directly.'
+  'A vendor or service provider in Fusion''s supplier master. SupplierId is the system primary key used for joins to POs; SupplierNumber is the human-readable identifier used for joins to invoices. Country is on the child Address resource, not on Supplier directly.',
+  'supplier'
 );
 
 INSERT INTO kg_entity VALUES (
   'Invoice', 'InvoiceId', 'InvoiceNumber',
   '/fscmRestApi/resources/11.13.18.05/invoices',
-  'An accounts-payable invoice tied to a supplier. Note: this endpoint exposes SupplierNumber (string) for the supplier reference, not SupplierId. Date-window filters use InvoiceDate.'
+  'An accounts-payable invoice tied to a supplier. Note: this endpoint exposes SupplierNumber (string) for the supplier reference, not SupplierId. Date-window filters use InvoiceDate.',
+  'payables'
 );
 
 INSERT INTO kg_entity VALUES (
   'PurchaseOrder', 'POHeaderId', 'OrderNumber',
   '/fscmRestApi/resources/11.13.18.05/purchaseOrders',
-  'A purchase order issued to a supplier and assigned to a buyer. Exposes SupplierId (numeric) for the supplier reference and BuyerId for the buyer reference. StatusCode carries values like OPEN, CLOSED, INCOMPLETE, CANCELED.'
+  'A purchase order issued to a supplier and assigned to a buyer. Exposes SupplierId (numeric) for the supplier reference and BuyerId for the buyer reference. StatusCode carries values like OPEN, CLOSED, INCOMPLETE, CANCELED.',
+  'procurement'
 );
 
 INSERT INTO kg_entity VALUES (
   'Buyer', 'PersonId', 'DisplayName',
   '/hcmRestApi/resources/11.13.18.05/publicWorkers',
-  'The purchasing agent assigned to a PO. Buyers are HCM workers, not an FSCM entity. PersonId equals the BuyerId on PurchaseOrder. No /fscmRestApi/.../buyers endpoint exists on this pod.'
+  'The purchasing agent assigned to a PO. Buyers are HCM workers, not an FSCM entity. PersonId equals the BuyerId on PurchaseOrder. No /fscmRestApi/.../buyers endpoint exists on this pod.',
+  'procurement'
 );
 
 INSERT INTO kg_entity VALUES (
   'Address', 'AddressId', NULL,
   '/fscmRestApi/resources/11.13.18.05/suppliers?expand=addresses',
-  'A supplier''s address. Modeled as a separate entity because a supplier can have addresses in multiple countries. Not exposed as a top-level resource; only accessible as a child of Supplier via expand=addresses.'
+  'A supplier''s address. Modeled as a separate entity because a supplier can have addresses in multiple countries. Not exposed as a top-level resource; only accessible as a child of Supplier via expand=addresses.',
+  'supplier'
 );
 
 INSERT INTO kg_entity VALUES (
   'Site', 'SupplierSiteId', 'SupplierSite',
   '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/sites',
-  'A supplier site (assignment point). Modeled as a separate entity because a supplier can have many sites, each in a different ProcurementBU. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/sites. ProcurementBU on a site filters reliably server-side via q= (unlike Status on Supplier).'
+  'A supplier site (assignment point). Modeled as a separate entity because a supplier can have many sites, each in a different ProcurementBU. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/sites. ProcurementBU on a site filters reliably server-side via q= (unlike Status on Supplier).',
+  'supplier'
 );
 
 INSERT INTO kg_entity VALUES (
   'Classification', 'ClassificationId', 'Classification',
   '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/businessClassifications',
-  'A supplier business classification (e.g. Small Business, Woman Owned, ISO 14001). Modeled as a separate entity because a supplier can hold many. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/businessClassifications. Classification (display) filters reliably server-side via single-clause q=. Status (CURRENT/expired) cannot be AND-combined with Classification in one q= (composite quirk), so Status is not constrained here.'
+  'A supplier business classification (e.g. Small Business, Woman Owned, ISO 14001). Modeled as a separate entity because a supplier can hold many. Not a top-level resource; only accessible as a child of Supplier at /suppliers/{SupplierId}/child/businessClassifications. Classification (display) filters reliably server-side via single-clause q=. Status (CURRENT/expired) cannot be AND-combined with Classification in one q= (composite quirk), so Status is not constrained here.',
+  'supplier'
 );
 
 INSERT INTO kg_entity VALUES (
   'PurchaseOrderLine', 'POLineId', 'LineNumber',
   '/fscmRestApi/resources/11.13.18.05/purchaseOrders/{POHeaderId}/child/lines',
-  'A line on a purchase order. Modeled as a separate entity because a PO has many lines. Not a top-level resource; only accessible as a child of PurchaseOrder at /purchaseOrders/{POHeaderId}/child/lines. Unlike the supplier children (sites/classifications), the line body carries the parent id (both POHeaderId and OrderNumber), so the join key is present in the body. Lines are fetched as a plain expansion (no server filter needed).'
+  'A line on a purchase order. Modeled as a separate entity because a PO has many lines. Not a top-level resource; only accessible as a child of PurchaseOrder at /purchaseOrders/{POHeaderId}/child/lines. Unlike the supplier children (sites/classifications), the line body carries the parent id (both POHeaderId and OrderNumber), so the join key is present in the body. Lines are fetched as a plain expansion (no server filter needed).',
+  'procurement'
 );
 
 INSERT INTO kg_entity VALUES (
   'POSchedule', 'LineLocationId', 'ScheduleNumber',
   '/fscmRestApi/resources/11.13.18.05/purchaseOrderSchedules',
-  'A shipment schedule on a purchase order. Reachable as a FLAT top-level collection (/purchaseOrderSchedules?q=POHeaderId=<id>) on this pod, so it is a one-hop fetch by POHeaderId (unlike PO lines, which are a nested child). The schedule row carries the full parent id chain (POHeaderId, POLineId, LineLocationId), which a later distributions phase needs. Include-only: not a root query target.'
+  'A shipment schedule on a purchase order. Reachable as a FLAT top-level collection (/purchaseOrderSchedules?q=POHeaderId=<id>) on this pod, so it is a one-hop fetch by POHeaderId (unlike PO lines, which are a nested child). The schedule row carries the full parent id chain (POHeaderId, POLineId, LineLocationId), which a later distributions phase needs. Include-only: not a root query target.',
+  'procurement'
 );
 
 INSERT INTO kg_entity VALUES (
   'Contact', 'SupplierContactId', 'ContactName',
   '/fscmRestApi/resources/11.13.18.05/suppliers/{SupplierId}/child/contacts',
-  'A contact person on a supplier. A child of the supplier record at /suppliers/{SupplierId}/child/contacts. Like the other supplier children (sites, businessClassifications), the contact body does NOT carry the parent SupplierId, so the join key is the URL path. Include-only: attached to a supplier via HAS_CONTACT; not a root query target and not a filter.'
+  'A contact person on a supplier. A child of the supplier record at /suppliers/{SupplierId}/child/contacts. Like the other supplier children (sites, businessClassifications), the contact body does NOT carry the parent SupplierId, so the join key is the URL path. Include-only: attached to a supplier via HAS_CONTACT; not a root query target and not a filter.',
+  'supplier'
 );
 
 INSERT INTO kg_entity VALUES (
   'PODistribution', 'PODistributionId', 'DistributionNumber',
   '/fscmRestApi/resources/11.13.18.05/purchaseOrders/{POHeaderId}/child/lines/{POLineId}/child/schedules/{LineLocationId}/child/distributions',
-  'A distribution on a PO schedule: the charge/accrual/variance accounts the schedule amount is booked to. The deepest PO child. No flat endpoint; reachable only on the deep nested path needing three ids (POHeaderId, POLineId, LineLocationId), all carried on the parent POSchedule row. Include-only; reached via HAS_DISTRIBUTION from POSchedule.'
+  'A distribution on a PO schedule: the charge/accrual/variance accounts the schedule amount is booked to. The deepest PO child. No flat endpoint; reachable only on the deep nested path needing three ids (POHeaderId, POLineId, LineLocationId), all carried on the parent POSchedule row. Include-only; reached via HAS_DISTRIBUTION from POSchedule.',
+  'procurement'
 );
 
 
@@ -284,14 +298,16 @@ INSERT INTO kg_entity VALUES (
 INSERT INTO kg_entity VALUES (
   'ReceivablesInvoice', 'CustomerTransactionId', 'TransactionNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesInvoices',
-  'An accounts-receivable (sell-side) invoice raised against a customer. Distinct from Invoice, which is the accounts-payable (buy-side) invoice on /invoices. Canonical id is CustomerTransactionId (numeric, queryable via q=); TransactionNumber is the human number (e.g. ''61765''). BillToCustomerName and BillToCustomerNumber are NOT queryable on this endpoint (confirmed live) - a customer''s invoices are reached via the customer account-activity path, not by filtering this collection. 173,531 rows on the pod, so list access must go through the account path, never a bulk scan.'
+  'An accounts-receivable (sell-side) invoice raised against a customer. Distinct from Invoice, which is the accounts-payable (buy-side) invoice on /invoices. Canonical id is CustomerTransactionId (numeric, queryable via q=); TransactionNumber is the human number (e.g. ''61765''). BillToCustomerName and BillToCustomerNumber are NOT queryable on this endpoint (confirmed live) - a customer''s invoices are reached via the customer account-activity path, not by filtering this collection. 173,531 rows on the pod, so list access must go through the account path, never a bulk scan.',
+  'receivables'
 );
 
 -- AR-P2
 INSERT INTO kg_entity VALUES (
   'ReceivablesInvoiceLine', 'CustomerTransactionLineId', 'LineNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines',
-  'A line on an AR invoice. Modeled as a separate entity because an invoice has many lines. Not a top-level resource; only accessible as a child of ReceivablesInvoice at /receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines. Fetched as a plain expansion (no server filter needed). Note the pod misspells one field as TransacationBusinessCategory (sic) - it must be requested with the typo or ?fields= drops it silently.'
+  'A line on an AR invoice. Modeled as a separate entity because an invoice has many lines. Not a top-level resource; only accessible as a child of ReceivablesInvoice at /receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines. Fetched as a plain expansion (no server filter needed). Note the pod misspells one field as TransacationBusinessCategory (sic) - it must be requested with the typo or ?fields= drops it silently.',
+  'receivables'
 );
 
 
@@ -299,7 +315,8 @@ INSERT INTO kg_entity VALUES (
 INSERT INTO kg_entity VALUES (
   'ReceivablesTaxLine', 'CustomerTransactionLineId', 'TaxLineNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceLines/{LineId}/child/receivablesInvoiceLineTaxLines',
-  'A tax line on an AR invoice line - the jurisdiction/rate/amount breakdown for one line (e.g. a STATE row and a COUNTY row). A grandchild of ReceivablesInvoice, reached three levels deep but keyed by only two ids (invoice CustomerTransactionId + parent line CustomerTransactionLineId, both in the URL path). Not a top-level resource. A single-parent expansion off ReceivablesInvoiceLine, unlike PO distributions (which need three sibling ids). NOTE: the tax-line row carries its OWN CustomerTransactionLineId (the tax line PK, e.g. 112) - a different value from the parent invoice-line id (e.g. 74).'
+  'A tax line on an AR invoice line - the jurisdiction/rate/amount breakdown for one line (e.g. a STATE row and a COUNTY row). A grandchild of ReceivablesInvoice, reached three levels deep but keyed by only two ids (invoice CustomerTransactionId + parent line CustomerTransactionLineId, both in the URL path). Not a top-level resource. A single-parent expansion off ReceivablesInvoiceLine, unlike PO distributions (which need three sibling ids). NOTE: the tax-line row carries its OWN CustomerTransactionLineId (the tax line PK, e.g. 112) - a different value from the parent invoice-line id (e.g. 74).',
+  'receivables'
 );
 
 
@@ -307,7 +324,8 @@ INSERT INTO kg_entity VALUES (
 INSERT INTO kg_entity VALUES (
   'ReceivablesInvoiceTransactionDFF', 'CustomerTrxId', 'CustomerTrxId',
   '/fscmRestApi/resources/11.13.18.05/receivablesInvoices/{CustomerTransactionId}/child/receivablesInvoiceTransactionDFF',
-  'The transaction descriptive flexfield (DFF) of an AR invoice - the __FLEX_Context and (when configured) its segment values. A single-parent child of ReceivablesInvoice, keyed by the parent invoice id carried in the URL path. NOTE: the child echoes the parent id as CustomerTrxId (short spelling), NOT the CustomerTransactionId used on the header and lines - match the pod exactly. AR invoices expose TWO DFF children (receivablesInvoiceDFF and receivablesInvoiceTransactionDFF); this is the TransactionDFF one, which is the populated child on this pod (invoice 1002 returns __FLEX_Context=''DOO''; the plain receivablesInvoiceDFF returns null). On this demo pod the context is set but carries no populated segment columns - only CustomerTrxId, __FLEX_Context, __FLEX_Context_DisplayValue.'
+  'The transaction descriptive flexfield (DFF) of an AR invoice - the __FLEX_Context and (when configured) its segment values. A single-parent child of ReceivablesInvoice, keyed by the parent invoice id carried in the URL path. NOTE: the child echoes the parent id as CustomerTrxId (short spelling), NOT the CustomerTransactionId used on the header and lines - match the pod exactly. AR invoices expose TWO DFF children (receivablesInvoiceDFF and receivablesInvoiceTransactionDFF); this is the TransactionDFF one, which is the populated child on this pod (invoice 1002 returns __FLEX_Context=''DOO''; the plain receivablesInvoiceDFF returns null). On this demo pod the context is set but carries no populated segment columns - only CustomerTrxId, __FLEX_Context, __FLEX_Context_DisplayValue.',
+  'receivables'
 );
 
 
@@ -315,46 +333,53 @@ INSERT INTO kg_entity VALUES (
 INSERT INTO kg_entity VALUES (
   'CustomerAccount', 'AccountId', 'CustomerName',
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities',
-  'A customer''s accounts-receivable account. The resolve point for customer-scoped AR queries: a customer name resolves here (q=CustomerName= is queryable on this endpoint, unlike the AR-invoice endpoint) to one or more accounts, each carrying an AccountId. Traverse HAS_CUSTOMER_TRANSACTION from an account to its transactions. Also carries the account balances (TotalOpenReceivablesForAccount, TotalTransactionsDueForAccount).'
+  'A customer''s accounts-receivable account. The resolve point for customer-scoped AR queries: a customer name resolves here (q=CustomerName= is queryable on this endpoint, unlike the AR-invoice endpoint) to one or more accounts, each carrying an AccountId. Traverse HAS_CUSTOMER_TRANSACTION from an account to its transactions. Also carries the account balances (TotalOpenReceivablesForAccount, TotalTransactionsDueForAccount).',
+  'receivables'
 );
 
 -- AR-P2b
 INSERT INTO kg_entity VALUES (
   'CustomerTransaction', 'TransactionId', 'TransactionNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/transactionPaymentSchedules',
-  'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.'
+  'A transaction (payment schedule / installment) on a customer account. Reached as a child of CustomerAccount. NOT the same object as ReceivablesInvoice: different id space (TransactionId, small ints, vs CustomerTransactionId) and different fields (TotalOriginalAmount/TotalBalanceAmount vs EnteredAmount/InvoiceBalanceAmount). The collection holds multiple classes; TransactionClass distinguishes invoices from credit memos etc. TransactionClass is NOT queryable, so class filtering is client-side.',
+  'receivables'
 );
 -- AR-P4 Credit Memo
 INSERT INTO kg_entity VALUES (
   'CreditMemo', 'CustomerTransactionId', 'TransactionNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesCreditMemos',
-  'An accounts-receivable (sell-side) credit memo raised against a customer. Same object model as ReceivablesInvoice but EnteredAmount is normally NEGATIVE (a credit) and the status field is CreditMemoStatus. Top-level resource: listable without a parent id. Recent-first ordering (orderBy=TransactionDate:desc) and limit are done server-side. NOTE: sign is not guaranteed - the demo pod has at least one POSITIVE, Incomplete memo, so never assume EnteredAmount < 0.'
+  'An accounts-receivable (sell-side) credit memo raised against a customer. Same object model as ReceivablesInvoice but EnteredAmount is normally NEGATIVE (a credit) and the status field is CreditMemoStatus. Top-level resource: listable without a parent id. Recent-first ordering (orderBy=TransactionDate:desc) and limit are done server-side. NOTE: sign is not guaranteed - the demo pod has at least one POSITIVE, Incomplete memo, so never assume EnteredAmount < 0.',
+  'receivables'
 );
 -- AR-P5 Account Credit Memo (prompt 7)
 INSERT INTO kg_entity VALUES (
   'AccountCreditMemo', 'CreditMemoId', 'CreditMemoNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/creditMemos',
-  'A credit memo on a customer account, reached as a child of CustomerAccount. NOT the same as CreditMemo: different id space (CreditMemoId, small ints, vs CustomerTransactionId) and different fields (CreditMemoNumber/CreditMemoDate/TotalOriginalAmount/TotalBalanceAmount/AvailableAmount/InstallmentId vs TransactionNumber/TransactionDate/EnteredAmount). This is the installment/payment-schedule projection - a sibling of CustomerTransaction - whereas CreditMemo is the top-level transaction projection. The collection holds credit memos ONLY, so no class filtering is needed. Recent-first ordering (orderBy=CreditMemoDate:desc) and limit are done server-side; ?fields= projection also works here. Amounts are normally negative but sign is not guaranteed. The row does NOT echo AccountId - the join key is the URL path.'
+  'A credit memo on a customer account, reached as a child of CustomerAccount. NOT the same as CreditMemo: different id space (CreditMemoId, small ints, vs CustomerTransactionId) and different fields (CreditMemoNumber/CreditMemoDate/TotalOriginalAmount/TotalBalanceAmount/AvailableAmount/InstallmentId vs TransactionNumber/TransactionDate/EnteredAmount). This is the installment/payment-schedule projection - a sibling of CustomerTransaction - whereas CreditMemo is the top-level transaction projection. The collection holds credit memos ONLY, so no class filtering is needed. Recent-first ordering (orderBy=CreditMemoDate:desc) and limit are done server-side; ?fields= projection also works here. Amounts are normally negative but sign is not guaranteed. The row does NOT echo AccountId - the join key is the URL path.',
+  'receivables'
 );
 -- AR-P5 Account Receipt (prompt 8)
 INSERT INTO kg_entity VALUES (
   'AccountReceipt', 'StandardReceiptId', 'ReceiptNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/standardReceipts',
-  'A standard receipt (cash received from a customer) on a customer account, reached as a child of CustomerAccount. Distinct from an AR invoice (money owed) and a credit memo (a credit issued). NOTE the SAME receipts are reachable via the TOP-LEVEL /standardReceipts resource, but with a DIFFERENT projection: this child has ProcessStatus and omits CustomerName/CustomerAccountNumber/bank fields, while the top-level has Status plus customer and remittance columns. Field names do NOT carry across - naming ProcessStatus in a fields= list against the top-level resource 500s it. The two also disagree on count (child 1559 vs top-level-by-account 1386 on the anchor); do not treat them as interchangeable. StandardReceiptId MIXES ID WIDTHS - backfilled rows are small ints (130), recent ones large (300000313660599); never infer anything from magnitude. Recent-first ordering (orderBy=ReceiptDate:desc) and limit are server-side; fields= works here. CustomerSite is present but NULLABLE. The row does NOT echo AccountId - the join key is the URL path.'
+  'A standard receipt (cash received from a customer) on a customer account, reached as a child of CustomerAccount. Distinct from an AR invoice (money owed) and a credit memo (a credit issued). NOTE the SAME receipts are reachable via the TOP-LEVEL /standardReceipts resource, but with a DIFFERENT projection: this child has ProcessStatus and omits CustomerName/CustomerAccountNumber/bank fields, while the top-level has Status plus customer and remittance columns. Field names do NOT carry across - naming ProcessStatus in a fields= list against the top-level resource 500s it. The two also disagree on count (child 1559 vs top-level-by-account 1386 on the anchor); do not treat them as interchangeable. StandardReceiptId MIXES ID WIDTHS - backfilled rows are small ints (130), recent ones large (300000313660599); never infer anything from magnitude. Recent-first ordering (orderBy=ReceiptDate:desc) and limit are server-side; fields= works here. CustomerSite is present but NULLABLE. The row does NOT echo AccountId - the join key is the URL path.',
+  'receivables'
 );
 
 -- AR-P5 Prompt 9: Account Receipt Application
 INSERT INTO kg_entity VALUES (
   'AccountReceiptApplication', 'ApplicationId', 'ReceiptNumber',
   '/fscmRestApi/resources/11.13.18.05/receivablesCustomerAccountActivities/{AccountId}/child/standardReceiptApplications',
-  'A receipt application (cash-to-invoice matching) on a customer account. Reached as a child of CustomerAccount. PRE-JOINED: carries both the receipt side (StandardReceiptId, ReceiptNumber, ReceiptMethod) and the transaction side (ReferenceTransactionId, ReferenceTransactionNumber, ReferenceTransactionStatus) on one record. PK is ApplicationId, a sixth AR id space. TRAP: the newest rows are unapplied cash (ApplicationStatus=''Unapplied'') with all ReferenceTransaction fields null; Spire filters client-side for ApplicationStatus=''Applied''. orderBy=ApplicationDate:desc works server-side; no second fetch is needed. The row does NOT echo AccountId - the join key is the URL path.'
+  'A receipt application (cash-to-invoice matching) on a customer account. Reached as a child of CustomerAccount. PRE-JOINED: carries both the receipt side (StandardReceiptId, ReceiptNumber, ReceiptMethod) and the transaction side (ReferenceTransactionId, ReferenceTransactionNumber, ReferenceTransactionStatus) on one record. PK is ApplicationId, a sixth AR id space. TRAP: the newest rows are unapplied cash (ApplicationStatus=''Unapplied'') with all ReferenceTransaction fields null; Spire filters client-side for ApplicationStatus=''Applied''. orderBy=ApplicationDate:desc works server-side; no second fetch is needed. The row does NOT echo AccountId - the join key is the URL path.',
+  'receivables'
 );
 
 -- Prompt 13: Top-level StandardReceipt entity (cash receipts rootable via account number and site)
 INSERT INTO kg_entity VALUES (
   'StandardReceipt', 'StandardReceiptId', 'ReceiptNumber',
   '/fscmRestApi/resources/11.13.18.05/standardReceipts',
-  'A cash receipt (payment from a customer) at the top level. Rootable via CustomerAccountNumber (server-side filter) and CustomerSite (client-side filter). Distinct from AccountReceipt (the per-account child) – this projection includes CustomerName, CustomerAccountNumber, and bank fields. `fields=` is broken on this endpoint (500s), so fetch full rows and discard client-side.'
+  'A cash receipt (payment from a customer) at the top level. Rootable via CustomerAccountNumber (server-side filter) and CustomerSite (client-side filter). Distinct from AccountReceipt (the per-account child) – this projection includes CustomerName, CustomerAccountNumber, and bank fields. `fields=` is broken on this endpoint (500s), so fetch full rows and discard client-side.',
+  'receivables'
 );
 
 PROMPT Seeded kg_entity (22 rows).

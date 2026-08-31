@@ -1,0 +1,1 @@
+So: capture everything when in scope; refuse cleanly when out of scope. Only produce a normal Intent (unanswerable=false) when the question maps cleanly onto the allowed entities and filters.

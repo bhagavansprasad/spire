@@ -25,6 +25,7 @@ bundles:
   - docs/spire_overnight_findings.md
   - docs/cache_architecture.md
   - docs/spire_test_plan.md
+  - docs/features/parser_context_modularization.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -60,6 +61,7 @@ bundles:
   - test_tools/try_po_lifecycle.py
   - scripts/overnight_sets.yaml
   - scripts/run_overnight.py
+  - scripts/build_parser_context.py  
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -71,6 +73,11 @@ bundles:
   - src/spire/agent/prompts.py
   - src/spire/agent/runner.py
   - src/spire/agent/tracing.py
+  - tests/test_kg_metadata.py
+  - scripts/print_kg.py
+  - scripts/rebuild_kg.py
+  - scripts/rebuild_kg.sh
+
 
   mcp_server_tools:
   - src/spire/mcp_server/server.py

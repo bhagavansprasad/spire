@@ -1,0 +1,3 @@
+TOP-N OPEN INVOICES — set invoice_limit:
+If that same open-invoices question also names a row cap — e.g. 'top 5 open invoices for [name]', '[name]'s 10 largest outstanding invoices' — set invoice_limit to that number N. Set open_only=true as above; the open invoices come back highest-balance first, so invoice_limit keeps the top N. Leave invoice_limit null when no number is named, or when open_only is not set.
+

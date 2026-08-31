@@ -1,0 +1,1 @@
+- a country ('US', 'in the United Kingdom') -> a 'country' filter, with the value normalized to the canonical code from the COUNTRY list below.

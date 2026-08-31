@@ -1,25 +1,57 @@
-# Parser Context Modularization — Architecture
+# Parser Context Modularization — Architecture (Fusion-Module Axis)
 
-Status: **Proposed** (design only; no implementation)
-Author: (drafted 2026-08-18)
+Status: **Phase 1 in progress** — the split (part 1 of 4) is implemented and
+merged behind the string-equality invariant. KG `module` mapping, the
+selective-load harness, and the #32a case remain.
+Supersedes: the functional-split draft. The organizing axis is now the
+**Oracle Fusion module**, not functional concern.
 Scope: the NL parser's system prompt (`_SYSTEM_PROMPT_PREAMBLE` in
-`src/spire/nl_parser/parser.py`) and its testing.
+`src/spire/nl_parser/parser.py`), the prompt/test corpus, and — as a documented
+principle, not a refactor here — the tools.
 
-This document defines **two features**, designed together but **implemented
-separately and in order**:
+> **Implementation note (updates §3, §4).** The delivered split refines the file
+> mechanism this doc originally sketched. Two things changed, both forced by the
+> §4.1 byte-identical guardrail:
+> - **Files are `.sysprompt`, not `.txt`**, and the extension is deliberate:
+>   these are LLM-visible system-prompt fragments, not prose docs.
+> - **The split is per-*block*, in per-module sub-directories**, not one flat
+>   file per module. The original literal interleaves modules bullet-by-bullet,
+>   so grouping each module into one contiguous file could not reproduce the
+>   original byte order. Instead each block is its own file under
+>   `context/<module>/`, and a single `context/order.manifest` lists the blocks
+>   in the original emit order. Assembly walks the manifest and joins — preserving
+>   bytes exactly. A cross-cutting **`modes`** concern was also added (the
+>   AGGREGATION / COMPARISON / COUNT / OPEN-INVOICES / ACCOUNT-BALANCE / TOP-N
+>   blocks), since those span modules and belong with `columns` as a concern, not
+>   on the module axis. Net: 48 block files across 8 directories
+>   (`core`, `refusals`, four modules, `columns`, `modes`) + the manifest.
+>
+> The **design intent is unchanged**: two tiers, module-partitioned Tier 2,
+> byte-identical all-modules assembly in Phase 1, KG-sourced module mapping,
+> Phase 2 deferred. Only the on-disk shape is finer-grained than first drawn.
 
-- **Feature A — Modular context + selective-load test harness.**
-  Split the monolithic parser context into module files. Production keeps
-  assembling *all* of them (byte-identical behavior). A test harness assembles
-  a *chosen subset* per test, so a single prompt-to-intent check costs a
-  fraction of the tokens and can be bisected to the responsible module.
-  **Production is not changed by Feature A.**
+---
 
-- **Feature B — Production dynamic module assembly.**
-  Production selects only the modules relevant to a given prompt, cutting the
-  ~8000-token-per-parse cost and reducing prompt fragility in production.
-  Larger and riskier (module selection is itself a routing problem). **Deferred
-  until Feature A exists and validates the module boundaries.**
+## 0. The organizing principle
+
+**The Oracle Fusion module is the single axis of organization for Spire.**
+Tools, parser context, and prompts are all partitioned along the same module
+boundaries. Adding a new Fusion module means adding, as one coherent unit: its
+tool group, its parser-context module, and its prompts. Everything derives from
+the module.
+
+Spire supports **four** Fusion modules:
+
+| Module | Domain | Root entities |
+|---|---|---|
+| **payables** | AP invoices (money owed to suppliers) | Invoice |
+| **procurement** | Purchasing — POs and their lifecycle | PurchaseOrder |
+| **receivables** | AR — money owed to the company | ReceivablesInvoice, CreditMemo, CustomerAccount, StandardReceipt |
+| **supplier** | Supplier master data | Supplier, Address |
+
+The tools already follow this axis (see §8). This document brings the **parser
+context** and the **prompts** onto the same axis, and defines how the system
+knows which module context a prompt needs.
 
 ---
 
@@ -30,280 +62,396 @@ separately and in order**:
 The parser sends the LLM one large system prompt on **every** parse:
 
 - `_SYSTEM_PROMPT_PREAMBLE` — a single string literal
-  (`parser.py:48`, ~470 lines): entity rules, the PO lifecycle block, the flag
-  instructions (count/open/balance/…), column rules, worked examples.
+  (`parser.py:48`, ~470 lines): role, entity rules, the PO lifecycle block, flag
+  instructions, column rules, refusal/capability guidance, worked examples — for
+  **all four modules at once**.
 - `+ _format_menu(menu)` — the KG menu appended by `_build_system_prompt`
-  (`parser.py:571`).
+  (`parser.py:570`).
 
-Measured cost: **~8000 input tokens per parse** (e.g. `in=9195`–`9514` observed
-across recent runs; the preamble is the dominant, fixed part).
+Measured cost: **~8000 input tokens per parse**; the preamble is the dominant,
+fixed part.
 
 ### 1.2 Two costs this imposes
 
-**Cost 1 — testing is expensive and slow.** Every prompt-to-intent test ships
-the full ~8000-token context, even to check one narrow behavior (does
-"Is PO N complete?" route to lifecycle?). A 60-prompt parser stress run pays
-that cost 60 times.
+**Cost 1 — testing is expensive.** Every prompt→intent check ships the full
+~8000-token, all-module context, even to test one module's behavior.
 
-**Cost 2 — fragility is un-bisectable.** The monolith is a single blob to the
-LLM. When one phrasing misclassifies (or, with additions, derails into runaway
-generation), there is no way to isolate *which part of the context* is
-responsible. You cannot ask "does the lifecycle block alone classify this
-right? does adding the flags block break it?" — the context is all-or-nothing.
+**Cost 2 — no module isolation.** Payables, Procurement, Receivables and
+Supplier instructions are one undifferentiated blob. You cannot test, edit, or
+reason about one module's parser behavior in isolation, and you cannot bisect
+which module's rules drive a misclassification.
 
 ### 1.3 Concrete motivation (issue #32)
 
-Fixing #32 fault (b) took ~5 hours largely because of Cost 2. The terse
-phrasing "Is PO N complete?" **deterministically misclassifies** to a bare
-`PurchaseOrder` intent (`filters=[]`, dropping the PO id) — a classification
-miss, not a token-limit problem (measured: 10/10 valid, short, wrong parses at
-the current 8000 cap). Attempts to fix it by *adding* prompt text repeatedly
-induced **non-deterministic MAX_TOKENS runaway** (out_tokens=7984 for a task
-needing ~100), because additions to the monolith perturb the model
-unpredictably. With no way to bisect the context, every attempt was
-whack-a-mole. The eventual safe fix set the disambiguating signal
-(`Intent.list_all`) in **deterministic Python code**, leaving the prompt
-byte-for-byte unchanged — precisely to avoid perturbing the monolith.
+Fixing #32 fault (b) took ~5 hours partly because of Cost 2. The Procurement
+phrasing "Is PO N complete?" deterministically misclassifies (drops the PO id),
+and there was no way to isolate the Procurement rules to see why. Attempts to fix
+it by adding prompt text induced **non-deterministic MAX_TOKENS runaway** — the
+all-module monolith has no headroom. A module-partitioned context (a
+Procurement-only file, testable alone) would have localized the diagnosis
+immediately.
 
-A modular context + a cheap, bisectable harness would have made that diagnosis
-minutes, not hours: load lifecycle-only → classifies right? add flags module →
-breaks? → the flags module is interfering.
+**Lesson banked:** add parser signals in **code**, not prompt (the monolith is
+fragile). The module split does not change this; it makes the prose *organized*
+and *testable*, but per-behavior signals still belong in deterministic code.
 
 ---
 
 ## 2. What already exists (build on, don't reinvent)
 
 - **`scripts/score_parser_prompts.py`** — a parse-only scorer. Reads
-  `EXPECT=<expectation> ||| <prompt>` lines, runs `parse()` (intent only, no
-  slow execution), reduces the result to a comparable summary
-  (`target_entity`, `filters`, `count_only`, `aggregate`, `refuse`), prints a
-  table, and reports failures. This is Feature A's **execution engine, already
-  built**.
+  `EXPECT=... ||| prompt`, runs `parse()` (intent only, no execution), reduces to
+  a comparable summary, reports failures. **This is the harness's execution
+  engine.**
 - **`scripts/prompts/scorer/parser_stress.txt`** — a ~60-prompt corpus in the
-  `EXPECT=... ||| prompt` format, organized by trap category (status paraphrase,
-  country collisions, name fragments, …). This is Feature A's **corpus format,
-  already established.**
-
-**Gaps** (what Feature A adds to the above):
-1. The scorer uses the **full monolith** — no way to select a context subset.
-2. The corpus expectations are **coarse** (`filter:status`, `target:entity`).
-   They do not assert richer intent facts we now care about
-   (`list_all`, a specific `lifecycle_status` filter, a dropped-id case).
-3. There is **no module structure** to select from.
+  `EXPECT=... ||| prompt` format. **The corpus format to extend.**
+- **Module-partitioned tools** — the tool files already group by module (§8).
+- **Module-aligned prompt sets** — `01_supplier`, `02_purchase_order`, `03_ar`
+  already map to modules; `04_columns`, `05_refusals`, `10_refusal_examples`,
+  `11_column_vocabulary` are cross-cutting (§6).
 
 ---
 
-## 3. Feature A — Modular context + selective-load harness
+## 3. Context tiers and files
 
-### 3.1 Split the monolith into module files
+The parser context splits into **two tiers**.
 
-Carve `_SYSTEM_PROMPT_PREAMBLE` into ordered module files on disk. Proposed
-boundaries (to be finalized against the actual literal):
+### 3.1 Tier 1 — always loaded
+
+Present in **every** parse, phase 1 and phase 2. Not Fusion modules — the shared
+base. Two always-loaded concerns, each a sub-directory of `.sysprompt` blocks
+(see the implementation note above for why per-block, not one file):
 
 ```
 src/spire/nl_parser/context/
-  00_core.txt          # role, output-shape contract, global rules
-  10_entities.txt      # entity roster + when-to-root rules
-  20_filters.txt       # filter vocabulary and validity
-  30_lifecycle.txt     # PO lifecycle block (the four legs, status/completion)
-  40_flags.txt         # count_only / open_only / balance_only / invoice_limit
-  50_columns.txt       # column selection / projection rules
-  90_examples.txt      # worked examples
+  core/        # role/Intent contract (role_contract), the completeness tail,
+               # and the sign-off — the shared spine, split across 3 blocks
+  refusals/    # refusal format + capability guidance (out_of_scope)
 ```
 
-The module set and ordering are a design task in themselves — the split must be
-**behavior-preserving** (see 3.2). Modules should be as independent as the
-current prose allows; where the current text has cross-references, those are
-documented as module dependencies (e.g. lifecycle examples may assume the
-entity roster).
+**Why `refusals` is always-on and not router-selected:** you cannot know a
+prompt will be refused until you try to parse it, so refusal guidance cannot be
+selected on a pre-parse signal. It must be present for every parse.
 
-### 3.2 Production invariant: byte-identical assembly
-
-`_build_system_prompt` changes from returning a literal to **reading and
-joining the modules in order**, then appending the menu:
+### 3.2 Tier 2 — selected (by the router in phase 2; all-loaded in phase 1)
 
 ```
+  payables/      # Payables — AP invoice queries
+  procurement/   # Procurement — PO / purchasing / lifecycle queries
+  receivables/   # Receivables — AR invoices, credit memos, receipts, customers
+  supplier/      # Supplier model — suppliers, sites, contacts, classifications, addresses
+  columns/       # column-projection / column-selection rules (cross-cutting CONCERN)
+  modes/         # aggregation / comparison / count / open-invoices / account-balance /
+                 # top-N mode instructions (cross-cutting CONCERN — spans modules)
+```
+
+Each directory holds one or more `.sysprompt` blocks; `context/order.manifest`
+fixes the global emit order across all of them.
+
+The four Fusion-module directories are selected on a **domain** signal (which
+module the prompt targets). `columns/` and `modes/` are selected on a **concern**
+signal (does the prompt name specific columns? does it ask for an aggregate /
+comparison / count?) — detectable from the raw prompt, so they are
+router-selectable unlike refusals. (`modes` did not exist in the original sketch;
+it was added during the split — see the implementation note.)
+
+### 3.3 Assembly
+
+`_build_system_prompt` joins the assembled preamble with the menu. In phase 1 the
+preamble is "everything," assembled once at import from the manifest; in phase 2
+the router narrows Tier 2 and the signature grows a `selected_modules` argument.
+
+Phase 1 (delivered) — no selection yet, manifest-driven, cached at import:
+
+```
+_load_preamble_from_files():           # runs once at import
+    parts = [read(block) for block in order.manifest]   # all blocks, in order
+    return "".join(parts)              # byte-identical to the old literal
+
+_ASSEMBLED_PREAMBLE = _load_preamble_from_files()
+
 _build_system_prompt(menu):
-    preamble = "\n".join(read(module) for module in ORDERED_MODULES)
+    return _ASSEMBLED_PREAMBLE + "\n" + _format_menu(menu)
+```
+
+Phase 2 (planned) — the router selects a subset, still in manifest order:
+
+```
+_build_system_prompt(menu, selected_modules):
+    blocks = tier1_always + selected_tier2_blocks(selected_modules)
+    preamble = "".join(read(b) for b in manifest_order(blocks))
     return preamble + "\n" + _format_menu(menu)
 ```
 
-**The invariant, enforced by a test:** the assembled full-module preamble is
-**string-equal** to the current `_SYSTEM_PROMPT_PREAMBLE`. This guarantees
-production behavior is unchanged by Feature A — same bytes to the LLM, same
-parses. The split is a pure refactor of *where the text lives*, not *what
-production sends*.
+---
 
-> Migration note: capture the current `_SYSTEM_PROMPT_PREAMBLE` value first,
-> split it into files, then assert equality. Until equality holds, the split is
-> not done. This is the single most important guardrail — it makes Feature A
-> unable to regress production.
+## 4. Phase 1 — static all-modules assembly (byte-identical)
 
-### 3.3 The selective-load test harness
+**Goal:** split the monolith into the Tier-1 + Tier-2 files, organized by Fusion
+module, while production keeps loading **all** of them — byte-identical to today.
 
-Extend the existing scorer (or add a sibling) so a test can specify **which
-modules** to assemble for that case:
+### 4.1 The production invariant (THE critical guardrail)
 
-```
-EXPECT=<intent expectation> ||| MODULES=core,lifecycle ||| <prompt>
-```
+The assembled **all-files** preamble must be **string-equal** to the current
+`_SYSTEM_PROMPT_PREAMBLE`. A test enforces this. Phase 1 changes *where the text
+lives*, not *what production sends*. **Until string-equality holds, the split is
+not done.** This is what makes phase 1 unable to regress production.
 
-- With `MODULES=...` present → assemble only those modules (+ core always) +
-  the menu, and parse. Cheap: a lifecycle-only context is a few hundred tokens,
-  not 8000.
-- With `MODULES` absent → assemble **all** modules (the production-equivalent
-  full context). This is the fidelity path (see 3.5).
+> Migration: capture the current literal; carve it into the tier/module files;
+> assert the joined result equals the original byte-for-byte. Only reorganize
+> text — never reword prose in a split that is meant to change nothing but
+> layout. Any semantic change to production behavior is out of scope for
+> phase 1.
 
-The harness reuses `score_parser_prompts.py`'s parse-only execution and summary
-reduction; it adds (a) module selection and (b) richer expectations (3.4).
+### 4.2 What phase 1 delivers
 
-### 3.4 Richer intent expectations
+1. **[DONE]** The context blocks (`core`, `refusals`, four modules, `columns`,
+   `modes`) under `src/spire/nl_parser/context/` — 48 `.sysprompt` files in 8
+   sub-directories, plus `order.manifest`. Generated by
+   `scripts/build_parser_context.py`, which carves the live literal at the
+   approved boundaries and self-verifies byte-equality.
+2. **[DONE]** `_build_system_prompt` reads+joins them (once at import, cached in
+   `_ASSEMBLED_PREAMBLE`); string-equality test green
+   (`tests/test_parser_context_assembly.py`: constant == literal, disk assembly
+   == literal, manifest complete, no orphans, count == 48).
+3. **[DONE]** Production parses **unchanged** — the assembled preamble is
+   byte-identical to the retained literal, verified live.
+4. **[TODO]** A selective-load **test harness** (§7) that can assemble a chosen
+   subset — e.g. `procurement`-only — to test/bisect one module cheaply.
+5. **[TODO]** #32 fault (a) captured as a tracked KNOWN-FAIL case (§7.3),
+   asserted on the full assembly.
 
-Extend the `EXPECT` grammar to assert the facts #32-class bugs turn on:
+Still remaining in Phase 1: the KG `module` mapping (§4.3), item 4, and item 5.
 
-```
-filter:lifecycle_status   -> intent carries a lifecycle_status filter
-list_all                  -> intent.list_all is True
-no_filters                -> intent.filters == []   (the dropped-id shape)
-target:PurchaseOrder      -> (existing) target_entity
-combo:a+b                 -> (existing) multiple filters
-refuse[:flavor]           -> (existing/extended) refusal, optional flavor
-```
+### 4.3 The entity→module mapping lives in the KG
 
-Fault (a) then becomes a **tracked corpus case**, e.g.:
+Something must map a root entity to its Fusion module (Invoice→payables,
+PurchaseOrder→procurement, CreditMemo/ReceivablesInvoice/CustomerAccount/
+StandardReceipt→receivables, Supplier/Address→supplier). **This mapping is a KG
+attribute** — a `module` field per entity — consistent with Spire's principle
+that the KG is the source of truth and everything derives from it. Tools,
+context selection, and the phase-2 router all read the same KG fact.
 
-```
-# KNOWN-FAIL (#32a): terse completion question should route to lifecycle,
-# but the full-context parser drops the id. Tracked, severity: high.
-filter:lifecycle_status ||| MODULES=all ||| Is PO 162034 complete?
-```
-
-### 3.5 The fidelity caveat (critical — do not skip)
-
-**A subset-context test is a diagnosis tool, not a production oracle.**
-
-Production ships the *full* context. A phrasing that classifies correctly under
-`MODULES=lifecycle` proves nothing about production, which parses it under the
-full monolith. Indeed #32 shows the failure is *induced by the full context* —
-a slim context might parse "Is PO N complete?" correctly and **false-pass**.
-
-Therefore:
-- **Bisection runs** (`MODULES=<subset>`) are for *finding which module drives
-  a behavior* — the debugging workflow that was missing.
-- **Fidelity runs** (`MODULES=all`) are for *asserting production-equivalent
-  behavior* — these are the ones that gate correctness.
-- Every tracked correctness expectation (like #32a) is asserted on
-  `MODULES=all`. Subset runs are diagnostic scaffolding around it.
-
-This distinction is what keeps the harness honest: cheap subset runs to
-*diagnose*, full-context runs to *verify*.
-
-### 3.6 Feature A acceptance criteria
-
-1. `_SYSTEM_PROMPT_PREAMBLE` is split into module files; assembled full-module
-   preamble is **string-equal** to the pre-split literal (test-enforced).
-2. Production parses are **unchanged** (same intents on the existing corpus;
-   `MODULES=all` is the default when unspecified).
-3. The harness can run a case against a **named module subset** at a fraction
-   of the full token cost.
-4. The corpus supports **richer intent expectations** (`list_all`,
-   `lifecycle_status`, `no_filters`, refusal flavor).
-5. **#32 fault (a) is captured** as a tracked KNOWN-FAIL case on `MODULES=all`.
-6. A short doc/README explains the bisection vs fidelity workflow (3.5).
+> KG change: add `module` to the entity metadata; bump the row-count tripwires in
+> `scripts/print_kg.py` and `tests/test_kg_metadata.py` together; rebuild with
+> `python scripts/rebuild_kg.py`.
 
 ---
 
-## 4. Feature B — Production dynamic module assembly (deferred)
+## 5. Phase 2 — module-scoped runtime context (the router)
 
-### 4.1 Idea
+**Goal:** production sends only the context the prompt needs — Tier 1 always,
+plus the targeting Fusion module(s) and `columns` when relevant. Real
+per-parse token reduction and a tighter, less fragile prompt.
 
-Instead of always sending all modules, production assembles **only the modules
-relevant to the incoming prompt** — e.g. a lifecycle question ships core +
-entities + lifecycle, not columns/flags/examples. Real per-parse token savings
-and reduced fragility *in production*, not just in tests.
+### 5.1 The chicken-and-egg, and how it is resolved
 
-### 4.2 The hard part, named honestly
+To scope parser context by module you must know the module **before** parsing —
+but knowing the module is what parsing determines. This circularity is real and
+exists **only at the parser boundary** (everything downstream — plan, execute,
+synthesize — already derives the module deterministically from the parsed
+`target_entity` via the KG).
 
-**Module selection is itself a classification/routing problem.** Deciding which
-modules a prompt needs — before parsing it — is a pre-parse router with its own
-failure modes:
-- Under-selection drops a needed module → the parse misclassifies for lack of
-  guidance (a *new* class of bug).
-- Over-selection erodes the token savings and reintroduces monolith fragility.
-- The router must be cheap and reliable, or it costs more than it saves.
+Resolution: a **tiny first-pass LLM classifier** runs before the main parse. It
+reads the raw prompt and returns the set of Fusion module(s) the prompt targets
+(and whether column rules are needed). The main parse then runs with Tier 1 +
+those modules.
 
-Options for the router (to be evaluated in B's own design):
-- **Deterministic keyword/heuristic routing** (cheapest, most predictable;
-  same philosophy as the code-side `_is_explicit_po_list` used in #32) —
-  likely the right starting point.
-- A lightweight first-pass LLM classifier (more flexible, adds a call).
-- Static always-on core + conditional modules by cheap signal.
+### 5.2 The router contract
 
-### 4.3 Why B waits for A
+- **Input:** the raw prompt.
+- **Output:** a set of module tags (e.g. `{procurement}`, or
+  `{supplier, procurement}`), plus a `columns` flag.
+- **Multi-module prompts load the UNION.** "Show suppliers with open purchase
+  orders, include the buyer" -> `{supplier, procurement}` -> both contexts
+  loaded. A prompt's primary module (its root entity's module) plus any modules
+  pulled in by includes are all selected.
+- **Unsure -> fall back to ALL modules.** When the classifier is not confident,
+  it returns all four. This degrades to phase-1 behavior — proven safe — so a
+  router miss never causes a misparse from missing context. Safety over savings.
 
-- A produces the **module boundaries** and the **fidelity harness** B needs to
-  prove it doesn't regress. Without A's `MODULES=all` fidelity runs, B has no
-  way to show that a dynamically-assembled subset matches full-context behavior.
-- A delivers most of the *developer* value (cheap, bisectable testing) at
-  near-zero production risk. B is a production behavior change; it should only
-  be attempted once A has de-risked the decomposition.
+### 5.3 Why a tiny LLM classifier (not deterministic keywords)
 
-### 4.4 Feature B acceptance (sketch, to be expanded in B's own doc)
+Chosen: a small first-pass LLM call. It is more robust to paraphrase than a
+keyword map and can express "unsure -> all" naturally. Costs: an extra (small)
+call and latency, and a new failure mode — both bounded by the all-modules
+fallback. The classifier prompt is itself tiny (module names + one-line
+descriptions), nowhere near the monolith's size, so it does not reintroduce the
+token-ceiling fragility.
 
-1. A deterministic (or measured-reliable) module router.
-2. For a representative prompt corpus, dynamically-assembled context yields
-   **the same intents** as `MODULES=all` (fidelity, via A's harness).
-3. Measured token/latency reduction versus the monolith, with the router's own
-   cost accounted for.
+### 5.4 The fidelity guarantee (how phase 2 is proven safe)
+
+A module-scoped parse must produce the **same Intent** as the full-context parse
+for the same prompt. This is verified with phase 1's harness: run the corpus once
+with the **full** assembly (the oracle) and once with **router-selected**
+context; every case must match. Where they differ, either the router
+under-selected (fix the router / widen the fallback) or a module file has a
+hidden cross-module dependency (fix the split). **The full assembly is always the
+correctness oracle; the router is an optimization measured against it.**
+
+### 5.5 Phase 2 acceptance
+
+1. A first-pass module classifier with an all-modules fallback.
+2. For the full corpus, router-selected context yields the **same intents** as
+   the full assembly (fidelity).
+3. Measured token/latency reduction vs the monolith, the classifier's own cost
+   included.
 4. No new misclassification from under-selection on the tracked corpus.
 
 ---
 
-## 5. Sequencing & risk summary
+## 6. Prompts / test corpus on the module axis
 
-| | Feature A | Feature B |
+- **Module-specific prompt sets** partition by Fusion module. The existing
+  `01_supplier`, `02_purchase_order`, `03_ar` already align; formalize the set as
+  one per module (payables, procurement, receivables, supplier).
+- **Cross-cutting prompt sets stay as-is.** `04_columns`, `05_refusals`,
+  `10_refusal_examples`, `11_column_vocabulary` test the always-on tier
+  (refusals) and the `columns` concern, which are not specific to one Fusion
+  module. **Do not fragment these into module folders** — that would break
+  coherent cross-module coverage. Keeping them unchanged also guarantees nothing
+  currently working breaks.
+
+---
+
+## 7. The selective-load test harness (delivered in phase 1)
+
+Extends `scripts/score_parser_prompts.py`.
+
+### 7.1 Module selection per case
+
+```
+EXPECT=<intent expectation> ||| MODULES=procurement ||| <prompt>
+```
+
+- `MODULES=<subset>` -> assemble Tier 1 + the named Tier-2 files only. Cheap
+  (hundreds of tokens vs 8000). Used to **bisect** which module drives a behavior.
+- `MODULES` absent -> assemble **all** files (the fidelity default / oracle).
+
+### 7.2 Richer intent expectations
+
+Extend the `EXPECT` grammar:
+
+```
+target:PurchaseOrder      target_entity  (existing)
+filter:lifecycle_status   intent carries a specific filter
+list_all                  intent.list_all is True
+no_filters                intent.filters == []   (the dropped-id shape)
+combo:a+b                 multiple filters (existing)
+count / aggregate         (existing)
+refuse[:flavor]           refusal, optional flavor
+```
+
+### 7.3 #32 fault (a) as a tracked case
+
+```
+# KNOWN-FAIL (#32a): terse completion question should route to lifecycle,
+# but the full-context parser drops the id. Procurement module. Severity high.
+filter:lifecycle_status ||| MODULES=all ||| Is PO 162034 complete?
+```
+
+### 7.4 The fidelity caveat (keep the harness honest)
+
+A subset-context run is a **diagnosis** tool, not a production oracle — a slim
+context can classify a prompt correctly that the full context (or a
+router-selected context) gets wrong. So: **`MODULES=<subset>` runs DIAGNOSE**
+which module drives a behavior; **the full assembly VERIFIES** production-
+equivalent behavior. Every tracked correctness expectation is asserted on the
+full assembly. In phase 2, fidelity is: router-selected == full assembly (§5.4).
+
+---
+
+## 8. Tools on the module axis (documented; not reorganized here)
+
+The tools already group by Fusion module. Reorganizing them into module
+subdirectories (`tools/procurement/…`) is **deferred** — a separate refactor with
+import churn, out of scope for this document. Current grouping:
+
+- **payables:** `invoices.py`, `aggregate_invoices.py`
+- **procurement:** `purchase_orders.py`, `purchase_order_by_id.py`,
+  `purchase_order_lines.py`, `purchase_order_schedules.py`,
+  `purchase_order_distributions.py`, `po_lifecycle.py`,
+  `aggregate_purchase_orders.py`, `buyer.py`
+- **receivables:** `receivables_invoice_by_id.py`, `receivables_invoice_lines.py`,
+  `receivables_invoice_tax_lines.py`, `receivables_invoice_transaction_dff.py`,
+  `receivables_credit_memos.py`, `account_credit_memos.py`, `account_receipts.py`,
+  `account_receipt_applications.py`, `standard_receipts.py`,
+  `aggregate_standard_receipts_by_method.py`, `customer_account_by_name.py`,
+  `customer_transactions.py`, `rank_customer_accounts_by_exposure.py`
+- **supplier:** `suppliers.py`, `suppliers_by_country.py`, `supplier_sites.py`,
+  `supplier_contacts.py`, `supplier_classifications.py`, `addresses.py`
+- **cross-module (note):** `compare_orders_to_invoices.py` spans Procurement +
+  Payables — a case the phase-2 router must load two modules for.
+- **shared infra (not module-specific):** `tool_result.py`, `pagination.py`.
+
+`compare_orders_to_invoices` confirms cross-module queries are real and the
+router's union behavior (§5.2) is necessary, not hypothetical.
+
+---
+
+## 9. Sequencing & risk
+
+| | Phase 1 | Phase 2 |
 |---|---|---|
-| Changes production? | **No** (byte-identical assembly) | **Yes** (dynamic subset) |
-| Primary value | Cheap, bisectable parser testing | Production token/fragility reduction |
-| Main risk | Low (guarded by string-equality invariant) | Higher (router is a new classifier) |
-| Depends on | Existing scorer + corpus | **Feature A** |
-| Order | **First** | After A validates boundaries |
+| Changes production? | **No** (byte-identical all-modules assembly) | **Yes** (router-scoped context) |
+| Value | Module-organized, module-testable context | Token/latency reduction; tighter prompt |
+| Main risk | Low (string-equality invariant) | Medium (classifier is a new component) |
+| Guardrail | Assembled == original literal | Router-selected == full assembly (fidelity) |
+| Depends on | Existing scorer + corpus; KG `module` field | Phase 1 (files, harness, mapping) |
+| Order | **First** | After phase 1 |
 
-**Recommended path:** implement A first, in small steps, each guarded by the
-string-equality invariant (3.2) and the existing green suite. Land the module
-split and the fidelity/bisection harness; capture #32a as a tracked case.
-Evaluate B separately, in its own design doc, once A is in place.
-
----
-
-## 6. Relationship to issue #32
-
-- **#32 fault (b)** — fixed and merged (PR #132): filter-less PO queries refuse
-  instead of dumping; explicit "list purchase orders" still lists. The
-  disambiguating signal is set in Python code, prompt untouched.
-- **#32 fault (a)** — the terse-phrasing classification miss ("Is PO N
-  complete?" drops the id). Characterized: deterministic, **not** a token-cap
-  problem, **not** a KG-definition problem (the lifecycle target exists in the
-  KG and is reached by explicit phrasings). Currently **de-risked** by the (b)
-  guard (fails safe to a refusal, no dump). Severity: **high**; tracked.
-- This framework is the **proper home** for (a): captured as a tracked
-  KNOWN-FAIL corpus case (3.4), diagnosable by bisection (3.5), and fixable
-  either by a code-side injection (mirroring `_is_explicit_po_list`) or, once
-  Feature B exists, by giving the lifecycle module more weight in a slimmer
-  context — each verifiable on `MODULES=all`.
+**Recommended path:** phase 1 first, in small steps, each guarded by
+string-equality and the green suite. Land the context blocks (done), the KG
+`module` mapping, and the selective-load harness; capture #32a. Then phase 2: the
+first-pass classifier, verified against the full-assembly oracle.
 
 ---
 
-## 7. Open questions (resolve during A's implementation)
+## 10. Relationship to issue #32
 
-1. **Exact module boundaries** — the split in 3.1 is a proposal; the real
-   boundaries fall out of the current literal's structure and its internal
-   cross-references.
-2. **Module dependency rules** — which modules assume others (e.g. examples
-   assuming the entity roster); how the harness enforces "core always included."
-3. **Corpus expectation grammar** — finalize the `EXPECT` extensions (3.4) and
-   migrate `parser_stress.txt` to them without losing existing coverage.
-4. **Where the harness lives** — extend `score_parser_prompts.py` in place vs.
-   a sibling `score_parser_modular.py` that imports its engine.
-5. **Menu handling** — the KG menu is appended after the preamble; decide
-   whether it is a module or stays a separate always-on append.
+- **#32 fault (b)** — fixed, merged (PR #132). Filter-less PO queries refuse
+  instead of dumping; the signal is set in deterministic code, prompt untouched.
+- **#32 fault (a)** — terse Procurement phrasings ("Is PO N complete?") drop the
+  PO id. Measured: **not** a token-cap problem (short, valid, wrong parses),
+  **not** a KG-definition problem (the lifecycle target exists and explicit
+  phrasings reach it). A classification miss in the all-module monolith; adding
+  prompt text induced MAX_TOKENS runaway (proven 3x). De-risked by the (b) guard
+  (fails safe to a refusal). Severity high, tracked.
+- This framework is (a)'s home: the `procurement` module file makes the relevant
+  rules editable and testable in isolation; the harness bisects which module (or
+  which added text) misclassifies "complete?"; any fix — a code-side injection
+  like `_is_explicit_po_list`, or reweighting the `procurement/` blocks — is
+  verified on the full assembly.
+
+---
+
+## 11. Open questions
+
+Resolved during the Phase-1 split (part 1):
+
+1. **Exact carve of the literal** — **RESOLVED.** Carved into 48 blocks by
+   original bullet ownership; emit order preserved exactly via
+   `order.manifest` (no reword, no reorder). Shared sentences were **not**
+   duplicated into each module — the split follows the literal's own structure,
+   and any bullet that sits between two modules stays where it was, in its own
+   block, at its original manifest position. A cross-cutting `modes` concern was
+   added alongside `columns`.
+2. **Module dependency rules** — **RESOLVED for Phase 1.** Tier 1 (`core`,
+   `refusals`) is always included by virtue of being listed in the manifest;
+   Phase 1 loads all blocks unconditionally, so no module can be assembled
+   without `core`. The harness's "Tier 1 always included" enforcement (§7) is a
+   Phase-1 TODO item, not yet built.
+4. **KG `module` field shape** — **RESOLVED (design).** One module per entity
+   (one-to-one); cross-module queries are handled by the Phase-2 router's union,
+   not by multi-module entities. Implementation of the field is the next Phase-1
+   step (§4.3).
+6. **Menu handling** — **RESOLVED.** The KG menu stays a separate always-on
+   append: `_build_system_prompt` returns `_ASSEMBLED_PREAMBLE + "\n" +
+   _format_menu(menu)`. It is not part of `core`.
+
+Still open (deferred to the harness step / Phase 2):
+
+3. **Corpus expectation grammar** — finalize the `EXPECT` extensions (§7.2) and
+   migrate `parser_stress.txt` without losing coverage. (Harness step, Phase 1.)
+5. **Classifier confidence threshold** — what counts as "unsure" (-> all-modules
+   fallback) for the phase-2 router; how it is tuned and measured. (Phase 2.)

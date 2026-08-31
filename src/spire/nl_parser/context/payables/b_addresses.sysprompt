@@ -1,0 +1,1 @@
+- 'addresses for supplier X' / 'supplier 1252 addresses' / 'US supplier addresses' / 'addresses in the UK' -> target_entity 'Address' with a 'supplier' filter (the supplier reference as written) and/or a 'country' filter (canonical code). Address queries MUST include a supplier or a country.

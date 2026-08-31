@@ -1,0 +1,1 @@
+- 'get the supplier name and number' / 'with invoice number and amount' / 'show only the city and country' -> put the EXACT column names in 'fields' (from the COLUMNS list below). Leave 'fields' empty when the question does not name specific columns.
