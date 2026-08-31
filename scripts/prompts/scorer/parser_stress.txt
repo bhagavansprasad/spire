@@ -111,3 +111,10 @@ filter:has_open_PO ||| MODULES=supplier ||| suppliers with open purchase orders
 filter:status ||| MODULES=supplier ||| List active suppliers
 target:Invoice ||| MODULES=payables,supplier ||| invoices for supplier 1252
 aggregate ||| MODULES=supplier,modes ||| top 10 suppliers by spend in 2022
+
+# ---------- 18. REGRESSION (#32a): terse completion routes to lifecycle ----------
+# "Is PO N complete?" must route to lifecycle_status with the id preserved.
+# This was a known-fail under gemini-2.5-flash (the parser dropped the id);
+# fixed by the 3.5-flash upgrade. Kept as a regression guard — if it fails
+# again, terse-phrasing routing has rebroken. Procurement module.
+filter:lifecycle_status ||| MODULES=all ||| Is PO 162034 complete?

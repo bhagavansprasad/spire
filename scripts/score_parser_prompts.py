@@ -86,6 +86,14 @@ def load_cases(path: Path):
         if expect.upper().startswith("EXPECT="):
             expect = expect[len("EXPECT="):].strip()
 
+        # A KNOWN-FAIL: prefix marks a case that is EXPECTED to fail (a tracked
+        # bug). It is run and scored separately: failing is "as expected", and
+        # PASSING is flagged loudly (the bug may be fixed — remove the marker).
+        known_fail = False
+        if expect.upper().startswith("KNOWN-FAIL:"):
+            known_fail = True
+            expect = expect[len("KNOWN-FAIL:"):].strip()
+
         modules = None
         if len(parts) == 2:
             prompt = parts[1]
@@ -93,9 +101,13 @@ def load_cases(path: Path):
             mid, prompt = parts[1], parts[2]
             if mid.upper().startswith("MODULES="):
                 mods = mid[len("MODULES="):].strip()
-                modules = tuple(
-                    m.strip() for m in mods.split(",") if m.strip()
-                )
+                # MODULES=all is the keyword for the full assembly (== absent).
+                if mods.lower() == "all":
+                    modules = None
+                else:
+                    modules = tuple(
+                        m.strip() for m in mods.split(",") if m.strip()
+                    )
             else:
                 # middle field wasn't MODULES= — treat the whole tail as prompt
                 prompt = "|||".join(parts[1:])
@@ -103,7 +115,7 @@ def load_cases(path: Path):
             # more than 3 fields: everything after the first is the prompt
             prompt = "|||".join(parts[1:])
 
-        cases.append((expect, modules, prompt))
+        cases.append((expect, modules, prompt, known_fail))
     return cases
 
 
@@ -204,9 +216,11 @@ def main() -> int:
     menu = load_kg_menu()
 
     passed, failed = 0, 0
+    known_fail_ok, known_fail_xpass = 0, 0
     failures = []
+    xpasses = []
 
-    for i, (expect, modules, prompt) in enumerate(cases, 1):
+    for i, (expect, modules, prompt, known_fail) in enumerate(cases, 1):
         try:
             system_prompt = assemble_subset(modules, menu)
             result = parse_prompt(
@@ -218,18 +232,36 @@ def main() -> int:
             summ = {"kind": "error", "detail": str(exc)}
             ok = False
 
-        mark = "PASS" if ok else "FAIL"
-        if ok:
-            passed += 1
-        else:
-            failed += 1
-            failures.append((prompt, expect, modules, summ))
-
         mod_tag = "" if modules is None else f" [{','.join(modules)}]"
-        print(f"[{mark}] {expect:<22}{mod_tag:<20} | {prompt[:50]}")
 
-    print(f"\n{'='*70}\nSUMMARY: {passed}/{len(cases)} passed, "
-          f"{failed} failed\n{'='*70}")
+        if known_fail:
+            # Expected to fail. Failing is fine; PASSING is the alarm.
+            if ok:
+                known_fail_xpass += 1
+                xpasses.append((prompt, expect, modules, summ))
+                mark = "XPASS"  # unexpectedly passed — bug may be fixed
+            else:
+                known_fail_ok += 1
+                mark = "kfail"  # failed as expected
+        else:
+            if ok:
+                passed += 1
+                mark = "PASS"
+            else:
+                failed += 1
+                failures.append((prompt, expect, modules, summ))
+                mark = "FAIL"
+
+        print(f"[{mark:<5}] {expect:<22}{mod_tag:<20} | {prompt[:50]}")
+
+    total_scored = passed + failed
+    print(f"\n{'='*70}\nSUMMARY: {passed}/{total_scored} passed, "
+          f"{failed} failed"
+          + (f"  |  {known_fail_ok} known-fail (as expected)"
+             if known_fail_ok else "")
+          + (f"  |  {known_fail_xpass} XPASS" if known_fail_xpass else "")
+          + f"\n{'='*70}")
+
     if failures:
         print("\nFAILURES (where routing broke) — this is the finding:\n")
         for prompt, expect, modules, summ in failures:
@@ -238,7 +270,19 @@ def main() -> int:
             print(f"  EXPECTED: {expect}   (modules: {mod_tag})")
             print(f"  GOT:      {summ}")
             print()
-    return 1 if failed else 0
+
+    if xpasses:
+        print("\nXPASS — a KNOWN-FAIL case now PASSES. The bug may be fixed;\n"
+              "remove the KNOWN-FAIL: marker if so:\n")
+        for prompt, expect, modules, summ in xpasses:
+            mod_tag = "all" if modules is None else ",".join(modules)
+            print(f"  PROMPT:   {prompt}")
+            print(f"  EXPECTED: {expect}   (modules: {mod_tag})")
+            print(f"  GOT:      {summ}")
+            print()
+
+    # A real failure OR an XPASS is a non-zero exit (both need attention).
+    return 1 if (failed or known_fail_xpass) else 0
 
 
 if __name__ == "__main__":
