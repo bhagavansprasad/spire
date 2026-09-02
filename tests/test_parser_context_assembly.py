@@ -18,20 +18,39 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from spire.nl_parser import parser as parser_mod
-from spire.nl_parser.parser import (
+from spire.nl_parser import context_assembly as assembly_mod
+from spire.nl_parser.context_assembly import (
     _ASSEMBLED_PREAMBLE,
     _SYSTEM_PROMPT_PREAMBLE,
 )
 
 # Resolve the context dir the same way the module does, independently of any
 # module-level constant, so this test exercises the files on disk directly.
-_CONTEXT_DIR = Path(parser_mod.__file__).resolve().parent / "context"
+_CONTEXT_DIR = Path(assembly_mod.__file__).resolve().parent / "context"
 _MANIFEST = _CONTEXT_DIR / "order.manifest"
 
 # The carve is fixed at 48 blocks for Phase 1 (design §4). A change to this
 # number is a deliberate re-carve and must update this expectation too.
 _EXPECTED_BLOCK_COUNT = 48
+
+# Subdirectories of context/ that hold .sysprompt files which are NOT carve
+# blocks and are deliberately absent from order.manifest. Phase 2's router adds
+# context/routing/classifier_menu.sysprompt — generated grounding for the
+# module classifier, assembled by the router, never joined into the parser
+# preamble. The carve invariants below (no orphans, exactly 48 blocks) are
+# about carve blocks only, so they exclude these subtrees. A NEW non-carve
+# subtree must be added here consciously — that is the point.
+_NON_CARVE_SUBTREES = ("routing",)
+
+
+def _carve_blocks_on_disk() -> list[Path]:
+    """All .sysprompt files that are carve blocks (i.e. outside the non-carve
+    subtrees). These are the files order.manifest is expected to list."""
+    return [
+        p
+        for p in _CONTEXT_DIR.rglob("*.sysprompt")
+        if p.relative_to(_CONTEXT_DIR).parts[0] not in _NON_CARVE_SUBTREES
+    ]
 
 
 def _manifest_entries() -> list[str]:
@@ -46,7 +65,7 @@ def _manifest_entries() -> list[str]:
 def _assemble_from_disk() -> str:
     """Re-read and join the blocks straight from disk, in manifest order.
 
-    Deliberately does NOT use parser._ASSEMBLED_PREAMBLE — this proves the
+    Deliberately does NOT use context_assembly._ASSEMBLED_PREAMBLE — this proves the
     files on disk assemble to the oracle, not merely that the module's cached
     import-time value does.
     """
@@ -83,7 +102,7 @@ def test_no_orphan_sysprompt_files() -> None:
     """Every .sysprompt file on disk is listed in the manifest (no orphans)."""
     on_disk = {
         str(p.relative_to(_CONTEXT_DIR)).replace("\\", "/")
-        for p in _CONTEXT_DIR.rglob("*.sysprompt")
+        for p in _carve_blocks_on_disk()
     }
     listed = set(_manifest_entries())
     orphans = on_disk - listed
@@ -95,6 +114,6 @@ def test_no_orphan_sysprompt_files() -> None:
 def test_block_count_is_expected() -> None:
     """The carve is exactly the approved number of blocks."""
     entries = _manifest_entries()
-    on_disk = list(_CONTEXT_DIR.rglob("*.sysprompt"))
+    on_disk = _carve_blocks_on_disk()
     assert len(entries) == _EXPECTED_BLOCK_COUNT
     assert len(on_disk) == _EXPECTED_BLOCK_COUNT
