@@ -4,8 +4,8 @@ The module-scoping router — classify a prompt to its Fusion module(s).
 Phase 2 of the prompt-to-intent framework
 (docs/features/prompt_to_intent_framework.md §2.1, D-router). The router is a
 layer AROUND ``parse``: it decides which module context to assemble, then calls
-the unchanged ``parse(prompt, system_prompt=scoped)``. This module holds the
-classifier; ``route_and_parse`` (the wiring) arrives in the next step.
+the unchanged ``parse(prompt, system_prompt=scoped)``. This module holds
+both the classifier (``classify_modules``) and the wiring (``route_and_parse``).
 
 WHY A CLASSIFIER: the parser's full preamble is at its ~8,000-token ceiling
 (§1.1). A prompt about invoices does not need supplier, procurement, and
@@ -39,7 +39,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from spire.nl_parser.context_assembly import KNOWN_MODULES, _CLASSIFIER_MENU
+from spire.nl_parser.context_assembly import (
+    KNOWN_MODULES,
+    _CLASSIFIER_MENU,
+    assemble_subset,
+)
+from spire.nl_parser.parser import parse
+from spire.nl_parser.result import ParseResult
+from spire.nl_parser.vocabulary import load_kg_menu
 
 
 # --- structured-output contract -------------------------------------------
@@ -174,3 +181,56 @@ def classify_modules(
     seen: set[str] = set()
     deduped = [m for m in modules if not (m in seen or seen.add(m))]
     return deduped
+
+
+# --- the router: route_and_parse ------------------------------------------
+# The two-request flow (D-router): classify the prompt to its module(s),
+# assemble ONLY that module's context, and parse against it. This is a layer
+# AROUND parse — parse itself is unchanged (it just receives a scoped
+# system_prompt instead of building the full one).
+
+
+def route_and_parse(
+    prompt: str,
+    llm: Any | None = None,
+    menu: Any | None = None,
+) -> ParseResult:
+    """Classify a prompt to its module(s), then parse against scoped context.
+
+    The production replacement for a bare ``parse(prompt)`` at the pipeline
+    seam. Instead of sending the full all-modules preamble, it classifies the
+    prompt to its Fusion module(s) and sends only Tier 1 (core + refusals) plus
+    that module's blocks — removing the parser's token ceiling as a constraint
+    (§1.1).
+
+    The KG menu is loaded ONCE here and shared by both assemble_subset (which
+    renders it into the scoped prompt) and parse (which uses it for KG
+    validation). Loading once guarantees the scoped prompt and the parse see
+    the SAME menu — the only thing that differs from a full parse is which
+    preamble blocks are present, which is exactly what the increment-1 fidelity
+    check requires (routing changes the token cost, not the Intent).
+
+    Args:
+        prompt: The user's natural-language question.
+        llm: Optional LangChain LLM, passed to BOTH the classify call and the
+            parse call. Production passes None; each builds its own via
+            build_llm. (A test injecting one mock must satisfy both the
+            ModuleChoice and DraftIntent structured-output calls; unit tests of
+            the wiring patch classify_modules/parse instead.)
+        menu: Optional pre-loaded KGMenu. Defaults to load_kg_menu().
+
+    Returns:
+        ParseResult — whatever parse() returns for the scoped context.
+
+    Raises:
+        ClassificationError: propagated from classify_modules on an empty or
+            unknown classification (decision 3-i). Increment 1 does NOT catch
+            this; increment 2 will replace the propagation with an all-modules
+            fallback for the unsure case.
+    """
+    if menu is None:
+        menu = load_kg_menu()
+
+    modules = classify_modules(prompt, llm=llm)
+    scoped = assemble_subset(modules, menu)
+    return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)

@@ -22,8 +22,10 @@ from spire.nl_parser.router import (
     ModuleChoice,
     ClassificationError,
     classify_modules,
+    route_and_parse,
     _classifier_system_prompt,
 )
+import spire.nl_parser.router as router_mod
 
 
 # --- mock LLM mirroring the with_structured_output(...).invoke(...) surface --
@@ -165,3 +167,114 @@ def test_structured_output_requested_with_schema():
     classify_modules("show bills", llm=llm, menu_text=_MENU)
     assert llm.calls["schema"] is ModuleChoice
     assert llm.calls["include_raw"] is True
+
+
+# --- route_and_parse wiring (step 4) --------------------------------------
+# These test the WIRING in isolation: classify_modules, assemble_subset,
+# parse, and load_kg_menu are patched, so we assert the call flow — the menu
+# is loaded once and shared, the classified modules reach assemble_subset, and
+# the scoped prompt reaches parse — without a real LLM, DB, or Intent. Fidelity
+# (that route_and_parse produces the SAME Intent as a full parse) is step 5.
+
+
+class _Recorder:
+    """Captures the arguments each patched collaborator was called with."""
+
+    def __init__(self):
+        self.menu_loads = 0
+        self.classify_prompt = None
+        self.assemble_args = None
+        self.parse_kwargs = None
+
+
+def _install_patches(monkeypatch, rec, modules=("payables",),
+                     scoped="SCOPED_PROMPT", parse_ret="PARSE_RESULT",
+                     classify_exc=None):
+    sentinel_menu = object()  # identity check: same menu passed to both
+
+    def fake_load_kg_menu():
+        rec.menu_loads += 1
+        return sentinel_menu
+
+    def fake_classify(prompt, llm=None, menu_text=None):
+        rec.classify_prompt = prompt
+        if classify_exc is not None:
+            raise classify_exc
+        return list(modules)
+
+    def fake_assemble_subset(mods, menu):
+        rec.assemble_args = (mods, menu)
+        return scoped
+
+    def fake_parse(prompt, llm=None, menu=None, system_prompt=None):
+        rec.parse_kwargs = {
+            "prompt": prompt, "llm": llm, "menu": menu,
+            "system_prompt": system_prompt,
+        }
+        return parse_ret
+
+    monkeypatch.setattr(router_mod, "load_kg_menu", fake_load_kg_menu)
+    monkeypatch.setattr(router_mod, "classify_modules", fake_classify)
+    monkeypatch.setattr(router_mod, "assemble_subset", fake_assemble_subset)
+    monkeypatch.setattr(router_mod, "parse", fake_parse)
+    return sentinel_menu
+
+
+def test_route_and_parse_happy_flow(monkeypatch):
+    rec = _Recorder()
+    menu = _install_patches(monkeypatch, rec)
+    out = route_and_parse("show unpaid bills")
+
+    assert out == "PARSE_RESULT"
+    # menu loaded exactly once
+    assert rec.menu_loads == 1
+    # classified modules reached assemble_subset, with the shared menu
+    assert rec.assemble_args == (["payables"], menu)
+    # scoped prompt + shared menu reached parse
+    assert rec.parse_kwargs["system_prompt"] == "SCOPED_PROMPT"
+    assert rec.parse_kwargs["menu"] is menu
+    assert rec.parse_kwargs["prompt"] == "show unpaid bills"
+
+
+def test_route_and_parse_menu_loaded_once_and_shared(monkeypatch):
+    """The SAME menu object must go to both assemble_subset and parse."""
+    rec = _Recorder()
+    menu = _install_patches(monkeypatch, rec)
+    route_and_parse("q")
+    assert rec.assemble_args[1] is menu
+    assert rec.parse_kwargs["menu"] is menu
+    assert rec.menu_loads == 1
+
+
+def test_route_and_parse_passes_provided_menu(monkeypatch):
+    """A caller-provided menu is used and load_kg_menu is NOT called."""
+    rec = _Recorder()
+    _install_patches(monkeypatch, rec)
+    my_menu = object()
+    route_and_parse("q", menu=my_menu)
+    assert rec.menu_loads == 0
+    assert rec.assemble_args[1] is my_menu
+    assert rec.parse_kwargs["menu"] is my_menu
+
+
+def test_route_and_parse_passes_llm_to_both(monkeypatch):
+    """An injected llm reaches the parse call (and the classify call)."""
+    rec = _Recorder()
+    _install_patches(monkeypatch, rec)
+    my_llm = object()
+    route_and_parse("q", llm=my_llm)
+    assert rec.parse_kwargs["llm"] is my_llm
+
+
+def test_route_and_parse_propagates_classification_error(monkeypatch):
+    """3-i: a ClassificationError from classify_modules propagates; parse is
+    never reached."""
+    rec = _Recorder()
+    _install_patches(
+        monkeypatch, rec,
+        classify_exc=ClassificationError("no modules"),
+    )
+    with pytest.raises(ClassificationError):
+        route_and_parse("garbled")
+    # parse must not have been called
+    assert rec.parse_kwargs is None
