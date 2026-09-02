@@ -19,6 +19,10 @@ WHAT LIVES HERE:
   router's per-module scoping and the scorer's bisection. Returns None when
   ``modules`` is None, signalling "let the caller use the full preamble".
 - ``_build_system_prompt`` — full preamble + menu (the production path).
+- ``KNOWN_MODULES`` — the four Fusion module names (mirrors kg_entity.module),
+  the single importable source for the router's validation.
+- ``load_classifier_menu`` / ``_CLASSIFIER_MENU`` — the router's generated
+  grounding (context/routing/classifier_menu.sysprompt), read once at import.
 
 Both ``_load_preamble_from_files`` and ``assemble_subset`` read the manifest
 through ``_manifest_pairs``, so there is exactly one place that knows how the
@@ -528,6 +532,13 @@ _CONTEXT_DIR = Path(__file__).resolve().parent / "context"
 # and the refusal rules are not optional for any module's parse.
 _TIER1 = ("core", "refusals")
 
+# The Fusion modules a prompt can be classified to (D2/D3). This mirrors the
+# CHECK constraint on kg_entity.module — the single importable source for the
+# four names, so the router's validation and the classifier menu agree without
+# hardcoding the list in two places. A change to the KG's module set changes
+# here too.
+KNOWN_MODULES = ("payables", "procurement", "receivables", "supplier")
+
 
 def _manifest_pairs() -> list[tuple[str, str]]:
     """The ordered (module, relative_path) pairs from context/order.manifest.
@@ -649,3 +660,33 @@ def assemble_subset(modules, menu: KGMenu) -> str | None:
 def _build_system_prompt(menu: KGMenu) -> str:
     return _ASSEMBLED_PREAMBLE + "\n" + _format_menu(menu)
 
+
+# --- classifier menu (Phase 2 router) -------------------------------------
+# The module classifier is grounded by a generated menu file — for each
+# module, its entities and their entity_synonyms (D2/D3/D4). The file is
+# written by scripts/build_classifier_context.py and lives OUTSIDE the carve
+# (context/routing/, not in order.manifest), because it is not a parser
+# preamble block — the router reads it, the parser never does.
+
+_ROUTING_DIR = _CONTEXT_DIR / "routing"
+_CLASSIFIER_MENU_PATH = _ROUTING_DIR / "classifier_menu.sysprompt"
+
+
+def load_classifier_menu() -> str:
+    """Read the generated module-classification menu from disk.
+
+    Fails loudly if the file is missing — the router cannot classify without
+    its grounding, and a silent empty menu would let the classifier route on
+    nothing. Regenerate with scripts/build_classifier_context.py.
+    """
+    if not _CLASSIFIER_MENU_PATH.is_file():
+        raise FileNotFoundError(
+            f"classifier menu missing: {_CLASSIFIER_MENU_PATH}. "
+            f"Generate it with scripts/build_classifier_context.py."
+        )
+    return _CLASSIFIER_MENU_PATH.read_text(encoding="utf-8")
+
+
+# Read once at import and cache, mirroring _ASSEMBLED_PREAMBLE (D4). The
+# router imports this rather than re-reading per classify call.
+_CLASSIFIER_MENU = load_classifier_menu()
