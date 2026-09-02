@@ -1,0 +1,93 @@
+# ============================================================================
+# Spire re-test set — derived from overnight/Dump1 analysis
+# Purpose: separate REAL parser/capability behavior from infra noise
+#          (503 / auth / 429 quota) seen in the dumps.
+#
+# Run each group on the CURRENT committed branch (gemini-3.5-flash) with a
+# LIVE pod and fresh Gemini quota. Compare against the notes below.
+#
+# The dumps ran on gemini-3.6-flash (a different model than committed) and
+# hit 503/auth/429 repeatedly — so their results are NOT a clean signal.
+# This set re-runs the substantive prompts under controlled conditions.
+# ============================================================================
+
+
+# ============================================================================
+# GROUP A — AR invoice COLLECTION retrieval  (finding #1: capability gap)
+# ----------------------------------------------------------------------------
+# In file 3 (prompts_output_10.txt) all of these REFUSED with:
+#   "planner requires a specific AR invoice identifier (CustomerTransactionId)"
+# Root cause: ReceivablesInvoice has ONLY a `by_id` tool in the KG — no
+# collection fetcher. Credit-memo prompts SUCCEEDED (they have list_* tool).
+#
+# EXPECTED on re-run: still refuse (this is a real capability gap, not a bug).
+# What to CONFIRM: the refusal is clean + honest (Reason/Solution/Example),
+# NOT a silent wrong-data dump. If any now returns rows, that's a NEW finding.
+# ============================================================================
+
+# --- A1: these SHOULD refuse (no AR-invoice collection tool) ---
+List the 5 most recent AR invoices.
+Show the latest AR invoice.
+List the 5 most recent customer transactions.
+List completed AR invoices.
+List incomplete AR invoices.
+Find AR invoices created in August 2026.
+Find AR invoices created between August 1, 2026 and August 31, 2026.
+List AR invoices with an amount greater than 1000.
+
+# --- A2: these SHOULD succeed (credit memos HAVE a collection tool) ---
+# Controls: prove the AR domain itself works when a collection tool exists.
+List the most recent AR credit memos.
+Show the 5 latest credit memos.
+
+
+# ============================================================================
+# GROUP B — "TOP-N by amount"  (finding #2: silent wrong answer)
+# ----------------------------------------------------------------------------
+# In files 4 & 5 these "succeeded" but returned the WRONG result:
+#   - asked for "top 10 by highest amount" -> Intent captured NO limit, NO sort
+#   - returned 25 records (default cap), NOT sorted by amount
+#   - i.e. "top 10 highest-value" became "first 25 for this supplier"
+# Root cause (hypothesis): Invoice has no ranking/orderBy/limit filter in the
+# KG, so the parser drops "top 10" and "by amount" entirely.
+#
+# EXPECTED on re-run: to CONFIRM the bug, check the printed Intent:
+#   does it contain a limit=10 and an amount-descending sort? If not, the
+#   ranking is being dropped. If the answer shows 25 unsorted rows -> bug
+#   reproduced. If it now returns 10 sorted rows -> fixed (model or otherwise).
+#
+# Run 2-3 of these (not all 10) to avoid burning Gemini quota. The wordings
+# vary only to check paraphrase-robustness; one is enough to see the Intent.
+# ============================================================================
+
+For supplier **Lee Supplies**, provide the 10 invoices with the highest invoice amounts, including invoice number, supplier, invoice date, invoice amount, tax, and payment status.
+Get the invoice records for **Lee Supplies**, prioritizing the invoices by invoice amount from highest to lowest, and return 10 records with their details.
+Show me 10 invoices belonging to **Lee Supplies** that have the greatest invoice amounts, along with invoice number, date, amount, tax, and payment information.
+
+
+# ============================================================================
+# GROUP C — CONTROLS  (prove the AP-invoice happy path still works)
+# ----------------------------------------------------------------------------
+# These are the SIMPLE invoice queries that DID work in the dumps (file 2,
+# APInvoicePrompts). They confirm Phase 1 didn't break basic invoice routing.
+# EXPECTED: succeed, return records, honest truncation narration.
+# ============================================================================
+
+invoices for supplier 1252
+show me invoices for Lee Supplies in 2023
+invoices over 100000 for supplier 1252
+
+
+# ============================================================================
+# GROUP D — projection field-drop  (finding #2b, secondary)
+# ----------------------------------------------------------------------------
+# In file 4, a prompt asking for "invoice number, date, amount, tax, payment"
+# returned only 2 columns (SupplierNumber, PaidStatus) and noted
+# "tax amount isn't available on Invoice".
+# EXPECTED on re-run: check whether ALL requested-and-available columns show
+# (number, date, amount, payment) or whether projection silently narrows.
+# 'tax' legitimately doesn't exist on Invoice (it's on PO/AR lines) — that
+# part of the refusal is correct.
+# ============================================================================
+
+For Lee Supplies, show invoice number, invoice date, invoice amount, and payment status for their invoices.

@@ -13,10 +13,10 @@ default_dev:
     # password: "H?tr0cob"
 
     base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
-    username: "Liam.Noah"
-    password: "_0BRaTad"
-
+    username: "Archie.Wood"
+    password: "?MR#$sA4"
     auth_type: "basic"
+    
   oracle:
     dsn: "localhost:1521/FREEPDB1"
     username: "spire"
