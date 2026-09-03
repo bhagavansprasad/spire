@@ -193,9 +193,9 @@ and there is no scoped prompt→intent to validate until the router produces it.
   two-request design.
 - **Increment 1 is single-module only.** A genuinely cross-module prompt
   ("compare invoices to POs") will classify to one module and may parse
-  incompletely until increment 2. Fidelity tests should use cleanly
-  single-module prompts; cross-module underperformance is expected, not a
-  regression.
+  incompletely until increment 2; cross-module underperformance is expected,
+  not a regression. (The comparison-based fidelity check this bullet originally
+  described was retired — see §7.1.)
 - **The framework stops at tool-selection.** It confirms the *right tool would
   be called*, not that calling it returns correct data. Execution correctness
   remains with the existing end-to-end scripts, by design.
@@ -203,3 +203,41 @@ and there is no scoped prompt→intent to validate until the router produces it.
   the scoped context lacks what the prompt needs and the parse suffers. This is
   why the classifier is grounded richly (D2/D3) and why increment 2 adds an
   all-modules fallback for the unsure case.
+
+
+### 7.1 Update from increment-1 validation — the full parse is non-deterministic
+
+The original increment-1 plan (§4) proposed a **fidelity check**:
+`route_and_parse(prompt)` should produce the *same Intent* as the full-context
+`parse(prompt)` on single-module prompts. Building and running it showed the
+premise is unsound, and the comparison harness was **removed**.
+
+**What we observed.** Running the same prompt through the full ~8,000-token
+context **three times at temperature 0 produced three different outcomes** —
+"list bills over 5000" refused (`missing_identifier`) on one run and parsed
+correctly (`Invoice` + `invoice_amount`) on the next two. The full parse does
+not preserve its *own* Intent across identical runs, so "matches the full parse"
+is not a definable oracle; the comparison was measuring against noise. This is
+consistent with the token-ceiling fragility in §1.1: at ~8,000 tokens the parser
+sits near a decision boundary and tips stochastically, even at temperature 0.
+
+Two points, stated with care:
+
+- **The over-refusal is flaky, not systematic.** The full context *sometimes*
+  over-refuses valid list/filter queries, unpredictably — not always.
+- **Scoped contexts appeared more stable, but this is observed, not
+  quantified.** In the same runs the payables-scoped parse of "list bills over
+  5000" passed every time while the full parse flaked — consistent with the
+  smaller context sitting further from the boundary. This is a handful of runs,
+  not a controlled variance measurement; it supports, but does not prove, that
+  scoping reduces non-determinism. If quantified later, reduced non-determinism
+  may be a stronger argument for the router than the token saving itself.
+
+**Consequence for validation.** The correct oracle is the **KG, not a second
+parse**. Increment-1 correctness is validated by the intent→tool-selection
+stage (§2.2): a routed Intent is checked against the KG's fetcher map for
+*serviceability* — does `(target_entity, filter)` resolve to a real tool —
+which is **deterministic** and does not flake. This also catches a class the
+comparison approach could not: an Intent naming a filter with **no fetcher**
+(e.g. `Invoice + created_date`, absent from `kg_entity_tool`) is flagged
+regardless of what any parse produced on a given run.
