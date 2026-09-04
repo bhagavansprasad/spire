@@ -36,6 +36,7 @@ from spire.nl_parser.intent_validation import validate_intent
 from spire.nl_parser.vocabulary import (
     expand_field_synonyms,
     correct_include_from_prompt,
+    add_child_include_from_prompt,
 )
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
@@ -312,6 +313,16 @@ def parse(
     # gate and refuses honestly rather than returning addresses. Runs after
     # the LLM, before validate_intent, deterministically from the KG.
     intent.include = correct_include_from_prompt(prompt, intent.include, menu)
+
+    # AI-12: add a child include the LLM OMITTED for child-led phrasing.
+    # "show contacts for supplier X" targets Supplier but often leaves include
+    # empty, dropping "contacts"; this adds Contact (the child the user named)
+    # so the planner expands the parent with it. Deterministic, KG-grounded,
+    # AFTER the LLM and BEFORE validate_intent — same pattern as the AI-10
+    # override above. Needs target_entity to decide, so it is passed in.
+    intent.include = add_child_include_from_prompt(
+        prompt, intent.target_entity, intent.include, menu
+    )
 
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).

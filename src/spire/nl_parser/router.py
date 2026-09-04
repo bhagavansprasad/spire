@@ -222,15 +222,30 @@ def route_and_parse(
     Returns:
         ParseResult — whatever parse() returns for the scoped context.
 
-    Raises:
-        ClassificationError: propagated from classify_modules on an empty or
-            unknown classification (decision 3-i). Increment 1 does NOT catch
-            this; increment 2 will replace the propagation with an all-modules
-            fallback for the unsure case.
+    Out-of-scope handling:
+        If classify_modules finds NO module (raises ClassificationError), this
+        falls back to a full-context parse rather than propagating the error —
+        so a definitively out-of-scope prompt gets a clean parser refusal, not
+        an exception (never worse than the pre-router baseline, design §4).
+        The "unsure between several modules" case remains increment-2 work.
     """
     if menu is None:
         menu = load_kg_menu()
 
-    modules = classify_modules(prompt, llm=llm)
+    try:
+        modules = classify_modules(prompt, llm=llm)
+    except ClassificationError:
+        # No module matched — the prompt is definitively out of scope (e.g.
+        # "what is the weather today", which names no Fusion entity). Fall back
+        # to a FULL-context parse, which refuses cleanly with a structured
+        # Reason/Solution/Example, instead of surfacing a raw
+        # ClassificationError. This keeps the router "never worse than today"
+        # (design §4): without the fallback, an out-of-scope prompt that the
+        # full parser handles gracefully would instead throw. This is the
+        # increment-2 all-modules fallback, applied to the no-module case;
+        # the "unsure between modules" case (classifier returns several) is
+        # still deferred to increment 2.
+        return parse(prompt, llm=llm, menu=menu)  # system_prompt=None -> full
+
     scoped = assemble_subset(modules, menu)
     return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)

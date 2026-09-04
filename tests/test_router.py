@@ -266,15 +266,21 @@ def test_route_and_parse_passes_llm_to_both(monkeypatch):
     assert rec.parse_kwargs["llm"] is my_llm
 
 
-def test_route_and_parse_propagates_classification_error(monkeypatch):
-    """3-i: a ClassificationError from classify_modules propagates; parse is
-    never reached."""
+def test_route_and_parse_falls_back_to_full_parse_on_no_module(monkeypatch):
+    """Finding 4 fix: when classify_modules raises ClassificationError (no
+    module matched — out of scope), route_and_parse falls back to a FULL-context
+    parse (system_prompt=None) rather than propagating the error, so the parser
+    can refuse cleanly. Never worse than the pre-router baseline."""
     rec = _Recorder()
     _install_patches(
         monkeypatch, rec,
         classify_exc=ClassificationError("no modules"),
     )
-    with pytest.raises(ClassificationError):
-        route_and_parse("garbled")
-    # parse must not have been called
-    assert rec.parse_kwargs is None
+    out = route_and_parse("what is the weather today")
+    # It did NOT raise; it fell back to parse.
+    assert out == "PARSE_RESULT"
+    # parse WAS called, with system_prompt=None (full context), not a scoped one.
+    assert rec.parse_kwargs is not None
+    assert rec.parse_kwargs["system_prompt"] is None
+    # assemble_subset must NOT have been called (we never got a module list).
+    assert rec.assemble_args is None

@@ -278,6 +278,48 @@ _INCLUDE_OVERRIDE_WHEN_PRESENT: dict[str, str] = {
     "Site": "Address",
 }
 
+# Child entity : (parent target_entity, trigger words). When a child's trigger
+# word appears in the prompt AND the Intent's target is that child's parent,
+# the child is added to the include if not already present. This fixes
+# child-led phrasing the LLM under-maps: "show contacts for supplier X" targets
+# Supplier but leaves the include empty, dropping "contacts"; we add Contact so
+# the planner expands the parent with it.
+#
+# WHY TRIGGER WORDS HERE (not entity_synonyms): the word "lines" is ambiguous —
+# PurchaseOrderLine under a PurchaseOrder target, ReceivablesInvoiceLine under a
+# ReceivablesInvoice target. entity_synonyms is a 1:1 term->entity map and
+# cannot represent that; keying on (child, parent) here disambiguates by the
+# Intent's target. Multi-word triggers ("shipment schedule") match as phrases.
+#
+# NOTE: Site is deliberately NOT here — sites are not standalone-listable on
+# this pod, so "sites for X" is routed to the Site gate (via
+# _INCLUDE_OVERRIDE_WHEN_PRESENT) to refuse honestly, not auto-included.
+_CHILD_INCLUDE_WHEN_PRESENT: dict[str, tuple[str, list[str]]] = {
+    # Only children with a FORWARD "get children of parent" edge tool belong
+    # here — verified against kg_edge_tool. Site and Classification are
+    # EXCLUDED: their only tools are REVERSE (search_suppliers_by_site_bu /
+    # search_suppliers_by_classification, i.e. "find suppliers BY a site/class"),
+    # so there is no way to include a supplier's sites/classifications; adding
+    # them here would only produce a validator refusal.
+    "Contact":                 ("Supplier",           ["contact", "contacts"]),
+    "PurchaseOrderLine":       ("PurchaseOrder",      ["line", "lines"]),
+    "POSchedule":              ("PurchaseOrder",      ["schedule", "schedules",
+                                                       "shipment schedule",
+                                                       "shipment schedules"]),
+    "ReceivablesInvoiceLine":  ("ReceivablesInvoice", ["line", "lines"]),
+    "AccountReceipt":          ("CustomerAccount",    ["receipt", "receipts"]),
+    "AccountCreditMemo":       ("CustomerAccount",    ["credit memo",
+                                                       "credit memos"]),
+    "AccountReceiptApplication": ("CustomerAccount",  ["receipt application",
+                                                       "receipt applications"]),
+    "CustomerTransaction":     ("CustomerAccount",    ["transaction",
+                                                       "transactions"]),
+    # Grandchildren (PODistribution via POSchedule, ReceivablesTaxLine via
+    # ReceivablesInvoiceLine) have forward tools but are two hops from a
+    # fetchable root; whether a single include chains two hops is UNVERIFIED,
+    # so they are deferred rather than added optimistically.
+}
+
 
 def correct_include_from_prompt(
     prompt: str, include: list[str], menu: KGMenu
@@ -330,6 +372,43 @@ def correct_include_from_prompt(
     return corrected
 
 
+def add_child_include_from_prompt(
+    prompt: str, target_entity: str, include: list[str], menu: KGMenu
+) -> list[str]:
+    """Add a child include the LLM omitted for child-led phrasing.
 
+    "show contacts for supplier Lee Supplies" -> the LLM targets Supplier and
+    (often) leaves include empty, dropping "contacts". This detects that: a
+    child trigger word ("contacts") is in the prompt, the target IS that
+    child's parent (Supplier), and the child (Contact) is not already in the
+    include -> add it. The planner then expands the parent with the child, so
+    the user gets what they asked for instead of just the parent record.
 
-
+    Grounded in _CHILD_INCLUDE_WHEN_PRESENT: (child -> parent, trigger words).
+    The (child, parent) key disambiguates a shared word like "lines" by the
+    Intent's target. Single-word triggers match whole words; multi-word
+    triggers ("shipment schedule") match as substrings. Order-preserving; no
+    duplicates. Returns the include unchanged when nothing matches. ``menu`` is
+    unused (the triggers are self-contained) but kept in the signature for
+    consistency with correct_include_from_prompt.
+    """
+    p = prompt.lower()
+    tokens = set(_re.findall(r"[a-z]+", p))
+    result = list(include)
+    for child, (parent, words) in _CHILD_INCLUDE_WHEN_PRESENT.items():
+        if target_entity != parent:
+            continue
+        if child in result:
+            continue
+        hit = False
+        for w in words:
+            if " " in w:          # multi-word phrase -> substring match
+                if w in p:
+                    hit = True
+                    break
+            elif w in tokens:     # single word -> whole-word match
+                hit = True
+                break
+        if hit:
+            result.append(child)
+    return result
