@@ -16,7 +16,6 @@ test_results/
 .envrc
 
 # Project-specific
-how-to-run.md
 traces/
 temp/
 flag_matrix/
