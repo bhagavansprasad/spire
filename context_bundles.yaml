@@ -131,6 +131,8 @@ bundles:
   - src/spire/planner/lookup.py
   - src/spire/planner/date_utils.py
   - src/spire/planner/plan_builders.py
+
+  synthesizer:
   - src/spire/synthesizer/synthesizer.py
   - src/spire/synthesizer/constants.py
   - src/spire/synthesizer/errors.py
@@ -144,6 +146,9 @@ bundles:
   - src/spire/synthesizer/response_validation.py
   - src/spire/synthesizer/lifecycle.py
   - src/spire/graph/pipeline.py
+  - tests/test_synthesizer_aggregation.py
+  - tests/test_synthesizer_supplier_records.py
+  - tests/test_synthesizer_truncation_narration.py
 
   tests:
   - tests/spire_sme_validation_checklist.md
