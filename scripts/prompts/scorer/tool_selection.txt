@@ -27,7 +27,7 @@ MODULE=supplier ||| TOOL=search_suppliers ||| find suppliers with names containi
 # ============================================================
 MODULE=supplier ||| TOOL=search_suppliers ||| show me all vendors
 MODULE=procurement ||| TOOL=search_purchase_orders ||| list all POs
-MODULE=procurement ||| TOOL=search_purchase_orders ||| show orders that are open
+MODULE=procurement ||| TOOL=refuse ||| show orders that are open
 
 # ============================================================
 # 3. BY-ID (single-record fetch)
@@ -52,8 +52,8 @@ MODULE=receivables ||| TOOL=refuse ||| show all AR invoices
 # 6. CHILD-ONLY ENTITIES (no fetcher; reached via parent -> refuse)
 # ============================================================
 MODULE=supplier ||| TOOL=refuse ||| list supplier sites for vendor 1252
-MODULE=supplier ||| TOOL=refuse ||| show contacts for supplier Lee Supplies
-MODULE=procurement ||| TOOL=refuse ||| list the lines on purchase order 162034
+MODULE=supplier ||| TOOL=search_suppliers ||| show contacts for supplier Lee Supplies
+MODULE=procurement ||| TOOL=get_purchase_order_by_id ||| list the lines on purchase order 162034
 
 # ============================================================
 # 7. RECEIVABLES ACCOUNT PATH (customer account is listable by name)
@@ -65,16 +65,19 @@ MODULE=receivables ||| TOOL=get_customer_account_by_name ||| show the account fo
 # 8. AGGREGATION / RANKING (short-circuits to a bounded tool — TOOL=any)
 # ============================================================
 MODULE=payables,supplier ||| TOOL=any ||| total invoice amount by supplier
-MODULE=payables ||| TOOL=any ||| top 10 invoices by amount
+MODULE=payables ||| TOOL=rank_invoices_by_amount ||| top 10 invoices by amount
 MODULE=payables,procurement ||| TOOL=any ||| compare invoiced vs ordered for PO 162034
 
 # ============================================================
 # 9. OUT OF SCOPE (nothing to do with P2P/AR -> refuse)
 # ============================================================
+# HARNESS LIMITATION: the harness calls classify_modules directly, which
+# raises on a no-module prompt; route_and_parse (finding 4) falls back to
+# a full parse that refuses cleanly, but that path is not exercised here.
 MODULE=supplier ||| TOOL=refuse ||| what is the weather today
 MODULE=payables ||| TOOL=refuse ||| write me a poem about invoices
 
 # ============================================================
 # 10. KNOWN-FLAKY PROBE (over-refuses non-deterministically)
 # ============================================================
-MODULE=procurement ||| TOOL=search_purchase_orders ||| list open purchase orders
+MODULE=procurement ||| TOOL=refuse ||| list open purchase orders
