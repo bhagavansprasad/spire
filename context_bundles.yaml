@@ -39,9 +39,10 @@ bundles:
   - scripts/prompts/08_lifecycle.txt
   - scripts/prompts/10_refusal_examples.txt
   - scripts/prompts/11_column_vocabulary.txt
+  - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
-  - scripts/prompts/README.md
   - scripts/prompts/scorer/parser_stress.txt
+  - scripts/prompts/scorer/tool_selection.txt
 
   scripts:
   - scripts/draw_graph.py
