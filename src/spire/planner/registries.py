@@ -111,6 +111,10 @@ _AGGREGATION_TOOLS: dict[str, str] = {
     "open_po_summary": "summarize_open_purchase_orders",
     "exposure_ranking": "rank_customer_accounts_by_exposure",
     "receipt_method_distribution": "aggregate_standard_receipts_by_method",
+    # Rank individual invoices by their own InvoiceAmount (server-side
+    # orderBy=InvoiceAmount:desc). NOT a grouping like by_supplier (which ranks
+    # suppliers by summed spend) — this ranks the invoice records themselves.
+    "top_invoices_by_amount": "rank_invoices_by_amount",
 }
 
 
@@ -129,6 +133,9 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     # Scoped aggregate: the scope arrives as an intent FILTER, not in the
     # aggregate block, so _build_aggregation_plan reads both.
     "receipt_method_distribution": ("customer_name", "account_number", "limit"),
+    # top_n only for now; per-supplier scoping (supplier_name) is added with
+    # the parser-side change that lets the block/filter carry the supplier.
+    "top_invoices_by_amount": ("top_n",),
 }
 
 

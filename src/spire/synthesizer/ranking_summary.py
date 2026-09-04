@@ -139,6 +139,16 @@ _RANKING_FIELDS: dict[str, dict[str, Any]] = {
         "source_label": "purchase orders",
         "measure_label": "committed value",
     },
+    "invoice_amount_ranking": {
+        # Rows are individual invoices, so the keys are the raw invoice field
+        # names and the "entity" ranked IS the source (no grouping step).
+        "label_key": "InvoiceNumber",
+        "measure_key": "InvoiceAmount",
+        "total_key": "total_available",
+        "entity_label": "invoices",
+        "source_label": "invoices",
+        "measure_label": "amount",
+    },
     "exposure_ranking": {
         "label_key": "customer_name",
         # The sort key, not transactions_due. See module docstring.

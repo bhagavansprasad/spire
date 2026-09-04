@@ -74,7 +74,10 @@ class DraftAggregate(BaseModel):
     op: str = Field(
         description=(
             "The aggregation shape. Supported: 'by_supplier' (rank "
-            "suppliers by total invoice spend over a date range)."
+            "SUPPLIERS by their total invoice spend over a date range), "
+            "'top_invoices_by_amount' (rank individual INVOICES by their own "
+            "InvoiceAmount, highest first — 'top 10 invoices by amount', "
+            "'largest invoices', 'biggest invoices for supplier X')."
         )
     )
     date_from: str = Field(
@@ -87,7 +90,10 @@ class DraftAggregate(BaseModel):
     )
     top_n: int = Field(
         default=10,
-        description="How many groups to return (e.g. 10 for 'top 10').",
+        description=(
+            "How many groups or records to return (e.g. 10 for 'top 10') — "
+            "suppliers for 'by_supplier', invoices for 'top_invoices_by_amount'."
+        ),
     )
 
 

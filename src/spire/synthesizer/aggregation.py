@@ -54,6 +54,46 @@ class SupplierSpendRankingResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class InvoiceAmountRow(BaseModel):
+    """One invoice in an amount ranking (top-N invoices by InvoiceAmount).
+
+    Unlike the supplier rankings, each row is an individual INVOICE, not a
+    grouped total — there is no per-row count. Validated against the ranking
+    the executor produced; the LLM must not invent or reorder invoices."""
+
+    invoice_number: str = Field(
+        description="The invoice's human-readable InvoiceNumber, copied from "
+        "the ranking data."
+    )
+    supplier: str = Field(
+        description="The supplier's display name, copied from the data."
+    )
+    supplier_number: str = Field(
+        description="The supplier's SupplierNumber, copied from the data."
+    )
+    invoice_amount: float = Field(
+        description="The invoice's InvoiceAmount, copied exactly from the "
+        "ranking data. Never recompute."
+    )
+    invoice_date: str = Field(
+        default="",
+        description="The invoice's InvoiceDate (ISO), copied from the data.",
+    )
+
+
+class InvoiceAmountRankingResponse(BaseModel):
+    """Aggregation response: individual invoices ranked by amount, highest
+    first (server-side orderBy=InvoiceAmount:desc)."""
+
+    summary: str = _SUMMARY_FIELD
+    invoices: list[InvoiceAmountRow] = Field(
+        default_factory=list,
+        description="Invoices in ranked order (highest amount first), copied "
+        "from the ranking data. Do not reorder, add, or drop invoices.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class SupplierPOValueRow(BaseModel):
     """One supplier in a PO-value ranking (P6 aggregation).
 
@@ -513,6 +553,29 @@ def build_supplier_spend_ranking(bucket: dict) -> SupplierSpendRankingResponse:
     )
 
 
+def build_invoice_amount_ranking(bucket: dict) -> InvoiceAmountRankingResponse:
+    """invoice_amount_ranking -> response, no LLM.
+
+    Rows are individual invoice dicts (the tool's projected fields), so the
+    row keys are the raw invoice field names (InvoiceNumber, InvoiceAmount,
+    ...), not the snake_case group keys the supplier rankings use.
+    """
+    return InvoiceAmountRankingResponse(
+        summary=_summary_text(bucket),
+        invoices=[
+            InvoiceAmountRow(
+                invoice_number=_s(r.get("InvoiceNumber")),
+                supplier=_s(r.get("Supplier")),
+                supplier_number=_s(r.get("SupplierNumber")),
+                invoice_amount=_f(r.get("InvoiceAmount")),
+                invoice_date=_s(r.get("InvoiceDate")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
 def build_supplier_po_value_ranking(
     bucket: dict,
 ) -> SupplierPOValueRankingResponse:
@@ -635,6 +698,7 @@ _LOCAL_AGGREGATION_BUILDERS = {
     "open_po_summary": build_open_po_summary,
     "exposure_ranking": build_exposure_ranking,
     "receipt_method_distribution": build_receipt_method_distribution,
+    "invoice_amount_ranking": build_invoice_amount_ranking,
 }
 
 
