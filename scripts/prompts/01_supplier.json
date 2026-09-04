@@ -1,0 +1,287 @@
+[
+  {
+    "prompt": "Get list of active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "which suppliers are currently active",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "show me all the active vendors",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers that are not inactive",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "List inactive suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers whose status is inactive",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "List US suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers based in America",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "vendors in the United States",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "which suppliers are located in the UK",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers from India",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "show me suppliers in Great Britain",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Suppliers named Lee",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "find vendors with Corp in the name",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "any supplier called Dell",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Prospective suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "show me spend authorized suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "which vendors are prospective",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Suppliers created between Jan and Mar 2025",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "vendors added in 2024",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers created after June 2025",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "active US suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "active prospective suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "woman owned suppliers in the US",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "US suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers in the US1 business unit",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "small business suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers with a UK business unit site",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "suppliers in the UK",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Count of suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "how many suppliers do we have",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "how many active suppliers are there",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Show supplier EIP Inc and its contacts",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Addresses for supplier 1252",
+    "module": [
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  },
+  {
+    "prompt": "Suppliers with their addresses",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "Show me invoices for supplier 1252",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices"
+  },
+  {
+    "prompt": "Invoices for supplier 1252 over 100000",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices"
+  },
+  {
+    "prompt": "Invoices for Lee Supplies in 2023",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices"
+  },
+  {
+    "prompt": "show me suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers"
+  },
+  {
+    "prompt": "everything about supplier 1252",
+    "module": [
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  }
+]

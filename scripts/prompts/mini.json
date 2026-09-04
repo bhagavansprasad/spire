@@ -1,0 +1,49 @@
+[
+  {
+    "prompt": "which vendors are in the US",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Suppliers named Lee",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "show contacts for supplier Lee Supplies",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "top 10 invoices by amount",
+    "module": [
+      "payables"
+    ],
+    "tool": "rank_invoices_by_amount",
+    "note": ""
+  },
+  {
+    "prompt": "Show me invoices for supplier 1252",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "what is the weather today",
+    "module": [],
+    "tool": "error",
+    "note": "<no-parse: classify failed>"
+  }
+]
