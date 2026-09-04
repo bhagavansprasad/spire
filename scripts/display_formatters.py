@@ -33,6 +33,7 @@ from spire.synthesizer.synthesizer import (
     CreditMemoListResponse,
     CountResponse,
     ComparisonResponse,
+    InvoiceAmountRankingResponse,
     SupplierSpendRankingResponse,
     SupplierPOValueRankingResponse,
     POStatusBreakdownResponse,
@@ -912,6 +913,28 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 ],
                 ["Rank", "Supplier", "SupplierNumber", "Total Spend", "Invoices"],
                 "No suppliers found.",
+            )
+        )
+        return _with_truncation(lines, response)
+
+    if isinstance(response, InvoiceAmountRankingResponse):
+        _append_summary(lines, response)
+        lines.extend(
+            _render_records(
+                "Top invoices by amount",
+                [
+                    {
+                        "Rank": i,
+                        "Invoice": row.invoice_number,
+                        "Supplier": row.supplier,
+                        "SupplierNumber": row.supplier_number,
+                        "Amount": f"{row.invoice_amount:,.2f}",
+                        "Date": row.invoice_date,
+                    }
+                    for i, row in enumerate(response.invoices, 1)
+                ],
+                ["Rank", "Invoice", "Supplier", "SupplierNumber", "Amount", "Date"],
+                "No invoices found.",
             )
         )
         return _with_truncation(lines, response)

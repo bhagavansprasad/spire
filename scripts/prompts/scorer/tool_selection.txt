@@ -1,0 +1,83 @@
+# tool_selection.txt — WIDE exploratory corpus for the router + tool-selection
+# validation (scripts/validate_tool_selection.py).
+#
+# Goal: probe the router across many KINDS of prompt and see what it does.
+# Expectations are best-effort (KG-grounded where known); a MISMATCH is a
+# finding, not necessarily a bug. Some expectations are deliberately uncertain.
+#
+# Format:  MODULE=<module(s)> ||| TOOL=<tool|refuse|any> ||| <prompt>
+#   MODULE may be a single module or comma-joined for genuinely cross-module
+#   prompts (e.g. payables,supplier). The classifier returns a LIST (D1).
+#   TOOL=refuse -> planner should refuse.  TOOL=any -> serves something; the
+#   run reports which tool (exploratory, e.g. aggregations).
+#
+# NOTE ON NON-DETERMINISM: the parse feeding the planner can flake near the
+# token ceiling. Run this a few times; per-prompt variance across runs is a
+# parser-stability signal, not a tool-selection failure.
+
+# ============================================================
+# 1. CLEANLY SINGLE-MODULE (supplier is listable bare)
+# ============================================================
+MODULE=supplier ||| TOOL=search_suppliers ||| which vendors are in the US
+MODULE=supplier ||| TOOL=search_suppliers ||| list suppliers created since 2020
+MODULE=supplier ||| TOOL=search_suppliers ||| find suppliers with names containing tech
+
+# ============================================================
+# 2. SYNONYMS / COLLOQUIAL (does the synonym route correctly?)
+# ============================================================
+MODULE=supplier ||| TOOL=search_suppliers ||| show me all vendors
+MODULE=procurement ||| TOOL=search_purchase_orders ||| list all POs
+MODULE=procurement ||| TOOL=refuse ||| show orders that are open
+
+# ============================================================
+# 3. BY-ID (single-record fetch)
+# ============================================================
+MODULE=procurement ||| TOOL=get_purchase_order_by_id ||| show purchase order 162034
+MODULE=receivables ||| TOOL=get_receivables_invoice_by_id ||| show AR invoice 61765
+
+# ============================================================
+# 4. TWO-MODULE (invoice names a supplier -> payables + supplier)
+# ============================================================
+MODULE=payables,supplier ||| TOOL=search_invoices ||| show invoices for supplier 1252
+MODULE=payables,supplier ||| TOOL=search_invoices ||| list bills over 5000 for supplier Lee Supplies
+
+# ============================================================
+# 5. BARE-LIST THAT SHOULD REFUSE (fetcher exists but needs scoping)
+# ============================================================
+MODULE=payables ||| TOOL=refuse ||| list all invoices
+MODULE=receivables ||| TOOL=refuse ||| list standard receipts
+MODULE=receivables ||| TOOL=refuse ||| show all AR invoices
+
+# ============================================================
+# 6. CHILD-ONLY ENTITIES (no fetcher; reached via parent -> refuse)
+# ============================================================
+MODULE=supplier ||| TOOL=refuse ||| list supplier sites for vendor 1252
+MODULE=supplier ||| TOOL=search_suppliers ||| show contacts for supplier Lee Supplies
+MODULE=procurement ||| TOOL=get_purchase_order_by_id ||| list the lines on purchase order 162034
+
+# ============================================================
+# 7. RECEIVABLES ACCOUNT PATH (customer account is listable by name)
+# ============================================================
+MODULE=receivables ||| TOOL=get_customer_account_by_name ||| what is the account balance for customer Acme
+MODULE=receivables ||| TOOL=get_customer_account_by_name ||| show the account for customer Global Traders
+
+# ============================================================
+# 8. AGGREGATION / RANKING (short-circuits to a bounded tool — TOOL=any)
+# ============================================================
+MODULE=payables,supplier ||| TOOL=any ||| total invoice amount by supplier
+MODULE=payables ||| TOOL=rank_invoices_by_amount ||| top 10 invoices by amount
+MODULE=payables,procurement ||| TOOL=any ||| compare invoiced vs ordered for PO 162034
+
+# ============================================================
+# 9. OUT OF SCOPE (nothing to do with P2P/AR -> refuse)
+# ============================================================
+# HARNESS LIMITATION: the harness calls classify_modules directly, which
+# raises on a no-module prompt; route_and_parse (finding 4) falls back to
+# a full parse that refuses cleanly, but that path is not exercised here.
+MODULE=supplier ||| TOOL=refuse ||| what is the weather today
+MODULE=payables ||| TOOL=refuse ||| write me a poem about invoices
+
+# ============================================================
+# 10. KNOWN-FLAKY PROBE (over-refuses non-deterministically)
+# ============================================================
+MODULE=procurement ||| TOOL=refuse ||| list open purchase orders

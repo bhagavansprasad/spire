@@ -32,7 +32,7 @@ from typing import Any, Optional, TypedDict
 from langgraph.graph import END, StateGraph
 
 from spire.executor.executor import execute_plan
-from spire.nl_parser.parser import parse as parse_prompt
+from spire.nl_parser.router import route_and_parse as parse_prompt
 from spire.planner.planner import generate_plan
 from spire.nl_parser.result import RefusalError
 from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
