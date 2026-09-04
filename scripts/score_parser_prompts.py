@@ -45,20 +45,13 @@ import sys
 from pathlib import Path
 
 from spire.nl_parser.parser import parse as parse_prompt
-from spire.nl_parser.parser import _format_menu
+from spire.nl_parser.context_assembly import assemble_subset
 from spire.nl_parser.vocabulary import load_kg_menu
 
 
 DEFAULT_FILE = (
     Path(__file__).parent / "prompts" / "scorer" / "parser_stress.txt"
 )
-
-# The parser context lives next to parser.py. Tier 1 is always assembled.
-_CONTEXT_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "src" / "spire" / "nl_parser" / "context"
-)
-_TIER1 = ("core", "refusals")
 
 
 # --- corpus parsing -------------------------------------------------------
@@ -117,41 +110,6 @@ def load_cases(path: Path):
 
         cases.append((expect, modules, prompt, known_fail))
     return cases
-
-
-# --- subset assembly (harness-only; production stays all-modules) ---------
-
-def _manifest_blocks():
-    """Ordered (module, relative_path) pairs from the context manifest."""
-    manifest = _CONTEXT_DIR / "order.manifest"
-    pairs = []
-    for line in manifest.read_text(encoding="utf-8").splitlines():
-        rel = line.strip()
-        if rel:
-            module = rel.split("/", 1)[0]  # first path component
-            pairs.append((module, rel))
-    return pairs
-
-
-def assemble_subset(modules, menu) -> str | None:
-    """Assemble a system prompt from Tier 1 + the named modules, + the menu.
-
-    Returns None when modules is None, signalling the caller to let parse()
-    build the full production preamble itself (the fidelity oracle path).
-
-    The menu is appended exactly as production does it, so a subset differs
-    from production ONLY in which preamble blocks are present.
-    """
-    if modules is None:
-        return None
-
-    wanted = set(_TIER1) | set(modules)
-    parts = [
-        (_CONTEXT_DIR / rel).read_text(encoding="utf-8")
-        for module, rel in _manifest_blocks()
-        if module in wanted
-    ]
-    return "".join(parts) + "\n" + _format_menu(menu)
 
 
 # --- intent summarising + checking ----------------------------------------

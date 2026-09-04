@@ -1,0 +1,37 @@
+# Fusion module classification menu — GENERATED from the KG.
+# Source: kg_entity.module + kg_vocabulary(vocab_kind='entity_synonym').
+# Regenerate: python scripts/build_classifier_context.py
+# Do not hand-edit — changes are overwritten on regeneration.
+#
+# For each module, its entities and their colloquial synonyms. The router
+# classifies a prompt to the module(s) whose entities/synonyms it names.
+
+payables:
+  Invoice (aka: bill, invoice)
+
+procurement:
+  Buyer (aka: agent, buyer, purchasing agent)
+  PODistribution (aka: distribution, distributions)
+  POSchedule (aka: schedule, shipment schedule)
+  PurchaseOrder (aka: PO, order, purchase order)
+  PurchaseOrderLine
+
+receivables:
+  AccountCreditMemo (aka: account credit memo, account credit memos)
+  AccountReceipt (aka: account receipt, account receipts, receipt, receipts)
+  AccountReceiptApplication (aka: account receipt application, account receipt applications, receipt application, receipt applications)
+  CreditMemo (aka: credit memo, credit memos)
+  CustomerAccount
+  CustomerTransaction
+  ReceivablesInvoice (aka: AR invoice, AR invoices, receivables invoice, receivables invoices)
+  ReceivablesInvoiceLine
+  ReceivablesInvoiceTransactionDFF
+  ReceivablesTaxLine
+  StandardReceipt
+
+supplier:
+  Address
+  Classification
+  Contact (aka: contact, contacts)
+  Site (aka: site, sites)
+  Supplier (aka: supplier, vendor)

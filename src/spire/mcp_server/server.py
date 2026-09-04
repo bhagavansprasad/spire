@@ -42,6 +42,9 @@ from spire.mcp_server.tools.aggregate_purchase_orders import (
 )
 from spire.mcp_server.tools.buyer import get_buyer as _get_buyer
 from spire.mcp_server.tools.invoices import search_invoices as _search_invoices
+from spire.mcp_server.tools.rank_invoices_by_amount import (
+    rank_invoices_by_amount as _rank_invoices_by_amount,
+)
 from spire.mcp_server.tools.purchase_orders import (
     search_purchase_orders as _search_purchase_orders,
 )
@@ -415,6 +418,38 @@ async def aggregate_invoices_by_supplier(
             date_to=date_to,
             top_n=top_n,
             report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def rank_invoices_by_amount(
+    supplier_name: str | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Return the top N invoices by amount, highest first.
+
+    Use this for "top N invoices by amount" / "largest invoices" / "biggest
+    invoices for supplier X" — a ranking of individual invoices by
+    InvoiceAmount. Distinct from search_invoices (a filtered list, not ranked)
+    and from aggregate_invoices_by_supplier (which ranks SUPPLIERS by total
+    spend, not individual invoices). Ordering is server-side
+    (orderBy=InvoiceAmount:desc), so top_n is a true top-N across the whole
+    collection, not a page slice.
+
+    Args:
+        supplier_name: Optional substring of a supplier's name. When given, the
+            ranking is scoped to that supplier's invoices (resolved to its
+            SupplierNumber first). When omitted, it ranks across all invoices.
+        top_n: How many invoices to return (default 10).
+    """
+    async with FusionClient(_persona) as client:
+        # The tool already returns an aggregation-shaped dict (shape tag +
+        # rows), like aggregate_invoices_by_supplier — return it directly, no
+        # .to_dict() (that is the ToolResult fetcher pattern, not this one).
+        return await _rank_invoices_by_amount(
+            client,
+            supplier_name=supplier_name,
+            top_n=top_n,
         )
 
 

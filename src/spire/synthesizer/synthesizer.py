@@ -110,6 +110,8 @@ from spire.synthesizer.aggregation import (  # noqa: F401
     CountResponse,
     ExposureRankingResponse,
     ExposureRankingRow,
+    InvoiceAmountRankingResponse,
+    InvoiceAmountRow,
     OpenPOSummaryResponse,
     POStatusBreakdownResponse,
     POStatusRow,
@@ -254,6 +256,7 @@ AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     "open_po_summary": (OpenPOSummaryResponse, "OpenPOSummary"),
     "exposure_ranking": (ExposureRankingResponse, "ExposureRanking"),
     "receipt_method_distribution": (ReceiptMethodDistributionResponse, "ReceiptMethodDistribution"),
+    "invoice_amount_ranking": (InvoiceAmountRankingResponse, "InvoiceAmountRanking"),
 }
 
 

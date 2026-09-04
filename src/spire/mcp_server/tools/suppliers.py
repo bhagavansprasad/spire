@@ -215,6 +215,18 @@ async def search_suppliers(
     # 3. Otherwise: we have every matching record.
 
     if needs_client_filter and len(items) >= OVERFETCH_LIMIT:
+        # Over-fetch capped without examining every supplier. Distinguish:
+        # ZERO matches in the window means "no supplier matched this filter" —
+        # reporting truncated=True there is misleading (it implies more matches
+        # may exist beyond the window). Report a clean empty result instead,
+        # which is what the no-match tests assert. SOME matches: more may exist
+        # past the window, so truncation with an unknown count is honest.
+        if not final_items:
+            return ToolResult.build(
+                items=[],
+                limit_applied=limit,
+                total_available=0,
+            )
         return ToolResult(
             items=projected,
             total_available=None,
