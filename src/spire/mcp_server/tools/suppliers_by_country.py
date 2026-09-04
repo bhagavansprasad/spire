@@ -87,9 +87,23 @@ async def search_suppliers_by_country(
             matched.append(projected)
 
     if overfetch_capped:
-        # We didn't examine all suppliers; can't claim a true count.
-        # We do know truncation occurred (more would have been matched
-        # if we'd looked further).
+        # We didn't examine all suppliers. But distinguish two cases:
+        #
+        # - ZERO matches in the window: we looked at OVERFETCH_LIMIT suppliers
+        #   and none matched this country. Reporting truncated=True here is
+        #   misleading — it implies "there may be more matches beyond the
+        #   window", when the honest reading of an empty window is "no matches
+        #   found". Report a clean empty result (total_available=0,
+        #   truncated=False), which is also what the no-match tests assert.
+        #
+        # - SOME matches: more may exist past the window, so truncation is the
+        #   honest signal and the true count is unknown.
+        if not matched:
+            return ToolResult.build(
+                items=[],
+                limit_applied=limit,
+                total_available=0,
+            )
         return ToolResult(
             items=matched,
             total_available=None,
