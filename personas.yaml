@@ -12,13 +12,13 @@ default_dev:
     # username: "Toby.White"
     # password: "r@Bot5iG"
 
-    # base_url: "https://eqjz.ds-fa.oraclepdemos.com"
-    # username: "Axel.Grant"
-    # password: "zu5*spEw"
+    base_url: "https://eqjz.ds-fa.oraclepdemos.com"
+    username: "Leo.Hayes"
+    password: "tH?8Wucr"
 
-    base_url: "https://fa-esll-saasfademo1.ds-fa.oraclepdemos.com"
-    username: "Soren.Fox"
-    password: "4h_flwiD"
+    # base_url: "https://fa-esll-saasfademo1.ds-fa.oraclepdemos.com"
+    # username: "Soren.Fox"
+    # password: "4h_flwiD"
 
     auth_type: "basic"
 
