@@ -354,6 +354,12 @@ def generate_plan(
     )
     previous_entity = intent.target_entity
     previous_output_name = plan[-1].output_name
+    # The root entity and its output name, captured once. Block 2 and each
+    # include in Block 3 overwrite previous_entity / previous_output_name as
+    # they chain, so a sibling include (below) — which must iterate off the
+    # ROOT, not the include before it — needs these preserved separately.
+    root_entity = intent.target_entity
+    root_output_name = plan[-1].output_name
     step_id += 1
 
     # ── Block 2: edge-traversal filters ───────────────────────────
@@ -444,7 +450,31 @@ def generate_plan(
         # binding anyway, so this would otherwise raise.
         if intent.target_entity == "Supplier" and include_entity == "Address":
             continue
-        edge = find_edge(previous_entity, include_entity)
+        # An include is normally the CHILD of the include before it — a
+        # grandchild chain, e.g. ReceivablesInvoice -> ReceivablesInvoiceLine
+        # -> ReceivablesTaxLine — so the hop runs previous_entity ->
+        # include_entity and iterates on the previous step's output. But two
+        # includes can instead be SIBLINGS under the same root: CustomerAccount
+        # -> AccountReceiptApplication AND CustomerAccount -> AccountReceipt are
+        # both direct children of the account, with no edge between the
+        # siblings. Chaining blindly (the old behaviour) called
+        # find_edge('AccountReceiptApplication', 'AccountReceipt') and raised
+        # KeyError. Decide by which edge the KG actually declares: try the
+        # chain hop first (preserves the grandchild case unchanged); on KeyError
+        # fall back to the sibling hop off the root, iterating the root output.
+        try:
+            edge = find_edge(previous_entity, include_entity)
+            include_iter_output = previous_output_name
+        except KeyError:
+            try:
+                edge = find_edge(root_entity, include_entity)
+            except KeyError:
+                raise KeyError(
+                    f"No edge to include {include_entity!r}: it is neither a "
+                    f"child of {previous_entity!r} (chain) nor of "
+                    f"{root_entity!r} (sibling under the root)."
+                )
+            include_iter_output = root_output_name
         tool = find_edge_tool(edge["edge_name"])
         if tool is None:
             raise RuntimeError(
@@ -462,13 +492,13 @@ def generate_plan(
         if iter_fields:
             step_tool_args = {arg: "$iteration_value" for arg in iter_fields}
             step_iterate_over = {
-                "from_step": previous_output_name,
+                "from_step": include_iter_output,
                 "fields": iter_fields,
             }
         else:
             step_tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
             step_iterate_over = {
-                "from_step": previous_output_name,
+                "from_step": include_iter_output,
                 "field": edge["from_join_field"],
             }
         # AR-P2c: the CustomerTransaction include supports an open_only
@@ -511,4 +541,5 @@ def generate_plan(
         step_id += 1
 
     return plan
+
 

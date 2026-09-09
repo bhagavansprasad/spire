@@ -394,6 +394,45 @@ def add_child_include_from_prompt(
     """
     p = prompt.lower()
     tokens = set(_re.findall(r"[a-z]+", p))
+
+    # Subsumption guard. A bare single-word trigger ("receipt") is a whole
+    # word even when it is only there as the first word of a more specific
+    # sibling phrase: "receipt applications" tokenises to {receipt,
+    # applications}, so AccountReceipt's "receipt" trigger fires alongside
+    # AccountReceiptApplication's "receipt applications" and BOTH children
+    # get added. The receipt fetch is then redundant (the applications tool
+    # pre-joins the receipt fields) AND reorders the answer away from what
+    # was asked. So collect every multi-word trigger phrase actually present
+    # in the prompt; a single-word trigger is suppressed when EVERY
+    # occurrence of that word lies inside one of those phrases. If the word
+    # also stands alone somewhere ("receipts and receipt applications"), it
+    # still fires — the user did name the bare child.
+    present_phrases = [
+        w
+        for _child, (_parent, words) in _CHILD_INCLUDE_WHEN_PRESENT.items()
+        for w in words
+        if " " in w and w in p
+    ]
+
+    def _word_only_inside_phrases(word: str) -> bool:
+        # True when the whole-word matches of `word` are all accounted for by
+        # occurrences of the longer phrases in present_phrases. Compares
+        # counts of the word standalone vs. the word inside those phrases:
+        # if the phrases contain at least as many, none is standalone.
+        word_hits = len(_re.findall(rf"\b{_re.escape(word)}\b", p))
+        if word_hits == 0:
+            return False
+        in_phrase = 0
+        for phrase in present_phrases:
+            phrase_word_count = len(
+                _re.findall(rf"\b{_re.escape(word)}\b", phrase)
+            )
+            if phrase_word_count:
+                in_phrase += phrase_word_count * len(_re.findall(
+                    rf"\b{_re.escape(phrase)}\b", p
+                ))
+        return in_phrase >= word_hits
+
     result = list(include)
     for child, (parent, words) in _CHILD_INCLUDE_WHEN_PRESENT.items():
         if target_entity != parent:
@@ -407,8 +446,13 @@ def add_child_include_from_prompt(
                     hit = True
                     break
             elif w in tokens:     # single word -> whole-word match
+                # Suppress when this word only appears inside a more specific
+                # sibling phrase that is itself present (subsumption guard).
+                if _word_only_inside_phrases(w):
+                    continue
                 hit = True
                 break
         if hit:
             result.append(child)
     return result
+

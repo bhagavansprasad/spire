@@ -18,7 +18,7 @@ import pytest
 from spire.nl_parser.draft import DraftFilter, DraftIntent
 from spire.nl_parser.parser import parse
 from spire.nl_parser.result import RefusalFlavor
-from spire.nl_parser.vocabulary import KGMenu
+from spire.nl_parser.vocabulary import KGMenu, add_child_include_from_prompt
 from spire.planner.planner import Intent
 
 
@@ -650,3 +650,86 @@ def test_open_only_and_invoice_limit_survive_conversion(ar_menu):
     assert result.intent.open_only is True
     assert result.intent.invoice_limit == 5
     assert result.intent.balance_only is False
+
+
+
+# ─────────────────────────────────────────────────────────────────────
+# add_child_include_from_prompt: the receipt/receipt-application
+# subsumption guard.
+#
+# The function reads _CHILD_INCLUDE_WHEN_PRESENT and the raw prompt; it
+# does NOT use `menu` (kept in the signature for parity with
+# correct_include_from_prompt), so these call it directly with the
+# fixture menu and assert the include it produces. The bug: "receipt
+# applications" tokenises to {receipt, applications}, so AccountReceipt's
+# bare "receipt" trigger fired alongside AccountReceiptApplication's
+# "receipt applications" phrase and BOTH children were added — a
+# redundant receipt fetch that also reordered the answer. The guard
+# suppresses the bare trigger only when every occurrence of the word is
+# inside a longer sibling phrase that is itself present.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_add_child_include_pure_applications_excludes_receipt(menu):
+    """'receipt applications' alone must not also pull AccountReceipt.
+
+    Starting from an empty include (the child-led case the function
+    exists for), only the application child is added — not the receipt.
+    """
+    result = add_child_include_from_prompt(
+        "Show receipt applications for customer ABC Application Software",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert result == ["AccountReceiptApplication"]
+    assert "AccountReceipt" not in result
+
+
+def test_add_child_include_applications_does_not_append_receipt(menu):
+    """Even when the include already holds the application, the bare
+    'receipt' trigger must not append AccountReceipt on top."""
+    result = add_child_include_from_prompt(
+        "Show receipt applications for customer ABC Application Software",
+        "CustomerAccount",
+        ["AccountReceiptApplication"],
+        menu,
+    )
+    assert result == ["AccountReceiptApplication"]
+
+
+def test_add_child_include_bare_receipts_still_adds_receipt(menu):
+    """The guard must not swallow a genuine bare-receipts request."""
+    result = add_child_include_from_prompt(
+        "Show receipts for ABC Application Software",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert result == ["AccountReceipt"]
+
+
+def test_add_child_include_both_named_adds_both(menu):
+    """When the prompt names receipts standalone AND receipt applications,
+    both children are added — 'receipts' stands alone, so it still fires."""
+    result = add_child_include_from_prompt(
+        "Show receipts and receipt applications for ABC",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert set(result) == {"AccountReceipt", "AccountReceiptApplication"}
+
+
+def test_add_child_include_guard_leaves_other_children_untouched(menu):
+    """The guard is specific to the receipt/application overlap: credit
+    memos and transactions have no such prefix collision and are added
+    exactly as before."""
+    memos = add_child_include_from_prompt(
+        "Show credit memos for ABC", "CustomerAccount", [], menu
+    )
+    assert memos == ["AccountCreditMemo"]
+    txns = add_child_include_from_prompt(
+        "Show transactions for ABC", "CustomerAccount", [], menu
+    )
+    assert txns == ["CustomerTransaction"]
