@@ -434,7 +434,6 @@ async def _run_async(files, single_prompt, show_stages) -> int:
     from display_formatters import MCP_SERVER_URL
 
     menu = load_kg_menu()
-    reset_usage()
 
     if single_prompt is not None:
         work = [("", "", single_prompt, None)]
@@ -453,6 +452,15 @@ async def _run_async(files, single_prompt, show_stages) -> int:
     async with Client(MCP_SERVER_URL) as client:
         current_file = object()
         for exp_module, exp_tool, prompt, fname in work:
+            # Reset the token accumulator per prompt so each prompt's
+            # usage_report() (printed inside _emit_run_graph_output)
+            # reflects only that prompt. Previously reset_usage() ran once
+            # before the loop, so _USAGE_LOG accumulated across every
+            # prompt and each block printed the running total — the last
+            # prompt appeared to cost the whole run. The single-prompt path
+            # runs this loop once, so it still gets exactly one reset before
+            # its one prompt.
+            reset_usage()
             if fname != current_file:
                 current_file = fname
                 if fname:
