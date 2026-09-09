@@ -807,10 +807,31 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 ),
             ):
                 if items:
+                    # Honest scope in the child table's header: when the
+                    # tool reported more of this child than the rows shown
+                    # (child_totals, populated by build_customer_account_
+                    # records from the executor's truncation metadata), say
+                    # "showing N of M" so the reader never mistakes the
+                    # page for the whole set — e.g. an account with 7,038
+                    # receipts must not present ten as all of them. The
+                    # count rides in the title line, before any row, and is
+                    # omitted when no larger total is known (None or <=
+                    # rows shown), so nothing unverifiable is claimed.
+                    shown = len(items)
+                    child_total = (
+                        getattr(acct, "child_totals", {}) or {}
+                    ).get(title)
+                    if child_total is not None and child_total > shown:
+                        header = (
+                            f"{acct.customer_name} — {title} "
+                            f"(showing {shown} of {child_total:,})"
+                        )
+                    else:
+                        header = f"{acct.customer_name} — {title}"
                     lines.extend(
                         _indent(
                             _render_records(
-                                f"{acct.customer_name} — {title}",
+                                header,
                                 [mapper(i) for i in items],
                                 cols_,
                                 "",

@@ -1,0 +1,67 @@
+[
+  {
+    "prompt": "Show only supplier name and status for active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Just the names of active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Supplier number and country for active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Supplier name, number, status and country for active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Invoice number, amount, and date for supplier 1252",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "Just the names of woman owned suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Order number and status for purchase orders created before 2015",
+    "module": [
+      "procurement"
+    ],
+    "tool": "search_purchase_orders",
+    "note": ""
+  },
+  {
+    "prompt": "Show supplier name and credit rating for active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  }
+]

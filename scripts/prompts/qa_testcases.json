@@ -1,0 +1,276 @@
+[
+  {
+    "prompt": "List all open invoices for the customer, top 5",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "Show invoice lines for invoice 300000248096352",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unknown_entity (parser)"
+  },
+  {
+    "prompt": "Get tax lines for that invoice line",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "Fetch descriptive flexfield (DFF) values for this invoice.",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "List recent credit memos, top 5",
+    "module": [
+      "receivables"
+    ],
+    "tool": "list_receivables_credit_memos",
+    "note": ""
+  },
+  {
+    "prompt": "Show account activity summary for top accounts",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Get all credit memos for account 300000047368512",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  },
+  {
+    "prompt": "Get the AR invoice with CustomerTransactionId 300000248096352",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_receivables_invoice_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Get list of Active Suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Suppliers with their addresses",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "List all open purchase orders for supplier 'EIP Inc",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (planner)"
+  },
+  {
+    "prompt": "For that PO, how much has actually been received versus ordered",
+    "module": [
+      "procurement"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "invoices for Lee Supplies",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "Show invoices",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "invoices for US1 Business Unit",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  },
+  {
+    "prompt": "show details for invoice number LEE-01-1006-111",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (planner)"
+  },
+  {
+    "prompt": "show lines for invoice number LEE-01-1006-111",
+    "module": [
+      "payables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unknown_entity (parser)"
+  },
+  {
+    "prompt": "list purchase orders",
+    "module": [
+      "procurement"
+    ],
+    "tool": "search_purchase_orders",
+    "note": ""
+  },
+  {
+    "prompt": "Show PO 2144 and its distributions",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "get account receivables transactions",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "get transaction number",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unparseable (parser)"
+  },
+  {
+    "prompt": "List suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Get Supplier contacts",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Get supplier sites for suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unknown_entity (parser)"
+  },
+  {
+    "prompt": "Get standardReceipts",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (planner)"
+  },
+  {
+    "prompt": "Trace receipt applications for this account",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "Verify a newly created AR invoice",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "Get the most recent standard receipts",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:missing_identifier (parser)"
+  },
+  {
+    "prompt": "Identify cash collection trends over the period - volume, average receipt size, and month-over-month movement",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Summarise receipt volume and value by month",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Get tax lines for invoice 300000248096352",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_receivables_invoice_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Trace receipt applications for account 25750",
+    "module": [
+      "receivables"
+    ],
+    "tool": "error",
+    "note": "<generate_plan error: KeyError: \"No edge from 'AccountReceiptApplication' to 'AccountReceipt'\">"
+  },
+  {
+    "prompt": "Get the most recent standard receipts for account 25750",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  },
+  {
+    "prompt": "Summarise receipt volume and value by month for account 25750",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  }
+]

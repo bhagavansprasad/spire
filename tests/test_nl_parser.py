@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import pytest
 
-from spire.nl_parser.draft import DraftFilter, DraftIntent
+from spire.nl_parser.draft import DraftAggregate, DraftFilter, DraftIntent
 from spire.nl_parser.parser import parse
 from spire.nl_parser.result import RefusalFlavor
-from spire.nl_parser.vocabulary import KGMenu
+from spire.nl_parser.vocabulary import KGMenu, add_child_include_from_prompt
 from spire.planner.planner import Intent
 
 
@@ -650,3 +650,138 @@ def test_open_only_and_invoice_limit_survive_conversion(ar_menu):
     assert result.intent.open_only is True
     assert result.intent.invoice_limit == 5
     assert result.intent.balance_only is False
+
+
+
+# ─────────────────────────────────────────────────────────────────────
+# add_child_include_from_prompt: the receipt/receipt-application
+# subsumption guard.
+#
+# The function reads _CHILD_INCLUDE_WHEN_PRESENT and the raw prompt; it
+# does NOT use `menu` (kept in the signature for parity with
+# correct_include_from_prompt), so these call it directly with the
+# fixture menu and assert the include it produces. The bug: "receipt
+# applications" tokenises to {receipt, applications}, so AccountReceipt's
+# bare "receipt" trigger fired alongside AccountReceiptApplication's
+# "receipt applications" phrase and BOTH children were added — a
+# redundant receipt fetch that also reordered the answer. The guard
+# suppresses the bare trigger only when every occurrence of the word is
+# inside a longer sibling phrase that is itself present.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_add_child_include_pure_applications_excludes_receipt(menu):
+    """'receipt applications' alone must not also pull AccountReceipt.
+
+    Starting from an empty include (the child-led case the function
+    exists for), only the application child is added — not the receipt.
+    """
+    result = add_child_include_from_prompt(
+        "Show receipt applications for customer ABC Application Software",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert result == ["AccountReceiptApplication"]
+    assert "AccountReceipt" not in result
+
+
+def test_add_child_include_applications_does_not_append_receipt(menu):
+    """Even when the include already holds the application, the bare
+    'receipt' trigger must not append AccountReceipt on top."""
+    result = add_child_include_from_prompt(
+        "Show receipt applications for customer ABC Application Software",
+        "CustomerAccount",
+        ["AccountReceiptApplication"],
+        menu,
+    )
+    assert result == ["AccountReceiptApplication"]
+
+
+def test_add_child_include_bare_receipts_still_adds_receipt(menu):
+    """The guard must not swallow a genuine bare-receipts request."""
+    result = add_child_include_from_prompt(
+        "Show receipts for ABC Application Software",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert result == ["AccountReceipt"]
+
+
+def test_add_child_include_both_named_adds_both(menu):
+    """When the prompt names receipts standalone AND receipt applications,
+    both children are added — 'receipts' stands alone, so it still fires."""
+    result = add_child_include_from_prompt(
+        "Show receipts and receipt applications for ABC",
+        "CustomerAccount",
+        [],
+        menu,
+    )
+    assert set(result) == {"AccountReceipt", "AccountReceiptApplication"}
+
+
+def test_add_child_include_guard_leaves_other_children_untouched(menu):
+    """The guard is specific to the receipt/application overlap: credit
+    memos and transactions have no such prefix collision and are added
+    exactly as before."""
+    memos = add_child_include_from_prompt(
+        "Show credit memos for ABC", "CustomerAccount", [], menu
+    )
+    assert memos == ["AccountCreditMemo"]
+    txns = add_child_include_from_prompt(
+        "Show transactions for ABC", "CustomerAccount", [], menu
+    )
+    assert txns == ["CustomerTransaction"]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# The two receivables aggregation ops — exposure_ranking and
+# receipt_method_distribution — were fully wired downstream (tool,
+# planner registries, synthesizer, display) but the parser refused them
+# as unsupported_operation: the router's scoped context drops the mode
+# sysprompt, so the only op teaching the scoped LLM sees is the
+# DraftAggregate.op FIELD DESCRIPTION, which listed only by_supplier and
+# top_invoices_by_amount. These pin that both ops now survive the
+# DraftAggregate -> Intent conversion (the schema accepts them; nothing
+# downstream of the LLM rejects the op string). Choosing the op from
+# natural language is the LLM's job and is verified by the live
+# end-to-end run, not here — these mock-LLM tests hold the draft constant
+# and check the plumbing, matching the rest of this module.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_exposure_ranking_aggregate_converts(menu):
+    """A DraftAggregate op='exposure_ranking' reaches the Intent verbatim."""
+    draft = DraftIntent(
+        target_entity="",
+        aggregate=DraftAggregate(op="exposure_ranking", top_n=10),
+    )
+    result = parse("rank top accounts by exposure", llm=MockLLM(draft), menu=menu)
+    assert not result.is_refusal
+    assert result.intent.aggregate == {
+        "op": "exposure_ranking",
+        "date_from": None,
+        "date_to": None,
+        "top_n": 10,
+    }
+
+
+def test_receipt_method_distribution_aggregate_converts(menu):
+    """A DraftAggregate op='receipt_method_distribution' reaches the Intent
+    verbatim; the customer scope, when present, rides as a filter (not in
+    the aggregate block)."""
+    draft = DraftIntent(
+        target_entity="CustomerAccount",
+        filters=[DraftFilter(type="by_customer_name",
+                             value_json='"ABC Application Software"')],
+        aggregate=DraftAggregate(op="receipt_method_distribution", top_n=10),
+    )
+    result = parse(
+        "receipt method distribution for ABC Application Software",
+        llm=MockLLM(draft), menu=menu,
+    )
+    assert not result.is_refusal
+    assert result.intent.aggregate["op"] == "receipt_method_distribution"
+    assert {"type": "by_customer_name",
+            "value": "ABC Application Software"} in result.intent.filters

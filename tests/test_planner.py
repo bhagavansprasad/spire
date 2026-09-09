@@ -1494,3 +1494,165 @@ def test_generate_plan_account_child_iterates_on_account_id() -> None:
     child = produced[1]
     assert child.iterate_over is not None
     assert "AccountId" in str(child.iterate_over)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Multi-include plans: SIBLINGS vs a grandchild CHAIN.
+#
+# Block 3 walks intent.include and, for each entry, decides the hop by
+# which edge the KG declares: the CHILD-of-the-previous-include hop
+# (a grandchild chain) if that edge exists, else the SIBLING hop off the
+# root. Before the sibling fallback, a second child of the same root
+# crashed: the loop called find_edge on the two siblings (e.g.
+# 'AccountReceiptApplication' -> 'AccountReceipt') and raised KeyError,
+# because siblings share no edge — both hang off CustomerAccount. These
+# two tests pin BOTH shapes so neither regresses: the sibling pair must
+# each iterate the ROOT account, and the grandchild chain must still
+# iterate step-by-step (tax line off the line, not off the invoice).
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_generate_plan_sibling_includes_both_iterate_the_root() -> None:
+    """Two children of one account are siblings, not a chain.
+
+    'Receipt applications for customer X' parses to CustomerAccount with
+    include=['AccountReceiptApplication', 'AccountReceipt'] — the
+    application tool pre-joins the receipt fields, so the parser names
+    both. They are siblings under the account (HAS_RECEIPT_APPLICATION and
+    HAS_ACCOUNT_RECEIPT, both joined on AccountId); there is no edge
+    between them. The old loop hopped the second include off the first and
+    raised KeyError('No edge from AccountReceiptApplication to
+    AccountReceipt'). The fix hops each off the root, so BOTH child steps
+    must iterate the resolve step's output, not each other's.
+    """
+    intent = Intent(
+        target_entity="CustomerAccount",
+        filters=[
+            {"type": "by_customer_name", "value": "ABC Application Software"},
+        ],
+        include=["AccountReceiptApplication", "AccountReceipt"],
+    )
+    produced = generate_plan(intent)
+
+    # Three steps: resolve the account, then each sibling child.
+    assert len(produced) == 3
+    assert produced[0].tool_name == "get_customer_account_by_name"
+    resolve_output = produced[0].output_name
+
+    app_step, receipt_step = produced[1], produced[2]
+    assert app_step.tool_name == "get_account_receipt_applications"
+    assert receipt_step.tool_name == "get_account_receipts"
+
+    # The regression guard: the SECOND sibling must iterate the account
+    # (root) output, NOT the first sibling's output. If it iterated the
+    # application step, we would be back to the crashing chain shape.
+    assert receipt_step.iterate_over is not None
+    assert receipt_step.iterate_over["from_step"] == resolve_output
+    assert app_step.iterate_over["from_step"] == resolve_output
+
+    # Both hop on the account's AccountId, and land in distinct buckets.
+    assert "AccountId" in str(app_step.iterate_over)
+    assert "AccountId" in str(receipt_step.iterate_over)
+    assert app_step.output_name == "account_receipt_applications"
+    assert receipt_step.output_name == "account_receipts"
+    assert app_step.output_name != receipt_step.output_name
+
+
+def test_generate_plan_grandchild_chain_still_iterates_stepwise() -> None:
+    """The invoice -> line -> tax-line chain is unchanged by the fix.
+
+    Here the includes ARE a chain: ReceivablesInvoiceLine is a child of
+    the invoice, and ReceivablesTaxLine is a child of the LINE, not of the
+    invoice (HAS_TAX_LINE runs ReceivablesInvoiceLine -> ReceivablesTaxLine).
+    The chain-first branch must keep this behaviour: the line step iterates
+    the invoice's output, and the tax-line step iterates the LINE's output.
+    A sibling-first strategy would wrongly re-root the tax line on the
+    invoice, so this locks the chain.
+    """
+    intent = Intent(
+        target_entity="ReceivablesInvoice",
+        filters=[{"type": "by_id", "value": "300000248096352"}],
+        include=["ReceivablesInvoiceLine", "ReceivablesTaxLine"],
+    )
+    produced = generate_plan(intent)
+
+    # Three steps: fetch invoice, its lines, then the lines' tax lines.
+    assert len(produced) == 3
+    line_step, tax_step = produced[1], produced[2]
+    assert line_step.tool_name == "get_receivables_invoice_lines"
+    assert tax_step.tool_name == "get_receivables_invoice_tax_lines"
+
+    invoice_output = produced[0].output_name
+    line_output = line_step.output_name
+
+    # The line hops off the invoice; the tax line hops off the LINE.
+    assert line_step.iterate_over["from_step"] == invoice_output
+    assert tax_step.iterate_over["from_step"] == line_output
+    assert line_output != invoice_output
+
+    # The parent step of a further include is flagged to stamp its parent
+    # key onto child rows (AR-P3): the line step has a follower (tax line),
+    # so it carries stamp_parent_key; the leaf tax step does not.
+    assert line_step.stamp_parent_key is True
+    assert tax_step.stamp_parent_key is False
+
+
+# ─────────────────────────────────────────────────────────────────────
+# exposure_ranking planner wiring. The parser now emits this op (its
+# field description was extended); the planner side was already wired via
+# _AGGREGATION_TOOLS / _AGGREGATION_PARAMS. This pins that an
+# exposure_ranking aggregate builds the bounded ranking tool step with
+# top_n, so a future registry edit can't silently unwire it.
+# (receipt_method_distribution's scoped plan is NOT asserted here: its
+# customer filter does not currently reach the tool — a separate,
+# logged planner/param bug — so its end-to-end plan is knowingly wrong
+# pending that fix.)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_generate_plan_exposure_ranking_builds_the_ranking_tool() -> None:
+    """An exposure_ranking aggregate maps to rank_customer_accounts_by_exposure
+    with top_n, in a single non-iterating step."""
+    plan = generate_plan(
+        Intent(target_entity="", aggregate={"op": "exposure_ranking", "top_n": 10})
+    )
+    assert len(plan) == 1
+    step = plan[0]
+    assert step.tool_name == "rank_customer_accounts_by_exposure"
+    assert step.tool_args.get("top_n") == 10
+    assert step.iterate_over is None
+
+
+def test_generate_plan_receipt_method_distribution_carries_customer_scope() -> None:
+    """receipt_method_distribution is a SCOPED aggregation: the customer
+    scope arrives as a by_customer_name filter, and the plan must pass it
+    to the tool as customer_name (finding #7). Before the fix the filter
+    type 'by_customer_name' never matched the accepted param 'customer_name'
+    and the scope was dropped, so the tool ran pod-wide."""
+    plan = generate_plan(
+        Intent(
+            target_entity="CustomerAccount",
+            filters=[{"type": "by_customer_name",
+                      "value": "ABC Application Software"}],
+            aggregate={"op": "receipt_method_distribution", "top_n": 10},
+        )
+    )
+    assert len(plan) == 1
+    step = plan[0]
+    assert step.tool_name == "aggregate_standard_receipts_by_method"
+    # The scope reached the tool as customer_name, not dropped.
+    assert step.tool_args.get("customer_name") == "ABC Application Software"
+
+
+def test_generate_plan_receipt_method_distribution_unscoped_is_pod_wide() -> None:
+    """With no scope filter, the tool is called with no customer_name — the
+    intentional pod-wide path. The #7 fix must not invent a scope."""
+    plan = generate_plan(
+        Intent(
+            target_entity="",
+            aggregate={"op": "receipt_method_distribution", "top_n": 10},
+        )
+    )
+    assert len(plan) == 1
+    assert plan[0].tool_name == "aggregate_standard_receipts_by_method"
+    assert "customer_name" not in plan[0].tool_args
