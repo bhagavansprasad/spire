@@ -1595,3 +1595,29 @@ def test_generate_plan_grandchild_chain_still_iterates_stepwise() -> None:
     # so it carries stamp_parent_key; the leaf tax step does not.
     assert line_step.stamp_parent_key is True
     assert tax_step.stamp_parent_key is False
+
+
+# ─────────────────────────────────────────────────────────────────────
+# exposure_ranking planner wiring. The parser now emits this op (its
+# field description was extended); the planner side was already wired via
+# _AGGREGATION_TOOLS / _AGGREGATION_PARAMS. This pins that an
+# exposure_ranking aggregate builds the bounded ranking tool step with
+# top_n, so a future registry edit can't silently unwire it.
+# (receipt_method_distribution's scoped plan is NOT asserted here: its
+# customer filter does not currently reach the tool — a separate,
+# logged planner/param bug — so its end-to-end plan is knowingly wrong
+# pending that fix.)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_generate_plan_exposure_ranking_builds_the_ranking_tool() -> None:
+    """An exposure_ranking aggregate maps to rank_customer_accounts_by_exposure
+    with top_n, in a single non-iterating step."""
+    plan = generate_plan(
+        Intent(target_entity="", aggregate={"op": "exposure_ranking", "top_n": 10})
+    )
+    assert len(plan) == 1
+    step = plan[0]
+    assert step.tool_name == "rank_customer_accounts_by_exposure"
+    assert step.tool_args.get("top_n") == 10
+    assert step.iterate_over is None

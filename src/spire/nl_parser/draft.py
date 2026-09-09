@@ -77,7 +77,17 @@ class DraftAggregate(BaseModel):
             "SUPPLIERS by their total invoice spend over a date range), "
             "'top_invoices_by_amount' (rank individual INVOICES by their own "
             "InvoiceAmount, highest first — 'top 10 invoices by amount', "
-            "'largest invoices', 'biggest invoices for supplier X')."
+            "'largest invoices', 'biggest invoices for supplier X'), "
+            "'exposure_ranking' (rank customer ACCOUNTS by outstanding "
+            "exposure — their open receivables — highest first — 'rank top "
+            "accounts by outstanding exposure', 'top accounts by exposure', "
+            "'which accounts have the most outstanding receivables'; uses "
+            "top_n, no date range), "
+            "'receipt_method_distribution' (group a customer's standard "
+            "RECEIPTS by ReceiptMethod with a count and total per method — "
+            "'receipt method distribution', 'receipts by method', 'receipt "
+            "method breakdown for customer X'; the customer scope rides as a "
+            "'by_customer_name' filter, NOT in this block)."
         )
     )
     date_from: str = Field(
@@ -92,7 +102,8 @@ class DraftAggregate(BaseModel):
         default=10,
         description=(
             "How many groups or records to return (e.g. 10 for 'top 10') — "
-            "suppliers for 'by_supplier', invoices for 'top_invoices_by_amount'."
+            "suppliers for 'by_supplier', invoices for 'top_invoices_by_amount', "
+            "accounts for 'exposure_ranking'."
         ),
     )
 
