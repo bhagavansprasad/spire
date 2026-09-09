@@ -92,8 +92,8 @@
     "module": [
       "receivables"
     ],
-    "tool": "error",
-    "note": "<generate_plan error: KeyError: \"No edge from 'AccountReceiptApplication' to 'AccountReceipt'\">"
+    "tool": "get_customer_account_by_name",
+    "note": ""
   },
   {
     "prompt": "Show receipts for ABC Application Software at Santa Clara",
