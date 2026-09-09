@@ -127,3 +127,25 @@ async def test_get_customer_transactions_open_only_is_balance_descending():
     # change, not on a code regression. The non-empty + descending assertions
     # above fully cover the behaviour this test guards (that the sort surfaces
     # open rows in balance-descending order).
+
+@pytest.mark.asyncio
+async def test_get_customer_transactions_default_is_date_descending():
+    # 5d: the UNFILTERED path (no open_only) previously sent no orderBy, so
+    # the pod returned oldest-first — "AR invoices for X" led with 2012
+    # backfilled, fully-paid rows. The fix sends orderBy=TransactionDate:desc
+    # for the non-open case. This asserts the sort is applied: the rows come
+    # back newest-first. ISO date strings sort lexically == chronologically,
+    # so a reverse-sorted check is drift-proof (holds regardless of the live
+    # dates). Would fail (oldest-first / unordered) if the orderBy were
+    # removed. open_only keeps its own balance-desc sort, covered above.
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await get_customer_transactions(
+            client, account_id=KNOWN_ACCOUNT_ID, limit=25
+        )
+    dates = [item["TransactionDate"] for item in result.items]
+    # Non-empty: this account has invoices.
+    assert dates, "expected invoices; the fetch returned nothing"
+    # Newest-first: proves orderBy=TransactionDate:desc is applied. Before
+    # the fix these were ascending (2012 first).
+    assert dates == sorted(dates, reverse=True)

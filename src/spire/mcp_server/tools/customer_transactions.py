@@ -93,10 +93,21 @@ async def get_customer_transactions(
     # rows surface in the first fetch_limit rows — the account may carry
     # thousands of rows (7,404 on the anchor), and the open ones sit past
     # the default-order page. Sorting also makes the post-filter `[:limit]`
-    # a true "top N by balance". Scoped to open_only to leave the
-    # all-invoices path (prompt 15) ordering untouched.
+    # a true "top N by balance". The all-invoices path takes its own
+    # order in the else-branch below (newest-first); open_only keeps the
+    # balance-desc sort that surfaces its open rows.
     if open_only:
         params["orderBy"] = "TotalBalanceAmount:desc"
+    else:
+        # All-invoices path (prompt 15): without an explicit order the pod
+        # returns oldest-first, so "AR invoices for customer X" led with
+        # 2012 backfilled, fully-paid rows — the least useful page, and
+        # nothing signalled it was the oldest slice. TransactionDate:desc
+        # works server-side (endpoints reference, newest-first), so lead
+        # with recent invoices instead. open_only keeps its balance-desc
+        # sort (it surfaces the open rows); this only orders the
+        # unfiltered case.
+        params["orderBy"] = "TransactionDate:desc"
     response = await client.get(path, params=params)
     items = response.get("items", [])
 
@@ -119,3 +130,4 @@ async def get_customer_transactions(
         limit_applied=limit,
         total_available=total_filtered,
     )
+
