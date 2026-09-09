@@ -139,6 +139,23 @@ _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 
+# Scope-filter type -> the tool kwarg it feeds, for scoped aggregations.
+# The scope of a scoped aggregation (currently only
+# receipt_method_distribution) arrives as an intent filter named
+# by_<param> (by_customer_name), but the tool's parameter is <param>
+# (customer_name). _build_aggregation_plan whitelists filters against the
+# op's accepted params, so without this bridge the by_-prefixed type never
+# matches and the scope is silently dropped — the tool then runs pod-wide
+# while the answer still names the customer (finding #7). Only
+# by_customer_name is mapped: it is the sole scope filter confirmed emitted
+# for a scoped aggregation. by_account_number would map to account_number
+# the same way, but the parser has not been observed to emit it, so it is
+# not added speculatively.
+_SCOPE_FILTER_TO_PARAM: dict[str, str] = {
+    "by_customer_name": "customer_name",
+}
+
+
 # P6c: map comparison op -> tool. Same one-op-per-tool discipline as the
 # aggregation registry: a different comparison shape is a different op and
 # a different tool, never a flag. Comparison is its own block (not an

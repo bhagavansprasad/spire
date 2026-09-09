@@ -1621,3 +1621,38 @@ def test_generate_plan_exposure_ranking_builds_the_ranking_tool() -> None:
     assert step.tool_name == "rank_customer_accounts_by_exposure"
     assert step.tool_args.get("top_n") == 10
     assert step.iterate_over is None
+
+
+def test_generate_plan_receipt_method_distribution_carries_customer_scope() -> None:
+    """receipt_method_distribution is a SCOPED aggregation: the customer
+    scope arrives as a by_customer_name filter, and the plan must pass it
+    to the tool as customer_name (finding #7). Before the fix the filter
+    type 'by_customer_name' never matched the accepted param 'customer_name'
+    and the scope was dropped, so the tool ran pod-wide."""
+    plan = generate_plan(
+        Intent(
+            target_entity="CustomerAccount",
+            filters=[{"type": "by_customer_name",
+                      "value": "ABC Application Software"}],
+            aggregate={"op": "receipt_method_distribution", "top_n": 10},
+        )
+    )
+    assert len(plan) == 1
+    step = plan[0]
+    assert step.tool_name == "aggregate_standard_receipts_by_method"
+    # The scope reached the tool as customer_name, not dropped.
+    assert step.tool_args.get("customer_name") == "ABC Application Software"
+
+
+def test_generate_plan_receipt_method_distribution_unscoped_is_pod_wide() -> None:
+    """With no scope filter, the tool is called with no customer_name — the
+    intentional pod-wide path. The #7 fix must not invent a scope."""
+    plan = generate_plan(
+        Intent(
+            target_entity="",
+            aggregate={"op": "receipt_method_distribution", "top_n": 10},
+        )
+    )
+    assert len(plan) == 1
+    assert plan[0].tool_name == "aggregate_standard_receipts_by_method"
+    assert "customer_name" not in plan[0].tool_args

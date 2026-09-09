@@ -30,6 +30,7 @@ from spire.planner.models import Plan, Step
 from spire.planner.registries import (
     _AGGREGATION_PARAMS,
     _AGGREGATION_TOOLS,
+    _SCOPE_FILTER_TO_PARAM,
     _COMPARISON_PARAMS,
     _COMPARISON_TOOLS,
     _FILTER_SOURCE_NAME_SUFFIX,
@@ -87,17 +88,22 @@ def _build_aggregation_plan(
         if aggregate.get(key) is not None:
             tool_args[key] = aggregate[key]
 
-    # Second pass: merge scoping filters the op's tool accepts. Filter
-    # types are named to match the tool's parameter (customer_name,
-    # account_number), so the accepted tuple is the whitelist for both
-    # sources. The aggregate block wins on conflict — it is the more
-    # specific statement of intent.
+    # Second pass: merge scoping filters the op's tool accepts. The scope
+    # arrives as an intent filter named by_<param> (by_customer_name),
+    # while the tool's kwarg is <param> (customer_name), so translate the
+    # filter type through _SCOPE_FILTER_TO_PARAM before whitelisting it
+    # against `accepted`; a type with no mapping passes through unchanged
+    # (identity). Without the translation the by_-prefixed type never
+    # matched and the scope was silently dropped — the tool ran pod-wide
+    # while the answer still named the customer (finding #7). The aggregate
+    # block wins on conflict — it is the more specific statement of intent.
     for f in filters or []:
         ftype = f.get("type")
-        if ftype in accepted and ftype not in tool_args:
+        param = _SCOPE_FILTER_TO_PARAM.get(ftype, ftype)
+        if param in accepted and param not in tool_args:
             value = f.get("value")
             if value is not None:
-                tool_args[ftype] = value
+                tool_args[param] = value
 
     return [
         Step(
