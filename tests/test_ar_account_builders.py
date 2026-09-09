@@ -238,3 +238,47 @@ def test_the_account_shape_is_recognised(account_row):
     parent, children = shape
     assert parent == "customer_accounts"
     assert set(children) == {"account_receipts"}
+
+
+
+# ─────────────────────────────────────────────────────────────────────
+# child_totals: per-child authoritative totals for the "showing N of M"
+# line under each child table. The tool computes total_available per
+# child; the synthesizer maps it to the child's display label and passes
+# it here; the builder stashes it on the record. These pin that the map
+# arrives intact and that the default stays empty for callers that pass
+# nothing (the pre-existing signature).
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_child_totals_default_empty_when_omitted(account_row):
+    """The parameter is optional; older callers pass none and the record
+    carries an empty map, claiming no total for any child."""
+    (record,) = build_customer_account_records([account_row], {})
+    assert record.child_totals == {}
+
+
+def test_child_totals_thread_through_to_the_record(account_row):
+    """A totals map keyed by display label reaches the record verbatim,
+    so the renderer can state 'showing N of M' per child."""
+    receipts = [
+        {
+            "StandardReceiptId": 300000313660599,
+            "ReceiptNumber": "PA-2026-000145",
+            "ReceiptDate": "2026-06-30",
+            "Amount": 1347.42,
+            "Currency": "USD",
+            "ReceiptMethod": "Lockbox",
+            "State": "Cleared",
+            "UnappliedAmount": 0,
+        }
+    ]
+    (record,) = build_customer_account_records(
+        [account_row],
+        {"account_receipts": receipts},
+        {"receipts": 2319},
+    )
+    assert record.child_totals == {"receipts": 2319}
+    # The rows themselves are unaffected by the totals map.
+    assert len(record.receipts) == 1
+    assert record.receipts[0].receipt_number == "PA-2026-000145"

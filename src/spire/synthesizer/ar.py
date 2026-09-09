@@ -411,6 +411,17 @@ class CustomerAccountRecord(BaseModel):
         "them (an 'account_receipt_applications' bucket in the data). Empty "
         "otherwise. Each application_id must appear in the executor's output.",
     )
+    child_totals: dict[str, int | None] = Field(
+        default_factory=dict,
+        description="Per-child authoritative totals for truncated child "
+        "lists, keyed by the child's display label ('transactions', "
+        "'credit memos', 'receipts', 'applications'). A value is the tool's "
+        "total_available for that child when it exceeds the rows carried "
+        "here, so the renderer can state 'Showing N of M'. Absent or None "
+        "means no honest total is known and nothing is claimed. Populated "
+        "deterministically by the builder from the executor's truncation "
+        "metadata — NOT by the LLM; leave it exactly as given.",
+    )
 
 
 class CustomerAccountResponse(BaseModel):
@@ -733,6 +744,7 @@ def build_receivables_invoice_records(
 def build_customer_account_records(
     parent_rows: list[dict],
     children: dict[str, list[dict]],
+    child_totals: dict[str, int | None] | None = None,
 ) -> list["CustomerAccountRecord"]:
     """Executor customer-account rows -> CustomerAccountRecord, verbatim.
 
@@ -834,6 +846,7 @@ def build_customer_account_records(
                 credit_memos=credit_memos,
                 receipts=receipts,
                 applications=applications,
+                child_totals=dict(child_totals or {}),
             )
         )
     return records

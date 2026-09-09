@@ -1001,6 +1001,35 @@ def synthesize_response(
                 total_available, notes = _local_truncation(
                     parent, rows, truncation_by_step, metadata_by_step
                 )
+                # Per-child authoritative totals for the inline "Showing N
+                # of M" line under each child table. The tool computed each
+                # child's total_available; it sits in truncation_by_step /
+                # metadata_by_step keyed by the child BUCKET name, but the
+                # renderer keys child tables by their display LABEL. Map
+                # bucket -> label here, in one place, so the builder and
+                # formatter never have to translate. Only the total is
+                # taken; the child's truncation NOTE is deliberately not
+                # added to truncation_notes — the inline line is the single
+                # statement, and duplicating it in the footer would report
+                # the same split twice. A child whose total is None (source
+                # gave no count) is omitted, so nothing is claimed.
+                _CHILD_BUCKET_LABELS = {
+                    "customer_transactions": "transactions",
+                    "account_credit_memos": "credit memos",
+                    "account_receipts": "receipts",
+                    "account_receipt_applications": "applications",
+                }
+                child_totals: dict[str, int | None] = {}
+                for bucket, label in _CHILD_BUCKET_LABELS.items():
+                    child_rows = children.get(bucket)
+                    if not child_rows:
+                        continue
+                    child_total, _child_notes = _local_truncation(
+                        bucket, child_rows, truncation_by_step,
+                        metadata_by_step,
+                    )
+                    if child_total is not None:
+                        child_totals[label] = child_total
                 return CustomerAccountResponse(
                     summary="\n".join(
                         local_list_summary(
@@ -1024,7 +1053,7 @@ def synthesize_response(
                         )
                     ),
                     customer_accounts=build_customer_account_records(
-                        rows, children
+                        rows, children, child_totals
                     ),
                     truncation_notes=notes,
                 )

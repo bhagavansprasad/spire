@@ -28,6 +28,9 @@ from spire.synthesizer.synthesizer import (
     SupplierRecord,
     SupplierResponse,
     POLifecycleResponse,
+    CustomerAccountResponse,
+    CustomerAccountRecord,
+    AccountReceiptInfo,
 )
 
 @pytest.fixture
@@ -255,3 +258,77 @@ def test_an_empty_summary_leaves_no_blank_line(response_with_addresses):
     out = _format_synthesized(response_with_addresses)
     assert "Answer:\n\n\n" not in out
     assert "Lee Supplies" in out
+
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Child-table headers state the honest scope: "showing N of M" when the
+# tool reported more of a child than the rows shown, and a plain header
+# otherwise. The account with thousands of receipts must not present ten
+# as the whole set. Uses child_totals on the record (populated upstream
+# from the executor's truncation metadata).
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _account_with_receipts(child_totals):
+    return CustomerAccountResponse(
+        summary="",
+        customer_accounts=[
+            CustomerAccountRecord(
+                account_id=300000047368512,
+                account_number="26360",
+                customer_name="ABC Application Software",
+                open_receivables=45989.16,
+                transactions_due=44017.52,
+                receipts=[
+                    AccountReceiptInfo(
+                        receipt_id=300000343850475,
+                        receipt_number="155766_03",
+                        receipt_date="2026-09-08",
+                        amount=118.75,
+                        currency="USD",
+                        receipt_method="check",
+                        state="Unapplied",
+                        unapplied_amount=118.75,
+                    ),
+                    AccountReceiptInfo(
+                        receipt_id=300000344034011,
+                        receipt_number="1464202",
+                        receipt_date="2026-09-08",
+                        amount=800.0,
+                        currency="USD",
+                        receipt_method="Lockbox",
+                        state="Unapplied",
+                        unapplied_amount=800.0,
+                    ),
+                ],
+                child_totals=child_totals,
+            )
+        ],
+        truncation_notes=[],
+    )
+
+
+def test_child_header_states_showing_n_of_m_when_truncated():
+    """Two receipts shown of 2,319 -> the child table header says so, so
+    the page is never mistaken for the whole set."""
+    out = _format_synthesized(_account_with_receipts({"receipts": 2319}))
+    assert "— receipts (showing 2 of 2,319)" in out
+    # The rows still render.
+    assert "155766_03" in out
+    assert "1464202" in out
+
+
+def test_child_header_is_plain_when_not_truncated():
+    """total_available equal to the rows shown is not truncation — no
+    count in the header, nothing unverifiable claimed."""
+    out = _format_synthesized(_account_with_receipts({"receipts": 2}))
+    assert "— receipts" in out
+    assert "showing" not in out
+
+
+def test_child_header_is_plain_when_total_unknown():
+    """No total for the child (empty map) -> plain header."""
+    out = _format_synthesized(_account_with_receipts({}))
+    assert "— receipts" in out
+    assert "showing" not in out
