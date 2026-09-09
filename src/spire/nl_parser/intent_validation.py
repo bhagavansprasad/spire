@@ -48,6 +48,22 @@ from spire.nl_parser.vocabulary import KGMenu
 from spire.planner.planner import Intent
 
 
+# Fields an active include already provides, so a request for them is
+# SATISFIED by the include rather than unresolved. The Address include
+# attaches the supplier's formatted address (a single Address column); the
+# location a user asks for — "address", "country", "city", "state" — is
+# carried there, so naming one of these is answered by that column, not a
+# missing one. Without this, Step 4 split such a field into
+# unresolved_fields (it is not a base-row column) and the display printed a
+# "column isn't available" note ABOVE the very Address column that answers
+# it — a self-contradicting answer (the AI-10 address-mapping quirk shows
+# up here; this removes the contradiction at the field-split, it does not
+# change how the parser maps the phrasing to the include).
+_FIELDS_SATISFIED_BY_INCLUDE: dict[str, set[str]] = {
+    "Address": {"address", "addresses", "country", "city", "state"},
+}
+
+
 def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
     """Validate a draft Intent against the KG menu.
 
@@ -151,9 +167,20 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
     # No-op when no columns were named (the common case) and for aggregate/
     # compare intents, which skip validate_intent entirely upstream.
     if intent.fields:
+        # Fields an active include already provides are neither projected
+        # base-row columns nor unresolved — the include's own column renders
+        # them. Collect that set from the active includes and skip those
+        # fields in the split, so no false "not available" note is emitted
+        # for a field the answer actually shows (see
+        # _FIELDS_SATISFIED_BY_INCLUDE).
+        satisfied_by_include: set[str] = set()
+        for inc in intent.include:
+            satisfied_by_include |= _FIELDS_SATISFIED_BY_INCLUDE.get(inc, set())
         known: list[str] = []
         unresolved: list[str] = []
         for col in intent.fields:
+            if col.lower() in satisfied_by_include:
+                continue
             (known if menu.is_known_field(entity, col) else unresolved).append(col)
         intent.fields = known
         intent.unresolved_fields = unresolved

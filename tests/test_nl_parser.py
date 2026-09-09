@@ -785,3 +785,55 @@ def test_receipt_method_distribution_aggregate_converts(menu):
     assert result.intent.aggregate["op"] == "receipt_method_distribution"
     assert {"type": "by_customer_name",
             "value": "ABC Application Software"} in result.intent.filters
+
+
+# ─────────────────────────────────────────────────────────────────────
+# COL-03 + includes: a field the active include already provides is
+# SATISFIED by it, not unresolved. "supplier name, number, and address"
+# (or "country") comes back with include=['Address'] and the location
+# field in fields; the Address include renders that data as its own
+# column, so the field must NOT be reported as an unavailable column —
+# previously the display printed "column isn't available" ABOVE the very
+# Address column that answered it (the AI-10 address-mapping quirk
+# surfacing at the field split). The guard only fires when the covering
+# include is active, so a genuine unknown, or the same word without the
+# include, still resolves to unresolved_fields.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_field_satisfied_by_active_address_include_is_not_unresolved(menu):
+    """'address'/'country' requested WITH the Address include: satisfied by
+    the include, so neither projected as a base column nor reported
+    unavailable."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[DraftFilter(type="country", value_json='"US"')],
+        include=["Address"],
+        fields=["Supplier", "SupplierNumber", "country"],
+    )
+    result = parse(
+        "US suppliers with supplier name, supplier number, and country",
+        llm=MockLLM(draft), menu=menu,
+    )
+    assert not result.is_refusal
+    # country is satisfied by the Address include: not in fields, not unresolved.
+    assert result.intent.fields == ["Supplier", "SupplierNumber"]
+    assert result.intent.unresolved_fields == []
+
+
+def test_location_field_without_the_include_still_unresolves(menu):
+    """The guard is scoped to an ACTIVE covering include. 'country' with NO
+    Address include stays unresolved — nothing renders it, so the honest
+    'not available' note must still fire."""
+    draft = DraftIntent(
+        target_entity="Supplier",
+        filters=[],
+        include=[],
+        fields=["Supplier", "country"],
+    )
+    result = parse(
+        "suppliers with name and country", llm=MockLLM(draft), menu=menu,
+    )
+    assert not result.is_refusal
+    assert result.intent.fields == ["Supplier"]
+    assert result.intent.unresolved_fields == ["country"]
