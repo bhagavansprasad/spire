@@ -1,0 +1,102 @@
+[
+  {
+    "prompt": "Show me invoices for EIP Inc over 100000 with invoice number, amount, and date",
+    "module": [
+      "payables"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "Show me invoices for EIP Inc over 100000 with invoice number, amount, date, supplier name, supplier number, and currency",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "List active suppliers with supplier name, supplier number, and status",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Just the invoice numbers for supplier 1252",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "List active suppliers with supplier name, supplier number, and address",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Show supplier 1252 with supplier name, number, and address",
+    "module": [
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (parser)"
+  },
+  {
+    "prompt": "List active suppliers with supplier name, supplier number, and address",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "List active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Top 5 suppliers by invoice spend last year with supplier name and total",
+    "module": [
+      "payables",
+      "supplier"
+    ],
+    "tool": "aggregate_invoices_by_supplier",
+    "note": ""
+  },
+  {
+    "prompt": "Show PO 2144 and its lines",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Show supplier name and credit rating for active suppliers",
+    "module": [
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Show me invoices for EIP Inc with invoice number, PO number, and PO line number",
+    "module": [
+      "payables",
+      "procurement"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  }
+]

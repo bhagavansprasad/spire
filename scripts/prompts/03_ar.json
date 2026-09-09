@@ -1,0 +1,138 @@
+[
+  {
+    "prompt": "Show the AR invoice with CustomerTransactionId 300000248096352 and its lines",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_receivables_invoice_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Show me AR invoices for customer ABC Corporation Americas",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show me open invoices for customer ABC Corporation Americas",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show me the top 5 open invoices for customer ABC Corporation Americas",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show the AR invoice with CustomerTransactionId 1002 and its tax lines",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_receivables_invoice_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Show the AR invoice with CustomerTransactionId 1002 and its DFF values",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_receivables_invoice_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "List recent credit memos",
+    "module": [
+      "receivables"
+    ],
+    "tool": "list_receivables_credit_memos",
+    "note": ""
+  },
+  {
+    "prompt": "What is the total value of credit memos?",
+    "module": [
+      "receivables"
+    ],
+    "tool": "list_receivables_credit_memos",
+    "note": ""
+  },
+  {
+    "prompt": "Show me the account balance for customer ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show credit memos for ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show receipts for ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  },
+  {
+    "prompt": "Show receipt applications for customer ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "error",
+    "note": "<generate_plan error: KeyError: \"No edge from 'AccountReceiptApplication' to 'AccountReceipt'\">"
+  },
+  {
+    "prompt": "Show receipts for ABC Application Software at Santa Clara",
+    "module": [
+      "receivables"
+    ],
+    "tool": "search_standard_receipts",
+    "note": ""
+  },
+  {
+    "prompt": "Show receipts for ABC Corporation Americas at Santa Clara",
+    "module": [
+      "receivables"
+    ],
+    "tool": "search_standard_receipts",
+    "note": ""
+  },
+  {
+    "prompt": "Rank top accounts by outstanding exposure",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Show receipt method distribution for ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Show lag between creation and last update for receipts of ABC Application Software",
+    "module": [
+      "receivables"
+    ],
+    "tool": "get_customer_account_by_name",
+    "note": ""
+  }
+]
