@@ -16,5 +16,5 @@ sets:
   - 07_alacarte
   - 11_column_vocabulary
   - qa_testcases
-  # - 08_lifecycle     # slow — uncomment for the full overnight run
-  # - 06_slow          # slowest — minutes each
+  - 08_lifecycle     # slow — uncomment for the full overnight run
+  - 06_slow          # slowest — minutes each

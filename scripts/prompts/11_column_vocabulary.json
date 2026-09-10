@@ -213,7 +213,7 @@
       "supplier"
     ],
     "tool": "refuse",
-    "note": "refuse:unsupported_filter (parser)"
+    "note": "refuse:unsupported_operation (parser)"
   },
   {
     "prompt": "Show only supplier name and status for active suppliers, include 'business unit'",

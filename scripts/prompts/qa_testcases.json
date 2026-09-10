@@ -44,8 +44,8 @@
     "module": [
       "receivables"
     ],
-    "tool": "refuse",
-    "note": "refuse:unsupported_operation (parser)"
+    "tool": "rank_customer_accounts_by_exposure",
+    "note": ""
   },
   {
     "prompt": "Get all credit memos for account 300000047368512",
@@ -254,8 +254,8 @@
     "module": [
       "receivables"
     ],
-    "tool": "error",
-    "note": "<generate_plan error: KeyError: \"No edge from 'AccountReceiptApplication' to 'AccountReceipt'\">"
+    "tool": "get_customer_account_by_name",
+    "note": ""
   },
   {
     "prompt": "Get the most recent standard receipts for account 25750",

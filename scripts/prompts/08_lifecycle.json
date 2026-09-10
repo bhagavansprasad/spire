@@ -1,0 +1,260 @@
+[
+  {
+    "prompt": "Has PO 701337 been fully received, fully invoiced, and fully paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Has PO 162034 been fully received, fully invoiced, and fully paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Is PO 162034 complete?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Why is PO 701337 still open?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "What is blocking PO 701337, and which team owns the next action?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Why has PO 701337 not been paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Is anything blocking PO 162034?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Give me an end-to-end summary of PO 701337 from supplier setup through payment.",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Trace PO 162034 from supplier setup through to payment and tell me the current stage.",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Summarise PO 701337 and identify the current lifecycle stage and responsible team.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Give me an executive summary of PO 701337 including risk and recommended action.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Executive summary for PO 162034 — value, delivery, invoice and payment status, risk, and what to do next.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "What is the risk rating on PO 701337 and why?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "What is the supplier status, approval status, receipt status, invoice matching status and payment status of PO 701337?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "For PO 162034, show the supplier status, invoice approval status and payment status, plus any unresolved exceptions.",
+    "module": [
+      "procurement",
+      "supplier",
+      "payables"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Has purchase order 701337 been received and paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "PO 701337 — received, invoiced, paid?",
+    "module": [
+      "procurement",
+      "payables"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Tell me the lifecycle status of purchase order 701337.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "What stage is PO 162034 at?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Who is responsible for the next action on PO 701337?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "What is outstanding on PO 701337?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Has PO 999999999 been fully received, fully invoiced, and fully paid?",
+    "module": [
+      "procurement",
+      "payables"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Has PO DOES-NOT-EXIST been paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_lifecycle_status",
+    "note": ""
+  },
+  {
+    "prompt": "Have all purchase orders been fully received and paid?",
+    "module": [
+      "procurement"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Compare the lifecycle of PO 701337 and PO 162034.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
+  },
+  {
+    "prompt": "Show PO 162034 and its lines.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "get_purchase_order_by_id",
+    "note": ""
+  },
+  {
+    "prompt": "Show the invoices raised against PO 162034.",
+    "module": [
+      "payables",
+      "procurement"
+    ],
+    "tool": "search_invoices",
+    "note": ""
+  },
+  {
+    "prompt": "Open POs for supplier JGA.",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "refuse",
+    "note": "refuse:unsupported_filter (planner)"
+  },
+  {
+    "prompt": "Which suppliers have open purchase orders?",
+    "module": [
+      "procurement",
+      "supplier"
+    ],
+    "tool": "search_suppliers",
+    "note": ""
+  },
+  {
+    "prompt": "Purchase orders created before 2015.",
+    "module": [
+      "procurement"
+    ],
+    "tool": "search_purchase_orders",
+    "note": ""
+  }
+]

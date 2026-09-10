@@ -59,8 +59,8 @@
   {
     "prompt": "How does invoiced compare to ordered for PO 162034?",
     "module": [
-      "payables",
-      "procurement"
+      "procurement",
+      "payables"
     ],
     "tool": "compare_purchase_order_to_invoices",
     "note": ""

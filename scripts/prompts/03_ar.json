@@ -116,23 +116,23 @@
     "module": [
       "receivables"
     ],
-    "tool": "refuse",
-    "note": "refuse:unsupported_operation (parser)"
+    "tool": "rank_customer_accounts_by_exposure",
+    "note": ""
   },
   {
     "prompt": "Show receipt method distribution for ABC Application Software",
     "module": [
       "receivables"
     ],
-    "tool": "refuse",
-    "note": "refuse:unsupported_operation (parser)"
+    "tool": "aggregate_standard_receipts_by_method",
+    "note": ""
   },
   {
     "prompt": "Show lag between creation and last update for receipts of ABC Application Software",
     "module": [
       "receivables"
     ],
-    "tool": "get_customer_account_by_name",
-    "note": ""
+    "tool": "refuse",
+    "note": "refuse:unsupported_operation (parser)"
   }
 ]
