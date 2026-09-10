@@ -47,6 +47,7 @@ from spire.nl_parser.context_assembly import (
 from spire.nl_parser.parser import parse
 from spire.nl_parser.result import ParseResult
 from spire.nl_parser.vocabulary import load_kg_menu
+from spire.diagnostics import get_logger
 
 
 # --- structured-output contract -------------------------------------------
@@ -245,7 +246,11 @@ def route_and_parse(
         # increment-2 all-modules fallback, applied to the no-module case;
         # the "unsure between modules" case (classifier returns several) is
         # still deferred to increment 2.
+        get_logger("parser").debug(
+            "Router: no module matched \u2192 full-context parse"
+        )
         return parse(prompt, llm=llm, menu=menu)  # system_prompt=None -> full
 
+    get_logger("parser").debug("Router: modules=%s", modules)
     scoped = assemble_subset(modules, menu)
     return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)
