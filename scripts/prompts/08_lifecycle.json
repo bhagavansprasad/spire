@@ -18,8 +18,7 @@
   {
     "prompt": "Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.",
     "module": [
-      "procurement",
-      "supplier"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
@@ -67,8 +66,7 @@
   {
     "prompt": "Give me an end-to-end summary of PO 701337 from supplier setup through payment.",
     "module": [
-      "procurement",
-      "supplier"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
@@ -76,8 +74,7 @@
   {
     "prompt": "Trace PO 162034 from supplier setup through to payment and tell me the current stage.",
     "module": [
-      "procurement",
-      "supplier"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
@@ -125,9 +122,7 @@
   {
     "prompt": "For PO 162034, show the supplier status, invoice approval status and payment status, plus any unresolved exceptions.",
     "module": [
-      "procurement",
-      "supplier",
-      "payables"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
@@ -143,8 +138,7 @@
   {
     "prompt": "PO 701337 — received, invoiced, paid?",
     "module": [
-      "procurement",
-      "payables"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
@@ -184,8 +178,7 @@
   {
     "prompt": "Has PO 999999999 been fully received, fully invoiced, and fully paid?",
     "module": [
-      "procurement",
-      "payables"
+      "procurement"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
