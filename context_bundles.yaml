@@ -2,8 +2,7 @@ bundles:
   # ── project root (content files only; tooling and secrets excluded) ──
   root:
   - README.md
-  - spire_setup_guide.md          # renamed from how-to-run-02.md, 2026-08-02
-  - how-to-run-after-pull.md
+  - how-to-run.md
   - prompt_coverage.md
   - build_context.py
   - context_bundles.yaml
@@ -26,6 +25,8 @@ bundles:
   - docs/cache_architecture.md
   - docs/spire_test_plan.md
   - docs/features/parser_context_modularization.md
+  - docs/features/prompt_to_intent_framework.md
+  - docs/features/actionable_refusals.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -44,6 +45,22 @@ bundles:
   - scripts/prompts/scorer/parser_stress.txt
   - scripts/prompts/scorer/tool_selection.txt
 
+  # ── generated .json corpora (promptkit routing baselines) + mini ──
+  corpora:
+  - scripts/prompts/00_dipstick.json
+  - scripts/prompts/01_supplier.json
+  - scripts/prompts/02_purchase_order.json
+  - scripts/prompts/03_ar.json
+  - scripts/prompts/04_columns.json
+  - scripts/prompts/05_refusals.json
+  - scripts/prompts/06_slow.json
+  - scripts/prompts/07_alacarte.json
+  - scripts/prompts/08_lifecycle.json
+  - scripts/prompts/11_column_vocabulary.json
+  - scripts/prompts/qa_testcases.json
+  - scripts/prompts/mini.txt
+  - scripts/prompts/mini.json
+
   scripts:
   - scripts/draw_graph.py
   - scripts/inspect_trace.py
@@ -60,9 +77,15 @@ bundles:
   - scripts/verify_nested_addresses.py
   - scripts/score_parser_prompts.py
   - test_tools/try_po_lifecycle.py
-  - scripts/overnight_sets.yaml
+  - test_tools/verify_rank_invoices.py
   - scripts/run_overnight.py
-  - scripts/build_parser_context.py  
+  - scripts/build_parser_context.py
+  # promptkit — the current test tooling (supersedes run_overnight/overnight_sets)
+  - scripts/promptkit.py
+  - scripts/promptkit_overnight.py
+  - scripts/promptkit_sets.yaml
+  # generates the classifier menu from the KG
+  - scripts/build_classifier_context.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -78,7 +101,6 @@ bundles:
   - scripts/print_kg.py
   - scripts/rebuild_kg.py
   - scripts/rebuild_kg.sh
-
 
   mcp_server_tools:
   - src/spire/mcp_server/server.py
@@ -113,6 +135,7 @@ bundles:
   - src/spire/mcp_server/tools/standard_receipts.py
   - src/spire/mcp_server/tools/aggregate_standard_receipts_by_method.py
   - src/spire/mcp_server/tools/rank_customer_accounts_by_exposure.py
+  - src/spire/mcp_server/tools/rank_invoices_by_amount.py
   # Shared paged-fetch helper, 2026-08-04. Four tools' private paging
   # loops collapsed into this; any task touching a fetch needs it.
   - src/spire/mcp_server/tools/pagination.py
@@ -124,6 +147,9 @@ bundles:
   - src/spire/nl_parser/result.py
   - src/spire/nl_parser/intent_validation.py
   - src/spire/nl_parser/vocabulary.py
+  # the module-scoping router + context assembler (central; the multi-module work)
+  - src/spire/nl_parser/router.py
+  - src/spire/nl_parser/context_assembly.py
   - src/spire/oracle/client.py
   - src/spire/planner/planner.py
   - src/spire/planner/registries.py
@@ -132,6 +158,59 @@ bundles:
   - src/spire/planner/lookup.py
   - src/spire/planner/date_utils.py
   - src/spire/planner/plan_builders.py
+
+  # ── parser context blocks (.sysprompt grounding + manifest + classifier menu) ──
+  parser_context:
+  - src/spire/nl_parser/context/order.manifest
+  - src/spire/nl_parser/context/routing/classifier_menu.sysprompt
+  - src/spire/nl_parser/context/core/role_contract.sysprompt
+  - src/spire/nl_parser/context/core/completeness_tail.sysprompt
+  - src/spire/nl_parser/context/core/signoff.sysprompt
+  - src/spire/nl_parser/context/refusals/out_of_scope.sysprompt
+  - src/spire/nl_parser/context/columns/b_column_fields.sysprompt
+  - src/spire/nl_parser/context/columns/b_who_columns.sysprompt
+  - src/spire/nl_parser/context/modes/m_account_balance.sysprompt
+  - src/spire/nl_parser/context/modes/m_aggregation.sysprompt
+  - src/spire/nl_parser/context/modes/m_comparison.sysprompt
+  - src/spire/nl_parser/context/modes/m_count.sysprompt
+  - src/spire/nl_parser/context/modes/m_open_invoices.sysprompt
+  - src/spire/nl_parser/context/modes/m_topn_open_invoices.sysprompt
+  - src/spire/nl_parser/context/payables/b_addresses.sysprompt
+  - src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt
+  - src/spire/nl_parser/context/payables/b_invoice_date.sysprompt
+  - src/spire/nl_parser/context/payables/b_invoices_for_po.sysprompt
+  - src/spire/nl_parser/context/payables/b_invoices_for_supplier.sysprompt
+  - src/spire/nl_parser/context/payables/b_no_recent_invoices.sysprompt
+  - src/spire/nl_parser/context/payables/b_open_po.sysprompt
+  - src/spire/nl_parser/context/procurement/b_buyer_include.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_by_id.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_created_date.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_distributions.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_lines.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_received.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_schedules.sysprompt
+  - src/spire/nl_parser/context/procurement/m_po_lifecycle.sysprompt
+  - src/spire/nl_parser/context/receivables/b_account_balance.sysprompt
+  - src/spire/nl_parser/context/receivables/b_account_receipts.sysprompt
+  - src/spire/nl_parser/context/receivables/b_ar_dff.sysprompt
+  - src/spire/nl_parser/context/receivables/b_ar_invoice_by_id.sysprompt
+  - src/spire/nl_parser/context/receivables/b_ar_invoice_lines.sysprompt
+  - src/spire/nl_parser/context/receivables/b_ar_tax_lines.sysprompt
+  - src/spire/nl_parser/context/receivables/b_credit_memos.sysprompt
+  - src/spire/nl_parser/context/receivables/b_customer_credit_memos.sysprompt
+  - src/spire/nl_parser/context/receivables/b_customer_invoices.sysprompt
+  - src/spire/nl_parser/context/receivables/b_receipt_applications.sysprompt
+  - src/spire/nl_parser/context/receivables/b_site_receipts.sysprompt
+  - src/spire/nl_parser/context/supplier/b_business_relationship.sysprompt
+  - src/spire/nl_parser/context/supplier/b_classification.sysprompt
+  - src/spire/nl_parser/context/supplier/b_contacts.sysprompt
+  - src/spire/nl_parser/context/supplier/b_country.sysprompt
+  - src/spire/nl_parser/context/supplier/b_created_date.sysprompt
+  - src/spire/nl_parser/context/supplier/b_invoice_over_amount.sysprompt
+  - src/spire/nl_parser/context/supplier/b_name_fragment.sysprompt
+  - src/spire/nl_parser/context/supplier/b_site_in_bu.sysprompt
+  - src/spire/nl_parser/context/supplier/b_status.sysprompt
+  - src/spire/nl_parser/context/supplier/b_suppliers_addresses.sysprompt
 
   synthesizer:
   - src/spire/synthesizer/synthesizer.py
@@ -204,6 +283,9 @@ bundles:
   # Paging tests, moved out of test_po_lifecycle_tool.py when the loop
   # became shared — they were never about lifecycle reconciliation.
   - tests/test_pagination.py
+  # router + context-assembly tests (the multi-module router work)
+  - tests/test_router.py
+  - tests/test_parser_context_assembly.py
 
 excludes:
 - traces
