@@ -231,8 +231,8 @@
       "procurement",
       "supplier"
     ],
-    "tool": "refuse",
-    "note": "refuse:unsupported_filter (planner)"
+    "tool": "search_purchase_orders",
+    "note": "S4: PO root supplier+status filtering. Verified end-to-end on pod eqjz — returns 21 open POs for JGA. Was refuse:unsupported_filter before the fix."
   },
   {
     "prompt": "Which suppliers have open purchase orders?",

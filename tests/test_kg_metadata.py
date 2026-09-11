@@ -348,7 +348,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_vocabulary": 120,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 10,
-        "kg_entity_filter": 24,
+        "kg_entity_filter": 26,
         "kg_edge_tool": 16,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted

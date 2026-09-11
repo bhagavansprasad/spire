@@ -1456,6 +1456,16 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Customer name; resolved to account number by the tool before the server call.'
 );
 
-PROMPT Seeded kg_entity_filter (24 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'supplier', 'entity_level', 'supplier_po', NULL, NULL, NULL, NULL, NULL, 'server_q', 'SupplierId', 'equals',
+  'PO-by-supplier. Value is a supplier reference; the planner routes an all-digit value to supplier_id, otherwise supplier_name (POs expose SupplierId numeric, NOT SupplierNumber -- distinct placeholder supplier_po, not the Invoice/Address supplier placeholder which routes to supplier_number). search_purchase_orders sends SupplierId server-side (wins the single q= slot) and filters any other clause client-side, so supplier+status is safe.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'status', 'entity_level', 'status', 'po_status', NULL, NULL, NULL, NULL, 'client_side', 'StatusCode', 'equals',
+  'PO-by-status (OPEN/CLOSED/etc). Value resolved via po_status vocab to the Fusion StatusCode. Applied client-side by search_purchase_orders after over-fetch: SupplierId (if present) takes the server q= clause, so status is matched in Python -- never composited into q= (the pod silently returns 0 for AND-combined clauses).'
+);
+
+PROMPT Seeded kg_entity_filter (26 rows).
 
 -- ============================================================
