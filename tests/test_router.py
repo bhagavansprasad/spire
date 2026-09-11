@@ -163,15 +163,16 @@ def test_system_prompt_contains_instruction_and_menu():
 
 def test_classifier_instruction_has_lifecycle_grounding():
     """The classifier instruction teaches that a single-PO lifecycle/status
-    question is procurement-only, even when it mentions invoiced/paid/supplier.
-    Guards the grounding rule (Task B) against silent removal — the behaviour
-    it produces is proven by the validate sweep, not here."""
+    question is a PROCUREMENT question even when it mentions invoiced/paid.
+    Guards the (minimal) grounding rule against silent removal — the
+    behaviour it produces is proven by the validate sweep, not here."""
     prompt = _classifier_system_prompt(_MENU)
-    # the core rule: lifecycle PO questions are procurement alone
-    assert "PROCUREMENT question ALONE" in prompt
-    assert "Do NOT add payables or supplier" in prompt
-    # the counter-rule that protects genuine cross-bucket prompts
-    assert "payables + supplier" in prompt
+    # scope: the rule is about ONE named purchase order's status/lifecycle
+    assert "ONE named purchase order" in prompt
+    # the core claim: such a question is procurement
+    assert "is a PROCUREMENT question" in prompt
+    # the instruction: do not attach payables to it
+    assert "Do NOT add payables for such a question" in prompt
 
 def test_structured_output_requested_with_schema():
     """The classifier binds ModuleChoice with include_raw=True."""

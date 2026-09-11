@@ -59,8 +59,7 @@
   {
     "prompt": "How does invoiced compare to ordered for PO 162034?",
     "module": [
-      "procurement",
-      "payables"
+      "procurement"
     ],
     "tool": "compare_purchase_order_to_invoices",
     "note": ""
@@ -68,7 +67,6 @@
   {
     "prompt": "How does invoiced compare to ordered for Lee Supplies?",
     "module": [
-      "payables",
       "procurement"
     ],
     "tool": "compare_supplier_orders_to_invoices",

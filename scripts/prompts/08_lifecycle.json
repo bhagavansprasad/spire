@@ -18,7 +18,8 @@
   {
     "prompt": "Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.",
     "module": [
-      "procurement"
+      "procurement",
+      "supplier"
     ],
     "tool": "get_purchase_order_lifecycle_status",
     "note": ""
