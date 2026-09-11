@@ -247,6 +247,13 @@ def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
 _VALUE_SHAPE_ROUTED_ARGS: dict[str, tuple[str, str]] = {
     # placeholder -> (arg when all-digit, arg otherwise)
     "supplier": ("supplier_number", "supplier_name"),
+    # PurchaseOrder supplier filter. POs expose SupplierId (numeric), NOT
+    # SupplierNumber (HTTP 400 if projected) -- so an all-digit value routes
+    # to search_purchase_orders' supplier_id, unlike the Invoice/Address
+    # 'supplier' placeholder above which routes to supplier_number. Same
+    # digit-vs-name shape test, different target args; hence a distinct
+    # placeholder token in the PurchaseOrder/supplier KG row (supplier_po).
+    "supplier_po": ("supplier_id", "supplier_name"),
 }
 
 
@@ -589,6 +596,3 @@ def _previous_entity(plan: Plan) -> str:
         "v1 tracks previous entity inline in generate_plan. "
         "This helper exists for design symmetry; do not call it."
     )
-
-
-

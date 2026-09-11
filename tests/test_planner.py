@@ -803,34 +803,74 @@ def test_invoice_by_id_reaches_the_supplier_guard() -> None:
     assert refusal.offending_entity == "Invoice"
 
 
-def test_purchase_order_status_filter_is_refused() -> None:
-    """PurchaseOrder + status/supplier is refused.
-
-    REC-2 removed the old PO no-filter guard (an unfiltered PO list now
-    samples instead of refusing). status and supplier are still not
-    PurchaseOrder entity-level filters — the actual answer to "open POs for
-    supplier X" is to root at the supplier — so the query is refused one
-    layer down, by _validate_intent_filters, now with a structured
-    RefusalError(UNSUPPORTED_FILTER) naming the rejected filters. The
-    user-facing "supported PurchaseOrder filters" wording is added by
-    capability_message (from _FILTER_GUIDANCE); the refusal is preserved,
-    only the mechanism and rendering changed.
+def test_purchase_order_supplier_status_now_plans_search() -> None:
+    """PurchaseOrder + supplier + status plans a search_purchase_orders
+    fetch (S4). Previously refused as UNSUPPORTED_FILTER; now supplier and
+    status are registered PurchaseOrder entity-level filters. The tool
+    receives both as kwargs and does the server/client split itself
+    (SupplierId server-side, StatusCode client-side) — so both ride on one
+    fetch step with no client_filters at the plan level.
     """
     intent = Intent(
         target_entity="PurchaseOrder",
         filters=[
-            {"type": "status", "value": "OPEN"},
             {"type": "supplier", "value": "EIP Inc"},
+            {"type": "status", "value": "open"},
         ],
     )
-    with pytest.raises(RefusalError) as exc_info:
-        generate_plan(intent)
-    refusal = exc_info.value.refusal
-    assert refusal.flavor is RefusalFlavor.UNSUPPORTED_FILTER
-    assert refusal.offending_entity == "PurchaseOrder"
-    assert "status" in refusal.offending_filters
-    assert "supplier" in refusal.offending_filters
+    plan = generate_plan(intent)
+    assert len(plan) == 1
+    step = plan[0]
+    assert step.tool_name == "search_purchase_orders"
+    assert step.tool_args == {"supplier_name": "EIP Inc", "status": "OPEN"}
+    assert step.client_filters == []
 
+def test_po_supplier_id_routes_to_supplier_id_arg() -> None:
+    """An all-digit supplier value routes to supplier_id (not
+    supplier_number — POs have no SupplierNumber). This is the supplier_po
+    placeholder in _VALUE_SHAPE_ROUTED_ARGS; the Invoice 'supplier'
+    placeholder routes digits to supplier_number instead.
+    """
+    intent = Intent(
+        target_entity="PurchaseOrder",
+        filters=[
+            {"type": "supplier", "value": "300000047507499"},
+            {"type": "status", "value": "open"},
+        ],
+    )
+    step = generate_plan(intent)[0]
+    assert step.tool_args == {"supplier_id": "300000047507499", "status": "OPEN"}
+
+
+def test_po_supplier_name_alone_plans_search() -> None:
+    """PurchaseOrder + supplier (name only) plans a name-scoped search."""
+    intent = Intent(
+        target_entity="PurchaseOrder",
+        filters=[{"type": "supplier", "value": "EIP Inc"}],
+    )
+    step = generate_plan(intent)[0]
+    assert step.tool_name == "search_purchase_orders"
+    assert step.tool_args == {"supplier_name": "EIP Inc"}
+
+
+def test_po_status_alone_plans_search_with_vocab_resolved() -> None:
+    """PurchaseOrder + status alone plans a status-scoped search, with the
+    status term resolved through po_status vocab (open -> OPEN).
+    """
+    intent = Intent(
+        target_entity="PurchaseOrder",
+        filters=[{"type": "status", "value": "open"}],
+    )
+    step = generate_plan(intent)[0]
+    assert step.tool_name == "search_purchase_orders"
+    assert step.tool_args == {"status": "OPEN"}
+
+
+def test_build_entity_fetcher_args_po_status_resolves_vocab() -> None:
+    """_build_entity_fetcher_args resolves a PO status term via po_status
+    vocab and keys it as the tool's `status` arg."""
+    filters = [{"type": "status", "value": "closed"}]
+    assert _build_entity_fetcher_args(filters, "PurchaseOrder") == {"status": "CLOSED"}    
 
 def test_standard_receipt_unscoped_is_refused() -> None:
     """"Get standardReceipts" reached the executor and failed inside the
