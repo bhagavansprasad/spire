@@ -86,6 +86,8 @@ bundles:
   - scripts/promptkit_sets.yaml
   # generates the classifier menu from the KG
   - scripts/build_classifier_context.py
+  # adds an entity->module mapping row to the KG
+  - scripts/add_entity_module.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -286,6 +288,8 @@ bundles:
   # router + context-assembly tests (the multi-module router work)
   - tests/test_router.py
   - tests/test_parser_context_assembly.py
+  # promptkit --validate decision-logic test (tool-gates-module-warns)
+  - tests/test_promptkit.py
 
 excludes:
 - traces
