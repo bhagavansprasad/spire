@@ -47,6 +47,7 @@ from spire.nl_parser.context_assembly import (
 from spire.nl_parser.parser import parse
 from spire.nl_parser.result import ParseResult
 from spire.nl_parser.vocabulary import load_kg_menu
+from spire.diagnostics import get_logger
 
 
 # --- structured-output contract -------------------------------------------
@@ -79,6 +80,13 @@ _CLASSIFIER_INSTRUCTION = (
     "receivables, supplier. Pick the module whose entities — or their listed "
     "synonyms — the question names. For a question that clearly concerns one "
     "area, return that single module.\n\n"
+    "A caution on one shared word. A question about the status or progress "
+    "of ONE named purchase order — whether PO N has been received, "
+    "invoiced, or paid; its lifecycle stage; what is blocking it; a "
+    "summary of it — is a PROCUREMENT question, even though it says "
+    "\"invoiced\" or \"paid.\" Those are stages of that purchase order's "
+    "lifecycle, reported from the order itself; they do not make it a "
+    "payables question. Do NOT add payables for such a question.\n\n"
     "Module menu (each module, its entities, and colloquial synonyms):\n\n"
 )
 
@@ -245,7 +253,11 @@ def route_and_parse(
         # increment-2 all-modules fallback, applied to the no-module case;
         # the "unsure between modules" case (classifier returns several) is
         # still deferred to increment 2.
+        get_logger("parser").debug(
+            "Router: no module matched \u2192 full-context parse"
+        )
         return parse(prompt, llm=llm, menu=menu)  # system_prompt=None -> full
 
+    get_logger("parser").debug("Router: modules=%s", modules)
     scoped = assemble_subset(modules, menu)
     return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)

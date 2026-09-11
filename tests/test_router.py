@@ -17,6 +17,7 @@ Coverage:
 from __future__ import annotations
 
 import pytest
+import logging
 
 from spire.nl_parser.router import (
     ModuleChoice,
@@ -160,6 +161,18 @@ def test_system_prompt_contains_instruction_and_menu():
     assert "four modules" in prompt or "payables, procurement" in prompt
     assert _MENU in prompt
 
+def test_classifier_instruction_has_lifecycle_grounding():
+    """The classifier instruction teaches that a single-PO lifecycle/status
+    question is a PROCUREMENT question even when it mentions invoiced/paid.
+    Guards the (minimal) grounding rule against silent removal — the
+    behaviour it produces is proven by the validate sweep, not here."""
+    prompt = _classifier_system_prompt(_MENU)
+    # scope: the rule is about ONE named purchase order's status/lifecycle
+    assert "ONE named purchase order" in prompt
+    # the core claim: such a question is procurement
+    assert "is a PROCUREMENT question" in prompt
+    # the instruction: do not attach payables to it
+    assert "Do NOT add payables for such a question" in prompt
 
 def test_structured_output_requested_with_schema():
     """The classifier binds ModuleChoice with include_raw=True."""
@@ -284,3 +297,31 @@ def test_route_and_parse_falls_back_to_full_parse_on_no_module(monkeypatch):
     assert rec.parse_kwargs["system_prompt"] is None
     # assemble_subset must NOT have been called (we never got a module list).
     assert rec.assemble_args is None
+
+def test_route_and_parse_logs_router_modules(monkeypatch, caplog):
+    """--show-parser visibility: the success path logs the chosen bucket
+    on the spire.parser logger."""
+    rec = _Recorder()
+    _install_patches(monkeypatch, rec, modules=("procurement",))
+    with caplog.at_level(logging.DEBUG, logger="spire.parser"):
+        route_and_parse("open POs")
+    assert any(
+        "Router: modules=['procurement']" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_route_and_parse_logs_fallback_on_no_module(monkeypatch, caplog):
+    """The out-of-scope fallback path logs that no module matched, on the
+    spire.parser logger."""
+    rec = _Recorder()
+    _install_patches(
+        monkeypatch, rec,
+        classify_exc=ClassificationError("no modules"),
+    )
+    with caplog.at_level(logging.DEBUG, logger="spire.parser"):
+        route_and_parse("what is the weather today")
+    assert any(
+        "Router: no module matched" in r.getMessage()
+        for r in caplog.records
+    )

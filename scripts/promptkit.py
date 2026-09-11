@@ -209,46 +209,94 @@ def do_generate(files: list[Path]) -> int:
 # --validate : check each JSON's routing (no execution)
 # ==========================================================================
 
-def validate_file(path: Path, menu) -> tuple[int, int]:
+def _classify_mark(m_ok: bool, t_ok: bool) -> tuple[str, bool, bool]:
+    """Decide a validate row's mark and how it counts.
+
+    Pass/fail is the TOOL's alone. A module mismatch on a tool-correct row is
+    a WARNING, not a failure: the module set only scopes the parser's grounding
+    and is discarded after the parse, so the selected tool is what determines
+    the answer. A wrong tool is the only real failure.
+
+    Returns (mark, is_pass, is_warn):
+      - is_pass : counts toward the tools-OK tally and does NOT fail the run
+      - is_warn : the module set diverged although the tool was correct
+    """
+    if t_ok:
+        if m_ok:
+            return "OK", True, False
+        return "OK*", True, True            # tool correct, module set differs
+    return "TOOL\u2717", False, False        # wrong tool = real failure
+
+
+def validate_file(path: Path, menu) -> tuple[int, int, int]:
+    """Check each case's routing. Pass/fail is decided by the TOOL: a module
+    mismatch on a tool-correct prompt is a WARNING, not a failure. The module
+    set only scopes the parser's grounding and is discarded after the parse;
+    the selected tool is what determines the answer. So only a wrong tool
+    fails the prompt and the run. Module warnings are always printed (and
+    counted) so a divergence is visible, but they do not affect pass/fail.
+
+    Returns (tool_ok_count, total_cases, module_warning_count).
+    """
     cases = load_cases(path)
     print(f"\n### validate {path.name} — {len(cases)} prompts")
-    both_ok = 0
+    tool_ok_count = 0
+    mod_warn_count = 0
     rows = []
     for module_exp, tool_exp, prompt in cases:
         r = validate_one(prompt, module_exp, tool_exp, menu)
         m_ok, t_ok = r["module_ok"], r["tool_ok"]
-        mark = ("OK" if m_ok and t_ok else
-                "TOOL\u2717" if m_ok else "MOD\u2717" if t_ok else "BOTH\u2717")
-        if m_ok and t_ok:
-            both_ok += 1
-        rows.append((mark, prompt, module_exp, tool_exp, r))
-        print(f"[{mark:<5}] {prompt[:48]:<48} "
+        mark, is_pass, is_warn = _classify_mark(m_ok, t_ok)
+        if is_pass:
+            tool_ok_count += 1
+        if is_warn:
+            mod_warn_count += 1
+        rows.append((mark, m_ok, t_ok, prompt, module_exp, tool_exp, r))
+        print(f"[{mark:<6}] {prompt[:48]:<48} "
               f"mod={str(r['module_got']):<18} tool={r['tool_got']}")
-    problems = [row for row in rows if row[0] != "OK"]
-    print(f"  {both_ok}/{len(cases)} OK" +
-          (f"  ({len(problems)} mismatch)" if problems else ""))
-    for mark, prompt, module_exp, tool_exp, r in problems:
-        print(f"    [{mark}] {prompt}")
-        print(f"        module: expected [{module_exp}]  got {r['module_got']}")
-        print(f"        tool:   expected {tool_exp}  got {r['tool_got']}")
-    return both_ok, len(cases)
+
+    tool_fails = [row for row in rows if not row[2]]              # t_ok False
+    mod_warns = [row for row in rows if row[2] and not row[1]]    # t_ok True, m_ok False
+
+    summary = f"  {tool_ok_count}/{len(cases)} tools OK"
+    if mod_warn_count:
+        summary += (f"  ({mod_warn_count} module "
+                    f"warning{'s' if mod_warn_count != 1 else ''})")
+    print(summary)
+
+    if tool_fails:
+        print("  TOOL FAILURES:")
+        for mark, m_ok, t_ok, prompt, module_exp, tool_exp, r in tool_fails:
+            print(f"    [{mark}] {prompt}")
+            print(f"        tool:   expected {tool_exp}  got {r['tool_got']}")
+            print(f"        module: expected [{module_exp}]  got {r['module_got']}")
+    if mod_warns:
+        print("  MODULE WARNINGS (tool correct, module set differs):")
+        for mark, m_ok, t_ok, prompt, module_exp, tool_exp, r in mod_warns:
+            print(f"    [{mark}] {prompt}")
+            print(f"        module: expected [{module_exp}]  got {r['module_got']}")
+    return tool_ok_count, len(cases), mod_warn_count
 
 
 def do_validate(files: list[Path]) -> int:
     menu = load_kg_menu()
     reset_usage()
-    total_ok = total_all = 0
+    total_ok = total_all = total_warn = 0
     for f in files:
         if not f.is_file():
             print(f"  [skip] not found: {f}")
             continue
-        ok, n = validate_file(f, menu)
+        ok, n, warn = validate_file(f, menu)
         total_ok += ok
         total_all += n
+        total_warn += warn
     print(f"\n{'='*72}")
-    print(f"TOTAL: {total_ok}/{total_all} OK across {len(files)} file(s)")
+    print(f"TOTAL: {total_ok}/{total_all} tools OK across {len(files)} file(s)"
+          + (f"  ({total_warn} module warning{'s' if total_warn != 1 else ''})"
+             if total_warn else ""))
     print('='*72)
     print(usage_report())
+    # Exit is driven by TOOLS only; module warnings never fail the run.
     return 0 if total_ok == total_all else 1
 
 
