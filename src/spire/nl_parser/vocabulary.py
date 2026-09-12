@@ -530,3 +530,66 @@ def add_child_include_from_prompt(
         if hit:
             result.append(child)
     return result
+
+
+# BUG-1: entity the parser mis-includes on a PurchaseOrder target because
+# 'supplier details for PO X' pattern-matches against the existing
+# 'include the buyer' rule. Supplier is NOT includable on PurchaseOrder —
+# there is no PurchaseOrder -> Supplier edge in the KG, and none is needed:
+# the supplier's name, number, site and contact are all projected directly
+# off the PO header by the by_id fetcher (verified by curl against
+# /purchaseOrders; see docs/four_bugs.md §2.1).
+#
+# The strip is keyed on (target, entity) and gated on the KG: it fires ONLY
+# when the edge is genuinely absent. If a future KG change adds a
+# PurchaseOrder -> Supplier edge, this becomes a no-op and the include
+# becomes legitimate again — no code change needed.
+_STRIP_INCLUDE_WHEN_NO_EDGE: tuple[str, str] = ("PurchaseOrder", "Supplier")
+
+
+def strip_po_supplier_include(
+    target_entity: str,
+    include: list[str],
+    menu: KGMenu,
+) -> list[str]:
+    """BUG-1: remove 'Supplier' from a PurchaseOrder intent's include list.
+
+    The parser sometimes emits include=['Supplier'] on a PurchaseOrder
+    intent for a prompt like "Show supplier details for PO 701337." — it
+    pattern-matches against the existing 'include the buyer' rule. There is
+    no PurchaseOrder -> Supplier edge, so this shape reaches BUG-2's
+    validate_intent gate and is refused, even though the underlying question
+    is answerable: the supplier name, number, site and contact ride on the
+    PO header itself, and the by_id fetcher already projects them.
+
+    This runs AFTER the LLM and BEFORE validate_intent, alongside the other
+    post-parse correction helpers (correct_include_from_prompt,
+    add_child_include_from_prompt). It is DETERMINISTIC and KG-grounded:
+    the strip fires only when the edge is genuinely absent. If a future KG
+    change declares PurchaseOrder -> Supplier, this becomes a no-op and the
+    include is left alone.
+
+    Order-preserving; the surviving includes keep their original order.
+    Returns the input list unchanged when the target is not PurchaseOrder,
+    when Supplier is not in the list, or when the edge exists.
+
+    Args:
+        target_entity: The Intent's target entity.
+        include: The Intent's include list (from the LLM, possibly already
+            corrected by the earlier helpers).
+        menu: The KG menu, for the edge check.
+
+    Returns:
+        A new list with 'Supplier' removed, or the input list unchanged.
+    """
+    strip_target, strip_entity = _STRIP_INCLUDE_WHEN_NO_EDGE
+    if target_entity != strip_target:
+        return include
+    if strip_entity not in include:
+        return include
+    if menu.has_edge(strip_target, strip_entity):
+        # The edge exists in the KG — the include is legitimate, leave
+        # it. This is what makes the strip self-retiring: adding the edge
+        # to the KG turns the strip off without a code change.
+        return include
+    return [e for e in include if e != strip_entity]

@@ -37,6 +37,7 @@ from spire.nl_parser.vocabulary import (
     expand_field_synonyms,
     correct_include_from_prompt,
     add_child_include_from_prompt,
+    strip_po_supplier_include,
 )
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
@@ -343,6 +344,19 @@ def parse(
         prompt, intent.target_entity, intent.include, menu
     )
 
+    # BUG-1: strip an un-wireable include=['Supplier'] from a PurchaseOrder
+    # intent, IF the KG genuinely has no PurchaseOrder -> Supplier edge.
+    # The parser sometimes emits this shape for 'supplier details for PO X'
+    # (it pattern-matches the 'include the buyer' rule). The include is not
+    # needed — the supplier name/number/site ride on the PO header and are
+    # projected by the by_id fetcher already. Runs AFTER the other include
+    # correction passes and BEFORE validate_intent, so the gate sees a
+    # clean include list. Deterministic and KG-gated: if the edge is ever
+    # declared in the KG, the strip becomes a no-op.
+    intent.include = strip_po_supplier_include(
+        intent.target_entity, intent.include, menu
+    )
+
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
@@ -358,7 +372,3 @@ def parse(
         return ParseResult(refusal=refusal)
 
     return ParseResult.ok(intent)
-
-
-
-

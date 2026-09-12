@@ -2,7 +2,7 @@
 
 **Issue under investigation:** `Show supplier details for PO 701337.`
 **Date:** 2026-09-12
-**Status:** Investigation complete; remediation not yet started
+**Status:** Investigation complete; remediation in progress on branch `fix/s1-remediation`
 **Prepared for:** SME review and staged implementation
 **Related document:** `Spire — S1 problem writeup for SME review` (2026-09-11)
 
@@ -18,6 +18,22 @@ Two issues (**BUG-3** and **BUG-4**) have their *mechanism* decided but their *u
 
 One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is listed for completeness only. Do not fix it during this cycle.
 
+**Structure of this document.** The original analysis, evidence and proposed fixes are preserved verbatim. As each bug is fixed, a **Status update** subsection is appended under that bug's §4 entry — it does not replace the original text. New top-level sections (§0.1, §6.1, §8.1, §9) were added below their originals rather than in place.
+
+### 0.1 Progress at a glance
+
+*(Added 2026-09-12 after the third fix. New section — does not replace §0.)*
+
+| # | Issue | Status | Commit |
+|---:|---|---|---|
+| BUG-2 | No general un-wireable-include gate in `validate_intent` | ✅ **FIXED** | `97bc8f7` |
+| BUG-3 | Planner raises raw `KeyError` for a bad include | ✅ **FIXED** | `acd3f6f` |
+| BUG-1 | Parser gap on "supplier details for PO X" | ✅ **Step 1 FIXED** (this commit) | — |
+| BUG-4 | Refusal message names wrong problem | ⏳ pending | — |
+| BUG-5 | Classify stage fires twice | ⏸ out of scope | — |
+
+**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` no longer crashes and, on the runs where the parser emits the bad `include=['Supplier']` shape, the strip (BUG-1 Step 1) removes it and the answer runs — returning `JGA`, `JGA Progress US`, `White, Eleanor`. Remaining failures are the parser's self-declared-refusal attractor, which is BUG-1 Step 2's target (parser prompt bullet).
+
 ---
 
 ## 1. Executive summary
@@ -31,7 +47,7 @@ Concretely:
 - **The parser prompt does not cover this case.** There is a rule for `include the buyer` (edge `ASSIGNED_TO` exists). There is no rule for `supplier details for PO X`. The model must guess. It guesses `include: ['Supplier']`, for which no edge exists, and the pipeline breaks in one of two ways.
 - **The failure is not a capability gap.** It is a parser-prompt gap, a validator gap, and a defensive-coding gap — three specific, locatable bugs. None requires a new tool or new Fusion endpoint.
 
-**Twenty-run measurement (2026-09-12, live):** 9/20 refused, 11/20 crashed, 0/20 answered correctly. The parse output-token count perfectly predicts which outcome fires: `out=3440` → refusal (9/9); `out=3741` → crash (11/11). Zero exceptions.
+**Twenty-run measurement (2026-09-12, live, baseline before any fix):** 9/20 refused, 11/20 crashed, 0/20 answered correctly. The parse output-token count perfectly predicts which outcome fires: `out=3440` → refusal (9/9); `out=3741` → crash (11/11). Zero exceptions.
 
 ---
 
@@ -378,6 +394,35 @@ The `Site` gate can be preserved for its distinct message, or its message merged
 
 **Commit boundary:** one PR, one commit. Small enough to review at a glance.
 
+#### Status update (2026-09-12) — ✅ FIXED
+
+**Commit:** `97bc8f7` on `fix/s1-remediation`.
+
+**Files actually changed:**
+
+- `src/spire/nl_parser/vocabulary.py` — `KGMenu` gained `edge_pairs`, `edge_traversal_targets`, `has_edge()`, `edge_traversal_target()`; `load_kg_menu()` populates both
+- `src/spire/nl_parser/intent_validation.py` — Step 3b generalised
+- `tests/test_bug2_include_gate.py` — new (17 tests)
+- `scripts/verify_bug2.py` — new (standalone probe)
+
+**What was learned during the fix (not in the original proposal):**
+
+The first draft of the general gate broke 5 pre-existing tests in `tests/test_nl_parser.py`. Those tests use hand-built `KGMenu` fixtures with `edge_pairs=set()` — they populate only the fields needed for parser/Intent logic, never edges. The gate consulted `edge_pairs`, found it empty, and refused every include.
+
+The fix: **the gate is a no-op when `menu.edge_pairs` is empty**, matching the contract `KGMenu` already follows for `field_synonyms`, `entity_synonyms`, and `entity_columns` (all treated as "absent => feature disabled", not "error"). The `Site` string check is a hardcoded string test and does NOT depend on edges, so it still fires.
+
+A second design point settled during the fix: the gate **simulates the planner's Block 2** before running its include chain. An edge-traversal filter (`has_open_PO`, `has_no_recent_invoices`, ...) updates the "previous entity" the first include chains from — without the simulation, `Supplier + has_open_PO + include=['Buyer']` would be falsely refused, because `Supplier → Buyer` has no edge but `PurchaseOrder → Buyer` does. The gate now walks that hop.
+
+**Also confirmed by the fix, broader than the original bug:** `HAS_CLASSIFICATION` (Supplier → Classification) has an edge but its only tool (`search_suppliers_by_classification`) is a *reverse filter* — it needs a `classification` arg the executor never supplies. Before the fix, that shape reached the executor and crashed on a missing required arg. The gate now refuses it with `offending_entity='Classification'`. Same defect class as S1, different trigger.
+
+**Verification (2026-09-12):**
+
+- `tests/test_bug2_include_gate.py`: **17 passed**
+- `tests/test_nl_parser.py`: **35 passed** (5 previously-failing tests now pass)
+- Full suite: **934 passed**, 18 deselected
+- 20-run S1 batch: **crash count 11 → 0** (all runs now produce refusals — clean messages, not crashes)
+- `verify_bug2.py`: rows [1], [4c], [5a], [5b] flip from PASSED to REFUSED; rows [2], [3], [4a], [4b], [6] unchanged
+
 ---
 
 ### BUG-3 — Planner Block 3 should not raise a raw `KeyError`
@@ -432,6 +477,26 @@ except KeyError:
 5. Full test suite passes.
 
 **Commit boundary:** one PR. Independent of BUG-2.
+
+#### Status update (2026-09-12) — ✅ FIXED
+
+**Commit:** `acd3f6f` on `fix/s1-remediation`.
+
+**Files actually changed:**
+
+- `src/spire/planner/planner.py` — Block 3, the inner `raise KeyError` at line 472 replaced by `RefusalError(Refusal(flavor=UNSUPPORTED_OPERATION, ...))`. The outer control flow (chain hop then sibling hop) is unchanged.
+- `tests/test_bug3_planner_include.py` — new (6 tests)
+- `scripts/verify_bug3.py` — new (standalone probe)
+
+**What was learned during the fix:** `plan_node` already catches `RefusalError` and routes `exc.refusal` into `state["refusal"]` — the same channel a parser decline uses. No change was needed in the pipeline, only in the planner's raise. This is the shortest fix of the three.
+
+**Verification (2026-09-12):**
+
+- `tests/test_bug3_planner_include.py`: **6 passed**
+- Full suite: **940 passed**, 18 deselected (934 + 6)
+- `verify_bug3.py` after fix: [1] `KeyError → RefusalError`; [3] `KeyError → RefusalError` (offending=Supplier, correct element in a multi-include list); [4] `{'error': ...}` with `plan_refusal = <MISSING>` → `{'refusal': Refusal}`; [2] and [5] unchanged
+
+**Reachability note (added by the fix, not in the original):** after BUG-2's gate, this path is unreachable for parser-generated intents. It is now a **layered backstop** for two cases the gate cannot reach — hand-built `Intent`s (the planner is a public API; `run_plan.py` and tests construct Intents directly, bypassing the parser), and future KG drift (a KG change that removes an edge a working parser include still assumes).
 
 ---
 
@@ -512,6 +577,44 @@ Depends on Open Question §5.1. If the SME wants the contact name in the answer,
 
 **Commit boundary:** Step 1 is its own PR. Step 2 is a separate PR gated on Step 1's stability. Step 3 is separate again.
 
+#### Status update (2026-09-12) — ✅ Step 1 FIXED
+
+**Commit:** this commit (BUG-1 Step 1) on `fix/s1-remediation`.
+
+**Files actually changed (Step 1 only):**
+
+- `src/spire/nl_parser/vocabulary.py` — new helper `strip_po_supplier_include(target, include, menu)` and the module-level pair `_STRIP_INCLUDE_WHEN_NO_EDGE = ("PurchaseOrder", "Supplier")`. The helper is **KG-gated**: it fires only if `menu.has_edge("PurchaseOrder", "Supplier")` is False, so if a future KG change declares the edge the strip becomes a no-op — self-retiring, no code change needed.
+- `src/spire/nl_parser/parser.py` — imports and calls `strip_po_supplier_include` after `add_child_include_from_prompt`, before `validate_intent`. The three S1 debug prints from `c9c4fb1` are preserved verbatim.
+- `tests/test_bug1_po_supplier_strip.py` — new (13 tests: 7 primitive on the helper, 6 end-to-end via a mock LLM)
+- `scripts/verify_bug1.py` — new (standalone probe, deterministic via a mock LLM)
+
+**What was learned during the fix:**
+
+The live 20-run S1 batch after the strip shows the fix works where the parser emits the bad include, but the model is still **bimodal**: 7/20 answer, 13/20 refuse. The refusals are the parser's **self-declared-refusal attractor** — the model emits `unanswerable=true` with a reason and never produces an `Intent`, so the strip has nothing to strip from. **Step 2 (the parser prompt bullet) is what addresses the self-declared-refusal mode.** The strip closes the crash path and the `include=['Supplier']` path; Step 2 closes the third path.
+
+**Live S1 batch after this fix (20 runs):**
+
+- **Crashes:** 0
+- **Refusals:** 13 (parser self-declared — Step 2's target)
+- **Answers (JGA, White Eleanor):** 7
+
+**Progress across the branch (20-run S1 batch):**
+
+| Metric | Baseline | After BUG-2 | After BUG-3 | After BUG-1 Step 1 |
+|---|---:|---:|---:|---:|
+| Crashes | 11 | 0 | 0 | **0** |
+| Refusals | 9 | 20 | 20 | **13** |
+| Answers | 0 | 0 | 0 | **7** |
+
+**Verification (2026-09-12):**
+
+- `tests/test_bug1_po_supplier_strip.py`: **13 passed**
+- Full suite: **953 passed**, 18 deselected (940 + 13)
+- `verify_bug1.py` after fix: [1]-[3] REFUSED → OK with `Supplier` stripped and survivors preserved; [4]-[8] controls unchanged
+- Canary `scripts/prompts/00_dipstick.txt`: 6/6 pass
+
+**Presentation gap noticed during the fix (not part of BUG-1):** the typed `PurchaseOrder` record renders `Supplier` but not `SupplierSite`, even though `SupplierSite: 'JGA Progress US'` is present in the raw output. This is a **synthesizer schema** issue (`PurchaseOrderRecord` in the synthesizer does not carry `supplier_site`), separate from BUG-1. Recorded here for a future cycle; not addressed in this commit.
+
 ---
 
 ### BUG-4 — Refusal message names the wrong problem
@@ -546,6 +649,10 @@ The same reasoning applies to `UNSUPPORTED_FILTER`: when `refusal.offending_filt
 
 **Commit boundary:** one PR, sub-part A only. Sub-part B deferred.
 
+#### Status update (2026-09-12) — ⏳ pending
+
+Not yet started. Target: step 4 of §6.
+
 ---
 
 ### BUG-5 — Classify stage fires twice per invocation
@@ -561,9 +668,13 @@ The same reasoning applies to `UNSUPPORTED_FILTER`: when `refusal.offending_filt
 
 **Deferred.** No action in this remediation.
 
+#### Status update (2026-09-12) — ⏸ out of scope
+
+Deferred to a separate cycle per §3.4.
+
 ---
 
-## 5. Open questions for SME (must be answered before BUG-1 Step 3 and BUG-4 sub-part B)
+## 5. Open questions for SME
 
 ### 5.1 — What does "supplier details" mean for the answer?
 
@@ -573,34 +684,21 @@ The current `get_purchase_order_by_id` projection includes Supplier, SupplierId,
 
 **Question:** should `Show supplier details for PO X` include the contact name (`Seth Ries`)?
 
-- **Yes** → BUG-1 Step 3 adds `SupplierContactDisplayName` (and/or the id) to `_PROJECTED_FIELDS`. Three-line change.
-- **No** → nothing to do; the current projection answers.
-
-**Recommendation:** include the contact. The user asked for "details" (plural), the field is on the same fetch, and the lifecycle path already surfaces it, so its omission from the by_id path is an inconsistency.
+**Recommendation:** include the contact.
 
 ### 5.2 — Prompt bullet (Option A/Step 2) or code-side strip only (Option B/Step 1)?
 
-**Question:** after BUG-1 Step 1 ships and the S1 prompt answers correctly, do you want to also add the parser prompt bullet (Step 2)?
+**Recommendation:** yes to Step 2, but as a separate, later PR after Step 1 has proven stable.
 
-- **Yes** → the parser prompt becomes self-consistent with the endpoint's actual shape. Cost: re-approval of the byte-equality oracle, a full regression run across `scripts/prompts/*.txt`.
-- **No** → the code-side strip is the only fix. Cheaper, but leaves the parser prompt implicitly wrong (no rule for the case), so the strip will keep being necessary for any prompt that acquires the bad include from a path we haven't enumerated.
-
-**Recommendation:** yes, but as a separate, later PR after Step 1 has proven stable in production for at least one full regression cycle.
+**Update from the fix:** Step 1 alone leaves 13/20 S1 runs in the parser's self-declared-refusal attractor. Step 2 is therefore not merely tidier — it is what closes the last failure mode. Recommend promoting Step 2 to the next item after BUG-4.
 
 ### 5.3 — Preserve the `Site` gate's distinct message, or generalise?
 
-**Question:** in BUG-2, when the general un-wireable-include gate is added, should `Site` retain its distinct user-facing message (`"Supplier sites aren't available as a standalone listing."` plus the specific Solution/Example keyed on `SupplierSiteListing`), or is it OK to fold it into the general message (`"Site is not a valid include on Supplier."`)?
-
-- **Preserve** → keep the `if "Site" in intent.include:` block as a specific case *before* the general loop, so the more helpful message wins.
-- **Generalise** → one code path, one message. Cleaner, but loses the specifically-worded Solution/Example.
-
-**Recommendation:** preserve. The `Site` message is already tested against (per the codebase's own docstring about `SupplierSiteListing` in `_OPERATION_EXAMPLES` and `_OPERATION_SOLUTIONS`), and its wording is more helpful than the general case can be.
+**Recommendation:** preserve. **Decided and shipped in BUG-2** — the Site message is retained verbatim (see §4 BUG-2 status update).
 
 ### 5.4 — BUG-4: detail-passthrough now, or new flavor later?
 
-**Question:** ship BUG-4 sub-part A (`_reason_line` prefers `refusal.detail` when structured fields are absent) now, and defer the new `RefusalFlavor.UNSUPPORTED_INCLUDE` to a later cycle?
-
-**Recommendation:** yes to both. Sub-part A is small, safe, and follows an existing pattern in the same file. Sub-part B is a schema change with wider ripple.
+**Recommendation:** yes to both. Sub-part A now, sub-part B deferred.
 
 ---
 
@@ -629,6 +727,23 @@ The following order is chosen so that each step is **safe on its own** and each 
 
 **After Step 3:** re-run the 20-run S1 batch as the definitive proof. If 20/20 answer correctly, the S1 problem is closed.
 
+### 6.1 Current execution status (2026-09-12)
+
+*(Added 2026-09-12 after the third fix. New section — does not replace the table above.)*
+
+| Step | Issue | Status | Commit | Verified by |
+|---:|---|---|---|---|
+| 1 | BUG-2 — validator gate | ✅ **DONE** | `97bc8f7` | 17 new tests; 934-suite green; crash count 11→0 |
+| 2 | BUG-3 — planner raises `RefusalError` | ✅ **DONE** | `acd3f6f` | 6 new tests; 940-suite green |
+| 3 | BUG-1 Step 1 — code-side strip | ✅ **DONE** | this commit | 13 new tests; 953-suite green; batch answers 0→7, crashes 0 |
+| 4 | BUG-4 sub-part A — `_reason_line` prefers detail | ⏳ **NEXT** | — | — |
+| 5 | BUG-1 Step 3 (optional) — contact field | ⏳ pending SME §5.1 | — | — |
+| 6 | BUG-1 Step 2 — parser prompt bullet | ⏳ promote (see §5.2 update) | — | gated on Step 3 stability |
+| 7 | BUG-4 sub-part B (deferred) — new flavor | ⏳ deferred | — | SME §5.4 |
+| — | BUG-5 — classify double-call | ⏸ out of scope | — | separate cycle |
+
+**Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivers 7/20 answers (crashes 0, refusals 13). The remaining 13 are the parser's self-declared-refusal mode, which the strip cannot touch. **Step 2 is the fix that closes them**, and §6.1 recommends promoting it to immediately after BUG-4. The plan's step order (3, 4, 5, 6) is preserved above; the recommendation is a schedule note, not a reorder.
+
 ---
 
 ## 7. What this document does **not** claim
@@ -638,8 +753,8 @@ To keep the record honest:
 1. **Not all failure modes are mapped.** Other prompts that acquire an unsatisfiable include may exist. BUG-2's general gate is designed to catch them, but it has not been exhaustively fuzzed.
 2. **Not all `PurchaseOrder` prompts have been tested.** The 20-run batch used only the S1 wording. `scripts/prompts/02_purchase_order.txt` and `08_lifecycle.txt` have been spot-checked, not re-run.
 3. **The classify double-call (§2.8) is unexplained.** It may correlate with something we haven't measured.
-4. **The 9/11 ratio in this batch differs from the earlier session's 7/3.** We do not know why. The batch was run live, same model, same temperature. It may be time-of-day, quota state, or unmeasured variance. It does not affect the fix, but it means the writeup's "8/10 refuse, 2/10 crash" characterization should be updated to "bimodal; ratio not stable".
-5. **The "8,000-token ceiling" framing in the original writeup is not supported by the evidence** (43–47%, not near ceiling). The fix does not depend on that framing being right or wrong.
+4. **The 9/11 ratio in this batch differs from the earlier session's 7/3.** We do not know why. It does not affect the fix, but it means the writeup's "8/10 refuse, 2/10 crash" characterization should be updated to "bimodal; ratio not stable".
+5. **The "8,000-token ceiling" framing in the original writeup is not supported by the evidence.** The fix does not depend on that framing.
 
 ---
 
@@ -653,4 +768,39 @@ To keep the record honest:
 | BUG-4 | Refusal message names wrong problem | code (capability) | Step 4 | §5.4 (new flavor or not) |
 | BUG-5 | Classify fires twice | code (router) | out of scope | none |
 
-**Questions for SME — please answer §5.1, §5.2, §5.3, §5.4. Then we can begin with Step 1 (BUG-2).**
+### 8.1 Current summary (2026-09-12)
+
+*(Added 2026-09-12 after the third fix. New section — does not replace the table above.)*
+
+| # | Issue | Fix type | Status | SME input needed |
+|---:|---|---|---|---|
+| BUG-2 | No general un-wireable-include gate | code (validator) | ✅ FIXED `97bc8f7` | none (Site preservation decided — retained) |
+| BUG-3 | Planner raises raw `KeyError` | code (planner) | ✅ FIXED `acd3f6f` | none |
+| BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) | ✅ Step 1 FIXED (this commit) | §5.1 (contact field), §5.2 (bullet — now recommended for next) |
+| BUG-4 | Refusal message names wrong problem | code (capability) | ⏳ NEXT | §5.4 (new flavor or not) |
+| BUG-5 | Classify fires twice | code (router) | ⏸ out of scope | none |
+
+---
+
+## 9. Branch history
+
+*(Added 2026-09-12. New section.)*
+
+Branch: `fix/s1-remediation`, based on `master`.
+
+| Commit | Message | Files |
+|---|---|---|
+| `97bc8f7` | Fix S1: general include gate in validate_intent | `vocabulary.py`, `intent_validation.py`, `test_bug2_include_gate.py`, `verify_bug2.py` |
+| `c9c4fb1` | chore: S1 debug instrumentation (temporary) | `parser.py`, `router.py` — *to be reverted in a cleanup commit at the end of the branch* |
+| `09ae116` | chore: S1 investigation artifacts | `four_bugs.md`, `prompts/12_po_supplier_include.{txt,json}`, `t_s1_isolate.py`, `t_s1_repro.py` |
+| `854b81c` | Updating readme, overnight bugs status and utility prograpm | `README.md`, `docs/spire_findings_11-Sep-2026.md`, `isolation/*` |
+| `acd3f6f` | Fix S1: planner raises RefusalError, not KeyError, for a bad include | `planner.py`, `test_bug3_planner_include.py`, `verify_bug3.py` |
+| `<this commit>` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, **`docs/four_bugs.md`** |
+
+**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 2 is verified. Add `.gitignore` entries for local-only artifacts.
+
+**Process note:** from this commit onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
+
+---
+
+**End of document.**
