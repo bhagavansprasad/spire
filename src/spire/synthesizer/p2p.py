@@ -196,6 +196,26 @@ class PurchaseOrderRecord(BaseModel):
     supplier_id: int = Field(
         description="The supplier's SupplierId. Must appear in the data."
     )
+    # BUG-1 Step 3. The supplier's fulfilment SITE and the contact person
+    # on this order. Both ride on the PO header itself (curl-confirmed:
+    # SupplierSite 'JGA Progress US' and SupplierContactDisplayName 'Seth
+    # Ries' for PO 701337), so neither needs a join. Both default to ""
+    # — the same treatment supplier_name and status get — so an older
+    # PO shape or a null header field degrades to an omitted column
+    # rather than a validation failure. Free text, not identifiers, so
+    # neither is cross-checked by the hallucination guard.
+    supplier_site: str = Field(
+        default="",
+        description="The supplier SITE name on the PO header (SupplierSite) "
+        "— the fulfilment site for this order. Empty when the PO carries no "
+        "site.",
+    )
+    supplier_contact: str = Field(
+        default="",
+        description="The supplier contact's display name, first-last "
+        "(SupplierContactDisplayName on the PO header). Empty when the PO "
+        "carries no contact.",
+    )
     buyer: BuyerInfo | None = Field(
         default=None,
         description="The buyer assigned to this PO, if one is in the data. "
@@ -594,6 +614,10 @@ def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
     only when the executor produced a single PO bucket, so no child rows
     were fetched to put in them. A query that DOES fetch a PO's children
     takes the LLM path, where the hierarchy join is still the model's job.
+
+    BUG-1 Step 3: supplier_site and supplier_contact are copied here too.
+    Both ride on the PO header itself (same-row, no join needed), so
+    there is no reason for the plain-list path to be missing them.
     """
     records: list[PurchaseOrderRecord] = []
     for row in rows:
@@ -613,6 +637,11 @@ def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
                 status=row.get("Status") or row.get("StatusCode") or "",
                 supplier_name=row.get("Supplier") or "",
                 supplier_id=row.get("SupplierId") or 0,
+                # BUG-1 Step 3.
+                supplier_site=str(row.get("SupplierSite") or ""),
+                supplier_contact=str(
+                    row.get("SupplierContactDisplayName") or ""
+                ),
                 buyer=buyer,
             )
         )
@@ -841,6 +870,11 @@ def build_po_with_children(
     Every id on every child comes straight from an executor row, so the
     response validator's child-id cross-checks (po_line_ids,
     line_location_ids, po_distribution_ids) all pass by construction.
+
+    BUG-1 Step 3: supplier_site and supplier_contact are copied here too.
+    This is a SECOND path that instantiates PurchaseOrderRecord; touching
+    only build_purchase_order_records would leave "Show PO X and its lines"
+    silently without site or contact.
     """
     po_rows = outputs.get(buckets["po"], [])
     line_rows = outputs.get(buckets.get("lines", ""), [])
@@ -866,6 +900,11 @@ def build_po_with_children(
                 status=po.get("Status") or po.get("StatusCode") or "",
                 supplier_name=po.get("Supplier") or "",
                 supplier_id=po.get("SupplierId") or 0,
+                # BUG-1 Step 3.
+                supplier_site=str(po.get("SupplierSite") or ""),
+                supplier_contact=str(
+                    po.get("SupplierContactDisplayName") or ""
+                ),
                 buyer=buyer,
                 lines=[_build_line(r) for r in _for_po(line_rows, ph)],
                 schedules=[_build_schedule(r) for r in _for_po(sched_rows, ph)],
@@ -875,8 +914,6 @@ def build_po_with_children(
             )
         )
     return records
-
-
 
 
 def _filtered_supplier_list(
@@ -976,5 +1013,3 @@ def build_narrowing_tip(
         f"Reading all {total:,} {entity_label} is slow. "
         f"Narrow with a filter: {filters_text}."
     )
-
-

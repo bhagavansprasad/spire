@@ -103,6 +103,8 @@ def generate_plan(
 
     Raises NotImplementedError if any filter in ``intent.filters`` has
     a ``type`` not supported in v1 (silent-drop defect fix — F1).
+    Raises RefusalError (structured) when an include cannot be satisfied
+    (BUG-3 — see Block 3).
     """
     # ── Feature 7: aggregation short-circuit ──────────────────────
     # When the intent carries an aggregate block, the question is a
@@ -469,10 +471,49 @@ def generate_plan(
             try:
                 edge = find_edge(root_entity, include_entity)
             except KeyError:
-                raise KeyError(
-                    f"No edge to include {include_entity!r}: it is neither a "
-                    f"child of {previous_entity!r} (chain) nor of "
-                    f"{root_entity!r} (sibling under the root)."
+                # BUG-3: route the unsatisfiable include as a STRUCTURED
+                # REFUSAL, not a raw KeyError. plan_node catches RefusalError
+                # and drops it into state["refusal"] — the same channel a
+                # parser decline uses — so run_graph renders it through
+                # capability_message (readable Reason/Solution/Example) and
+                # exits with the refusal code, instead of printing
+                # "ERROR: plan: ..." to stderr and exiting 2 as a hard
+                # failure.
+                #
+                # This path is now UNREACHABLE for parser-generated intents:
+                # the validate_intent include gate (BUG-2, on this branch)
+                # refuses the shape before the planner runs. This is the
+                # BACKSTOP for the two cases the gate cannot reach — a
+                # hand-built Intent (the planner is a public API; run_plan.py
+                # and tests construct Intents directly), or a KG change that
+                # removes an edge a working parser include still assumes.
+                # Layered defence: BUG-2 is the front gate, this is the net.
+                #
+                # The flavor is UNSUPPORTED_OPERATION (an include the intent
+                # asks for cannot be satisfied), matching the message the
+                # gate produces — so a user who somehow reaches either path
+                # sees the same reason. capability.py's wording for this
+                # flavor is not yet ideal (BUG-4); that is a separate fix.
+                #
+                # Local import breaks a module-load cycle: result.py imports
+                # Intent via planner.planner, so a top-level result import
+                # here would import-cycle. By call time both modules are
+                # fully loaded — same pattern the entity guards above use.
+                from spire.nl_parser.result import (
+                    Refusal,
+                    RefusalError,
+                    RefusalFlavor,
+                )
+
+                raise RefusalError(
+                    Refusal(
+                        flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
+                        detail=(
+                            f"{include_entity} is not a valid include "
+                            f"on {intent.target_entity}."
+                        ),
+                        offending_entity=include_entity,
+                    )
                 )
             include_iter_output = root_output_name
         tool = find_edge_tool(edge["edge_name"])
@@ -541,5 +582,3 @@ def generate_plan(
         step_id += 1
 
     return plan
-
-

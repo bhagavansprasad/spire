@@ -40,6 +40,8 @@ bundles:
   - scripts/prompts/08_lifecycle.txt
   - scripts/prompts/10_refusal_examples.txt
   - scripts/prompts/11_column_vocabulary.txt
+  - scripts/prompts/12_po_supplier_include.txt
+  - scripts/prompts/README.md
   - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/scorer/parser_stress.txt
@@ -57,6 +59,7 @@ bundles:
   - scripts/prompts/07_alacarte.json
   - scripts/prompts/08_lifecycle.json
   - scripts/prompts/11_column_vocabulary.json
+  - scripts/prompts/12_po_supplier_include.json
   - scripts/prompts/qa_testcases.json
   - scripts/prompts/mini.txt
   - scripts/prompts/mini.json
@@ -88,6 +91,15 @@ bundles:
   - scripts/build_classifier_context.py
   # adds an entity->module mapping row to the KG
   - scripts/add_entity_module.py
+  # S1 remediation (BUG-1..4) verify/apply + isolation harnesses
+  - scripts/verify_bug1.py
+  - scripts/verify_bug1_step2.py
+  - scripts/verify_bug2.py
+  - scripts/verify_bug3.py
+  - scripts/verify_bug4.py
+  - scripts/apply_bug1_step2_context_assembly.py
+  - scripts/t_s1_isolate.py
+  - scripts/t_s1_repro.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -191,6 +203,7 @@ bundles:
   - src/spire/nl_parser/context/procurement/b_po_lines.sysprompt
   - src/spire/nl_parser/context/procurement/b_po_received.sysprompt
   - src/spire/nl_parser/context/procurement/b_po_schedules.sysprompt
+  - src/spire/nl_parser/context/procurement/b_po_supplier_details.sysprompt
   - src/spire/nl_parser/context/procurement/m_po_lifecycle.sysprompt
   - src/spire/nl_parser/context/receivables/b_account_balance.sysprompt
   - src/spire/nl_parser/context/receivables/b_account_receipts.sysprompt
@@ -290,6 +303,12 @@ bundles:
   - tests/test_parser_context_assembly.py
   # promptkit --validate decision-logic test (tool-gates-module-warns)
   - tests/test_promptkit.py
+  # S1 remediation (BUG-1..4) tests
+  - tests/test_bug1_po_supplier_strip.py
+  - tests/test_bug1_step2_prompt_coverage.py
+  - tests/test_bug2_include_gate.py
+  - tests/test_bug3_planner_include.py
+  - tests/test_bug4_reason_line.py
 
 excludes:
 - traces

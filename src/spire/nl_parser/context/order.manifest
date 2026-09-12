@@ -14,6 +14,7 @@ payables/b_invoice_date.sysprompt
 payables/b_invoice_amount.sysprompt
 payables/b_addresses.sysprompt
 procurement/b_buyer_include.sysprompt
+procurement/b_po_supplier_details.sysprompt
 procurement/b_po_by_id.sysprompt
 procurement/b_po_lines.sysprompt
 receivables/b_ar_invoice_by_id.sysprompt

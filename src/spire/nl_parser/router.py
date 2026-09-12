@@ -141,6 +141,7 @@ def classify_modules(
 
     structured_llm = llm.with_structured_output(ModuleChoice, include_raw=True)
     system_prompt = _classifier_system_prompt(menu_text)
+
     result = structured_llm.invoke(
         [("system", system_prompt), ("human", prompt)]
     )
