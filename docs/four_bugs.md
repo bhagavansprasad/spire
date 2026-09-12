@@ -28,11 +28,12 @@ One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is
 |---:|---|---|---|
 | BUG-2 | No general un-wireable-include gate in `validate_intent` | ✅ **FIXED** | `97bc8f7` |
 | BUG-3 | Planner raises raw `KeyError` for a bad include | ✅ **FIXED** | `acd3f6f` |
-| BUG-1 | Parser gap on "supplier details for PO X" | ✅ **Step 1 FIXED** (this commit) | — |
-| BUG-4 | Refusal message names wrong problem | ⏳ pending | — |
+| BUG-1 Step 1 | Code-side strip of the un-wireable `Supplier` include | ✅ **FIXED** | `333ea95` |
+| BUG-1 Step 2 | Parser prompt rule for "supplier details for PO X" | ✅ **FIXED** (this commit) | — |
+| BUG-4 | Refusal message names wrong problem | ⏳ NEXT | — |
 | BUG-5 | Classify stage fires twice | ⏸ out of scope | — |
 
-**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` no longer crashes and, on the runs where the parser emits the bad `include=['Supplier']` shape, the strip (BUG-1 Step 1) removes it and the answer runs — returning `JGA`, `JGA Progress US`, `White, Eleanor`. Remaining failures are the parser's self-declared-refusal attractor, which is BUG-1 Step 2's target (parser prompt bullet).
+**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `SupplierSite: JGA Progress US`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes, no reliance on which attractor the parser lands in. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on.
 
 ---
 
@@ -304,7 +305,7 @@ The precedent for a code-side, prompt-free fix already exists in the codebase: `
 - **Option B — code-side strip.** In `parse()`, after the LLM, if `intent.target_entity == 'PurchaseOrder'` and `intent.include == ['Supplier']`, strip the `Supplier` from the include list. Zero prompt change. Deterministic. Minimal blast radius. Requires a comment explaining why.
 - **Option C — both.** Do B now (safe, immediate), plan A for a later cycle with a full regression run across `scripts/prompts/*.txt`.
 
-**Recommended: Option C, with B shipped first.** The user-facing bug is fixed immediately and safely; the prompt is brought into line in a follow-up with proper regression coverage.
+**Recommended: Option C, with B shipped first.** The user-facing bug is fixed immediately and safely; the prompt is brought into line in a follow-up with proper regression coverage. **This is the path taken.** Option B shipped as `333ea95` (BUG-1 Step 1); Option A shipped as BUG-1 Step 2 (this commit).
 
 ### 3.3 Where each fix belongs
 
@@ -579,7 +580,7 @@ Depends on Open Question §5.1. If the SME wants the contact name in the answer,
 
 #### Status update (2026-09-12) — ✅ Step 1 FIXED
 
-**Commit:** this commit (BUG-1 Step 1) on `fix/s1-remediation`.
+**Commit:** `333ea95` on `fix/s1-remediation`.
 
 **Files actually changed (Step 1 only):**
 
@@ -615,6 +616,45 @@ The live 20-run S1 batch after the strip shows the fix works where the parser em
 
 **Presentation gap noticed during the fix (not part of BUG-1):** the typed `PurchaseOrder` record renders `Supplier` but not `SupplierSite`, even though `SupplierSite: 'JGA Progress US'` is present in the raw output. This is a **synthesizer schema** issue (`PurchaseOrderRecord` in the synthesizer does not carry `supplier_site`), separate from BUG-1. Recorded here for a future cycle; not addressed in this commit.
 
+#### Status update (2026-09-12) — ✅ **Step 2 FIXED — S1 CLOSED**
+
+**Commit:** this commit (BUG-1 Step 2) on `fix/s1-remediation`.
+
+**Files changed (Step 2 only):**
+
+- `src/spire/nl_parser/context/procurement/b_po_supplier_details.sysprompt` — new. One bullet, 290 chars, added at position 17 in the manifest (immediately after `b_buyer_include.sysprompt`).
+- `src/spire/nl_parser/context/order.manifest` — one line added. Now 49 blocks.
+- `src/spire/nl_parser/context_assembly.py` — `_SYSTEM_PROMPT_PREAMBLE` literal extended with the matching fragment block, applied via the script below. Diff is exactly five lines.
+- `scripts/apply_bug1_step2_context_assembly.py` — new. One-shot, idempotent insertion script. Inserted the fragment after `add 'Buyer' to include.\n`.
+- `tests/test_bug1_step2_prompt_coverage.py` — new. Six tests: block exists, starts with a bullet, carries the expected phrasing, manifest lists it, manifest position is right, assembled preamble contains the rule.
+- `tests/test_parser_context_assembly.py` — `_EXPECTED_BLOCK_COUNT` bumped from 48 to 49 (the byte-equality tripwire correctly flagged the manifest change).
+
+**Verification:**
+
+- `tests/test_parser_context_assembly.py`: **5/5 passed** — the byte-equality oracle confirms the literal and the files agree byte for byte.
+- `tests/test_bug1_step2_prompt_coverage.py`: **6/6 passed**.
+- Regression across the four affected prompt sets: **134/134 passed** — `01_supplier` (40), `02_purchase_order` (10), `08_lifecycle` (31), `11_column_vocabulary` (53). No new refusals, no degenerate parses.
+- Live S1 batch (20 runs): **20/20 answered, 0 crashes, 0 refusals.**
+
+**Progress across the branch — 20-run S1 batch:**
+
+| Metric | Baseline | BUG-2 | BUG-3 | Step 1 | **Step 2** |
+|---|---:|---:|---:|---:|---:|
+| Crashes | 11 | 0 | 0 | 0 | **0** |
+| Refusals | 9 | 20 | 20 | 13 | **0** |
+| Answers | 0 | 0 | 0 | 7 | **20** |
+
+**S1 status: CLOSED.** The prompt `Show supplier details for PO 701337.` answers correctly and deterministically. The parser's self-declared-refusal attractor — the last remaining failure mode — no longer fires on this wording.
+
+**What this does NOT close (still open on the branch):**
+
+- **BUG-4** (step 5) — the refusal MESSAGE for include-shaped problems is still the generic `UNSUPPORTED_OPERATION` fallback. Not observable on S1 anymore (S1 answers instead of refusing), but still a defect for other prompts that reach the refusal path.
+- **BUG-1 Step 3** (step 6, SME-gated §5.1) — adding `SupplierContactDisplayName` to the `by_id` projection. The answer currently shows `Supplier: JGA` and `SupplierSite: JGA Progress US` but not the contact (`Seth Ries`).
+- **BUG-5** — out of scope.
+- **Cleanup commit** — reverting the temporary debug instrumentation from `c9c4fb1` and adding `.gitignore` entries for `isolation/`, `s1_*.txt`, `test_bug1*.txt`, `verify_bug*.txt`.
+
+**Note on the tripwire:** the byte-equality test file was updated as part of this fix, not as a separate cleanup. The `_EXPECTED_BLOCK_COUNT` constant is the intended notification mechanism — the manifest change moved the count from 48 to 49, the test failed loudly, and the constant was bumped. This is the tripwire working as designed, documented in the test's own docstring. It is not a workaround.
+
 ---
 
 ### BUG-4 — Refusal message names the wrong problem
@@ -649,9 +689,9 @@ The same reasoning applies to `UNSUPPORTED_FILTER`: when `refusal.offending_filt
 
 **Commit boundary:** one PR, sub-part A only. Sub-part B deferred.
 
-#### Status update (2026-09-12) — ⏳ pending
+#### Status update (2026-09-12) — ⏳ NEXT
 
-Not yet started. Target: step 4 of §6.
+Not yet started. Target: step 5 of §6.1. This is the next scheduled item on the branch, following the promotion of BUG-1 Step 2 to step 4 (per §6.1's schedule note).
 
 ---
 
@@ -686,11 +726,13 @@ The current `get_purchase_order_by_id` projection includes Supplier, SupplierId,
 
 **Recommendation:** include the contact.
 
+**Note after the S1 fix:** the typed PurchaseOrder record renders `Supplier` and `Buyer`, but not `SupplierSite` even though the raw output has it. That is a **synthesizer schema** issue (`PurchaseOrderRecord` does not carry `supplier_site`), separate from BUG-1. If the SME wants both the site and the contact in the answer, two things are needed: (a) add `SupplierSite` (and `SupplierContactDisplayName` if desired) to `PurchaseOrderRecord` in the synthesizer, and (b) add `SupplierContactDisplayName` to `_PROJECTED_FIELDS` in `purchase_order_by_id.py`. These could ship together as a follow-up.
+
 ### 5.2 — Prompt bullet (Option A/Step 2) or code-side strip only (Option B/Step 1)?
 
 **Recommendation:** yes to Step 2, but as a separate, later PR after Step 1 has proven stable.
 
-**Update from the fix:** Step 1 alone leaves 13/20 S1 runs in the parser's self-declared-refusal attractor. Step 2 is therefore not merely tidier — it is what closes the last failure mode. Recommend promoting Step 2 to the next item after BUG-4.
+**Decided and shipped.** Step 2 shipped as the follow-up. §6.1 promoted it to run before BUG-4, on the grounds that it was the fix that closed the remaining 13/20 S1 failures — not merely tidier, but load-bearing. The regression across all four affected prompt sets passed cleanly.
 
 ### 5.3 — Preserve the `Site` gate's distinct message, or generalise?
 
@@ -735,14 +777,17 @@ The following order is chosen so that each step is **safe on its own** and each 
 |---:|---|---|---|---|
 | 1 | BUG-2 — validator gate | ✅ **DONE** | `97bc8f7` | 17 new tests; 934-suite green; crash count 11→0 |
 | 2 | BUG-3 — planner raises `RefusalError` | ✅ **DONE** | `acd3f6f` | 6 new tests; 940-suite green |
-| 3 | BUG-1 Step 1 — code-side strip | ✅ **DONE** | this commit | 13 new tests; 953-suite green; batch answers 0→7, crashes 0 |
-| 4 | BUG-4 sub-part A — `_reason_line` prefers detail | ⏳ **NEXT** | — | — |
-| 5 | BUG-1 Step 3 (optional) — contact field | ⏳ pending SME §5.1 | — | — |
-| 6 | BUG-1 Step 2 — parser prompt bullet | ⏳ promote (see §5.2 update) | — | gated on Step 3 stability |
+| 3 | BUG-1 Step 1 — code-side strip | ✅ **DONE** | `333ea95` | 13 new tests; 953-suite green; batch answers 0→7, crashes 0 |
+| 4 | **BUG-1 Step 2 (promoted)** — parser prompt rule | ✅ **DONE — S1 CLOSED** | this commit | 6 new tests; 134/134 across four regression sets; **batch answers 7→20, refusals 13→0** |
+| 5 | BUG-4 sub-part A — `_reason_line` prefers detail | ⏳ **NEXT** | — | — |
+| 6 | BUG-1 Step 3 (optional) — contact field | ⏳ pending SME §5.1 | — | — |
 | 7 | BUG-4 sub-part B (deferred) — new flavor | ⏳ deferred | — | SME §5.4 |
 | — | BUG-5 — classify double-call | ⏸ out of scope | — | separate cycle |
+| — | Cleanup commit | ⏳ end of branch | — | revert `c9c4fb1` debug prints; `.gitignore` |
 
-**Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivers 7/20 answers (crashes 0, refusals 13). The remaining 13 are the parser's self-declared-refusal mode, which the strip cannot touch. **Step 2 is the fix that closes them**, and §6.1 recommends promoting it to immediately after BUG-4. The plan's step order (3, 4, 5, 6) is preserved above; the recommendation is a schedule note, not a reorder.
+**Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivered 7/20 answers (crashes 0, refusals 13). The remaining 13 were the parser's self-declared-refusal mode, which the strip could not touch. **Step 2 was the fix that closed them**, and §6.1 promoted it to run before BUG-4 for that reason. The plan's step order (3, 4, 5, 6) is preserved above; the promotion is a schedule adjustment, not a reorder.
+
+**Step 4 outcome:** S1 CLOSED — 20/20 answers, 0 refusals, 0 crashes on the live batch. Regression across the four affected prompt sets: 134/134 passed.
 
 ---
 
@@ -776,8 +821,8 @@ To keep the record honest:
 |---:|---|---|---|---|
 | BUG-2 | No general un-wireable-include gate | code (validator) | ✅ FIXED `97bc8f7` | none (Site preservation decided — retained) |
 | BUG-3 | Planner raises raw `KeyError` | code (planner) | ✅ FIXED `acd3f6f` | none |
-| BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) | ✅ Step 1 FIXED (this commit) | §5.1 (contact field), §5.2 (bullet — now recommended for next) |
-| BUG-4 | Refusal message names wrong problem | code (capability) | ⏳ NEXT | §5.4 (new flavor or not) |
+| BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) | ✅ **Both steps FIXED** — S1 CLOSED | §5.1 (contact field) still open for Step 3 |
+| BUG-4 | Refusal message names wrong problem | code (capability) | ⏳ **NEXT** | §5.4 (new flavor or not) |
 | BUG-5 | Classify fires twice | code (router) | ⏸ out of scope | none |
 
 ---
@@ -795,11 +840,12 @@ Branch: `fix/s1-remediation`, based on `master`.
 | `09ae116` | chore: S1 investigation artifacts | `four_bugs.md`, `prompts/12_po_supplier_include.{txt,json}`, `t_s1_isolate.py`, `t_s1_repro.py` |
 | `854b81c` | Updating readme, overnight bugs status and utility prograpm | `README.md`, `docs/spire_findings_11-Sep-2026.md`, `isolation/*` |
 | `acd3f6f` | Fix S1: planner raises RefusalError, not KeyError, for a bad include | `planner.py`, `test_bug3_planner_include.py`, `verify_bug3.py` |
-| `<this commit>` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, **`docs/four_bugs.md`** |
+| `333ea95` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, **`docs/four_bugs.md`** |
+| `<this commit>` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, **`docs/four_bugs.md`** |
 
-**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 2 is verified. Add `.gitignore` entries for local-only artifacts.
+**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-4 (and optionally BUG-1 Step 3) is verified. Add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`).
 
-**Process note:** from this commit onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
+**Process note:** from commit `333ea95` onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
 
 ---
 

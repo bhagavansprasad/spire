@@ -1,0 +1,1 @@
+- 'supplier details for PO X' / 'show the supplier on PO X' / 'who is the supplier on PO X' -> target_entity 'PurchaseOrder' with a 'by_id' filter. Do NOT add 'Supplier' to include; the supplier name, number, site and contact are projected directly from the PO header by the by_id fetcher.
