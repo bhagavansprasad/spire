@@ -29,11 +29,14 @@ One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is
 | BUG-2 | No general un-wireable-include gate in `validate_intent` | ✅ **FIXED** | `97bc8f7` |
 | BUG-3 | Planner raises raw `KeyError` for a bad include | ✅ **FIXED** | `acd3f6f` |
 | BUG-1 Step 1 | Code-side strip of the un-wireable `Supplier` include | ✅ **FIXED** | `333ea95` |
-| BUG-1 Step 2 | Parser prompt rule for "supplier details for PO X" | ✅ **FIXED** (this commit) | — |
-| BUG-4 | Refusal message names wrong problem | ⏳ NEXT | — |
+| BUG-1 Step 2 | Parser prompt rule for "supplier details for PO X" | ✅ **FIXED** | `29737de` |
+| BUG-4 sub-part A | Refusal Reason line prefers clean detail | ✅ **FIXED** (this commit) | — |
+| BUG-4 sub-part B | New `UNSUPPORTED_INCLUDE` flavor | ⏳ deferred | — |
 | BUG-5 | Classify stage fires twice | ⏸ out of scope | — |
 
-**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `SupplierSite: JGA Progress US`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes, no reliance on which attractor the parser lands in. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on.
+**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `SupplierSite: JGA Progress US`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on.
+
+**Refusal-message state after BUG-4 sub-part A:** an include-shaped self-declared refusal (the S1-attractor shape, if it ever fires for a different prompt) now shows the parser's specific diagnosis in the Reason line, not the generic "not the way this question narrows them". Include-shaped refusals whose detail quotes an internal snake_case identifier still fall to the generic sentence; that is the discriminator working as designed.
 
 ---
 
@@ -305,7 +308,7 @@ The precedent for a code-side, prompt-free fix already exists in the codebase: `
 - **Option B — code-side strip.** In `parse()`, after the LLM, if `intent.target_entity == 'PurchaseOrder'` and `intent.include == ['Supplier']`, strip the `Supplier` from the include list. Zero prompt change. Deterministic. Minimal blast radius. Requires a comment explaining why.
 - **Option C — both.** Do B now (safe, immediate), plan A for a later cycle with a full regression run across `scripts/prompts/*.txt`.
 
-**Recommended: Option C, with B shipped first.** The user-facing bug is fixed immediately and safely; the prompt is brought into line in a follow-up with proper regression coverage. **This is the path taken.** Option B shipped as `333ea95` (BUG-1 Step 1); Option A shipped as BUG-1 Step 2 (this commit).
+**Recommended: Option C, with B shipped first.** The user-facing bug is fixed immediately and safely; the prompt is brought into line in a follow-up with proper regression coverage. **This is the path taken.** Option B shipped as `333ea95` (BUG-1 Step 1); Option A shipped as `29737de` (BUG-1 Step 2).
 
 ### 3.3 Where each fix belongs
 
@@ -618,7 +621,7 @@ The live 20-run S1 batch after the strip shows the fix works where the parser em
 
 #### Status update (2026-09-12) — ✅ **Step 2 FIXED — S1 CLOSED**
 
-**Commit:** this commit (BUG-1 Step 2) on `fix/s1-remediation`.
+**Commit:** `29737de` (BUG-1 Step 2) on `fix/s1-remediation`.
 
 **Files changed (Step 2 only):**
 
@@ -644,7 +647,7 @@ The live 20-run S1 batch after the strip shows the fix works where the parser em
 | Refusals | 9 | 20 | 20 | 13 | **0** |
 | Answers | 0 | 0 | 0 | 7 | **20** |
 
-**S1 status: CLOSED.** The prompt `Show supplier details for PO 701337.` answers correctly and deterministically. The parser's self-declared-refusal attractor — the last remaining failure mode — no longer fires on this wording.
+**S1 status: CLOSED.** The prompt `Show supplier details for PO 701337.` answers correctly and deterministically.
 
 **What this does NOT close (still open on the branch):**
 
@@ -689,9 +692,32 @@ The same reasoning applies to `UNSUPPORTED_FILTER`: when `refusal.offending_filt
 
 **Commit boundary:** one PR, sub-part A only. Sub-part B deferred.
 
-#### Status update (2026-09-12) — ⏳ NEXT
+#### Status update (2026-09-12) — ✅ sub-part A FIXED
 
-Not yet started. Target: step 5 of §6.1. This is the next scheduled item on the branch, following the promotion of BUG-1 Step 2 to step 4 (per §6.1's schedule note).
+**Commit:** this commit on `fix/s1-remediation`.
+
+**Files changed:**
+
+- `src/spire/nl_parser/capability.py` — new module-level `_INTERNAL_IDENTIFIER_RE` regex and `_detail_has_internal_identifier` helper. The `UNSUPPORTED_FILTER` self-declared branch now surfaces `detail` only when the discriminator passes. The KG-validation path (which always sets `offending_filters`) is unchanged — it never reaches the new branch.
+- `tests/test_bug4_reason_line.py` — new (8 tests).
+- `scripts/verify_bug4.py` — new (standalone probe).
+- `docs/four_bugs.md` — this section.
+
+**What was learned — the first attempt broke a pre-existing test:**
+
+The first attempt at sub-part A surfaced `detail` unconditionally on the self-declared path. It broke `tests/test_nl_parser_capability.py::test_unsupported_filter_without_named_filters_still_reads`, which protects against the model echoing an internal identifier verbatim — *"requires the 'by_customer_name' filter"*. That is the second-branch leak the existing code was written to hide. The test caught it, which is exactly what it exists for.
+
+The corrected version discriminates. Filter and field keys on this pod are snake_case (`by_customer_name`, `has_open_PO`, `created_before`); underscores in English prose are essentially always identifiers. A `detail` that contains a snake_case token is NOT safe to render; the generic sentence fires instead. A `detail` without one IS the model's specific diagnosis and is shown verbatim. CamelCase class names (`PurchaseOrder`, `ReceivablesInvoice`) do not match the discriminator and are deliberately allowed through — users read them as the noun phrase they spell, and the S1 diagnosis relies on `PurchaseOrder` being visible to make its point.
+
+**Verification (2026-09-12):**
+
+- `tests/test_bug4_reason_line.py`: **8 passed** — including boundary tests for the discriminator in both directions.
+- `tests/test_nl_parser_capability.py`: **101 passed**, including the previously-broken `test_unsupported_filter_without_named_filters_still_reads`.
+- Full suite: **967 passed**, 18 deselected.
+- `verify_bug4.py`: [1] shows the specific detail verbatim (was the generic sentence before the fix); [2], [3], [4] unchanged.
+- S1 is unaffected — it already answers via BUG-1 Step 2 and no longer reaches the refusal path.
+
+**Sub-part B (a new `RefusalFlavor.UNSUPPORTED_INCLUDE`) remains deferred** per §5.4.
 
 ---
 
@@ -742,6 +768,8 @@ The current `get_purchase_order_by_id` projection includes Supplier, SupplierId,
 
 **Recommendation:** yes to both. Sub-part A now, sub-part B deferred.
 
+**Decided and shipped.** Sub-part A shipped as this commit, with a discriminator to prevent the leak that a first attempt introduced. Sub-part B remains deferred.
+
 ---
 
 ## 6. Execution plan — one issue at a time
@@ -778,9 +806,9 @@ The following order is chosen so that each step is **safe on its own** and each 
 | 1 | BUG-2 — validator gate | ✅ **DONE** | `97bc8f7` | 17 new tests; 934-suite green; crash count 11→0 |
 | 2 | BUG-3 — planner raises `RefusalError` | ✅ **DONE** | `acd3f6f` | 6 new tests; 940-suite green |
 | 3 | BUG-1 Step 1 — code-side strip | ✅ **DONE** | `333ea95` | 13 new tests; 953-suite green; batch answers 0→7, crashes 0 |
-| 4 | **BUG-1 Step 2 (promoted)** — parser prompt rule | ✅ **DONE — S1 CLOSED** | this commit | 6 new tests; 134/134 across four regression sets; **batch answers 7→20, refusals 13→0** |
-| 5 | BUG-4 sub-part A — `_reason_line` prefers detail | ⏳ **NEXT** | — | — |
-| 6 | BUG-1 Step 3 (optional) — contact field | ⏳ pending SME §5.1 | — | — |
+| 4 | BUG-1 Step 2 (promoted) — parser prompt rule | ✅ **DONE — S1 CLOSED** | `29737de` | 6 new tests; 134/134 across four regression sets; batch answers 7→20, refusals 13→0 |
+| 5 | BUG-4 sub-part A — `_reason_line` prefers clean detail | ✅ **DONE** | this commit | 8 new tests; 967-suite green; discriminator pinned by boundary tests |
+| 6 | BUG-1 Step 3 (optional) — contact field | ⏳ **NEXT — SME-gated** | — | needs §5.1 answer |
 | 7 | BUG-4 sub-part B (deferred) — new flavor | ⏳ deferred | — | SME §5.4 |
 | — | BUG-5 — classify double-call | ⏸ out of scope | — | separate cycle |
 | — | Cleanup commit | ⏳ end of branch | — | revert `c9c4fb1` debug prints; `.gitignore` |
@@ -788,6 +816,10 @@ The following order is chosen so that each step is **safe on its own** and each 
 **Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivered 7/20 answers (crashes 0, refusals 13). The remaining 13 were the parser's self-declared-refusal mode, which the strip could not touch. **Step 2 was the fix that closed them**, and §6.1 promoted it to run before BUG-4 for that reason. The plan's step order (3, 4, 5, 6) is preserved above; the promotion is a schedule adjustment, not a reorder.
 
 **Step 4 outcome:** S1 CLOSED — 20/20 answers, 0 refusals, 0 crashes on the live batch. Regression across the four affected prompt sets: 134/134 passed.
+
+**Step 5 outcome:** BUG-4 sub-part A fixed on the second attempt (the first attempt broke `test_unsupported_filter_without_named_filters_still_reads`; the corrected version adds a snake_case discriminator to the detail passthrough). Full suite 967 green.
+
+**Step 6 — the only remaining work with an open question.** Depends on §5.1: does the S1 answer need the contact name (`Seth Ries`)? If yes, it also needs the synthesizer `PurchaseOrderRecord` to carry `SupplierSite` for the site to render.
 
 ---
 
@@ -822,7 +854,8 @@ To keep the record honest:
 | BUG-2 | No general un-wireable-include gate | code (validator) | ✅ FIXED `97bc8f7` | none (Site preservation decided — retained) |
 | BUG-3 | Planner raises raw `KeyError` | code (planner) | ✅ FIXED `acd3f6f` | none |
 | BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) | ✅ **Both steps FIXED** — S1 CLOSED | §5.1 (contact field) still open for Step 3 |
-| BUG-4 | Refusal message names wrong problem | code (capability) | ⏳ **NEXT** | §5.4 (new flavor or not) |
+| BUG-4 sub-part A | Refusal Reason line prefers clean detail | code (capability) | ✅ **FIXED** — this commit | none |
+| BUG-4 sub-part B | New `UNSUPPORTED_INCLUDE` flavor | code (capability) | ⏳ deferred | §5.4 |
 | BUG-5 | Classify fires twice | code (router) | ⏸ out of scope | none |
 
 ---
@@ -841,9 +874,10 @@ Branch: `fix/s1-remediation`, based on `master`.
 | `854b81c` | Updating readme, overnight bugs status and utility prograpm | `README.md`, `docs/spire_findings_11-Sep-2026.md`, `isolation/*` |
 | `acd3f6f` | Fix S1: planner raises RefusalError, not KeyError, for a bad include | `planner.py`, `test_bug3_planner_include.py`, `verify_bug3.py` |
 | `333ea95` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, **`docs/four_bugs.md`** |
-| `<this commit>` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, **`docs/four_bugs.md`** |
+| `29737de` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `verify_bug1_step2.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, **`docs/four_bugs.md`** |
+| `<this commit>` | Fix S1: refusal Reason line prefers clean detail over generic sentence | `capability.py`, `test_bug4_reason_line.py`, `verify_bug4.py`, **`docs/four_bugs.md`** |
 
-**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-4 (and optionally BUG-1 Step 3) is verified. Add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`).
+**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 3 (or a decision to skip it) is settled. Add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`, `s1_step2_*.txt`, `pipeline_*.txt`).
 
 **Process note:** from commit `333ea95` onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
 

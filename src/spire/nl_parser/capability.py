@@ -93,14 +93,83 @@ lands. A prompt naming one good column and one bad one currently returns
 nothing; it should return the good column and name the bad one. At that
 point a total column refusal means every requested column failed, which is
 the only case where refusing is the right answer.
+
+WHAT BUG-4 (SUB-PART A) ADDED — AND THE DISCRIMINATOR
+
+The same pattern, one more time, on UNSUPPORTED_FILTER — with a new twist.
+When the parser self-declared a refusal (so ``offending_filters`` is empty
+— that field is populated only by the KG-validation path), the renderer
+fell through to the generic "not the way this question narrows them"
+sentence and DISCARDED ``detail``.
+
+The model's diagnosis on the S1 shape — "Cannot retrieve supplier details
+for a specific purchase order because Supplier is not an allowed include
+on PurchaseOrder." — is specific, accurate, and was being thrown away in
+favour of a sentence the user cannot act on.
+
+BUT: the second branch exists for a REASON. The model sometimes echoes an
+internal identifier verbatim — "requires the 'by_customer_name' filter" —
+which is raw prose about the KG's own vocabulary and must not reach a
+user. A first attempt at this fix surfaced ``detail`` unconditionally and
+leaked exactly that; ``test_nl_parser_capability.py::
+test_unsupported_filter_without_named_filters_still_reads`` caught it.
+
+So the fix is not "always show detail" or "never show detail" — it is
+"show detail only when it is plain prose, not prose quoting an internal
+identifier". The discriminator is snake_case. Filter and field keys on
+this pod are snake_case (by_customer_name, has_open_PO, created_before);
+underscores in English prose are essentially always identifiers. A detail
+that names a snake_case token is NOT safe to render; the generic sentence
+is. A detail without one is the model's specific, accurate diagnosis and
+IS safe to render.
+
+CamelCase class names (PurchaseOrder, ReceivablesInvoice) do NOT match and
+are deliberately allowed through. Users read them as the noun phrase they
+spell, and the S1 diagnosis relies on "PurchaseOrder" being visible to
+make its point. The class-name tripwire in test_nl_parser_capability.py
+checks ``offending_entity``, not ``detail``, so this is consistent with
+the existing design.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from spire.nl_parser.result import Refusal, RefusalFlavor
 from spire.nl_parser.vocabulary import KGMenu
+
+
+# Filter and field keys on this pod are snake_case. The pattern requires at
+# least one underscore so single-word keys (country, status) do NOT match
+# — they humanize to themselves and are legitimate prose. Case-insensitive
+# so has_open_PO matches.
+_INTERNAL_IDENTIFIER_RE = re.compile(
+    r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+",
+    re.IGNORECASE,
+)
+
+
+def _detail_has_internal_identifier(text: str) -> bool:
+    """True if `text` quotes a snake_case filter or field key.
+
+    The KG's filter and field identifiers are snake_case — by_customer_name,
+    has_open_PO, created_before. The model sometimes echoes one verbatim
+    when explaining a refusal ("requires the 'by_customer_name' filter"),
+    which is the exact leak the UNSUPPORTED_FILTER second branch exists to
+    hide. A detail that names a snake_case token is therefore NOT safe to
+    render; the generic sentence is. A detail without one is plain English
+    — the S1 case, "Supplier is not an allowed include on PurchaseOrder"
+    — and IS the model's specific, accurate diagnosis, which the generic
+    sentence would throw away.
+
+    CamelCase class names (PurchaseOrder, ReceivablesInvoice) do NOT match
+    and are deliberately allowed through. Users read them as the noun
+    phrase they spell, and the S1 diagnosis relies on "PurchaseOrder"
+    being visible. The class-name tripwire checks ``offending_entity``,
+    not ``detail``, so this is consistent with the existing design.
+    """
+    return bool(_INTERNAL_IDENTIFIER_RE.search(text))
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -588,6 +657,28 @@ def _reason_line(refusal: Refusal, menu: KGMenu) -> str:
             if entity:
                 return f"I can look up {entity_label}, but not by {bad}."
             return f"I can't narrow records by {bad}."
+        # BUG-4 (sub-part A): the self-declared path. When the parser
+        # refused with its own reason, `detail` is sometimes a specific,
+        # accurate diagnosis — the S1 case, "Cannot retrieve supplier
+        # details for a specific purchase order because Supplier is not
+        # an allowed include on PurchaseOrder." — and sometimes raw prose
+        # quoting an internal identifier — "requires the 'by_customer_name'
+        # filter". The first is exactly what the user needs to see; the
+        # second is the leak the branch above exists to hide.
+        #
+        # The discriminator is snake_case. Filter and field keys on this
+        # pod are snake_case (by_customer_name, has_open_PO, created_before);
+        # underscores in English prose are essentially always identifiers.
+        # See _detail_has_internal_identifier for the check and the
+        # reasoning for why CamelCase class names are deliberately allowed
+        # through.
+        #
+        # A first attempt at this fix surfaced `detail` unconditionally and
+        # leaked "by_customer_name" — caught by
+        # test_unsupported_filter_without_named_filters_still_reads. This is
+        # the corrected version.
+        if refusal.detail and not _detail_has_internal_identifier(refusal.detail):
+            return refusal.detail
         if entity:
             return (
                 f"I can look up {entity_label}, but not the way this "
@@ -791,5 +882,3 @@ def capabilities_sentence(menu: KGMenu) -> str:
 # Backward-compatible alias: the previous private name, in case anything
 # outside this module imported it.
 _capabilities_sentence = capabilities_sentence
-
-
