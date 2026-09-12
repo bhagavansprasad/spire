@@ -2,7 +2,7 @@
 
 **Issue under investigation:** `Show supplier details for PO 701337.`
 **Date:** 2026-09-12
-**Status:** Investigation complete; remediation complete on branch `fix/s1-remediation` (cleanup commit pending)
+**Status:** Complete — remediation shipped on branch `fix/s1-remediation`, ready for PR
 **Prepared for:** SME review and staged implementation
 **Related document:** `Spire — S1 problem writeup for SME review` (2026-09-11)
 
@@ -34,7 +34,7 @@ One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is
 | BUG-1 Step 3 | Render supplier site and contact in PO answers | ✅ **FIXED** (this commit) | — |
 | BUG-4 sub-part B | New `UNSUPPORTED_INCLUDE` flavor | ⏳ deferred | — |
 | BUG-5 | Classify stage fires twice | ⏸ out of scope | — |
-| Cleanup | Revert `c9c4fb1`; add `.gitignore` entries | ⏳ pending | — |
+| Cleanup | Revert `c9c4fb1`; add `.gitignore` entries | ✅ **FIXED** | this commit |
 
 **Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `Site: JGA Progress US`, `Contact: Seth Ries`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on. Step 3 extended the answer with the two fields the SME asked for in §5.1.
 
@@ -844,7 +844,7 @@ The following order is chosen so that each step is **safe on its own** and each 
 | 6 | BUG-1 Step 3 — render supplier site and contact | ✅ **DONE** | this commit | 12 new tests; 979-suite green; live S1 shows Site and Contact |
 | 7 | BUG-4 sub-part B (deferred) — new flavor | ⏳ deferred | — | SME §5.4 |
 | — | BUG-5 — classify double-call | ⏸ out of scope | — | separate cycle |
-| — | Cleanup commit | ⏳ **PENDING** | — | revert `c9c4fb1` debug prints; `.gitignore` |
+| — | Cleanup commit | ✅ **DONE** | this commit | debug prints gone; `.gitignore` covers local artifacts |
 
 **Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivered 7/20 answers (crashes 0, refusals 13). The remaining 13 were the parser's self-declared-refusal mode, which the strip could not touch. **Step 2 was the fix that closed them**, and §6.1 promoted it to run before BUG-4 for that reason. The plan's step order (3, 4, 5, 6) is preserved above; the promotion is a schedule adjustment, not a reorder.
 
@@ -909,9 +909,11 @@ Branch: `fix/s1-remediation`, based on `master`.
 | `333ea95` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, `docs/four_bugs.md` |
 | `29737de` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `verify_bug1_step2.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, `docs/four_bugs.md` |
 | `7989d24` | Fix S1: refusal Reason line prefers clean detail over generic sentence | `capability.py`, `test_bug4_reason_line.py`, `verify_bug4.py`, `docs/four_bugs.md` |
-| `<this commit>` | Fix S1: render supplier site and contact in PO answers | `purchase_order_by_id.py`, `p2p.py`, `display_formatters.py`, `test_bug1_step3_supplier_details.py`, `docs/four_bugs.md` |
+| `939b08e` | Fix S1: render supplier site and contact in PO answers | `purchase_order_by_id.py`, `p2p.py`, `display_formatters.py`, `test_bug1_step3_supplier_details.py`, `docs/four_bugs.md` |
+| `ccf024b` | chore: update bundles list and add Step 3 probe | `context_bundles.yaml`, `scripts/verify_bug1_step3.py` |
+| `<this commit>` | chore: revert S1 debug instrumentation; ignore local artifacts | `parser.py`, `router.py`, `.gitignore`, `docs/four_bugs.md` |
 
-**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 3 is settled (it now is), and add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`, `s1_step2_*.txt`, `pipeline_*.txt`, `source-tree.txt`).
+**Cleanup commit landed** as `<this commit>`: the temporary debug instrumentation from `c9c4fb1` is reverted (three prints in `parser.py`, one in `router.py`), and `.gitignore` carries the local-only artifact patterns (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`, `s1_step2_*.txt`, `pipeline_*.txt`, `source-tree.txt`). The branch is ready for PR.
 
 **Process note:** from commit `333ea95` onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
 
