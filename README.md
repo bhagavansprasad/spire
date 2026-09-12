@@ -103,10 +103,54 @@ Full setup, keys, diagnostics, prompt sets, and troubleshooting are in
 
 ---
 
+## Working with prompt sets
+
+`promptkit` has three modes — **generate** a corpus from plain prompts,
+**validate** that a corpus still routes correctly, and **run** prompts end to
+end against the pod. JSON is the single corpus format.
+
+```bash
+# 1. GENERATE — turn a plain-text prompt list into a JSON corpus.
+#    Each prompt is run through the router; the chosen module + tool are
+#    recorded. The result is a DRAFT — a human curates the module/tool values,
+#    because the classifier is non-deterministic (see docs/ findings).
+python scripts/promptkit.py --generate scripts/prompts/08_lifecycle.txt
+
+# 2. VALIDATE — check a corpus still routes as recorded (no execution).
+#    Pass/fail is decided by the TOOL; a module-set mismatch on a tool-correct
+#    prompt is a non-failing "OK*" warning, listed under MODULE WARNINGS.
+python scripts/promptkit.py --validate scripts/prompts/08_lifecycle.json
+python scripts/promptkit.py --validate scripts/prompts/*.json        # all sets
+
+# 3. RUN — execute end to end against the live pod (full pipeline → answer).
+python scripts/promptkit.py --run scripts/prompts/08_lifecycle.json  # a whole set
+python scripts/promptkit.py --run --prompt "List all suppliers in India"  # one ad-hoc prompt
+```
+
+**Diagnostics** (with `--run` only) show inside the pipeline. The committed
+defaults in `pyproject.toml` (`[tool.spire.diagnostics]`) apply; override per
+run with any of `--show-parser` (Intent + the routing decision),
+`--show-planner` (the Plan / tool), `--show-raw-output`, `--show-synthesizer`,
+`--show-tokens`, `--show-timings`, or `--show-all` — and `--no-show-*` to
+silence one.
+
+```bash
+# ad-hoc run with every stage visible
+python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
+
+# a corpus run, but silence token accounting
+python scripts/promptkit.py --run scripts/prompts/01_supplier.json --no-show-tokens
+```
+
+The typical loop for a new or changed prompt set is **generate → curate the
+JSON → validate → run**. The curation step is manual and load-bearing: a fresh
+`--generate` records whatever the classifier emitted that run, so the draft
+must be reviewed before it becomes the routing baseline.
+
 ## Tests
 
 ```bash
-python -m pytest -q                  # ~886 passed, 18 deselected (integration)
+python -m pytest -q                  # ~913 passed, 18 deselected (integration)
 python -m pytest -q -m integration   # needs MCP server + KG + a provider key
 ```
 

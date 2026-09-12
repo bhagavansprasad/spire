@@ -298,11 +298,15 @@ Two systemic follow-ups worth their own findings/design (do NOT build reactively
       (this finding's Step 1, done well) is reusable — every future
       entity+filter then becomes closer to "just KG rows" rather than new code.
 
---- Status: 🔴 open (2026-09-11). PRIORITY. Not a bug in the sense of "wrong
-    code" — a deliberately narrow capability boundary that should be widened,
-    carefully, because the underlying Fusion composite-q= quirk makes the naive
-    implementation return silent-wrong answers.
-
+--- Status: ✅ fixed (2026-09-11, commit 5d1cf0d, PR #141). Shipped as KG rows
+    (PurchaseOrder/supplier + PurchaseOrder/status) + a supplier_po placeholder
+    routing digits to supplier_id. search_purchase_orders already did the safe
+    server/client split internally, so NO new planner client-filter mechanism
+    was needed (a divergence from this finding's "not a 2-row fix" framing —
+    verified against pod data). Verified end-to-end on eqjz: Dell -> 8 OPEN,
+    JGA -> 21 OPEN, EIP Inc -> 5 OPEN, all curl-cross-checked. Corpus updated
+    (JGA row: refuse -> search_purchase_orders). Full suite 917 green.
+    
 # CARRY-FORWARD
 
 - **Main register verification pass** — re-run the ~14 open/verified issues in
