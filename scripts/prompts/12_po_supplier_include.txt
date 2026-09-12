@@ -1,0 +1,28 @@
+# S1 phrasing gradient — "PO with supplier info", ordered safe -> dangerous.
+# Purpose: find where the parser tips a PO query into an unwireable
+# include: Supplier (which crashes generate_plan today). Run repeatedly —
+# the parser is non-deterministic near its token ceiling, so read the
+# DISTRIBUTION of outcomes per prompt, not a single run. Do NOT --generate
+# a frozen expected value from this set (S3): its whole point is to expose
+# flaky/ crashing behavior, not to pin a stable ground truth.
+
+# --- safe end: PO amounts, supplier as inline/lifecycle, no traverse ---
+Show amounts for PO 701337.
+Show ordered, received, invoiced and paid amounts for PO 701337.
+PO 701337 status with the supplier.
+PO 701337 amounts and who the supplier is.
+What is the supplier name on PO 701337?
+
+# --- middle: the phrase under suspicion ("with supplier details") ---
+Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.
+PO 701337 with supplier details.
+Show supplier details for PO 701337.
+Details of the supplier for PO 701337.
+Give me PO 701337 along with its supplier information.
+
+# --- dangerous end: explicit master-record / traverse language ---
+PO 701337 with the full supplier record.
+PO 701337 including the supplier's address and classifications.
+Show PO 701337 and the supplier's business relationship and tax details.
+For PO 701337, pull the supplier's master data.
+List PO 701337 and join the supplier's site and contact records.
