@@ -1,5 +1,3 @@
-
-
 """
 Synchronous KG vocabulary read for the NL parser.
 
@@ -62,6 +60,20 @@ class KGMenu:
             rather than hallucinate a fetcher for it.
         country_terms: Accepted country vocabulary (term -> canonical), from
             kg_vocabulary. Lets the LLM map "United States" / "USA" -> US.
+        edge_pairs: The (from_entity, to_entity) pairs declared in kg_edge.
+            Used by validate_intent's include gate (BUG-2) to check that a
+            requested include has a forward edge from the target entity
+            (or from its root, for the sibling case). Without this, an
+            include with no edge (e.g. PurchaseOrder -> Supplier) passes
+            validation and crashes the planner's Block 3 with a raw
+            KeyError.
+        edge_traversal_targets: filter_type -> target_entity for edge-traversal
+            filters (from kg_entity_filter WHERE mechanism='edge_traversal').
+            Used by the same include gate to simulate the planner's Block 2:
+            an edge-traversal filter updates the "previous entity" the first
+            include chains from, so the validator must account for it or it
+            will over-refuse valid intents like
+            Supplier + has_open_PO + include=['Buyer'].
     """
 
     target_entities: set[str] = field(default_factory=set)
@@ -75,7 +87,16 @@ class KGMenu:
     # deterministic, not model judgement.
     entity_synonyms: dict[str, str] = field(default_factory=dict)
     entity_columns: dict[str, list[str]] = field(default_factory=dict)
-    
+    # BUG-2: the (from_entity, to_entity) pairs declared in kg_edge.
+    # Populated by load_kg_menu() from a single SELECT against kg_edge.
+    edge_pairs: set[tuple[str, str]] = field(default_factory=set)
+    # BUG-2: filter_type -> target_entity for edge-traversal filters.
+    # Populated by load_kg_menu() from kg_entity_filter WHERE
+    # mechanism='edge_traversal'. Used by validate_intent to simulate
+    # Block 2's effect on the "previous entity" the include chain starts
+    # from.
+    edge_traversal_targets: dict[str, str] = field(default_factory=dict)
+
     def is_known_entity(self, entity_name: str) -> bool:
         """True if the entity exists in the KG at all (valid or not as a
         target). Distinguishes UNKNOWN_ENTITY (not in KG) from
@@ -112,6 +133,31 @@ class KGMenu:
         """
         return list(self.entity_columns.get(entity_name, []))
 
+    def has_edge(self, from_entity: str, to_entity: str) -> bool:
+        """True if kg_edge declares an edge from ``from_entity`` to
+        ``to_entity``.
+
+        BUG-2. Directional: an edge declared Supplier -> PurchaseOrder does
+        NOT make PurchaseOrder -> Supplier true. This is what the S1 bug
+        hinges on — the KG has Supplier -> PurchaseOrder (HAS_PURCHASE_ORDER)
+        but no reverse, and the planner's include loop only tries the forward
+        direction. Callers must check the SAME direction the planner will.
+        """
+        return (from_entity, to_entity) in self.edge_pairs
+
+    def edge_traversal_target(self, filter_type: str) -> str | None:
+        """The target entity of an edge-traversal filter, or None.
+
+        BUG-2. Used by validate_intent to simulate what the planner's Block 2
+        does to the "previous entity" before includes are chained: an
+        edge-traversal filter (has_open_PO, has_no_recent_invoices, ...) walks
+        the intent to a child entity, and Block 3 chains the first include
+        from THERE, not from the intent's target. Without this simulation the
+        validator would over-refuse valid intents like
+        Supplier + has_open_PO + include=['Buyer'].
+        """
+        return self.edge_traversal_targets.get(filter_type)
+
 
 def _read_clob(value) -> str:
     """Coerce a possibly-CLOB column value to str. Mirrors the planner's sync
@@ -132,7 +178,8 @@ def load_kg_menu() -> KGMenu:
 
     Returns:
         A KGMenu describing valid target entities, supported filter types,
-        entity descriptions, and country vocabulary.
+        entity descriptions, country vocabulary, edge pairs, and
+        edge-traversal targets.
 
     Raises:
         Anything oracledb raises (connection failure, etc.) propagates — same
@@ -153,7 +200,9 @@ def load_kg_menu() -> KGMenu:
     field_synonyms: dict[str, str] = {}
     entity_synonyms: dict[str, str] = {}
     entity_columns: dict[str, list[str]] = {}
-    
+    edge_pairs: set[tuple[str, str]] = set()
+    edge_traversal_targets: dict[str, str] = {}
+
     with _kg_cursor() as cursor:
         # All known entities + descriptions.
         cursor.execute(
@@ -182,7 +231,7 @@ def load_kg_menu() -> KGMenu:
             "SELECT term, canonical_value FROM kg_vocabulary "
             "WHERE vocab_kind = 'country' ORDER BY term"
         )
-        
+
         for term, canonical in cursor.fetchall():
             country_terms[term] = canonical
 
@@ -218,6 +267,30 @@ def load_kg_menu() -> KGMenu:
         for entity_name, field_name in cursor.fetchall():
             entity_columns.setdefault(entity_name, []).append(field_name)
 
+        # BUG-2: the (from_entity, to_entity) pairs declared in kg_edge.
+        # Used by validate_intent's include gate to check that a requested
+        # include has a forward edge from the target entity (or its root,
+        # for the sibling case) — the same direction the planner's Block 3
+        # tries. Read raw (both directions as declared) so the gate can
+        # match the planner exactly.
+        cursor.execute("SELECT from_entity, to_entity FROM kg_edge")
+        for from_e, to_e in cursor.fetchall():
+            edge_pairs.add((from_e, to_e))
+
+        # BUG-2: filter_type -> target_entity for edge-traversal filters.
+        # Used by the include gate to simulate what the planner's Block 2
+        # leaves as the "previous entity" before Block 3 chains the first
+        # include — an edge-traversal filter walks the intent to a child
+        # entity, and the first include chains from THERE, not from the
+        # intent's target.
+        cursor.execute(
+            "SELECT filter_type, target_entity FROM kg_entity_filter "
+            "WHERE mechanism = 'edge_traversal'"
+        )
+        for filter_type, target_entity in cursor.fetchall():
+            if target_entity:
+                edge_traversal_targets[filter_type] = target_entity
+
     return KGMenu(
         target_entities=target_entities,
         filter_types=filter_types,
@@ -226,6 +299,8 @@ def load_kg_menu() -> KGMenu:
         field_synonyms=field_synonyms,
         entity_synonyms=entity_synonyms,
         entity_columns=entity_columns,
+        edge_pairs=edge_pairs,
+        edge_traversal_targets=edge_traversal_targets,
     )
 
 
@@ -455,4 +530,3 @@ def add_child_include_from_prompt(
         if hit:
             result.append(child)
     return result
-
