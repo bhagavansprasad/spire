@@ -141,6 +141,19 @@ def classify_modules(
 
     structured_llm = llm.with_structured_output(ModuleChoice, include_raw=True)
     system_prompt = _classifier_system_prompt(menu_text)
+
+    # [DEBUG — S1 pre-send dump, remove before commit]
+    import sys as _dbg_sys
+    print("\n########## PIPELINE CLASSIFY — SYSTEM PROMPT (bytes sent) ##########",
+          file=_dbg_sys.stderr)
+    print(f"[len={len(system_prompt)} chars]", file=_dbg_sys.stderr)
+    # print(system_prompt, file=_dbg_sys.stderr)  # disabled: full-prompt dump
+    print("########## PIPELINE CLASSIFY — HUMAN PROMPT ##########",
+          file=_dbg_sys.stderr)
+    print(repr(prompt), file=_dbg_sys.stderr)
+    print("########## PIPELINE CLASSIFY — END OF INPUT ##########\n",
+          file=_dbg_sys.stderr)
+
     result = structured_llm.invoke(
         [("system", system_prompt), ("human", prompt)]
     )

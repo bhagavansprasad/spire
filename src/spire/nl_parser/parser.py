@@ -168,6 +168,18 @@ def parse(
     if system_prompt is None:
         system_prompt = _build_system_prompt(menu)
 
+    # [DEBUG — S1 pre-send dump, remove before commit]
+    import sys as _dbg_sys
+    print("\n########## PIPELINE PARSE — SYSTEM PROMPT (bytes sent) ##########",
+          file=_dbg_sys.stderr)
+    print(f"[len={len(system_prompt)} chars]", file=_dbg_sys.stderr)
+    # print(system_prompt, file=_dbg_sys.stderr)  # disabled: full-prompt dump
+    print("########## PIPELINE PARSE — HUMAN PROMPT ##########",
+          file=_dbg_sys.stderr)
+    print(repr(prompt), file=_dbg_sys.stderr)
+    print("########## PIPELINE PARSE — END OF INPUT ##########\n",
+          file=_dbg_sys.stderr)
+
     result = structured_llm.invoke(
         [("system", system_prompt), ("human", prompt)]
     )
@@ -276,6 +288,13 @@ def parse(
             detail=f"The model's Intent was malformed: {exc}",
         )
 
+    # [DEBUG — S1 instrumentation, remove before commit]
+    import sys as _dbg_sys
+    print(f"[DBG raw-intent] target={intent.target_entity!r} "
+          f"include={intent.include!r} "
+          f"filters={[f.get('type') for f in intent.filters]!r}",
+          file=_dbg_sys.stderr)
+
     # #32 fault (b): set list_all deterministically from the raw prompt,
     # code-side (no LLM-visible text — the prompt is at its token ceiling).
     # Scoped to PurchaseOrder-rooted intents so nothing else is affected.
@@ -327,7 +346,14 @@ def parse(
     # Q2 direction 2: validate the draft back against the KG. Out-of-scope
     # entities/filters become typed refusals (checkpoint 3).
     refusal = validate_intent(intent, menu)
-    
+
+    # [DEBUG — S1 instrumentation, remove before commit]
+    import sys as _dbg_sys
+    print(f"[DBG validate] refusal="
+          f"{'None' if refusal is None else refusal.flavor.name} "
+          f"post-validate include={intent.include!r}",
+          file=_dbg_sys.stderr)
+
     if refusal is not None:
         return ParseResult(refusal=refusal)
 
