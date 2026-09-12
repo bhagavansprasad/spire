@@ -534,9 +534,19 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             }
             if po.buyer:
                 row["Buyer"] = po.buyer.display_name
+            # BUG-1 Step 3. Same conditional shape as Buyer: a column
+            # only earns its place when at least one row carries a
+            # value, so a plain PO list without site or contact data
+            # renders exactly as it did before. Both fields are free
+            # text carried on the PO header itself (see
+            # synthesizer/p2p.py PurchaseOrderRecord).
+            if po.supplier_site:
+                row["Site"] = po.supplier_site
+            if po.supplier_contact:
+                row["Contact"] = po.supplier_contact
             rows.append(row)
         cols = ["Order", "POHeaderId", "Status", "Supplier"]
-        for extra in ("Buyer",):
+        for extra in ("Buyer", "Site", "Contact"):
             if any(extra in r for r in rows):
                 cols.append(extra)
         lines.extend(
@@ -1429,5 +1439,3 @@ def _format_projected_table(
             cells.append(("—" if v is None else str(v)).ljust(widths[f]))
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
-
-

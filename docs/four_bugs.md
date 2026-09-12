@@ -2,7 +2,7 @@
 
 **Issue under investigation:** `Show supplier details for PO 701337.`
 **Date:** 2026-09-12
-**Status:** Investigation complete; remediation in progress on branch `fix/s1-remediation`
+**Status:** Investigation complete; remediation complete on branch `fix/s1-remediation` (cleanup commit pending)
 **Prepared for:** SME review and staged implementation
 **Related document:** `Spire — S1 problem writeup for SME review` (2026-09-11)
 
@@ -22,7 +22,7 @@ One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is
 
 ### 0.1 Progress at a glance
 
-*(Added 2026-09-12 after the third fix. New section — does not replace §0.)*
+*(Added 2026-09-12 after the third fix. Updated as later fixes landed.)*
 
 | # | Issue | Status | Commit |
 |---:|---|---|---|
@@ -30,11 +30,13 @@ One issue (**BUG-5**, a classify-stage observation) is **not S1-related** and is
 | BUG-3 | Planner raises raw `KeyError` for a bad include | ✅ **FIXED** | `acd3f6f` |
 | BUG-1 Step 1 | Code-side strip of the un-wireable `Supplier` include | ✅ **FIXED** | `333ea95` |
 | BUG-1 Step 2 | Parser prompt rule for "supplier details for PO X" | ✅ **FIXED** | `29737de` |
-| BUG-4 sub-part A | Refusal Reason line prefers clean detail | ✅ **FIXED** (this commit) | — |
+| BUG-4 sub-part A | Refusal Reason line prefers clean detail | ✅ **FIXED** | `7989d24` |
+| BUG-1 Step 3 | Render supplier site and contact in PO answers | ✅ **FIXED** (this commit) | — |
 | BUG-4 sub-part B | New `UNSUPPORTED_INCLUDE` flavor | ⏳ deferred | — |
 | BUG-5 | Classify stage fires twice | ⏸ out of scope | — |
+| Cleanup | Revert `c9c4fb1`; add `.gitignore` entries | ⏳ pending | — |
 
-**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `SupplierSite: JGA Progress US`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on.
+**Current observable state of the S1 prompt:** `Show supplier details for PO 701337.` **20/20 answers**. S1 is closed. The prompt returns `Supplier: JGA`, `Site: JGA Progress US`, `Contact: Seth Ries`, `Buyer: White, Eleanor` deterministically; no refusals, no crashes. Steps 1 and 2 together closed both failure modes — Step 1 eliminated the crash path by stripping the bad include, Step 2 eliminated the parser's self-declared-refusal attractor by giving the model an explicit rule to land on. Step 3 extended the answer with the two fields the SME asked for in §5.1.
 
 **Refusal-message state after BUG-4 sub-part A:** an include-shaped self-declared refusal (the S1-attractor shape, if it ever fires for a different prompt) now shows the parser's specific diagnosis in the Reason line, not the generic "not the way this question narrows them". Include-shaped refusals whose detail quotes an internal snake_case identifier still fall to the generic sentence; that is the discriminator working as designed.
 
@@ -649,14 +651,44 @@ The live 20-run S1 batch after the strip shows the fix works where the parser em
 
 **S1 status: CLOSED.** The prompt `Show supplier details for PO 701337.` answers correctly and deterministically.
 
-**What this does NOT close (still open on the branch):**
+**What this does NOT close (still open on the branch at the time of this commit):**
 
-- **BUG-4** (step 5) — the refusal MESSAGE for include-shaped problems is still the generic `UNSUPPORTED_OPERATION` fallback. Not observable on S1 anymore (S1 answers instead of refusing), but still a defect for other prompts that reach the refusal path.
-- **BUG-1 Step 3** (step 6, SME-gated §5.1) — adding `SupplierContactDisplayName` to the `by_id` projection. The answer currently shows `Supplier: JGA` and `SupplierSite: JGA Progress US` but not the contact (`Seth Ries`).
+- **BUG-4** (sub-part A, later shipped as `7989d24`) — the refusal MESSAGE for include-shaped problems is still the generic `UNSUPPORTED_OPERATION` fallback. Not observable on S1 anymore (S1 answers instead of refusing), but still a defect for other prompts that reach the refusal path.
+- **BUG-1 Step 3** (shipped in the next commit) — adding `SupplierContactDisplayName` to the `by_id` projection and rendering the site and contact in the answer.
 - **BUG-5** — out of scope.
 - **Cleanup commit** — reverting the temporary debug instrumentation from `c9c4fb1` and adding `.gitignore` entries for `isolation/`, `s1_*.txt`, `test_bug1*.txt`, `verify_bug*.txt`.
 
 **Note on the tripwire:** the byte-equality test file was updated as part of this fix, not as a separate cleanup. The `_EXPECTED_BLOCK_COUNT` constant is the intended notification mechanism — the manifest change moved the count from 48 to 49, the test failed loudly, and the constant was bumped. This is the tripwire working as designed, documented in the test's own docstring. It is not a workaround.
+
+#### Status update (2026-09-12) — ✅ Step 3 FIXED
+
+**Commit:** this commit on `fix/s1-remediation`.
+
+**Files changed:**
+
+- `src/spire/mcp_server/tools/purchase_order_by_id.py` — `SupplierContactDisplayName` added to `_PROJECTED_FIELDS`.
+- `src/spire/synthesizer/p2p.py` — `supplier_site` and `supplier_contact` added to `PurchaseOrderRecord` (both default `""`); populated in `build_purchase_order_records` and `build_po_with_children`.
+- `scripts/display_formatters.py` — `Site` and `Contact` columns added to the `PurchaseOrderResponse` branch, conditional on at least one row carrying a value (same pattern as `Buyer`).
+- `tests/test_bug1_step3_supplier_details.py` — new (12 tests, all three layers).
+- `scripts/verify_bug1_step3.py` — new (standalone probe, added before the fix).
+
+**Answers SME §5.1 option (c) — add the contact AND fix the site rendering gap.** Both gaps were demonstrated by the Step 3 probe (`verify_bug1_step3.py`), and both were already visible in Step 1's own §4 finding: the tool fetched `SupplierSite` but the synthesizer dropped it; the tool never fetched the contact at all.
+
+**What was learned during the fix:**
+
+The probe confirmed the shape the handoff had hedged on — Step 3 is the **medium** variant (tool + synthesizer + display), not the small one (tool + display). `PurchaseOrderRecord` carried neither field, so the synthesizer is the middle layer that both ends of the pipeline pass through. Both of the synthesizer's PO builders instantiate the record by hand; touching only one leaves the other path silently without the new fields, which is why the tests pin both.
+
+The field additions default to `""` rather than being required. That matches `supplier_name` / `status` on the same record, and keeps the record constructible without them — the existing tests that instantiate `PurchaseOrderRecord` directly did not need updating, and any future PO shape that does not carry a site or contact degrades to an empty string rather than a validation failure.
+
+The prompt block for `PurchaseOrder` was deliberately NOT extended. The parser prompt is at its token ceiling (documented in the handoff's §7) and the new fields reach the answer through the two local builders, not through the LLM. An LLM path that misses them produces `""` and the display omits the column — the same behaviour as today, which is the right failure mode.
+
+**Verification (2026-09-12):**
+
+- `tests/test_bug1_step3_supplier_details.py`: **12 passed**
+- Full suite: **979 passed**, 18 deselected (967 + 12)
+- Canary `scripts/prompts/00_dipstick.json`: 6/6 pass
+- Live S1 prompt `python scripts/promptkit.py --run --prompt "Show supplier details for PO 701337."` — answer now shows `Site  JGA Progress US` and `Contact  Seth Ries` in the PO block, in addition to `Supplier  JGA` and `Buyer  White, Eleanor`.
+- `verify_bug1_step3.py` after fix: all four sections green — [A] both fields in `_PROJECTED_FIELDS`; [B] both fields on `PurchaseOrderRecord`; [C] both columns referenced by the display; [D] round-trip through `build_purchase_order_records` and `_format_synthesized` preserves both.
 
 ---
 
@@ -694,14 +726,13 @@ The same reasoning applies to `UNSUPPORTED_FILTER`: when `refusal.offending_filt
 
 #### Status update (2026-09-12) — ✅ sub-part A FIXED
 
-**Commit:** this commit on `fix/s1-remediation`.
+**Commit:** `7989d24` on `fix/s1-remediation`.
 
 **Files changed:**
 
 - `src/spire/nl_parser/capability.py` — new module-level `_INTERNAL_IDENTIFIER_RE` regex and `_detail_has_internal_identifier` helper. The `UNSUPPORTED_FILTER` self-declared branch now surfaces `detail` only when the discriminator passes. The KG-validation path (which always sets `offending_filters`) is unchanged — it never reaches the new branch.
 - `tests/test_bug4_reason_line.py` — new (8 tests).
 - `scripts/verify_bug4.py` — new (standalone probe).
-- `docs/four_bugs.md` — this section.
 
 **What was learned — the first attempt broke a pre-existing test:**
 
@@ -754,6 +785,8 @@ The current `get_purchase_order_by_id` projection includes Supplier, SupplierId,
 
 **Note after the S1 fix:** the typed PurchaseOrder record renders `Supplier` and `Buyer`, but not `SupplierSite` even though the raw output has it. That is a **synthesizer schema** issue (`PurchaseOrderRecord` does not carry `supplier_site`), separate from BUG-1. If the SME wants both the site and the contact in the answer, two things are needed: (a) add `SupplierSite` (and `SupplierContactDisplayName` if desired) to `PurchaseOrderRecord` in the synthesizer, and (b) add `SupplierContactDisplayName` to `_PROJECTED_FIELDS` in `purchase_order_by_id.py`. These could ship together as a follow-up.
 
+**SME answer:** (c) — add the supplier contact **and** fix the site rendering gap. Shipped as BUG-1 Step 3.
+
 ### 5.2 — Prompt bullet (Option A/Step 2) or code-side strip only (Option B/Step 1)?
 
 **Recommendation:** yes to Step 2, but as a separate, later PR after Step 1 has proven stable.
@@ -768,7 +801,7 @@ The current `get_purchase_order_by_id` projection includes Supplier, SupplierId,
 
 **Recommendation:** yes to both. Sub-part A now, sub-part B deferred.
 
-**Decided and shipped.** Sub-part A shipped as this commit, with a discriminator to prevent the leak that a first attempt introduced. Sub-part B remains deferred.
+**Decided and shipped.** Sub-part A shipped as `7989d24`, with a discriminator to prevent the leak that a first attempt introduced. Sub-part B remains deferred.
 
 ---
 
@@ -799,7 +832,7 @@ The following order is chosen so that each step is **safe on its own** and each 
 
 ### 6.1 Current execution status (2026-09-12)
 
-*(Added 2026-09-12 after the third fix. New section — does not replace the table above.)*
+*(Added 2026-09-12 after the third fix. Updated as later fixes landed.)*
 
 | Step | Issue | Status | Commit | Verified by |
 |---:|---|---|---|---|
@@ -807,11 +840,11 @@ The following order is chosen so that each step is **safe on its own** and each 
 | 2 | BUG-3 — planner raises `RefusalError` | ✅ **DONE** | `acd3f6f` | 6 new tests; 940-suite green |
 | 3 | BUG-1 Step 1 — code-side strip | ✅ **DONE** | `333ea95` | 13 new tests; 953-suite green; batch answers 0→7, crashes 0 |
 | 4 | BUG-1 Step 2 (promoted) — parser prompt rule | ✅ **DONE — S1 CLOSED** | `29737de` | 6 new tests; 134/134 across four regression sets; batch answers 7→20, refusals 13→0 |
-| 5 | BUG-4 sub-part A — `_reason_line` prefers clean detail | ✅ **DONE** | this commit | 8 new tests; 967-suite green; discriminator pinned by boundary tests |
-| 6 | BUG-1 Step 3 (optional) — contact field | ⏳ **NEXT — SME-gated** | — | needs §5.1 answer |
+| 5 | BUG-4 sub-part A — `_reason_line` prefers clean detail | ✅ **DONE** | `7989d24` | 8 new tests; 967-suite green; discriminator pinned by boundary tests |
+| 6 | BUG-1 Step 3 — render supplier site and contact | ✅ **DONE** | this commit | 12 new tests; 979-suite green; live S1 shows Site and Contact |
 | 7 | BUG-4 sub-part B (deferred) — new flavor | ⏳ deferred | — | SME §5.4 |
 | — | BUG-5 — classify double-call | ⏸ out of scope | — | separate cycle |
-| — | Cleanup commit | ⏳ end of branch | — | revert `c9c4fb1` debug prints; `.gitignore` |
+| — | Cleanup commit | ⏳ **PENDING** | — | revert `c9c4fb1` debug prints; `.gitignore` |
 
 **Step 3 acceptance — the original plan said "20/20 answer".** Step 1 alone delivered 7/20 answers (crashes 0, refusals 13). The remaining 13 were the parser's self-declared-refusal mode, which the strip could not touch. **Step 2 was the fix that closed them**, and §6.1 promoted it to run before BUG-4 for that reason. The plan's step order (3, 4, 5, 6) is preserved above; the promotion is a schedule adjustment, not a reorder.
 
@@ -819,7 +852,7 @@ The following order is chosen so that each step is **safe on its own** and each 
 
 **Step 5 outcome:** BUG-4 sub-part A fixed on the second attempt (the first attempt broke `test_unsupported_filter_without_named_filters_still_reads`; the corrected version adds a snake_case discriminator to the detail passthrough). Full suite 967 green.
 
-**Step 6 — the only remaining work with an open question.** Depends on §5.1: does the S1 answer need the contact name (`Seth Ries`)? If yes, it also needs the synthesizer `PurchaseOrderRecord` to carry `SupplierSite` for the site to render.
+**Step 6 outcome (BUG-1 Step 3):** the SME's §5.1 option (c) shipped in three layers — tool projection, synthesizer record + both builders, display formatter. 12 new tests; full suite 979 green; live S1 prompt now shows both fields. Only the cleanup commit remains on the branch.
 
 ---
 
@@ -847,14 +880,14 @@ To keep the record honest:
 
 ### 8.1 Current summary (2026-09-12)
 
-*(Added 2026-09-12 after the third fix. New section — does not replace the table above.)*
+*(Added 2026-09-12 after the third fix. Updated as later fixes landed.)*
 
 | # | Issue | Fix type | Status | SME input needed |
 |---:|---|---|---|---|
 | BUG-2 | No general un-wireable-include gate | code (validator) | ✅ FIXED `97bc8f7` | none (Site preservation decided — retained) |
 | BUG-3 | Planner raises raw `KeyError` | code (planner) | ✅ FIXED `acd3f6f` | none |
-| BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) | ✅ **Both steps FIXED** — S1 CLOSED | §5.1 (contact field) still open for Step 3 |
-| BUG-4 sub-part A | Refusal Reason line prefers clean detail | code (capability) | ✅ **FIXED** — this commit | none |
+| BUG-1 | Parser gap on "supplier details for PO X" | code (strip) + prompt (bullet) + render (site + contact) | ✅ **All three steps FIXED — S1 CLOSED with full supplier details** | none |
+| BUG-4 sub-part A | Refusal Reason line prefers clean detail | code (capability) | ✅ FIXED `7989d24` | none |
 | BUG-4 sub-part B | New `UNSUPPORTED_INCLUDE` flavor | code (capability) | ⏳ deferred | §5.4 |
 | BUG-5 | Classify fires twice | code (router) | ⏸ out of scope | none |
 
@@ -862,7 +895,7 @@ To keep the record honest:
 
 ## 9. Branch history
 
-*(Added 2026-09-12. New section.)*
+*(Added 2026-09-12. New section. Updated as later commits landed.)*
 
 Branch: `fix/s1-remediation`, based on `master`.
 
@@ -873,11 +906,12 @@ Branch: `fix/s1-remediation`, based on `master`.
 | `09ae116` | chore: S1 investigation artifacts | `four_bugs.md`, `prompts/12_po_supplier_include.{txt,json}`, `t_s1_isolate.py`, `t_s1_repro.py` |
 | `854b81c` | Updating readme, overnight bugs status and utility prograpm | `README.md`, `docs/spire_findings_11-Sep-2026.md`, `isolation/*` |
 | `acd3f6f` | Fix S1: planner raises RefusalError, not KeyError, for a bad include | `planner.py`, `test_bug3_planner_include.py`, `verify_bug3.py` |
-| `333ea95` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, **`docs/four_bugs.md`** |
-| `29737de` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `verify_bug1_step2.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, **`docs/four_bugs.md`** |
-| `<this commit>` | Fix S1: refusal Reason line prefers clean detail over generic sentence | `capability.py`, `test_bug4_reason_line.py`, `verify_bug4.py`, **`docs/four_bugs.md`** |
+| `333ea95` | Fix S1: strip the un-wireable Supplier include on PurchaseOrder | `vocabulary.py`, `parser.py`, `test_bug1_po_supplier_strip.py`, `verify_bug1.py`, `docs/four_bugs.md` |
+| `29737de` | Fix S1: parser prompt rule for 'supplier details for PO X' | `b_po_supplier_details.sysprompt`, `order.manifest`, `context_assembly.py`, `apply_bug1_step2_context_assembly.py`, `verify_bug1_step2.py`, `test_bug1_step2_prompt_coverage.py`, `test_parser_context_assembly.py`, `docs/four_bugs.md` |
+| `7989d24` | Fix S1: refusal Reason line prefers clean detail over generic sentence | `capability.py`, `test_bug4_reason_line.py`, `verify_bug4.py`, `docs/four_bugs.md` |
+| `<this commit>` | Fix S1: render supplier site and contact in PO answers | `purchase_order_by_id.py`, `p2p.py`, `display_formatters.py`, `test_bug1_step3_supplier_details.py`, `docs/four_bugs.md` |
 
-**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 3 (or a decision to skip it) is settled. Add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`, `s1_step2_*.txt`, `pipeline_*.txt`).
+**Cleanup commit still pending:** revert the temporary debug instrumentation from `c9c4fb1` once BUG-1 Step 3 is settled (it now is), and add `.gitignore` entries for local-only artifacts (`isolation/`, `s1_*.txt`, `test_bug*.txt`, `verify_bug*.txt`, `s1_step2_*.txt`, `pipeline_*.txt`, `source-tree.txt`).
 
 **Process note:** from commit `333ea95` onward, every commit on `fix/s1-remediation` includes an updated `docs/four_bugs.md` as part of the commit. The document tracks what was fixed, by which commit, and any deviations from the plan discovered during the fix.
 

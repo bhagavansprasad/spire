@@ -69,6 +69,12 @@ _PROJECTED_FIELDS = [
     "Buyer",
     "BuyerId",
     "SupplierSite",
+    # BUG-1 Step 3: the supplier contact's display name rides on the PO
+    # header itself — curl-confirmed on the pod ('Seth Ries' for PO
+    # 701337) — so it costs nothing extra to fetch and answers the SME's
+    # §5.1 option (c): show the contact alongside the supplier, site and
+    # buyer.
+    "SupplierContactDisplayName",
     "Ordered",
     "Total",
     "TotalTax",
