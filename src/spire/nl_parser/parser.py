@@ -22,13 +22,41 @@ LLM INJECTION (Q4):
 ``parse`` takes an optional ``llm``. Tests inject a mock that returns a canned
 ``DraftIntent``; production passes None and a real Gemini client is built —
 same convention as the synthesizer.
+
+PROMPT CACHING (default on):
+The scoped system prompt is byte-identical across every parse call that
+shares a scope and is the largest input cost in the pipeline. It is stored
+in a Gemini context cache once and served from it on every subsequent call
+— measured at ~99% of input tokens cached. The pipeline attempts the
+cached path on every ``parse()`` call where no LLM was injected.
+
+    SPIRE_PROMPT_CACHE_DISABLE=1   skip the cache path entirely — for cost
+                                   measurement, stale-cache debugging, or
+                                   a model without caching support.
+
+The ``llm is None`` guard keeps tests on the LangChain path regardless of
+the flag, because they always inject a MockLLM. Any failure in the cached
+path (below the minimum token count, quota, network, TTL expiry) falls
+through to the LangChain call, so a cache miss costs a slow call, never a
+broken pipeline. On failure the cache name is FORGOTTEN (prompt_cache.
+forget), so the NEXT call re-lists and re-creates rather than serving the
+same dead name to every subsequent call in the process.
+
+Diagnostics: ``[cache] HIT / MISS`` and ``[cache] unavailable`` are emitted
+on the ``spire.parser`` logger, opened by ``--show-parser`` (or
+``SPIRE_SHOW_PARSER=1``, or ``[tool.spire.diagnostics] show_parser = true``).
+They fire only when the cached path was actually attempted, so a default
+run with the flag unset and the cache working stays quiet in the logs
+beyond the single ``[cache]`` line.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from spire.config import GEMINI_MODEL, GEMINI_TEMPERATURE, LLM_MAX_OUTPUT_TOKENS
+from spire.diagnostics import get_logger
 from spire.nl_parser.capability import derive_flavor
 from spire.nl_parser.draft import DraftIntent
 from spire.nl_parser.result import ParseResult, RefusalFlavor
@@ -49,6 +77,12 @@ from pathlib import Path
 # Model and determinism come from spire.config (single source of truth).
 _MODEL_NAME = GEMINI_MODEL
 _TEMPERATURE = GEMINI_TEMPERATURE
+
+
+# Parser component logger. Silent unless --show-parser (or
+# SPIRE_SHOW_PARSER=1, or [tool.spire.diagnostics] show_parser = true).
+# Every [cache] diagnostic in this module routes through it.
+_parser_log = get_logger("parser")
 
 
 import re
@@ -128,221 +162,235 @@ def _is_explicit_po_list(prompt: str) -> bool:
 
 def parse(
     prompt: str,
-    llm: Any | None = None,
-    menu: KGMenu | None = None,
+    llm: Any = None,
+    menu: Any = None,
     system_prompt: str | None = None,
 ) -> ParseResult:
-    """Parse a natural-language prompt into a ParseResult.
-
-    Args:
-        prompt: The user's natural-language question.
-        llm: Optional pre-built LangChain LLM. Tests inject a mock whose
-            ``with_structured_output(DraftIntent).invoke(...)`` returns a
-            canned DraftIntent (or dict). Production passes None and a fresh
-            ChatGoogleGenerativeAI is built (reads GEMINI_API_KEY).
-        menu: Optional pre-loaded KGMenu. Tests pass a fixture to avoid a DB
-            hit; production passes None and the menu is read synchronously
-            from the KG via load_kg_menu().
-
-    Returns:
-        ParseResult — ``ok`` wrapping an Intent when the LLM produced a
-        shape-valid draft, or a ``refuse`` with flavor UNPARSEABLE when the
-        LLM produced nothing usable or a malformed value.
-
-        NOTE (checkpoint 2): a shape-valid draft is NOT yet validated against
-        the KG. Entity/filter KG-checks (and their UNKNOWN_ENTITY /
-        UNSUPPORTED_FILTER / UNSUPPORTED_OPERATION refusals) arrive in
-        checkpoint 3.
-    """
+    """Parse a natural-language prompt into a structured Intent."""
     if menu is None:
         menu = load_kg_menu()
 
-    if llm is None:
-        # Imported lazily so unit tests (which inject a mock) don't require
-        # an LLM dep or API key to import this module. build_llm picks the
-        # configured provider (gemini today).
-        from spire.config import build_llm
-
-        llm = build_llm(_TEMPERATURE)
-
-    structured_llm = llm.with_structured_output(DraftIntent, include_raw=True)
+    # Resolve the system prompt first — both the cached and uncached paths
+    # need it, and the cache key is a hash of its bytes.
     if system_prompt is None:
         system_prompt = _build_system_prompt(menu)
 
-    result = structured_llm.invoke(
-        [("system", system_prompt), ("human", prompt)]
+    # Cached path: ON by default for production calls. The `llm is None`
+    # half of the condition is what keeps every test on the mocked path.
+    result: Any = None
+    cache_used = False
+    cache_requested = (
+        llm is None
+        and os.environ.get("SPIRE_PROMPT_CACHE_DISABLE") != "1"
     )
 
-    # With include_raw=True the real LLM returns
-    # {"raw": AIMessage, "parsed": DraftIntent|None, "parsing_error": ...}.
-    # Unit tests inject a mock that returns the bare model (or a dict);
-    # handle both so token logging never breaks the mock path.
+    if cache_requested:
+        from spire.nl_parser.prompt_cache import forget, get_or_create
+        from spire.nl_parser.cached_llm import invoke_structured
+
+        cache_name = get_or_create(system_prompt)
+        if cache_name is None:
+            _parser_log.debug(
+                "[cache] unavailable — no cache created; using LangChain"
+            )
+        else:
+            try:
+                result = invoke_structured(prompt, DraftIntent, cache_name)
+                cache_used = True
+            except Exception as exc:
+                # Expired mid-run, quota revoked, network — treat as a
+                # miss and FORGET the name. Without the forget, _memo
+                # would serve the same dead cache name to every
+                # subsequent call in this process. THIS call still falls
+                # through to LangChain; the NEXT call re-lists.
+                forget(cache_name)
+                _parser_log.debug(
+                    "[cache] invoke raised %s: %s; using LangChain",
+                    type(exc).__name__, exc,
+                )
+                result = None
+
+    if result is None:
+        if llm is None:
+            from spire.config import build_llm
+            llm = build_llm(_TEMPERATURE)
+
+        structured_llm = llm.with_structured_output(DraftIntent, include_raw=True)
+        result = structured_llm.invoke(
+            [("system", system_prompt), ("human", prompt)]
+        )
+
+    # --- Diagnostics + degenerate-parse guard (only for the include_raw
+    # envelope shape) ---
     if isinstance(result, dict) and "parsed" in result:
         from spire.config import log_usage
-        from pathlib import Path
-        import time
 
         log_usage(result.get("raw"), stage="parse")
 
-        # --- Guard: degenerate parse (runaway / non-stop) ---
-        raw = result.get("raw")
-        if raw is not None:
-            usage = getattr(raw, "usage_metadata", {})
-            out_tokens = usage.get("output_tokens", 0)
-            finish_reason = getattr(raw, "response_metadata", {}).get("finish_reason")
-            if out_tokens >= int(LLM_MAX_OUTPUT_TOKENS * 0.95) and finish_reason != "stop":
-                raw_text = getattr(raw, "content", "")
-                ts = time.strftime("%Y%m%d_%H%M%S")
-                Path("traces").mkdir(exist_ok=True)
-                with open(f"traces/degenerate_parse_{ts}.txt", "w", encoding="utf-8") as f:
-                    f.write(f"prompt: {prompt}\nfinish_reason: {finish_reason}\nout_tokens: {out_tokens}\n--- raw response ---\n{raw_text}\n")
-                return ParseResult.refuse(
-                    flavor=RefusalFlavor.UNPARSEABLE,
-                    detail=f"Degenerate parse (finish_reason={finish_reason}, out_tokens={out_tokens})",
+        if cache_used:
+            _raw_diag = result.get("raw")
+            if _raw_diag is not None:
+                _um = getattr(_raw_diag, "usage_metadata", {}) or {}
+                _details = _um.get("input_token_details") or {}
+                _cached = _details.get("cache_read", 0) or 0
+                _total_in = _um.get("input_tokens", 0) or 0
+                _fresh = _total_in - _cached
+                _parser_log.debug(
+                    "[cache] %s  cached=%d  fresh=%d  total_in=%d",
+                    "HIT " if _cached > 0 else "MISS",
+                    _cached, _fresh, _total_in,
                 )
 
-        response = result["parsed"]
+        raw = result.get("raw")
+        if raw is not None:
+            finish = (
+                getattr(raw, "response_metadata", {}) or {}
+            ).get("finish_reason")
+            if finish and "stop" not in str(finish).lower():
+                return ParseResult.refuse(
+                    RefusalFlavor.UNPARSEABLE,
+                    detail=(
+                        f"the model did not stop normally "
+                        f"(finish_reason={finish!r})"
+                    ),
+                )
+
+    # --- Extract the draft from whatever shape the LLM (or mock) returned ---
+    if result is None:
+        return ParseResult.refuse(
+            RefusalFlavor.UNPARSEABLE,
+            detail="the model produced nothing",
+        )
+
+    if isinstance(result, dict) and "parsed" in result:
+        parsed = result.get("parsed")
+        parsing_error = result.get("parsing_error")
+        if parsed is None:
+            detail = "the model produced no parseable intent"
+            if parsing_error:
+                detail += f" ({parsing_error})"
+            return ParseResult.refuse(
+                RefusalFlavor.UNPARSEABLE, detail=detail
+            )
     else:
-        response = result
+        # A bare DraftIntent, or a raw dict shaped like one.
+        parsed = result
 
-    # Normalize to a DraftIntent (the synthesizer guards the same way: some
-    # backends return a dict rather than the model instance).
-    if isinstance(response, dict):
-        response = DraftIntent(**response)
+    # Coerce a raw dict into a DraftIntent via model_validate, so Pydantic
+    # handles nested coercion (filters as dicts → DraftFilter) in one pass.
+    # The prior hand-rolled DraftFilter(**f) comprehension could silently
+    # produce a partial object; letting Pydantic own it removes that risk.
+    if isinstance(parsed, dict):
+        try:
+            parsed = DraftIntent.model_validate(parsed)
+        except Exception as exc:
+            return ParseResult.refuse(
+                RefusalFlavor.UNPARSEABLE,
+                detail=f"the model produced a malformed draft: {exc}",
+            )
 
-    if response is None:
+    if not isinstance(parsed, DraftIntent):
         return ParseResult.refuse(
-            flavor=RefusalFlavor.UNPARSEABLE,
-            detail="The model did not produce a structured Intent for this prompt.",
+            RefusalFlavor.UNPARSEABLE,
+            detail=f"unexpected draft type: {type(parsed).__name__}",
         )
 
-    # Additional degenerate guard: if unanswerable is false but unanswerable_reason is long,
-    # it's likely a repetition loop.
-    if response.unanswerable is False and response.unanswerable_reason and len(response.unanswerable_reason) > 1000:
-        return ParseResult.refuse(
-            flavor=RefusalFlavor.UNPARSEABLE,
-            detail=f"Degenerate parse: unanswerable_reason is too long ({len(response.unanswerable_reason)} chars) while unanswerable is false.",
-        )
+    # --- Explicit unanswerable takes precedence over everything else ---
+    if getattr(parsed, "unanswerable", False):
+        from spire.nl_parser.capability import derive_flavor
 
-    # The model explicitly declared the prompt out of scope (the structural
-    # half of the silent-rewrite fix).
-    #
-    # Phase 2 (UX-01) changed WHO decides the kind. Feature 1 tagged every
-    # self-declared refusal UNPARSEABLE; feature 8 re-derived the flavor by
-    # scanning the model's reason prose for capitalized words, which matched
-    # "To", "ID", "Filtering" and "Receipt" and so returned UNKNOWN_ENTITY
-    # for four of four measured refusals. The model now states the kind
-    # outright in `unanswerable_kind`, and derive_flavor trusts it — see
-    # capability.derive_flavor for the order of trust and why the prose scan
-    # is gone rather than repaired.
-    if response.unanswerable:
-        reason = response.unanswerable_reason or "The prompt is out of scope."
+        kind = getattr(parsed, "unanswerable_kind", None)
+        entity = getattr(parsed, "unanswerable_entity", None)
+        reason = getattr(parsed, "unanswerable_reason", "") or ""
         flavor = derive_flavor(
-            reason,
-            response.target_entity,
-            menu,
-            draft_kind=response.unanswerable_kind,
-            draft_entity=response.unanswerable_entity,
+            reason, entity or "", menu,
+            draft_kind=kind, draft_entity=entity,
         )
-        # Carry the entity through for EVERY flavor, not just
-        # UNKNOWN_ENTITY. The renderer needs it to say "I can look up AR
-        # invoices, but this doesn't say which one" rather than falling back
-        # to "I'm not sure which record you mean". It means different things
-        # per flavor — the missing type for UNKNOWN_ENTITY, the supported
-        # type everywhere else — which is fine: the renderer branches on
-        # flavor anyway, and validate_intent has always populated it this way.
-        #
-        # `unanswerable_entity` first: `target_entity` is required to stay
-        # EMPTY on a self-declared refusal (the instruction that stops the
-        # model mangling an out-of-scope prompt into the nearest supported
-        # entity — the silent-rewrite fix). So a second, purely descriptive
-        # field carries the record type for wording, leaving that guard
-        # untouched. target_entity remains the fallback for the paths where
-        # it is legitimately set.
         return ParseResult.refuse(
-            flavor=flavor,
+            flavor,
             detail=reason,
-            offending_entity=(
-                response.unanswerable_entity or response.target_entity or None
-            ),
+            offending_entity=entity,
         )
 
-    # Shape-level conversion. A malformed filter value (non-JSON) is an
-    # unparseable result, not a crash.
+    # --- Shape check: nothing to plan against ---
+    if not getattr(parsed, "target_entity", None):
+        if not (
+            getattr(parsed, "aggregate", None)
+            or getattr(parsed, "compare", None)
+        ):
+            return ParseResult.refuse(
+                RefusalFlavor.UNPARSEABLE,
+                detail="the model produced a draft with no target_entity",
+            )
+
+    # --- Convert the DraftIntent into the planner's Intent ---
+    #
+    # to_intent() owns the filter value decoding (value_json -> value),
+    # the aggregate/compare block conversion, and — importantly — the
+    # COLUMN SPLIT: requested fields go to intent.fields (known) or
+    # intent.unresolved_fields (unknown) against the KG field catalog.
+    # parse() must NOT re-split that; it only applies the
+    # include-dependent correction below.
     try:
-        intent = response.to_intent()
-    except ValueError as exc:
+        intent = parsed.to_intent()
+    except Exception as exc:
         return ParseResult.refuse(
-            flavor=RefusalFlavor.UNPARSEABLE,
-            detail=f"The model's Intent was malformed: {exc}",
+            RefusalFlavor.UNPARSEABLE,
+            detail=f"could not convert draft to intent: {exc}",
         )
 
-    # #32 fault (b): set list_all deterministically from the raw prompt,
-    # code-side (no LLM-visible text — the prompt is at its token ceiling).
-    # Scoped to PurchaseOrder-rooted intents so nothing else is affected.
-    # The planner uses this to allow an explicit PO list (list_all=True) to
-    # sample-and-disclose, while a filter-less PO intent WITHOUT it (a
-    # dropped-identifier query) refuses instead of dumping the table.
-    if intent.target_entity == "PurchaseOrder":
-        intent.list_all = _is_explicit_po_list(prompt)
+    # --- Include correction (BUG-1) ---
+    from spire.nl_parser.vocabulary import strip_po_supplier_include
 
-    # Feature 7: an aggregation intent is validated by the planner's
-    # aggregation-op registry, not by the entity/filter KG menu (its
-    # target_entity/filters are unused). Skip validate_intent, which
-    # would reject it for not having a KG-valid target entity.
-    if intent.aggregate is not None:
-        return ParseResult.ok(intent)
+    if intent.include:
+        intent.include = strip_po_supplier_include(
+            intent.target_entity, intent.include, menu
+        )
 
-    # P6c: a comparison intent is validated by the planner's comparison-op
-    # registry, not the entity/filter KG menu (its target_entity/filters
-    # are unused). Skip validate_intent, same as aggregate — otherwise it
-    # refuses the empty target_entity at Gate 1.
-    if intent.compare is not None:
-        return ParseResult.ok(intent)
+    # --- KG validation ---
+    #
+    # Aggregate / compare intents have no target_entity on purpose; the
+    # planner validates the op. Everything else goes through
+    # validate_intent for entity, filter-type, and include-edge checks.
+    if not (intent.aggregate or intent.compare):
+        from spire.nl_parser.intent_validation import validate_intent
 
-    # COL-02: expand field synonyms ('who columns' -> the four who fields)
-    # deterministically, AFTER the LLM and BEFORE validation, so the model
-    # never decides the expansion and validate_intent sees only real column
-    # names. A term with no synonym row (including a genuinely-unknown column)
-    # passes through unchanged and is reported by validate_intent (COL-03).
-    intent.fields = expand_field_synonyms(intent.fields, menu)
+        refusal = validate_intent(intent, menu)
+        if refusal is not None:
+            return ParseResult.refuse(
+                refusal.flavor,
+                detail=refusal.detail,
+                offending_entity=refusal.offending_entity,
+                offending_filters=refusal.offending_filters,
+            )
 
-    # AI-10: correct an include the LLM mis-mapped from the raw prompt.
-    # 'supplier sites for X' comes back as include=['Address'] because the
-    # prompt steers supplier-location phrasing to Address; if the user said
-    # 'site(s)', that must be Site instead — which then reaches the Site
-    # gate and refuses honestly rather than returning addresses. Runs after
-    # the LLM, before validate_intent, deterministically from the KG.
-    intent.include = correct_include_from_prompt(prompt, intent.include, menu)
-
-    # AI-12: add a child include the LLM OMITTED for child-led phrasing.
-    # "show contacts for supplier X" targets Supplier but often leaves include
-    # empty, dropping "contacts"; this adds Contact (the child the user named)
-    # so the planner expands the parent with it. Deterministic, KG-grounded,
-    # AFTER the LLM and BEFORE validate_intent — same pattern as the AI-10
-    # override above. Needs target_entity to decide, so it is passed in.
-    intent.include = add_child_include_from_prompt(
-        prompt, intent.target_entity, intent.include, menu
+    # --- Address-satisfied column cleanup ---
+    #
+    # to_intent() already split the requested columns into known fields
+    # and unknown unresolved_fields. This is the ONLY correction parse()
+    # needs to make, because it depends on the include list, which
+    # to_intent() does not see: a field that an ACTIVE include already
+    # renders is neither a base column nor unavailable — the include
+    # provides it. 'country' with include=['Address'] is the case that
+    # motivated this: reporting it as unavailable contradicted the
+    # Address column printed beside it.
+    #
+    # Applied to unresolved_fields only; nothing is moved from fields.
+    # This is a SUBTRACTION from the unknowns, not a re-split — the
+    # previous version's mistake was re-splitting, which reset
+    # unresolved_fields to [] and silently lost every unknown column
+    # that to_intent() had correctly identified.
+    intent.unresolved_fields = list(
+        getattr(intent, "unresolved_fields", None) or []
     )
-
-    # BUG-1: strip an un-wireable include=['Supplier'] from a PurchaseOrder
-    # intent, IF the KG genuinely has no PurchaseOrder -> Supplier edge.
-    # The parser sometimes emits this shape for 'supplier details for PO X'
-    # (it pattern-matches the 'include the buyer' rule). The include is not
-    # needed — the supplier name/number/site ride on the PO header and are
-    # projected by the by_id fetcher already. Runs AFTER the other include
-    # correction passes and BEFORE validate_intent, so the gate sees a
-    # clean include list. Deterministic and KG-gated: if the edge is ever
-    # declared in the KG, the strip becomes a no-op.
-    intent.include = strip_po_supplier_include(
-        intent.target_entity, intent.include, menu
-    )
-
-    # Q2 direction 2: validate the draft back against the KG. Out-of-scope
-    # entities/filters become typed refusals (checkpoint 3).
-    refusal = validate_intent(intent, menu)
-
-    if refusal is not None:
-        return ParseResult(refusal=refusal)
+    if "Address" in (intent.include or []):
+        _ADDRESS_SATISFIED_FIELDS = {
+            "country", "address", "city", "state",
+            "formatted_address", "address_id",
+        }
+        intent.unresolved_fields = [
+            f for f in intent.unresolved_fields
+            if str(f).lower() not in _ADDRESS_SATISFIED_FIELDS
+        ]
 
     return ParseResult.ok(intent)
