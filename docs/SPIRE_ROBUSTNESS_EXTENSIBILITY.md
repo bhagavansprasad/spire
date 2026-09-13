@@ -2,18 +2,26 @@
 
 **Making the NL-to-Data Pipeline Trustworthy, Then Extensible**
 
-**Document version:** 3.0
+**Document version:** 3.1
 **Created:** 2026-09-13
+**Last revised:** 2026-09-13 (v3.1 — review-driven additions)
 **Author:** Bhagavan (with architectural analysis by DeepSeek)
-**Status:** Living document. The design is frozen at v3.0. Status sections are appended per completed phase. **Never edit a Design section — record deviations in that phase's Status section.**
+**Status:** Living document. The design is frozen at v3.1. Status sections are appended per completed phase. **Never edit a Design section — record deviations in that phase's Status section.**
+
+**Change log**
+
+| Version | Date | Change |
+|---|---|---|
+| 3.0 | 2026-09-13 | Initial seven-phase structure; purpose-first framing. |
+| 3.1 | 2026-09-13 | Review-driven additions: drift evidence (S1/S4) in §3; `quirks` spec block in Phase 3d; strengthened Phase 3e acceptance; in-flight work inventory in Phase 1; baseline-snapshot caveat in Appendix A; N-run evidence template in Appendix B; three decisions-log entries; prompt-cache reference in Phase 6c; new §4.5 "In-flight work at v3.1 authoring." |
 
 ---
 
 ## How to read this document
 
-**Part I (§1–§4) explains why we are doing this work.** It is the origin story: where SPIRE came from, what it is, where it falls short, and what the plan achieves. Read this first.
+**Part I (§1–§4) explains why we are doing this work.** It is the origin story: where SPIRE came from, what it is, where it falls short, what the plan achieves, and what is already in flight. Read this first.
 
-**Part II (§5–§12) is the seven-phase plan.** Each phase has a Design section (frozen at v3.0) and a Status section (updated as work proceeds).
+**Part II (§5–§12) is the seven-phase plan.** Each phase has a Design section (frozen at v3.1) and a Status section (updated as work proceeds).
 
 **Part III (§13–§14) is the tracking machinery.** The Phase Index and the Session Log are the two places that change every session.
 
@@ -33,23 +41,24 @@
 2. [What SPIRE is today](#2-what-spire-is-today)
 3. [Where SPIRE falls short](#3-where-spire-falls-short)
 4. [What this plan achieves](#4-what-this-plan-achieves)
+5. [In-flight work at v3.1 authoring](#5-in-flight-work-at-v31-authoring)
 
 **Part II — The seven phases**
-5. [Phase Index](#5-phase-index)
-6. [Phase 1 — Audit & Baseline](#6-phase-1--audit--baseline)
-7. [Phase 2 — Correctness](#7-phase-2--correctness)
-8. [Phase 3 — Consistency](#8-phase-3--consistency)
-9. [Phase 4 — Structure](#9-phase-4--structure)
-10. [Phase 5 — Observability](#10-phase-5--observability)
-11. [Phase 6 — Performance](#11-phase-6--performance)
-12. [Phase 7 — Extensibility](#12-phase-7--extensibility)
+6. [Phase Index](#6-phase-index)
+7. [Phase 1 — Audit & Baseline](#7-phase-1--audit--baseline)
+8. [Phase 2 — Correctness](#8-phase-2--correctness)
+9. [Phase 3 — Consistency](#9-phase-3--consistency)
+10. [Phase 4 — Structure](#10-phase-4--structure)
+11. [Phase 5 — Observability](#11-phase-5--observability)
+12. [Phase 6 — Performance](#12-phase-6--performance)
+13. [Phase 7 — Extensibility](#13-phase-7--extensibility)
 
 **Part III — Tracking**
-13. [Phase completion checklist](#13-phase-completion-checklist)
-14. [Session Log](#14-session-log)
+14. [Phase completion checklist](#14-phase-completion-checklist)
+15. [Session Log](#15-session-log)
 
 **Appendices**
-- [A — Baseline state (2026-09-13)](#appendix-a--baseline-state-2026-09-13)
+- [A — Baseline snapshot (2026-09-13)](#appendix-a--baseline-snapshot-2026-09-13)
 - [B — Evidence capture templates](#appendix-b--evidence-capture-templates)
 - [C — Decisions log](#appendix-c--decisions-log)
 - [D — The dependency argument (why this order)](#appendix-d--the-dependency-argument-why-this-order)
@@ -117,7 +126,7 @@ prompt
 - **The synthesizer is 90% local.** Most shapes build their records and summaries from code. The remaining 10% is documented and shrinking.
 - **Refusals are first-class.** Out-of-scope prompts get a Reason/Solution/Example message, not a stack trace.
 - **Truncation is disclosed.** When a result is a sample, the answer says so.
-- **The test suite is broad** — 996 tests, most fast, most passing.
+- **The test suite is broad** — approximately 1,000 tests, most fast, most passing.
 
 **What's working well enough to build on:**
 
@@ -135,9 +144,16 @@ SPIRE has accreted. As it grew from five endpoints to twenty-two entities, from 
 
 The KG declares entities, filters, edges, vocabularies. But the parser prompt hand-writes the same information. The tool files hand-code the same endpoints. The tripwire tests hand-count the same rows. When any one of these is updated without the others, drift appears — and the drift is silent. The codebase itself documents this as a recurring defect class, calling out "the four places that must move together, not two as earlier notes implied."
 
+**This is not theoretical.** Two shipped, documented bugs in the recent history are direct instances of this pattern:
+
+- **S1** — the parser prompt taught one shape ("supplier details for PO X is a lifecycle query") while the planner expected another (a PurchaseOrder root with a `by_id` filter), and the model flipped between the two on identical input. The bug was not in either side individually; it was in the drift between the prompt's teaching and the planner's expectation.
+- **S4** — a `supplier_number` vs `supplier_id` mismatch across the KG row, the tool signature, and the routing placeholder. The KG said one thing, the tool hardcoded another, and the routing layer held a third. Each was internally consistent; the join between them was not.
+
+These are the exact shape the plan is designed to eliminate. Citing them here is deliberate: **the failure class is proven, not hypothetical, and the two bugs that motivated this plan are instances of it.**
+
 **Problem 2 — Bugs hide in the drift.**
 
-When the KG says "the supplier filter routes to `supplier_number`" and the tool hardcodes `supplier_name`, the bug is invisible until a prompt hits it. When the parser prompt teaches one shape and the planner expects another, the failure surfaces three phases downstream.
+When the KG says "the supplier filter routes to `supplier_number`" and the tool hardcodes `supplier_name`, the bug is invisible until a prompt hits it. When the parser prompt teaches one shape and the planner expects another, the failure surfaces three phases downstream. The bug's *mechanism* is a mismatch between two registries, not an error in either one.
 
 **Problem 3 — Extensibility is expensive.**
 
@@ -150,6 +166,10 @@ The `src/spire/` layout reflects an earlier version of the system. Some modules 
 **Problem 5 — There is no clear seam for the future.**
 
 The founding vision was graph-to-SQL. SPIRE is graph-to-REST. To retarget to SQL — or to any other backend — you need a clean interface between "the pipeline that understands questions" and "the layer that talks to the data source." Today that interface is implicit, embedded in thirty-four tool files and a hand-written dispatch.
+
+**Problem 6 — Determinism is assumed but not always enforced.**
+
+Two LLM calls per request means two places where the same input can produce different output across runs. The parser's include list flips. The classifier's module set flips. The synthesizer's summary drifts. Each of these has been observed in the last two weeks. The plan's correctness phase must account for bugs that fire probabilistically, not just ones that fire every time.
 
 **The common thread:** SPIRE's *capability* grows linearly with developer effort, but its *trustworthiness* and *velocity* decrease. That is the wrong shape for a system that is supposed to keep growing — and eventually to serve as the foundation for the SQL vision.
 
@@ -165,6 +185,7 @@ Concretely, by the end of all seven phases:
 
 - Every known bug is fixed with a regression test that proves it stays fixed.
 - The audit's findings are turned into a bug list, and the bug list is turned into zero.
+- Probabilistic bugs (parser non-determinism, classifier drift) are held to a repeated-run evidence standard, not a single-pass test.
 
 **Consistency.**
 
@@ -198,9 +219,36 @@ Concretely, by the end of all seven phases:
 
 ---
 
+## 5. In-flight work at v3.1 authoring
+
+**This section exists because the plan assumes a starting state, and the starting state is not clean.** Several pieces of work are in progress or recently landed. The audit in Phase 1 will find them; this section is the map so the audit can interpret what it finds.
+
+**Work in flight or recently merged:**
+
+| Item | State | Relationship to phases |
+|---|---|---|
+| Parser prompt cache (`feat/parser-prompt-cache`) | Merged or in review | Interacts with Phase 6c (Intent cache). The caching work has an important lesson: caching interacts with the model's thinking-step budget, and a cache hit can change the reasoning path, not just the timing. Phase 6c must reference this lesson. |
+| S1 remediation (the "supplier details for PO X" bug) | Shipped | Feeds Phase 1's bug inventory as a **closed** example — the fix exists, so the audit records it as evidence of the drift class, not as an open item. |
+| S4 remediation (PO supplier filter) | Shipped | Same as S1: closed, cited as evidence. |
+| `qa_testcases.json` corpus | Stale | Contains at least one entry that expects `refuse` where the system now returns `search_purchase_orders` (EIP Inc supplier filter). This is a **live, unfixed drift bug** and belongs in Phase 1's bug inventory as a concrete example. |
+| Classifier lifecycle flip fix (`feat/router-show-parser-diagnostic`) | Shipped | Related to Phase 3's consistency work — the classifier's teaching and the parser's teaching have to agree, and today they don't always. Phase 3's prompt generation should make the classifier menu a first-class generated artifact. |
+| `--validate` philosophy change (tool-gates-pass, module-warns) | Shipped | Affects Phase 3's acceptance criteria. Validation keying on the TOOL, not the module set, is the correct model — but it means "validate passes" is weaker evidence than it looks. Phase 3's byte-equality gate remains the stronger check. |
+
+**What this means for Phase 1's audit:**
+
+1. **The bug inventory is not a greenfield list.** It has closed items (S1, S4) that serve as evidence, open items (the `qa_testcases` drift), and items that will surface as the audit runs.
+2. **The registry drift map is not a greenfield survey.** Several registries already have known drift. The audit's job is to *enumerate* the drift, not to discover whether it exists.
+3. **Baselines must be re-measured.** See Appendix A. The numbers there are a snapshot from authoring; Phase 1 re-measures.
+
+**A note on phase ordering given in-flight work:**
+
+Some in-flight items naturally belong to phases later in the plan — the parser prompt cache is Phase 6c territory, the S1 fix is Phase 2 territory. **Do not try to absorb them into Phase 1.** Phase 1 audits. The fixes land in their phases. If the audit finds that the in-flight work has introduced *new* drift (which it may have — the cache changes parser timing and behaviour), that goes in the bug inventory.
+
+---
+
 # Part II — The seven phases
 
-## 5. Phase Index
+## 6. Phase Index
 
 **This table is the single source of truth for progress.** Update it at the end of every session.
 
@@ -227,27 +275,27 @@ Concretely, by the end of all seven phases:
 
 **Legend:** ⬜ Not started · 🟡 In progress · 🟢 Complete · 🔴 Blocked · ⚪ Deferred
 
-### 5.1 Why this order, in one paragraph
+### 6.1 Why this order, in one paragraph
 
 **Audit before correctness** — you can't fix what you haven't measured. **Correctness before consistency** — consolidating buggy code consolidates the bug. **Consistency before structure** — you can't decide where a module belongs until you know what the module *is*, and consistency work makes the code's true shape visible. **Structure before observability** — instrument stable code, not code that's about to move. **Observability before performance** — you can't prove a performance change helped without a baseline. **Performance before extensibility** — you want to generate new capabilities against a fast, well-understood system, not a slow, drifting one. **Extensibility last** — it is the *output* of everything above; a correct, consistent, structured, instrumented, fast system is extensible by construction. See Appendix D for the full dependency argument.
 
 ---
 
-## 6. Phase 1 — Audit & Baseline
+## 7. Phase 1 — Audit & Baseline
 
-### 6.1 Objective
+### 7.1 Objective
 
-Measure everything. Find drift, bugs, dead code, and inconsistencies. Untrack `personas.yaml`. Perform small mechanical hygiene that unblocks later phases.
+Measure everything. Find drift, bugs, dead code, and inconsistencies. Untrack `personas.yaml`. Perform small mechanical hygiene that unblocks later phases. Produce an in-flight work inventory.
 
-### 6.2 Why here
+### 7.2 Why here
 
 The audit is the *prerequisite* of every other phase. Correctness work needs a bug list. Consistency work needs a list of parallel registries. Structure work needs a map of what exists. Observability, performance, and extensibility all need the baseline metrics the audit produces.
 
 An audit done at any other point would miss the state that earlier phases changed. It has to come first.
 
-### 6.3 Design
+### 7.3 Design
 
-**6.3.1 Security pre-work.**
+**7.3.1 Security pre-work.**
 
 `personas.yaml` is currently tracked in git. It contains live Fusion and Oracle credentials. This is the first commit on the branch.
 
@@ -260,7 +308,7 @@ git commit -m "security: untrack personas.yaml; gitignore it"
 
 After this commit, rotate the credentials. They are in git history.
 
-**6.3.2 Mechanical hygiene.**
+**7.3.2 Mechanical hygiene.**
 
 Small, safe moves that later phases assume.
 
@@ -271,7 +319,7 @@ Small, safe moves that later phases assume.
 
 These are the only structural changes Phase 1 makes. The substantive restructuring happens in Phase 4, after consistency work has revealed the architecture.
 
-**6.3.3 The audit.**
+**7.3.3 The audit.**
 
 A systematic survey of the codebase. Deliverable is a document, `docs/audit/phase-1-audit.md`, with the following sections:
 
@@ -290,11 +338,22 @@ Example rows:
 
 **B. Bug inventory.** Prompts that fail today. Run the full prompt suite, read every answer, and record what's wrong. Each entry: prompt, expected, actual, suspected root cause. Cross-reference the open items already documented in `docs/spire_overnight_findings.md` and `docs/spire_findings_11-Sep-2026.md`.
 
+**Closed items to record as evidence** (not to fix — they're already fixed):
+
+- S1 — the parser/planner drift on "supplier details for PO X" (closed).
+- S4 — the `supplier_number`/`supplier_id` mismatch (closed).
+
+**Open items known at authoring time:**
+
+- The `qa_testcases.json` corpus expects `refuse` for "list open purchase orders for supplier EIP Inc" where the system now correctly returns `search_purchase_orders`. The corpus is stale; the code is correct. A **corpus-drift bug**.
+
 **C. Dead code inventory.** Modules, functions, or files not referenced by any test, tool, or prompt. `pytest --collect-only` plus `grep` for importers.
 
 **D. Inconsistency inventory.** Style, naming, error handling, logging. Where the codebase says the same thing two ways. Where similar code has different shapes.
 
-**E. Baseline metrics.** The numbers every later phase will compare against:
+**E. In-flight work inventory.** Enumerate the branches and recent merges that the plan must absorb. Start from §5 of this document, but re-verify against the actual git state. For each item: name, state, whether it introduced new drift, whether it left partial work.
+
+**F. Baseline metrics.** The numbers every later phase will compare against:
 
 - Test count (`pytest -q --collect-only | tail -1`).
 - Test wall-clock (`pytest -q`).
@@ -306,7 +365,7 @@ Example rows:
 - MCP tool count.
 - `.sysprompt` file count.
 
-**F. Behavioural byte-diffs.** Three prompt outputs saved as golden files, to be used as the byte-equality oracle for every subsequent phase:
+**G. Behavioural byte-diffs.** Three prompt outputs saved as golden files, to be used as the byte-equality oracle for every subsequent phase:
 
 - `"Count of suppliers"` (count path)
 - `"Show PO 2144 and its lines"` (child path)
@@ -314,11 +373,13 @@ Example rows:
 
 Save the exact stdout to `docs/audit/golden/*.txt`.
 
-**6.3.4 The audit is not a wishlist.**
+**H. Probabilistic-behaviour map.** For every LLM-boundary behaviour — parser include-list, classifier module-set, synthesizer summary — record the *distribution* of outcomes across N runs (N ≥ 20). Note which behaviours are deterministic and which are not. This map is the input to Phase 2's correctness work for probabilistic bugs; without it, "the parser sometimes flips" stays a rumour.
+
+**7.3.4 The audit is not a wishlist.**
 
 The audit is a factual document. It says what *is*, not what *should be*. Fixes go in Phase 2 (correctness) or Phase 3 (consistency).
 
-### 6.4 Tasks
+### 7.4 Tasks
 
 | # | Task | Output |
 |---|---|---|
@@ -327,25 +388,27 @@ The audit is a factual document. It says what *is*, not what *should be*. Fixes 
 | 1.3 | Move PDFs and XLSX out of the source tree | commit |
 | 1.4 | Remove scratch files from the repo | commit |
 | 1.5 | Write the registry drift map | `docs/audit/phase-1-audit.md` §A |
-| 1.6 | Write the bug inventory | `docs/audit/phase-1-audit.md` §B |
+| 1.6 | Write the bug inventory (including S1, S4, and the `qa_testcases` corpus drift) | `docs/audit/phase-1-audit.md` §B |
 | 1.7 | Write the dead code inventory | `docs/audit/phase-1-audit.md` §C |
 | 1.8 | Write the inconsistency inventory | `docs/audit/phase-1-audit.md` §D |
-| 1.9 | Capture baseline metrics | `docs/audit/phase-1-audit.md` §E |
-| 1.10 | Save three golden outputs | `docs/audit/golden/*.txt` |
+| 1.9 | **Write the in-flight work inventory** | `docs/audit/phase-1-audit.md` §E |
+| 1.10 | Capture baseline metrics | `docs/audit/phase-1-audit.md` §F |
+| 1.11 | Save three golden outputs | `docs/audit/golden/*.txt` |
+| 1.12 | **Write the probabilistic-behaviour map (N≥20 runs per behaviour)** | `docs/audit/phase-1-audit.md` §H |
 
-### 6.5 Acceptance criteria
+### 7.5 Acceptance criteria
 
 - `personas.yaml` is untracked; credentials rotated.
-- The audit document exists and is complete.
+- The audit document exists and is complete, including the in-flight work inventory and the probabilistic-behaviour map.
 - The golden outputs are saved and reproducible: running the same three prompts today produces byte-identical output.
 - All tests still pass (the mechanical moves shouldn't break anything).
 - No code changes beyond the mechanical hygiene.
 
-### 6.6 Rollback
+### 7.6 Rollback
 
 Revert the merge commit. Restore the moved files. If credentials were rotated, no rollback — the rotation stands.
 
-### 6.7 Phase 1 Status
+### 7.7 Phase 1 Status
 
 **Current status:** ⬜ Not started
 
@@ -357,21 +420,21 @@ Revert the merge commit. Restore the moved files. If credentials were rotated, n
 
 ---
 
-## 7. Phase 2 — Correctness
+## 8. Phase 2 — Correctness
 
-### 7.1 Objective
+### 8.1 Objective
 
 Fix every bug the audit found. Add a regression test for each. Do not consolidate or restructure; just make the code correct.
 
-### 7.2 Why here
+### 8.2 Why here
 
 Buggy code should not be consolidated (Phase 3) or moved (Phase 4). Consolidation duplicates bugs. Restructuring hides bugs in a wave of imports.
 
 The audit (Phase 1) produced a bug list. Phase 2 turns that list into zero.
 
-### 7.3 Design
+### 8.3 Design
 
-**7.3.1 Prioritize by severity.**
+**8.3.1 Prioritize by severity.**
 
 Not every bug is equally important. Sort the audit's bug list into:
 
@@ -380,7 +443,24 @@ Not every bug is equally important. Sort the audit's bug list into:
 - **Missing-capability bugs** — the prompt refuses when it shouldn't. Fix third.
 - **Cosmetic bugs** — the answer is right but ugly. Fix last.
 
-**7.3.2 One bug, one branch, one test.**
+**8.3.2 Deterministic bugs vs probabilistic bugs.**
+
+The audit produces two kinds of bugs. They need different treatment.
+
+**Deterministic bugs** fire every time. They fit "one bug, one branch, one test" cleanly. The regression test is a single-run assertion: given the input, the output must be correct.
+
+**Probabilistic bugs** fire some fraction of the time. The S1 include flip fired roughly 9 times in 20. The classifier module-set flips fire less often. A single-run test passes most of the time even when the bug is live. **A probabilistic bug needs N-run evidence, not a single pass.**
+
+For a probabilistic bug:
+
+- The regression test runs the input N times (N ≥ 20) and asserts a distribution — for example, "at least 19 of 20 runs produce the correct output."
+- The test is marked `@pytest.mark.slow` (or similar) because N× cost matters.
+- The fix is not "make the failing case pass" but "make the distribution converge to deterministic." If the flip is driven by an LLM, the fix is usually to move the decision out of the LLM, not to add a hedge around it.
+- The test *does not* assert byte-equality across runs (that's a different property); it asserts that the *correct outcome dominates*.
+
+The template for N-run evidence is in Appendix B.2.
+
+**8.3.3 One bug, one branch, one test.**
 
 Do not bundle bugs. Each fix:
 
@@ -388,43 +468,46 @@ Do not bundle bugs. Each fix:
 - Gets its own regression test.
 - Gets verified with the exact prompt that exposed it.
 
-**7.3.3 The regression test proves the fix stays fixed.**
+**8.3.4 The regression test proves the fix stays fixed.**
 
 The test asserts the *correct* behaviour, not just the absence of the bug. If the bug was "supplier sites returns addresses," the test asserts that supplier sites returns sites *and* that the entity name in the answer is Site, not Address.
 
-**7.3.4 No behaviour changes beyond the fixes.**
+**8.3.5 No behaviour changes beyond the fixes.**
 
 Phase 2 is not the place for cleanup, refactoring, or style changes. The only changes are the bugs.
 
-**7.3.5 The byte-diff oracle applies.**
+**8.3.6 The byte-diff oracle applies.**
 
 Before Phase 2, run the three golden prompts and save the output. After each bug fix, re-run the three golden prompts and confirm the output for those three is unchanged (unless the bug *was* in one of those prompts' output, in which case update the golden file and note the change).
 
-### 7.4 Tasks
+### 8.4 Tasks
 
 | # | Task | Output |
 |---|---|---|
-| 2.1 | Triage the audit's bug list by severity | revised `docs/audit/phase-1-audit.md` §B |
-| 2.2 | Fix wrong-data bugs | one commit per bug + regression test |
-| 2.3 | Fix crash bugs | one commit per bug + regression test |
-| 2.4 | Fix missing-capability bugs | one commit per bug + regression test |
-| 2.5 | Fix cosmetic bugs | one commit per bug |
-| 2.6 | Re-run the full prompt suite | updated pass count |
-| 2.7 | Update the golden files if any of the three prompts changed | refreshed golden outputs |
-| 2.8 | Verify every fix's regression test fails without the fix | evidence in PR |
+| 2.1 | Triage the audit's bug list by severity, and separate deterministic from probabilistic | revised `docs/audit/phase-1-audit.md` §B |
+| 2.2 | Fix wrong-data bugs (deterministic) | one commit per bug + regression test |
+| 2.3 | Fix wrong-data bugs (probabilistic) | one commit per bug + N-run regression test |
+| 2.4 | Fix crash bugs | one commit per bug + regression test |
+| 2.5 | Fix missing-capability bugs | one commit per bug + regression test |
+| 2.6 | Fix corpus-drift bugs (e.g. `qa_testcases.json`) | regenerate the affected corpus; review; commit |
+| 2.7 | Fix cosmetic bugs | one commit per bug |
+| 2.8 | Re-run the full prompt suite | updated pass count |
+| 2.9 | Update the golden files if any of the three prompts changed | refreshed golden outputs |
+| 2.10 | Verify every fix's regression test fails without the fix | evidence in PR |
 
-### 7.5 Acceptance criteria
+### 8.5 Acceptance criteria
 
 - Every bug in the audit's list is either fixed with a regression test or deferred with a documented reason.
 - The full prompt suite pass count has improved or stayed the same.
 - No new failures.
 - Every fix's regression test fails without the fix.
+- Every probabilistic bug has an N-run regression test that demonstrates convergence.
 
-### 7.6 Rollback
+### 8.6 Rollback
 
 Phase 2 is composed of independent bug fixes. Each can be reverted individually. The branch as a whole can be reverted if the phase is abandoned.
 
-### 7.7 Phase 2 Status
+### 8.7 Phase 2 Status
 
 **Current status:** ⬜ Not started
 
@@ -434,23 +517,23 @@ Phase 2 is composed of independent bug fixes. Each can be reverted individually.
 
 ---
 
-## 8. Phase 3 — Consistency
+## 9. Phase 3 — Consistency
 
-### 8.1 Objective
+### 9.1 Objective
 
 Make the KG the single source of truth. Generate the parser prompt, the classifier menu, the tool dispatch, and the tripwire counts from it. The result: adding a filter becomes one KG row, not five code changes.
 
-### 8.2 Why here
+### 9.2 Why here
 
 This is the biggest single lever in the plan. Almost every bug the audit finds will trace back to a drift between two parallel registries. Fixing the drift at the source eliminates the *class* of bug, not just individual instances.
 
 Consistency must come *after* correctness because consolidating a buggy registry just produces a buggier one. It must come *before* structure because structure needs to know what belongs where, and consistency makes the code's true architecture visible.
 
-### 8.3 Design
+### 9.3 Design
 
 Phase 3 is split into five sub-phases. Each has its own branch and its own PR.
 
-#### 8.3.1 Phase 3a — Prompt coverage validation
+#### 9.3.1 Phase 3a — Prompt coverage validation
 
 **Objective.** Add a test that fails when the KG declares an entity, filter, or field that the parser prompt does not cover.
 
@@ -475,7 +558,7 @@ Plus similar for filters and fields.
 
 **Acceptance.** The test passes today. If it fails, the gap is real; fix the prompt before proceeding.
 
-#### 8.3.2 Phase 3b — Prompt generation from KG
+#### 9.3.2 Phase 3b — Prompt generation from KG
 
 **Objective.** Replace the 51 hand-written `.sysprompt` files with a generator plus a small overlay set.
 
@@ -495,7 +578,7 @@ Plus similar for filters and fields.
 - Adding a filter to the KG produces a new `.sysprompt` file when the generator runs.
 - Assembled prompt size is within ±5% of baseline.
 
-#### 8.3.3 Phase 3c — Generic executor (prototype)
+#### 9.3.3 Phase 3c — Generic executor (prototype)
 
 **Objective.** Implement `execute_operation` for one entity-level fetch (`search_suppliers`). Prove the pattern works.
 
@@ -508,7 +591,7 @@ Plus similar for filters and fields.
 
 **Acceptance.** The prototype's output matches the legacy tool's output for several argument combinations.
 
-#### 8.3.4 Phase 3d — Generic executor (full)
+#### 9.3.4 Phase 3d — Generic executor (full)
 
 **Objective.** Extend `execute_operation` to every entity-level fetch, every edge traversal, and every child fetch.
 
@@ -521,9 +604,81 @@ Plus similar for filters and fields.
 
 **Scope.** 8 entities × ~20 filters + 16 edges + all child fetches.
 
-**Acceptance.** Every operation byte-equals its legacy counterpart. `--validate` on all corpora passes. Full prompt suite runs clean.
+**THE RISK — per-endpoint quirks resist generalization.**
 
-#### 8.3.5 Phase 3e — Delete legacy tools
+This is the phase where the plan's biggest risk lives. Individual legacy tools carry hard-won, non-obvious quirks baked into their code:
+
+- The composite-`q=` silent-zero (a filter that composes two server clauses returns HTTP 200 with an empty result).
+- `fields=` breaking on `/standardReceipts` (500s even with valid field names).
+- `SupplierNumber` 400ing on `/purchaseOrders` (the endpoint doesn't expose it).
+- The over-fetch-200-then-client-filter pattern (used because a single server clause is unreliable but a composite is worse).
+- Per-endpoint ordering requirements (`orderBy=StandardReceiptId` on `/standardReceipts` because the endpoint has no default order).
+
+These are documented in `docs/spire_fusion_endpoints_reference.md` precisely because they are *not* derivable from the KG schema. A generic executor has to reproduce every one of these per-endpoint idiosyncrasies from declarative spec — and the ones it misses won't fail loudly; they'll silent-zero or 500 or return wrong counts.
+
+**Byte-equality on sampled combinations is not sufficient evidence.** The quirks bite on the combinations nobody tested. A generic executor that passes the golden prompts and the corpora can still ship a silent wrong answer on a filter pair that nobody exercised.
+
+**The design response — declarative `quirks`.**
+
+The spec format must have a first-class `quirks` block so that each per-endpoint idiosyncrasy is declarative and testable.
+
+```yaml
+quirks:
+  # Example: composite q= silently zeroes on this endpoint.
+  - kind: no_composite_q
+    description: |
+      ANDing two clauses in a single q= returns HTTP 200 with an empty
+      result set on this endpoint, even when each clause alone returns
+      thousands and the intersection is non-empty. Send one clause
+      server-side and the rest client-side.
+
+  # Example: fields= 500s on this endpoint even with valid names.
+  - kind: no_fields_projection
+    description: |
+      Passing fields= to this endpoint returns HTTP 500 regardless of
+      whether the field names are valid. Fetch full rows and project
+      client-side.
+
+  # Example: this endpoint has no default order; paginating without
+  # an explicit orderBy produces a different sample each call.
+  - kind: requires_order_by
+    field: StandardReceiptId
+    description: |
+      This collection has no default ordering. Paginating via offset
+      without an explicit orderBy returns overlapping or missing rows
+      across calls. The PK is the deterministic key; note that
+      ReceiptNumber is NOT unique on this pod.
+
+  # Example: this endpoint's body does not echo the parent id.
+  - kind: parent_id_not_in_body
+    description: |
+      Child rows do not carry the parent id in the body; the join key is
+      the URL path. The executor must stamp the parent id onto each row
+      when a following step needs to iterate on it.
+```
+
+The generic executor reads the `quirks` block and behaves accordingly. The acceptance criterion becomes: **for every quirk kind the executor knows about, there is a per-quirk test that exercises it**. Not "for each of the 24 tools, byte-equality on sampled combinations."
+
+**What the per-quirk tests look like:**
+
+- `no_composite_q`: assert that the executor sends exactly one clause via q= when two filters are requested, and applies the second client-side.
+- `no_fields_projection`: assert that the executor does not send fields= on this endpoint and that the returned items carry the full row.
+- `requires_order_by`: assert that the executor sends orderBy with the specified field on every page.
+- `parent_id_not_in_body`: assert that the executor stamps the parent id onto each child row.
+
+Each quirk kind is tested once, not once per endpoint. The `quirks` block in each endpoint's spec says *which* quirks apply; the executor's test suite says *how* each quirk kind is honoured.
+
+**Scope.** 8 entities × ~20 filters + 16 edges + all child fetches.
+
+**Acceptance.**
+
+- Every operation byte-equals its legacy counterpart **on the tested argument combinations**.
+- Every quirk kind the endpoint declares has a per-quirk test in the executor's test suite.
+- The endpoints reference is the checklist: every quirk documented there must have a corresponding declarative quirk and a corresponding test.
+- `--validate` on all corpora passes.
+- Full prompt suite runs clean.
+
+#### 9.3.5 Phase 3e — Delete legacy tools
 
 **Objective.** Delete the 24 fetch-only tool files. Keep the 7 semantic tools (aggregations, comparisons, lifecycle).
 
@@ -536,9 +691,64 @@ Plus similar for filters and fields.
 - Delete corresponding test files.
 - Regenerate corpora with `--generate`, review, commit.
 
-**Acceptance.** Only semantic tools + `execute_operation` registered. All tests pass. Full prompt suite passes. Tool count drops from 34 to 12.
+**Files to delete:**
 
-### 8.4 Tasks
+```
+addresses.py  buyer.py  customer_account_by_name.py  customer_transactions.py
+invoices.py  purchase_order_by_id.py  purchase_order_distributions.py
+purchase_order_lines.py  purchase_order_schedules.py  purchase_orders.py
+receivables_credit_memos.py  receivables_invoice_by_id.py
+receivables_invoice_lines.py  receivables_invoice_tax_lines.py
+receivables_invoice_transaction_dff.py  standard_receipts.py
+supplier_classifications.py  supplier_contacts.py  supplier_sites.py
+suppliers.py  suppliers_by_country.py
+account_credit_memos.py  account_receipt_applications.py  account_receipts.py
+```
+
+That is **24 files**, keeping these 7 semantic tools:
+
+```
+aggregate_invoices.py
+aggregate_purchase_orders.py
+aggregate_standard_receipts_by_method.py
+compare_orders_to_invoices.py
+po_lifecycle.py
+rank_customer_accounts_by_exposure.py
+rank_invoices_by_amount.py
+```
+
+Plus helpers: `pagination.py`, `tool_result.py`. Total `mcp_server/tools/`: **9 files + execute.py = 10.**
+
+**THE ACCEPTANCE BAR — stronger than byte-equality.**
+
+The plan does not ship Phase 3e until the acceptance bar is provably met. This means:
+
+1. **Every per-endpoint quirk is enumerated.** The endpoints reference (`docs/spire_fusion_endpoints_reference.md`) documents the quirks each legacy tool encodes. Extract them into the `quirks` block for each endpoint's spec.
+
+2. **Every quirk has a per-quirk test.** For each quirk kind (`no_composite_q`, `no_fields_projection`, `requires_order_by`, `parent_id_not_in_body`, etc.), there is a test in the executor's suite that verifies the executor honours it.
+
+3. **For each of the 24 tools being deleted, byte-equality on *at least three argument combinations*.** The combinations must include at least one that exercises the endpoint's declared quirks. Not just the happy path.
+
+4. **A negative test for each tool.** For the tool being deleted, construct an argument combination that the legacy tool handled *unusually* — a composite filter, a specific `fields=` request, an ordering-sensitive fetch — and confirm the generic executor produces the same result.
+
+5. **A documented diff.** The PR includes a table showing, per tool: its quirks, the tests that verify each quirk, and the diff between its legacy output and the generic executor's output on multiple combinations.
+
+**What this bar is designed to prevent:**
+
+The failure mode is: the generic executor passes the golden prompts and the corpora, ships, and then silent-wrong-answers on a combination nobody put in a test. This is exactly the failure SPIRE exists to prevent. The per-quirk test bar makes that failure impossible — if the quirk is declared, it's tested; if it's not declared, the tool doesn't get deleted.
+
+**A note on the risk.** The reviewer of an earlier draft of this plan observed: *"tool code is where the ERP's ugliness is absorbed, and ugliness resists generalization."* The response is not to refuse consolidation, but to make the ugliness **declarative** so the consolidation is auditable. `quirks` is the mechanism.
+
+**Acceptance.**
+
+- Only semantic tools + `execute_operation` are registered.
+- All tests pass.
+- Full prompt suite runs with no regression.
+- Corpora regenerated (`--generate`), reviewed, committed.
+- **Per-quirk test suite passes.**
+- **The tool-by-tool diff table is in the PR.**
+
+### 9.4 Tasks
 
 | # | Task | Branch |
 |---|---|---|
@@ -546,12 +756,15 @@ Plus similar for filters and fields.
 | 3.2 | Rewrite the prompt generator | `phase-3b-prompt-generation` |
 | 3.3 | Migrate to generated prompts | same branch |
 | 3.4 | Implement `execute_operation` prototype | `phase-3c-generic-executor-prototype` |
-| 3.5 | Extend to all entity-level fetches | `phase-3d-generic-executor-entity` |
-| 3.6 | Extend to edge traversals and children | `phase-3d-generic-executor-edges` |
-| 3.7 | Delete legacy tool files | `phase-3e-delete-legacy-tools` |
-| 3.8 | Regenerate corpora | same branch |
+| 3.5 | **Define the `quirks` spec block and the per-quirk tests** | `phase-3d-generic-executor-entity` |
+| 3.6 | Extend to all entity-level fetches | same |
+| 3.7 | Extend to edge traversals and children | `phase-3d-generic-executor-edges` |
+| 3.8 | **Enumerate every legacy tool's quirks into its spec** | `phase-3e-delete-legacy-tools` |
+| 3.9 | Delete legacy tool files | same |
+| 3.10 | Regenerate corpora | same |
+| 3.11 | **Produce the tool-by-tool diff table** | same |
 
-### 8.5 Acceptance criteria
+### 9.5 Acceptance criteria
 
 - The KG is the single source of truth for: entity list, field list, filter definitions, edge definitions, tool dispatch, classifier menu, parser prompt.
 - `--check` on the prompt generator returns 0.
@@ -560,12 +773,13 @@ Plus similar for filters and fields.
 - The full test suite passes.
 - The full prompt suite passes.
 - Tool count is 12 (1 generic + 11 semantic), down from 34.
+- **Every endpoint quirk is declared in its spec; every quirk kind has a test; the tool-by-tool diff table is documented.**
 
-### 8.6 Rollback
+### 9.6 Rollback
 
-Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the deleted files in a `legacy/` directory for one sprint.
+Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the deleted files in a `legacy/` directory for one sprint. If any per-quirk test fails in production data, the legacy tool can be restored.
 
-### 8.7 Phase 3 Status
+### 9.7 Phase 3 Status
 
 **Current status:** ⬜ Not started
 
@@ -575,21 +789,21 @@ Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the 
 
 ---
 
-## 9. Phase 4 — Structure
+## 10. Phase 4 — Structure
 
-### 9.1 Objective
+### 10.1 Objective
 
-Reorganize the source tree and the code so the layout reflects the actual architecture. Split tests by concern. Move entry points into the package.
+Reorganize the source tree and the code so the layout reflects the actual architecture. Split tests by concern. Move entry points into the package. Update documented commands to match.
 
-### 9.2 Why here
+### 10.2 Why here
 
 Consistency work (Phase 3) made the code's true shape visible. Before that, the architecture was obscured by drift. After it, the boundaries are obvious: the KG layer, the pipeline stages, the rendering layer, the operators, the entry points.
 
 Structure must come *after* consistency because you can't decide where a module belongs until you know what it is. It must come *before* observability because you want to instrument stable code, not code that's about to move.
 
-### 9.3 Design
+### 10.3 Design
 
-#### 9.3.1 Phase 4a — Source-tree reorganization
+#### 10.3.1 Phase 4a — Source-tree reorganization
 
 **Target tree:**
 
@@ -671,7 +885,40 @@ spire-promptkit = "spire.cli.promptkit:main"
 spire-kg = "spire.ops.kg.print:main"
 ```
 
-#### 9.3.2 Phase 4b — Test suite split
+**The documented-command problem.**
+
+Moving entry points into `src/spire/cli/` and making them console scripts will break every `python scripts/promptkit.py ...` invocation in the repo's documentation. This is not hypothetical — the codebase has extensive documentation of exact commands:
+
+- `README.md`
+- `how-to-run.md`
+- `docs/SPIRE_SESSION_HANDOFF.md`
+- `docs/four_bugs.md`
+- `docs/spire_findings_11-Sep-2026.md`
+- Every session log entry
+- Every handoff document
+
+**The fix has two parts, both required:**
+
+1. **Thin forwarding shims.** Keep `scripts/run_graph.py`, `scripts/promptkit.py`, etc. as small forwarding files that import and call the new entry point. They print a deprecation warning to stderr and forward. One release cycle later, they can be deleted. This preserves muscle memory and prevents the docs from rotting on day one.
+
+   ```python
+   # scripts/promptkit.py
+   import sys
+   from spire.cli.promptkit import main
+
+   print(
+       "[deprecation] scripts/promptkit.py has moved to "
+       "spire.cli.promptkit. Run `spire-promptkit` instead.",
+       file=sys.stderr,
+   )
+   sys.exit(main())
+   ```
+
+2. **A documentation update task.** Phase 4a includes a task to grep every doc for `python scripts/*.py` and `scripts/*.sh` invocations and either update them to the new form or ensure the shim covers them. The grep must be exhaustive; a partial update leaves half the docs pointing at old paths.
+
+The shims are a temporary measure; the doc update is the permanent fix. Both ship in Phase 4a.
+
+#### 10.3.2 Phase 4b — Test suite split
 
 Move `tests/` from flat to component-organized:
 
@@ -706,7 +953,7 @@ markers = ["integration: tests requiring external services"]
 addopts = "-m 'not integration'"
 ```
 
-#### 9.3.3 Phase 4c — Module boundaries
+#### 10.3.3 Phase 4c — Module boundaries
 
 Where Phase 3 revealed that a module bundles multiple concerns, split it. Where it revealed that a concern is scattered, consolidate it.
 
@@ -718,7 +965,7 @@ Examples (actual splits depend on Phase 3's findings):
 
 This is the smallest sub-phase and the most judgement-dependent. It's also the one where doing it *after* consistency matters most — before Phase 3, you'd split things along the wrong seams.
 
-### 9.4 Tasks
+### 10.4 Tasks
 
 | # | Task | Branch |
 |---|---|---|
@@ -728,23 +975,27 @@ This is the smallest sub-phase and the most judgement-dependent. It's also the o
 | 4.4 | Move `test_tools/` → `tests/manual/` | same |
 | 4.5 | Add console scripts to `pyproject.toml` | same |
 | 4.6 | Move `archive/` probes out | same |
-| 4.7 | Split `tests/` by component | `phase-4b-test-split` |
-| 4.8 | Add `tests/conftest.py` auto-marker | same |
-| 4.9 | Split bundled modules | `phase-4c-module-boundaries` |
+| 4.7 | **Add thin forwarding shims in `scripts/`** | same |
+| 4.8 | **Grep-and-update every doc reference to `scripts/*.py` invocations** | same |
+| 4.9 | Split `tests/` by component | `phase-4b-test-split` |
+| 4.10 | Add `tests/conftest.py` auto-marker | same |
+| 4.11 | Split bundled modules | `phase-4c-module-boundaries` |
 
-### 9.5 Acceptance criteria
+### 10.5 Acceptance criteria
 
 - `spire --prompt "Count of suppliers"` works from anywhere after `pip install -e .`.
+- `python scripts/promptkit.py ...` still works (via shim) for one release.
 - `pytest -q` passes with the same count as before.
 - `pytest -q tests/unit/` runs fast (<30s).
 - Three golden prompts still byte-identical.
 - Every import that referenced a moved file is updated.
+- **Every doc reference to a `scripts/*.py` command is either updated or covered by a shim.**
 
-### 9.6 Rollback
+### 10.6 Rollback
 
-Each sub-phase reverts independently. The `src/spire/cli/` and `src/spire/ops/` moves are the largest single change; the rest is mechanical.
+Each sub-phase reverts independently. The `src/spire/cli/` and `src/spire/ops/` moves are the largest single change; the rest is mechanical. The forwarding shims mean that even a full revert of the tree move leaves old commands working.
 
-### 9.7 Phase 4 Status
+### 10.7 Phase 4 Status
 
 **Current status:** ⬜ Not started
 
@@ -754,19 +1005,19 @@ Each sub-phase reverts independently. The `src/spire/cli/` and `src/spire/ops/` 
 
 ---
 
-## 10. Phase 5 — Observability
+## 11. Phase 5 — Observability
 
-### 10.1 Objective
+### 11.1 Objective
 
 Instrument every pipeline stage with OpenTelemetry spans. Replace the `--show-*` flag diagnostics with structured traces for production use.
 
-### 10.2 Why here
+### 11.2 Why here
 
 Observability must come *after* structure because you want to instrument stable code — code that isn't about to move. It must come *before* performance because you can't prove a performance change helped without a baseline.
 
 The `--show-*` flags remain for local development. OTel is for production: multiple requests, aggregated metrics, distributed traces.
 
-### 10.3 Design
+### 11.3 Design
 
 **New module:** `src/spire/observability/`.
 
@@ -806,7 +1057,7 @@ def setup_otel(exporter="console", service_name="spire"):
 
 **The `--show-*` flags stay.** They're local, fast, and useful. OTel is additive.
 
-### 10.4 Tasks
+### 11.4 Tasks
 
 | # | Task |
 |---|---|
@@ -818,18 +1069,18 @@ def setup_otel(exporter="console", service_name="spire"):
 | 5.6 | Configure exporter via env var |
 | 5.7 | Document the trace shape |
 
-### 10.5 Acceptance criteria
+### 11.5 Acceptance criteria
 
 - One full request produces a trace with the expected span hierarchy.
 - Attributes are present and correct.
 - Overhead is under 1% of wall-clock.
 - The `--show-*` flags still work.
 
-### 10.6 Rollback
+### 11.6 Rollback
 
 Remove the span wrappers. The observability module can stay as dead code or be deleted.
 
-### 10.7 Phase 5 Status
+### 11.7 Phase 5 Status
 
 **Current status:** ⬜ Not started
 
@@ -839,19 +1090,19 @@ Remove the span wrappers. The observability module can stay as dead code or be d
 
 ---
 
-## 11. Phase 6 — Performance
+## 12. Phase 6 — Performance
 
-### 11.1 Objective
+### 12.1 Objective
 
 Reduce latency and cost without changing answers. Add caching and parallel execution.
 
-### 11.2 Why here
+### 12.2 Why here
 
 Performance must come *after* observability because you need a baseline to prove the change helped. It must come *before* extensibility because you want the generator to produce endpoints into a fast, well-understood system, not a slow, drifting one.
 
-### 11.3 Design
+### 12.3 Design
 
-#### 11.3.1 Phase 6a — Tool-result cache
+#### 12.3.1 Phase 6a — Tool-result cache
 
 **Objective.** TTL cache around MCP tool calls.
 
@@ -863,7 +1114,7 @@ Wrap `session.call_tool` in the executor.
 
 **Acceptance.** Two concurrent identical requests → one pod fetch. No answer change.
 
-#### 11.3.2 Phase 6b — Parallel execution
+#### 12.3.2 Phase 6b — Parallel execution
 
 **Objective.** Replace sequential `for step in plan` with a dependency-aware parallel executor.
 
@@ -871,15 +1122,25 @@ Wrap `session.call_tool` in the executor.
 
 **Acceptance.** The anchor question drops from ~17s to under 5s. Byte-diff identical to sequential.
 
-#### 11.3.3 Phase 6c — Intent cache
+#### 12.3.3 Phase 6c — Intent cache
 
 **Objective.** Implement the three-stage intent cache from `docs/cache_architecture.md`.
 
 **Design.** New modules: `intent_cache.py`, `intent_cache_backends.py`, `intent_cache_verify.py`. The router consults the cache before classify+parse.
 
-**Acceptance.** Ten repeats of one prompt → one LLM parse call. Zero new failures in `--validate`. Cache invalidates on KG rebuild.
+**Reference to prior work — the parser prompt cache.**
 
-### 11.4 Tasks
+A parser prompt cache was implemented earlier (branch `feat/parser-prompt-cache`) and merged. Its lesson is directly relevant to Phase 6c:
+
+- **Caching interacts with the model's thinking-step budget.** A cache hit can change the *reasoning path* the model takes, not just the timing. The cached prompt arrives in a different internal state than the fresh prompt would, and the model may skip a step it would otherwise have taken.
+- **This was observed as a regression during the cache work** and fixed. Phase 6c must reference this lesson and include a test that verifies the intent cache does not silently change the model's reasoning path.
+- The specific failure mode: a cached intent may be *structurally correct* but reflect a different internal reasoning than a fresh parse would. If the intent feeds a downstream decision (planner choice, filter shape), the difference can surface as a wrong answer three phases later.
+
+Phase 6c's acceptance criteria must include: **for a sample of prompts, the cache hit and the cache miss produce byte-identical Intents.** If they don't, the difference must be investigated before shipping the cache.
+
+**Acceptance.** Ten repeats of one prompt → one LLM parse call. Zero new failures in `--validate`. Cache invalidates on KG rebuild. Cache hits and misses produce identical Intents on the sample.
+
+### 12.4 Tasks
 
 | # | Task | Branch |
 |---|---|---|
@@ -887,20 +1148,22 @@ Wrap `session.call_tool` in the executor.
 | 6.2 | Add `depends_on` to plan steps | `phase-6b-parallel` |
 | 6.3 | Implement parallel executor | same |
 | 6.4 | Implement three-stage intent cache | `phase-6c-intent-cache` |
-| 6.5 | Verify no byte-diff changes | same |
+| 6.5 | **Test cache-hit vs cache-miss Intent identity** | same |
+| 6.6 | Verify no byte-diff changes | same |
 
-### 11.5 Acceptance criteria
+### 12.5 Acceptance criteria
 
 - Anchor question latency drops measurably.
 - All answers byte-identical to pre-Phase-6 output.
 - Cache respects truncation.
+- **Cache hit and cache miss produce identical Intents on the sample.**
 - All tests pass.
 
-### 11.6 Rollback
+### 12.6 Rollback
 
 Each sub-phase reverts independently. The cache is disableable by env flag.
 
-### 11.7 Phase 6 Status
+### 12.7 Phase 6 Status
 
 **Current status:** ⬜ Not started
 
@@ -910,13 +1173,13 @@ Each sub-phase reverts independently. The cache is disableable by env flag.
 
 ---
 
-## 12. Phase 7 — Extensibility
+## 13. Phase 7 — Extensibility
 
-### 12.1 Objective
+### 13.1 Objective
 
 Turn the accumulated machinery (KG as source of truth, generic dispatch, generated prompts) into a single command a developer can run to add a new endpoint.
 
-### 12.2 Why last
+### 13.2 Why last
 
 Extensibility is the *output* of doing everything else well. It needs:
 
@@ -928,11 +1191,11 @@ Extensibility is the *output* of doing everything else well. It needs:
 
 Doing extensibility earlier would build a generator over unstable ground. Every later phase would invalidate it.
 
-### 12.3 Design
+### 13.3 Design
 
 Phase 7 is split into four sub-phases.
 
-#### 12.3.1 Phase 7a — Endpoint spec format
+#### 13.3.1 Phase 7a — Endpoint spec format
 
 **Objective.** Define the YAML spec that declares one endpoint.
 
@@ -973,6 +1236,12 @@ filters:
     server_q: "ProcurementBU='{value}'"
     keep_parent_when: nonempty
 
+quirks:                              # see Phase 3d
+  - kind: parent_id_not_in_body
+    description: |
+      Child rows do not carry the parent id in the body; the join key is
+      the URL path.
+
 parent_edge:
   name: HAS_SITE
   from_entity: Supplier
@@ -995,12 +1264,13 @@ test_hint:
 - Required fields present.
 - Module and kind are known.
 - Every field in `endpoint.fields` is declared.
+- Every `quirks[].kind` is a known quirk kind.
 - No name collision (unless `--update`).
 - Referenced vocab kinds exist.
 
 **Acceptance.** A real existing endpoint (`supplier_sites`) can be spec'd and validated.
 
-#### 12.3.2 Phase 7b — `spire add-endpoint` generator
+#### 13.3.2 Phase 7b — `spire add-endpoint` generator
 
 **Objective.** One command takes a validated spec and applies every change needed to make the endpoint live.
 
@@ -1019,7 +1289,8 @@ Behind the scenes:
 5. Regenerate the classifier menu.
 6. Update tripwire counts (`test_kg_metadata.py`, `ops/kg/print.py`, `schema.sql` banners).
 7. Emit a stub integration test.
-8. Print a diff summary.
+8. Emit a per-quirk test if the spec declares quirks the endpoint doesn't already have coverage for.
+9. Print a diff summary.
 
 **Flags.**
 
@@ -1036,7 +1307,7 @@ Behind the scenes:
 - `--dry-run` shows the same summary without applying.
 - Idempotent: running twice on the same spec errors unless `--update`.
 
-#### 12.3.3 Phase 7c — `spire add-module` generator
+#### 13.3.3 Phase 7c — `spire add-module` generator
 
 **Objective.** Adding a new Fusion module is a data operation.
 
@@ -1067,7 +1338,7 @@ Applies:
 
 **Acceptance.** Adding a module works, and adding endpoints to it works via Phase 7b.
 
-#### 12.3.4 Phase 7d — Documentation + walkthrough
+#### 13.3.4 Phase 7d — Documentation + walkthrough
 
 **Objective.** Write the developer-facing docs that make Phase 7a–7c usable.
 
@@ -1082,17 +1353,17 @@ Applies:
 
 **Acceptance.** A developer who has never seen SPIRE can add an endpoint in 30 minutes following the docs. A tripwire test asserts the walkthrough's commands still work.
 
-### 12.4 Tasks
+### 13.4 Tasks
 
 | # | Task | Branch |
 |---|---|---|
-| 7.1 | Define the endpoint spec format + validator | `phase-7a-spec-format` |
+| 7.1 | Define the endpoint spec format + validator (including `quirks`) | `phase-7a-spec-format` |
 | 7.2 | Implement `spire add-endpoint` | `phase-7b-add-endpoint` |
 | 7.3 | Implement `spire add-module` | `phase-7c-add-module` |
 | 7.4 | Write the extensibility docs | `phase-7d-extensibility-docs` |
 | 7.5 | Record the 15-minute walkthrough | same |
 
-### 12.5 Acceptance criteria
+### 13.5 Acceptance criteria
 
 - Adding a new endpoint touches ≤2 files (the spec + a test stub).
 - Adding a filter is one line in the spec.
@@ -1100,11 +1371,11 @@ Applies:
 - Adding a module is one YAML file plus endpoints.
 - The walkthrough works from a fresh clone.
 
-### 12.6 Rollback
+### 13.6 Rollback
 
 Each sub-phase reverts independently. The generator can be bypassed by hand-editing the KG (the old way still works).
 
-### 12.7 Phase 7 Status
+### 13.7 Phase 7 Status
 
 **Current status:** ⬜ Not started
 
@@ -1116,44 +1387,46 @@ Each sub-phase reverts independently. The generator can be bypassed by hand-edit
 
 # Part III — Tracking
 
-## 13. Phase completion checklist
+## 14. Phase completion checklist
 
 Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 
-### 13.1 Tests
+### 14.1 Tests
 
 - [ ] `pytest -q` → all tests pass.
 - [ ] `pytest -q --collect-only | tail -1` → new test count recorded.
 - [ ] Full prompt suite runs with no new failures.
+- [ ] For probabilistic-bug fixes: N-run evidence collected (see Appendix B.2).
+- [ ] For Phase 3e: per-quirk tests pass.
 
-### 13.2 Byte-diffs
+### 14.2 Byte-diffs
 
 - [ ] `"Count of suppliers"` — stdout identical to the golden file.
 - [ ] `"Show PO 2144 and its lines"` — stdout identical.
 - [ ] `"Which suppliers have open purchase orders?"` — stdout identical.
 - (For phases that intentionally change output — record and explain; update the golden file.)
 
-### 13.3 KG integrity
+### 14.3 KG integrity
 
 - [ ] `spire-ops kg rebuild` succeeds.
 - [ ] `spire-ops kg print --counts-only` matches expected.
 - [ ] `tests/integration/kg/test_kg_metadata.py` passes.
 
-### 13.4 Branch and PR
+### 14.4 Branch and PR
 
-- [ ] Branch named `phase-{N}{letter}-...` per §5.
+- [ ] Branch named `phase-{N}{letter}-...` per §6.
 - [ ] Commits use named `git add`, not `-A`.
-- [ ] PR uses the template at §13.6.
+- [ ] PR uses the template at §14.6.
 - [ ] PR linked to this document (§{N}).
 
-### 13.5 Documentation
+### 14.5 Documentation
 
-- [ ] §5 Phase Index row updated.
+- [ ] §6 Phase Index row updated.
 - [ ] §{N} Status section updated.
-- [ ] §14 Session Log has a new entry.
-- [ ] README references updated.
+- [ ] §15 Session Log has a new entry.
+- [ ] **Every doc reference to a moved/renamed file is updated, or covered by a shim.**
 
-### 13.6 PR template
+### 14.6 PR template
 
 ```markdown
 ## Phase {N}{letter} — {Name}
@@ -1170,6 +1443,8 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 - `pytest --collect-only` after: {N'} selected
 - `pytest -q` after: {pass_count} passed
 - Byte-diff of three golden prompts: {identical / diff link}
+- (For probabilistic fixes) N-run evidence: {link}
+- (For Phase 3e) Per-quirk test results: {link}
 
 ### Rollback
 `git revert {sha}`. Delete: {new files}.
@@ -1178,12 +1453,12 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 {none / list}
 
 ### Status update
-After merge, update §5 Phase Index and §14 Session Log.
+After merge, update §6 Phase Index and §15 Session Log.
 ```
 
 ---
 
-## 14. Session Log
+## 15. Session Log
 
 **Append-only. Newest entry at the top.**
 
@@ -1203,6 +1478,7 @@ After merge, update §5 Phase Index and §14 Session Log.
 - `pytest -q`: {pass count}
 - Full prompt suite: {pass count}
 - Byte-diff of three golden prompts: {identical / diff}
+- (For probabilistic fixes) N-run distribution: {summary}
 
 **Blockers / open questions:**
 - {bullet}
@@ -1222,15 +1498,17 @@ After merge, update §5 Phase Index and §14 Session Log.
 
 # Appendices
 
-## Appendix A — Baseline state (2026-09-13)
+## Appendix A — Baseline snapshot (2026-09-13)
 
-| Metric | Value | How measured |
+**These numbers are a snapshot from the document's authoring date. They are illustrative, not authoritative. Phase 1 re-measures from scratch, and the Phase 1 numbers become the baseline that every subsequent phase compares against. Do not treat any number below as a gate.**
+
+| Metric | Value at authoring | How measured |
 |---|---|---|
-| Test count | **996 selected, 18 deselected, 1014 total** | `pytest -q --collect-only \| tail -1` |
-| Test collection time | 2.47s | same |
-| Python files in `src/spire/` | 71 | `find src/spire -name "*.py" \| wc -l` |
-| Python files in `scripts/` | 33 | `find scripts -name "*.py" \| wc -l` |
-| Python files in `tests/` | 55 | `find tests -name "*.py" \| wc -l` |
+| Test count | ~996 selected, 18 deselected, ~1,014 total | `pytest -q --collect-only \| tail -1` |
+| Test collection time | ~2.5s | same |
+| Python files in `src/spire/` | ~71 | `find src/spire -name "*.py" \| wc -l` |
+| Python files in `scripts/` | ~33 | `find scripts -name "*.py" \| wc -l` |
+| Python files in `tests/` | ~55 | `find tests -name "*.py" \| wc -l` |
 | MCP tool count | 34 | `server.py` `@mcp.tool()` occurrences |
 | `.sysprompt` files | 51 | `find src/spire/nl_parser/context -name "*.sysprompt" \| wc -l` |
 | Parser prompt input tokens | 8,805–8,819 | from `[llm] stage=parse in=...` logs |
@@ -1238,7 +1516,7 @@ After merge, update §5 Phase Index and §14 Session Log.
 | LLM calls per request (worst case) | 3 | classify + parse + synthesize |
 | Anchored query wall-clock | ~16s | `run_graph.py` on PO 701337 prompt |
 
-**Dependency versions:**
+**Dependency versions at authoring:**
 
 | Package | Version |
 |---|---|
@@ -1251,7 +1529,7 @@ After merge, update §5 Phase Index and §14 Session Log.
 | oracledb | 4.0.0 |
 | pydantic | 2.13.4 |
 
-**KG row counts (2026-09-13):**
+**KG row counts at authoring:**
 
 | Table | Rows |
 |---|---|
@@ -1269,7 +1547,9 @@ After merge, update §5 Phase Index and §14 Session Log.
 
 ## Appendix B — Evidence capture templates
 
-### B.1 Test evidence block
+### B.1 Deterministic test evidence block
+
+For a bug that fires every time, or for a phase that makes a deterministic change:
 
 ```
 $ pytest -q --collect-only | tail -1
@@ -1277,28 +1557,82 @@ $ pytest -q --collect-only | tail -1
 
 $ pytest -q
 {N} passed, {M} deselected in {T}s
+
+$ python -m spire.cli.run --prompt "Count of suppliers" > /tmp/after.txt 2>&1
+$ diff docs/audit/golden/count_suppliers.txt /tmp/after.txt
+{empty diff}
 ```
 
-### B.2 Byte-diff evidence block
+### B.2 N-run evidence block (for probabilistic behaviour)
 
-```bash
-python -m spire.cli.run --prompt "Count of suppliers" > /tmp/after.txt 2>&1
-diff docs/audit/golden/count_suppliers.txt /tmp/after.txt
+For a bug that fires probabilistically, or for a change that affects a probabilistic behaviour:
+
 ```
+$ for i in $(seq 1 20); do
+    python -m spire.cli.run --prompt "{prompt}" 2>&1 | grep "{assertion}" >> /tmp/nrun.txt
+  done
+$ sort /tmp/nrun.txt | uniq -c
+{count of each outcome}
+
+$ python -c "
+from collections import Counter
+outcomes = open('/tmp/nrun.txt').read().splitlines()
+c = Counter(outcomes)
+print(f'Runs: {sum(c.values())}')
+for outcome, n in c.most_common():
+    print(f'  {outcome}: {n} ({n/sum(c.values()):.0%})')
+"
+{Runs: 20
+  correct_outcome: 19 (95%)
+  incorrect_outcome: 1 (5%)}
+```
+
+The evidence must show:
+
+- N ≥ 20 for any probabilistic bug fix.
+- The correct outcome dominates (typically ≥ 95% of runs).
+- The failure mode is documented (what the incorrect outcome looks like).
+- For a *fix*, the pre-fix distribution and post-fix distribution are both recorded.
 
 ### B.3 Timing evidence block
 
-```bash
+For a performance phase:
+
+```
 $ time python -m spire.cli.run --prompt "Show PO 2144 and its lines"
 [...]
 real  0m{N}.{M}s
+
+# Run 5 times, report mean, median, p95
 ```
 
 ### B.4 KG integrity block
 
-```bash
+```
 $ spire-ops kg rebuild
 $ spire-ops kg print --counts-only
+```
+
+### B.5 Phase 3e per-quirk evidence block
+
+For the generic-executor acceptance bar:
+
+```
+# For each endpoint being migrated:
+#   - list its declared quirks
+#   - for each quirk, link the test that verifies it
+#   - byte-equality on 3+ argument combinations, including one that exercises a quirk
+
+Tool: suppliers.py
+  Declared quirks:
+    - no_composite_q
+    - no_fields_projection (not applicable; suppliers does project)
+  Per-quirk tests:
+    - tests/unit/executor/test_quirks.py::test_no_composite_q_honoured
+  Byte-equality combinations:
+    - {"status": "ACTIVE"}  ✓
+    - {"country": "US"}  ✓
+    - {"status": "ACTIVE", "country": "US"}  ✓  (composite-q case)
 ```
 
 ---
@@ -1322,6 +1656,10 @@ Cross-session decisions that affect multiple phases.
 | 2026-09-13 | Phase 6b (parallel) is the highest user-visible latency win. | ~17s → <5s on the anchor question. |
 | 2026-09-13 | Endpoint spec format is YAML, one file per endpoint, in `specs/endpoints/`. | Readable, diffable, validated. |
 | 2026-09-13 | `spire add-endpoint` is idempotent; requires `--update` for re-runs. | Prevents accidental double-inserts. |
+| 2026-09-13 (v3.1) | **Drift is the proven root-cause class — S1 and S4 are shipped, documented instances, not hypotheticals.** | The document's §3 argument for consistency is now backed by evidence, not just theory. Phase 1's audit cites them. |
+| 2026-09-13 (v3.1) | **LLM-boundary changes require N-run evidence (N ≥ 20), not single-pass tests.** | Probabilistic bugs pass a single-run test 95% of the time when live. The caching regression this session was caught by running 40 times, not once. |
+| 2026-09-13 (v3.1) | **Per-endpoint quirks are declared in the spec, not re-derived from code.** | The generic executor must reproduce each legacy tool's quirks. Making them declarative makes consolidation auditable. Phase 3d defines the `quirks` block; Phase 3e's acceptance bar requires per-quirk tests before deleting any legacy tool. |
+| 2026-09-13 (v3.1) | **Entry-point moves require thin forwarding shims, not just a move.** | Moving `scripts/*.py` to `src/spire/cli/` breaks every documented command in the repo. The shims preserve muscle memory and prevent doc rot; Phase 4a also greps and updates every doc reference. |
 
 ---
 
@@ -1353,7 +1691,13 @@ A system that is correct, consistent, structured, observable, and fast is extens
 **What the old order (v2.0) got wrong.**
 It put Structure first and Extensibility last-but-one, with Consistency and Correctness in between. That ordering forces rework: Structure (Phase 0) reshapes the tree; Consistency (Phase 2) reveals a different architecture; Extensibility (Phase 6) wants to write into a third. Three tree changes for one goal.
 
-The v3.0 order eliminates the rework. Structure is Phase 4, after Consistency has revealed the true shape. Extensibility is Phase 7, after everything else has stabilized. No phase forces a later phase to undo it.
+The v3.1 order eliminates the rework. Structure is Phase 4, after Consistency has revealed the true shape. Extensibility is Phase 7, after everything else has stabilized. No phase forces a later phase to undo it.
+
+**The v3.1 additions strengthen the argument in two places.**
+
+The first is the ordering's *evidence*: S1 and S4 prove that the drift class is real, not theoretical. Correctness + Consistency aren't just good ideas; they address a defect class with shipped instances.
+
+The second is the ordering's *risk*: Phase 3e is the phase where consolidation can go wrong, and v3.1 makes the acceptance bar per-quirk rather than per-sample. This doesn't change the ordering; it makes the hardest phase in it survivable.
 
 ---
 
@@ -1361,10 +1705,10 @@ The v3.0 order eliminates the rework. Structure is Phase 4, after Consistency ha
 
 **Next action:** Open a new DeepSeek window, paste this document, and say:
 
-> *"Resume SPIRE work. Read §5 Phase Index and §14 Session Log. Start Phase 1. Here is the current repo state: [paste `git status`, `git branch`, `pytest -q`]"*
+> *"Resume SPIRE work. Read §6 Phase Index and §15 Session Log. Start Phase 1. Here is the current repo state: [paste `git status`, `git branch`, `pytest -q`]"*
 
 ---
 
-**Document version:** 3.0
+**Document version:** 3.1
 **Last updated:** 2026-09-13
-**Next revision:** After Phase 1 completes, add the first Session Log entry and update §5 Phase Index.
+**Next revision:** After Phase 1 completes, add the first Session Log entry and update §6 Phase Index.
