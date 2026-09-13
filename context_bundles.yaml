@@ -27,6 +27,13 @@ bundles:
   - docs/features/parser_context_modularization.md
   - docs/features/prompt_to_intent_framework.md
   - docs/features/actionable_refusals.md
+  - docs/four_bugs.md
+  - docs/spire_findings_11-Sep-2026.md
+  - run-server.sh
+  - docs/designs/01_kg_as_mcp_tool.puml
+  - docs/designs/02_kg_as_preLLM.puml
+  - docs/designs/03_static_kg_summary_prompt.puml
+  - docs/designs/04_Hybrid_kg.puml
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -100,6 +107,10 @@ bundles:
   - scripts/apply_bug1_step2_context_assembly.py
   - scripts/t_s1_isolate.py
   - scripts/t_s1_repro.py
+  # cache probes + BUG-1 step3 verify
+  - scripts/probe_cache.py
+  - scripts/probe_cache_v2.py
+  - scripts/verify_bug1_step3.py
 
   graph_kg:
   - scripts/sql/kg_schema.sql
@@ -172,6 +183,9 @@ bundles:
   - src/spire/planner/lookup.py
   - src/spire/planner/date_utils.py
   - src/spire/planner/plan_builders.py
+  # parser prompt-cache (Gemini context caching + fallback)
+  - src/spire/nl_parser/cached_llm.py
+  - src/spire/nl_parser/prompt_cache.py
 
   # ── parser context blocks (.sysprompt grounding + manifest + classifier menu) ──
   parser_context:
@@ -309,6 +323,9 @@ bundles:
   - tests/test_bug2_include_gate.py
   - tests/test_bug3_planner_include.py
   - tests/test_bug4_reason_line.py
+  - tests/test_bug1_step3_supplier_details.py
+  # parser prompt-cache tests
+  - tests/test_prompt_cache.py
 
 excludes:
 - traces
