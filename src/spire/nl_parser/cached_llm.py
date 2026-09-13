@@ -20,6 +20,24 @@ So this module talks to the SDK directly, in JSON mode
 combination alongside cached_content. It returns a dict shaped like
 LangChain's with_structured_output(include_raw=True) return value, so
 parser.parse() does not branch on which path ran.
+
+THINKING TOKENS AND output_tokens
+
+LangChain's AIMessage.usage_metadata["output_tokens"] is candidates plus
+thoughts. The raw SDK exposes them as two separate fields
+(candidates_token_count, thoughts_token_count). _RawResponse must sum
+them to match, or the two paths report different quantities under the
+same key and any cached-vs-uncached comparison is meaningless — which
+is exactly what happened: an apparent "80% output drop" on the cached
+path was the two paths logging different things, not the model
+producing less.
+
+gemini-3.5-flash thinks by default; no thinking_config is needed on the
+cached path. A thinking_budget=1024 alongside cached_content is NOT a
+fix and must not be added — the API accepts the parameter but silently
+collapses thoughts_token_count to None, i.e. disables thinking. If a
+future change ever wants to tune the budget for the cached path, the
+only value that works is -1 (dynamic).
 """
 from __future__ import annotations
 
@@ -52,9 +70,16 @@ class _RawResponse:
         self._resp = resp
 
         um = getattr(resp, "usage_metadata", None)
+
+        # LangChain reports output_tokens as candidates + thoughts. The
+        # raw SDK splits them. Sum here so the two paths log the same
+        # quantity — see the module docstring.
+        candidates = getattr(um, "candidates_token_count", 0) or 0
+        thoughts = getattr(um, "thoughts_token_count", 0) or 0
+
         self.usage_metadata = {
             "input_tokens": getattr(um, "prompt_token_count", 0) or 0,
-            "output_tokens": getattr(um, "candidates_token_count", 0) or 0,
+            "output_tokens": candidates + thoughts,
             "total_tokens": getattr(um, "total_token_count", 0) or 0,
             "input_token_details": {
                 # This is the field that makes caching observable in the
@@ -64,9 +89,9 @@ class _RawResponse:
         }
 
         fr = None
-        candidates = getattr(resp, "candidates", None) or []
-        if candidates:
-            fr = getattr(candidates[0], "finish_reason", None)
+        candidates_list = getattr(resp, "candidates", None) or []
+        if candidates_list:
+            fr = getattr(candidates_list[0], "finish_reason", None)
             # google-genai returns a FinishReason enum; LangChain's
             # normalized form is a lowercase string ("stop"). Match that.
             if fr is not None and hasattr(fr, "name"):
@@ -108,6 +133,10 @@ def invoke_structured(prompt: str, schema: Any, cached_content: str) -> dict:
     No system_instruction is sent — it lives inside cached_content. The
     response_schema route is JSON mode rather than tool-calling, which is
     what makes the request legal alongside cached_content.
+
+    No thinking_config is sent either. gemini-3.5-flash thinks by
+    default, and setting thinking_budget=1024 alongside cached_content
+    would silently disable thinking. See the module docstring.
     """
     client = genai.Client()
     resp = client.models.generate_content(
@@ -129,7 +158,9 @@ def invoke_structured(prompt: str, schema: Any, cached_content: str) -> dict:
             import json
 
             text = resp.text or ""
-            parsed = schema.model_validate(json.loads(text)) if text.strip() else None
+            parsed = (
+                schema.model_validate(json.loads(text)) if text.strip() else None
+            )
         except Exception:
             parsed = None
 

@@ -160,6 +160,70 @@ def _is_explicit_po_list(prompt: str) -> bool:
     return True
 
 
+def _is_empty_draft(parsed: Any) -> bool:
+    """A shape-valid draft with nothing to plan against.
+
+    The model produced structured output that deserializes, isn't
+    unanswerable, and has no aggregate or compare block — and no
+    target_entity. This is JSON mode's schema-as-hint behaviour, not a
+    schema violation, so it slips past the model's own validity check.
+    See the retry in parse() for why it cannot be configured away.
+    """
+    return (
+        not getattr(parsed, "unanswerable", False)
+        and not getattr(parsed, "target_entity", None)
+        and not getattr(parsed, "aggregate", None)
+        and not getattr(parsed, "compare", None)
+    )
+
+
+def _retry_draft_once(
+    prompt: str,
+    schema: Any,
+    system_prompt: str,
+    llm: Any,
+    cache_name: str | None,
+) -> Any | None:
+    """Re-issue the structured-output call once. Returns the new draft,
+    or None if the retry also failed.
+
+    Uses the same path the first call used when possible — the cached
+    call if a cache name is given, otherwise LangChain. Never raises:
+    a failed retry means "fall back to the first call's refusal", not
+    "crash the parser".
+    """
+    def _coerce(x: Any) -> Any | None:
+        if isinstance(x, dict):
+            try:
+                x = schema.model_validate(x)
+            except Exception:
+                return None
+        return x if isinstance(x, schema) else None
+
+    if cache_name is not None:
+        try:
+            from spire.nl_parser.cached_llm import invoke_structured
+            r = invoke_structured(prompt, schema, cache_name)
+            p = r.get("parsed") if isinstance(r, dict) else r
+            p = _coerce(p)
+            if p is not None:
+                return p
+        except Exception:
+            pass
+
+    try:
+        if llm is None:
+            from spire.config import build_llm
+            llm = build_llm(_TEMPERATURE)
+        r = llm.with_structured_output(schema, include_raw=True).invoke(
+            [("system", system_prompt), ("human", prompt)]
+        )
+        p = r.get("parsed") if isinstance(r, dict) else r
+        return _coerce(p)
+    except Exception:
+        return None
+
+
 def parse(
     prompt: str,
     llm: Any = None,
@@ -311,6 +375,34 @@ def parse(
             detail=reason,
             offending_entity=entity,
         )
+
+    # --- Empty-draft retry ---
+    #
+    # The cached path (response_schema JSON mode) occasionally returns a
+    # shape-valid draft with no target_entity, no aggregate, no compare,
+    # and no unanswerable flag: the model wrote structured output with
+    # nothing to plan against. Measured 5% on one prompt (1/20 loop),
+    # ~3.2% over 155 prompts across 5 runs; the uncached path has not
+    # shown the mode (0/155). Cause: JSON mode treats the schema as a
+    # hint, not a contract. Tool-calling would enforce it, but the API
+    # forbids tools alongside cached_content, so the mode is not
+    # configurable away.
+    #
+    # One retry converts the ~3% to ~0.15% (single-call failure is
+    # stochastic; the retry is an independent trial). The retry fires
+    # only on the ~3% of runs that produce an empty draft, so a healthy
+    # run pays nothing for it.
+    if _is_empty_draft(parsed):
+        _parser_log.debug(
+            "[parse] empty draft (no target_entity, not unanswerable); "
+            "retrying once"
+        )
+        retry = _retry_draft_once(
+            prompt, DraftIntent, system_prompt,
+            llm, cache_name if cache_used else None,
+        )
+        if retry is not None:
+            parsed = retry
 
     # --- Shape check: nothing to plan against ---
     if not getattr(parsed, "target_entity", None):
