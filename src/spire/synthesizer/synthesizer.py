@@ -42,7 +42,7 @@ from spire.diagnostics import get_logger
 
 # Re-exported so that every existing import of these names from
 # spire.synthesizer.synthesizer keeps working unchanged. Five test
-# modules and scripts/display_formatters.py import from this path; a
+# modules and spire.rendering.formatters import from this path; a
 # split that moved them would turn a refactor into a diff across the
 # test suite.
 from spire.synthesizer.constants import (  # noqa: F401

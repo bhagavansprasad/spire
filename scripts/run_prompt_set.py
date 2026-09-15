@@ -82,8 +82,8 @@ from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
 
-# Formatters live in display_formatters (run_plan.py is deprecated).
-from display_formatters import (
+# Formatters live in spire.rendering.formatters (run_plan.py is deprecated).
+from spire.rendering.formatters import (
     MCP_SERVER_URL,
     _format_intent,
     _format_outputs,

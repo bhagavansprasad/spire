@@ -46,7 +46,7 @@ from spire.diagnostics import (
 from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
-from display_formatters import (
+from spire.rendering.formatters import (
     MCP_SERVER_URL,
     _format_intent,
     _format_outputs,
