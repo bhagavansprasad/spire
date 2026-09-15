@@ -12,6 +12,8 @@ bundles:
   - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
+  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
   - docs/spire_plan.md
@@ -34,6 +36,12 @@ bundles:
   - docs/designs/02_kg_as_preLLM.puml
   - docs/designs/03_static_kg_summary_prompt.puml
   - docs/designs/04_Hybrid_kg.puml
+
+  # ── the master plan + its append-only status log ──
+  # This bundle is exactly what a new window needs to resume work.
+  plan:
+  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -348,3 +356,6 @@ excludes:
 - context_out/*
 - docs/archive/*
 - archive
+- isolation
+- isolation/*
+- source-tree.txt
