@@ -2,11 +2,12 @@
 
 **Making the NL-to-Data Pipeline Trustworthy, Then Extensible**
 
-**Document version:** 3.1
+**Document version:** 3.2
 **Created:** 2026-09-13
-**Last revised:** 2026-09-13 (v3.1 — review-driven additions)
+**Last revised:** 2026-09-14 (v3.2 plus Addendum A: two-document model; Addendum B: UI and API layer)
 **Author:** Bhagavan (with architectural analysis by DeepSeek)
-**Status:** Living document. The design is frozen at v3.1. Status sections are appended per completed phase. **Never edit a Design section — record deviations in that phase's Status section.**
+**Status:** Living document. The design is frozen at v3.2. Status sections are appended per completed phase. **Never edit a Design section — record deviations in that phase's Status section.**
+**Companion document:** `SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md` — the append-only forensic record. Session detail, bugs, investigations, commands, and outputs live there.
 
 **Change log**
 
@@ -14,6 +15,9 @@
 |---|---|---|
 | 3.0 | 2026-09-13 | Initial seven-phase structure; purpose-first framing. |
 | 3.1 | 2026-09-13 | Review-driven additions: drift evidence (S1/S4) in §3; `quirks` spec block in Phase 3d; strengthened Phase 3e acceptance; in-flight work inventory in Phase 1; baseline-snapshot caveat in Appendix A; N-run evidence template in Appendix B; three decisions-log entries; prompt-cache reference in Phase 6c; new §4.5 "In-flight work at v3.1 authoring." |
+| 3.2 | 2026-09-14 | Initial-review merge. Adds sub-phases **3f** (deterministic classifier), **3g** (KG versioning), **6d** (plan cache), **6e** (concurrency & back-pressure); adds **§8.3.7** (partial results + explicit gaps); adds **§4.6** (explicit non-goals); adds task **4.12** (`docs/architecture/`). No phase renumbering. No phase reordering. |
+| 3.2 | 2026-09-14 | Addendum A — Two-document model. Introduces the companion status document. Adds a "Two-document model" subsection to "How to read this document." Updates §15 Session Log to a pointer index. Updates §14.5 checklist. No design changes. No phase renumbering. |
+| 3.2 | 2026-09-14 | Addendum B — UI and API layer. Adds sub-phase **4d** (UI and API layer). Adds §10.3.5. Adds task rows 4.13–4.17. Adds two console scripts (`spire-api`, `spire-ui`) and two source directories (`src/spire/api/`, `src/spire/ui/`) to the Phase 4a target tree. No design changes elsewhere. No phase renumbering. No phase reordering. |
 
 ---
 
@@ -21,16 +25,46 @@
 
 **Part I (§1–§4) explains why we are doing this work.** It is the origin story: where SPIRE came from, what it is, where it falls short, what the plan achieves, and what is already in flight. Read this first.
 
-**Part II (§5–§12) is the seven-phase plan.** Each phase has a Design section (frozen at v3.1) and a Status section (updated as work proceeds).
+**Part II (§5–§12) is the seven-phase plan.** Each phase has a Design section (frozen at v3.2) and a Status section (updated as work proceeds).
 
 **Part III (§13–§14) is the tracking machinery.** The Phase Index and the Session Log are the two places that change every session.
 
 **Rules for cross-session continuity:**
 
 1. **Never edit a Design section.** If the design turns out to be wrong, record the deviation in that phase's Status section.
-2. **Update the Phase Index (§5) at the end of every session.**
-3. **Add a Session Log entry (§14) at the end of every session.** Newest at the top.
-4. **When resuming in a new DeepSeek window, paste this document and say:** *"Resume SPIRE work. Read §5 Phase Index and §14 Session Log. Current phase is [X]. Here is the repo state: [paste `git status`, `git branch`, `pytest -q`]."*
+2. **Update the Phase Index (§6) at the end of every session.**
+3. **Add a Session Log entry (§15) at the end of every session.** Newest at the top.
+4. **When resuming in a new DeepSeek window, paste this document and say:** *"Resume SPIRE work. Read §6 Phase Index and §15 Session Log. Current phase is [X]. Here is the repo state: [paste `git status`, `git branch`, `pytest -q`]."*
+
+### Two-document model
+
+This plan is maintained as two files:
+
+- **Doc A** — this document. The frozen plan. It changes only when a phase completes or the design is formally revised. It carries the seven phases, the sub-phases, the acceptance criteria, and the dependency argument.
+- **Doc B** — `SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md`. The append-only forensic record. Every session, every bug, every investigation, every test, every command, and every output lives here. Nothing is deleted.
+
+**Where each kind of content lives:**
+
+| Content | Doc A | Doc B |
+|---|---|---|
+| Phase design and acceptance criteria | ✅ frozen | — |
+| Phase status (not started / in progress / complete) | ✅ §6 Index and §{N}.7 Status | ✅ §1 snapshot |
+| Session detail (work items, commands, outputs) | — | ✅ §4 |
+| Bug register | — | ✅ §2.1 |
+| Investigation register | — | ✅ §2.2 |
+| Session-level decisions | Appendix C (when promoted) | ✅ §2.3 |
+| Open questions | — | ✅ §2.4 |
+| Session pointer (one line) | ✅ §15 | — |
+
+**Checkpoint discipline.** At every checkpoint:
+
+1. Update Doc B §1 (snapshot) and §2 (registers).
+2. Add the full session entry to Doc B §4.
+3. Add a one-line pointer to Doc A §15.
+4. Update Doc A §6 Phase Index and the phase's §{N}.7 Status.
+5. Emit the checkpoint block. Copy it into Doc B. Copy the pointer into Doc A.
+
+**Why two documents.** Doc A must stay small enough to paste into a new window without dragging history. Doc B must be complete enough that no history is lost when a window reaches its limit. The split keeps the plan invariant and the record complete.
 
 ---
 
@@ -41,16 +75,22 @@
 2. [What SPIRE is today](#2-what-spire-is-today)
 3. [Where SPIRE falls short](#3-where-spire-falls-short)
 4. [What this plan achieves](#4-what-this-plan-achieves)
+   - 4.6 [Explicit non-goals and when to revisit](#46-explicit-non-goals-and-when-to-revisit)
 5. [In-flight work at v3.1 authoring](#5-in-flight-work-at-v31-authoring)
 
 **Part II — The seven phases**
 6. [Phase Index](#6-phase-index)
 7. [Phase 1 — Audit & Baseline](#7-phase-1--audit--baseline)
 8. [Phase 2 — Correctness](#8-phase-2--correctness)
+   - 8.3.7 [Partial results and explicit gaps](#837-partial-results-and-explicit-gaps)
 9. [Phase 3 — Consistency](#9-phase-3--consistency)
+   - 9.3.6 [Phase 3f — Deterministic classifier](#936-phase-3f--deterministic-classifier)
+   - 9.3.7 [Phase 3g — KG versioning](#937-phase-3g--kg-versioning)
 10. [Phase 4 — Structure](#10-phase-4--structure)
 11. [Phase 5 — Observability](#11-phase-5--observability)
 12. [Phase 6 — Performance](#12-phase-6--performance)
+    - 12.3.4 [Phase 6d — Plan cache](#1234-phase-6d--plan-cache)
+    - 12.3.5 [Phase 6e — Concurrency and back-pressure](#1235-phase-6e--concurrency-and-back-pressure)
 13. [Phase 7 — Extensibility](#13-phase-7--extensibility)
 
 **Part III — Tracking**
@@ -171,6 +211,10 @@ The founding vision was graph-to-SQL. SPIRE is graph-to-REST. To retarget to SQL
 
 Two LLM calls per request means two places where the same input can produce different output across runs. The parser's include list flips. The classifier's module set flips. The synthesizer's summary drifts. Each of these has been observed in the last two weeks. The plan's correctness phase must account for bugs that fire probabilistically, not just ones that fire every time.
 
+**Problem 7 — The pipeline has no partial-failure behaviour.**
+
+`execute_plan` iterates steps and any exception fails the whole plan. A five-step plan that fails at step four returns nothing. This is not just a UX wart — it is a correctness gap. The pipeline discards successful work when a later step fails.
+
 **The common thread:** SPIRE's *capability* grows linearly with developer effort, but its *trustworthiness* and *velocity* decrease. That is the wrong shape for a system that is supposed to keep growing — and eventually to serve as the foundation for the SQL vision.
 
 ---
@@ -186,11 +230,14 @@ Concretely, by the end of all seven phases:
 - Every known bug is fixed with a regression test that proves it stays fixed.
 - The audit's findings are turned into a bug list, and the bug list is turned into zero.
 - Probabilistic bugs (parser non-determinism, classifier drift) are held to a repeated-run evidence standard, not a single-pass test.
+- The pipeline behaves correctly under partial failure: successful steps are returned, failed steps are reported, and the synthesizer narrates the gap. (§8.3.7)
 
 **Consistency.**
 
 - The KG is the single source of truth. The parser prompt is generated from it. The tool dispatch is generated from it. The tripwire counts are generated from it. Drift becomes structurally impossible.
 - Adding a filter is one KG row. Adding a field is one KG row. No code change.
+- The classifier is a deterministic gazetteer, not an LLM call. (§9.3.6)
+- The KG carries a version stamp; caches invalidate correctly. (§9.3.7)
 
 **Structure.**
 
@@ -204,8 +251,9 @@ Concretely, by the end of all seven phases:
 
 **Performance.**
 
-- Repeated questions reuse cached results. Independent steps run in parallel.
+- Repeated questions reuse cached results. Independent steps run in parallel. Concurrent requests are handled without saturating the LLM or the pod.
 - Latency per request drops. Growing the system stays neutral-or-better on wall-clock.
+- LLM calls per request drop from three to one for most prompts (parse only). (§9.3.6, §12.3.3)
 
 **Extensibility.**
 
@@ -216,6 +264,17 @@ Concretely, by the end of all seven phases:
 **And the ultimate purpose.** With all of the above in place, the interface between SPIRE's pipeline and its data source becomes explicit — one clean seam where "REST endpoints" could become "SQL tables" or any other backend. SPIRE is not the destination; it is the platform on which the original graph-to-SQL vision can eventually be realized.
 
 **Extensibility is a consequence, not a goal.** A correct, consistent, structured system is extensible by construction. A system that is extensible but inconsistent simply has more places to be wrong. That is why extensibility is Phase 7, not Phase 1.
+
+### 4.6 Explicit non-goals and when to revisit
+
+These are deliberately deferred. They are not missing; they are out of scope for the current plan. Each has a revisit trigger.
+
+- **Page-cap-at-scale / materialized views.** Not needed for current POC scope. The 25k-row `page_all` cap silently truncates at production scale. Revisit when a tenant exceeds ~50k rows for an ordinary aggregation.
+- **Multi-tenancy.** Deferred. The KG is single-tenant. Revisit when moving from demo pod to shared production.
+- **Streaming.** Deferred. Revisit when partial-result UX (§8.3.7) is in place.
+- **Auth.** Deferred. Revisit before any non-internal deployment.
+
+Recording these as non-goals is more honest than silently dropping them. They remain in the initial review's record; they are simply not scheduled.
 
 ---
 
@@ -231,7 +290,7 @@ Concretely, by the end of all seven phases:
 | S1 remediation (the "supplier details for PO X" bug) | Shipped | Feeds Phase 1's bug inventory as a **closed** example — the fix exists, so the audit records it as evidence of the drift class, not as an open item. |
 | S4 remediation (PO supplier filter) | Shipped | Same as S1: closed, cited as evidence. |
 | `qa_testcases.json` corpus | Stale | Contains at least one entry that expects `refuse` where the system now returns `search_purchase_orders` (EIP Inc supplier filter). This is a **live, unfixed drift bug** and belongs in Phase 1's bug inventory as a concrete example. |
-| Classifier lifecycle flip fix (`feat/router-show-parser-diagnostic`) | Shipped | Related to Phase 3's consistency work — the classifier's teaching and the parser's teaching have to agree, and today they don't always. Phase 3's prompt generation should make the classifier menu a first-class generated artifact. |
+| Classifier lifecycle flip fix (`feat/router-show-parser-diagnostic`) | Shipped | Related to Phase 3's consistency work — the classifier's teaching and the parser's teaching have to agree, and today they don't always. Phase 3's prompt generation should make the classifier menu a first-class generated artifact. Phase 3f replaces the LLM classifier with a gazetteer. |
 | `--validate` philosophy change (tool-gates-pass, module-warns) | Shipped | Affects Phase 3's acceptance criteria. Validation keying on the TOOL, not the module set, is the correct model — but it means "validate passes" is weaker evidence than it looks. Phase 3's byte-equality gate remains the stronger check. |
 
 **What this means for Phase 1's audit:**
@@ -261,13 +320,18 @@ Some in-flight items naturally belong to phases later in the plan — the parser
 | 3c | Consistency — Generic executor (prototype) | ⬜ Not started | — | — | — | — |
 | 3d | Consistency — Generic executor (full) | ⬜ Not started | — | — | — | — |
 | 3e | Consistency — Delete legacy tools | ⬜ Not started | — | — | — | — |
+| 3f | Consistency — Deterministic classifier | ⬜ Not started | — | — | — | — |
+| 3g | Consistency — KG versioning | ⬜ Not started | — | — | — | — |
 | 4a | Structure — Source-tree reorg | ⬜ Not started | — | — | — | — |
 | 4b | Structure — Test suite split | ⬜ Not started | — | — | — | — |
 | 4c | Structure — Module boundaries | ⬜ Not started | — | — | — | — |
+| 4d | Structure — UI and API layer | ⬜ Not started | — | — | — | — |
 | 5 | Observability | ⬜ Not started | — | — | — | — |
 | 6a | Performance — Tool-result cache | ⬜ Not started | — | — | — | — |
 | 6b | Performance — Parallel execution | ⬜ Not started | — | — | — | — |
 | 6c | Performance — Intent cache | ⬜ Not started | — | — | — | — |
+| 6d | Performance — Plan cache | ⬜ Not started | — | — | — | — |
+| 6e | Performance — Concurrency & back-pressure | ⬜ Not started | — | — | — | — |
 | 7a | Extensibility — Endpoint spec format | ⬜ Not started | — | — | — | — |
 | 7b | Extensibility — `add-endpoint` generator | ⬜ Not started | — | — | — | — |
 | 7c | Extensibility — `add-module` generator | ⬜ Not started | — | — | — | — |
@@ -278,6 +342,8 @@ Some in-flight items naturally belong to phases later in the plan — the parser
 ### 6.1 Why this order, in one paragraph
 
 **Audit before correctness** — you can't fix what you haven't measured. **Correctness before consistency** — consolidating buggy code consolidates the bug. **Consistency before structure** — you can't decide where a module belongs until you know what the module *is*, and consistency work makes the code's true shape visible. **Structure before observability** — instrument stable code, not code that's about to move. **Observability before performance** — you can't prove a performance change helped without a baseline. **Performance before extensibility** — you want to generate new capabilities against a fast, well-understood system, not a slow, drifting one. **Extensibility last** — it is the *output* of everything above; a correct, consistent, structured, instrumented, fast system is extensible by construction. See Appendix D for the full dependency argument.
+
+**v3.2 note.** Sub-phases 3f, 3g, 6d, 6e, and 4d are additions inside existing phases. They do not change the order. The dependency argument is unchanged.
 
 ---
 
@@ -426,6 +492,8 @@ Revert the merge commit. Restore the moved files. If credentials were rotated, n
 
 Fix every bug the audit found. Add a regression test for each. Do not consolidate or restructure; just make the code correct.
 
+**v3.2 note.** Phase 2's thesis is expanded to include correctness under partial failure. See §8.3.7. The pipeline must not discard successful work when a later step fails.
+
 ### 8.2 Why here
 
 Buggy code should not be consolidated (Phase 3) or moved (Phase 4). Consolidation duplicates bugs. Restructuring hides bugs in a wave of imports.
@@ -474,11 +542,52 @@ The test asserts the *correct* behaviour, not just the absence of the bug. If th
 
 **8.3.5 No behaviour changes beyond the fixes.**
 
-Phase 2 is not the place for cleanup, refactoring, or style changes. The only changes are the bugs.
+Phase 2 is not the place for cleanup, refactoring, or style changes. The only changes are the bugs. (The one exception is §8.3.7, which is a capability change explicitly scoped into Phase 2 by v3.2.)
 
 **8.3.6 The byte-diff oracle applies.**
 
 Before Phase 2, run the three golden prompts and save the output. After each bug fix, re-run the three golden prompts and confirm the output for those three is unchanged (unless the bug *was* in one of those prompts' output, in which case update the golden file and note the change).
+
+**8.3.7 Partial results and explicit gaps.**
+
+**The problem.** `execute_plan` iterates steps and any exception fails the whole plan. A five-step plan that fails at step four returns nothing. The user asking "suppliers in the US with open POs and no recent invoices" gets an error instead of "here are 12 suppliers with open POs; I couldn't check their invoices."
+
+This is a **correctness** concern, not a UX detail. The pipeline is incorrect if it discards successful work when a later step fails. Phase 2's thesis is expanded from "fix bugs" to "fix bugs and behave correctly under partial failure."
+
+**Design.**
+
+The executor returns a structured result instead of raising:
+
+```python
+{
+    "completed_steps": [{"step": 1, "output": ...}, {"step": 2, "output": ...}],
+    "failed_steps":    [{"step": 4, "error": "...", "error_kind": "timeout"}],
+    "outputs":         {...},   # everything that succeeded, keyed by step name
+    "coverage":        "partial"  # or "complete"
+}
+```
+
+The synthesizer receives `coverage` and `failed_steps` and narrates the gap:
+
+> "I found 12 suppliers with open purchase orders, but I couldn't check their invoices (the invoice service timed out). Here's what I have."
+
+The renderer displays the gap as a first-class section, not as an error banner.
+
+**Rules.**
+
+- A step failure does not abort the plan unless a later step depends on it.
+- Independent steps continue.
+- `coverage` is `"complete"` only if every step succeeded.
+- The synthesizer must mention the gap. It must not silently omit it.
+- A plan where every step succeeds is byte-identical to pre-§8.3.7 output.
+
+**Acceptance.**
+
+- A plan with an induced failure in one step returns the successful steps' outputs.
+- The synthesizer mentions the gap.
+- `coverage` is `"partial"`.
+- No answer changes for plans where all steps succeed.
+- The byte-diff of the three golden prompts is unchanged.
 
 ### 8.4 Tasks
 
@@ -494,6 +603,9 @@ Before Phase 2, run the three golden prompts and save the output. After each bug
 | 2.8 | Re-run the full prompt suite | updated pass count |
 | 2.9 | Update the golden files if any of the three prompts changed | refreshed golden outputs |
 | 2.10 | Verify every fix's regression test fails without the fix | evidence in PR |
+| 2.11 | **Implement partial execution + gap reporting in `execute_plan`** | commit + regression test |
+| 2.12 | **Induced-failure regression test (one step fails, others succeed)** | test |
+| 2.13 | **Synthesizer gap-narration test** | test |
 
 ### 8.5 Acceptance criteria
 
@@ -502,6 +614,7 @@ Before Phase 2, run the three golden prompts and save the output. After each bug
 - No new failures.
 - Every fix's regression test fails without the fix.
 - Every probabilistic bug has an N-run regression test that demonstrates convergence.
+- Partial-failure behaviour is verified: successful steps are returned, gaps are reported, and the synthesizer narrates them.
 
 ### 8.6 Rollback
 
@@ -531,7 +644,7 @@ Consistency must come *after* correctness because consolidating a buggy registry
 
 ### 9.3 Design
 
-Phase 3 is split into five sub-phases. Each has its own branch and its own PR.
+Phase 3 is split into seven sub-phases. Each has its own branch and its own PR.
 
 #### 9.3.1 Phase 3a — Prompt coverage validation
 
@@ -748,6 +861,74 @@ The failure mode is: the generic executor passes the golden prompts and the corp
 - **Per-quirk test suite passes.**
 - **The tool-by-tool diff table is in the PR.**
 
+#### 9.3.6 Phase 3f — Deterministic classifier
+
+**Objective.** Replace the LLM classifier with a gazetteer lookup for prompts whose tokens match entity synonyms. Keep the LLM classifier as a fallback for prompts with no synonym match.
+
+**Why here.** The classifier's job is to match prompt tokens against entity synonyms. That is a gazetteer lookup, not a classification problem. The classifier menu (generated in Phase 3b) already contains entity names and their synonyms. The gazetteer reads from the same source. This is Phase 3's thesis applied to routing: replace an LLM call with a deterministic KG lookup.
+
+This is a **Tier 1 item** from the initial architecture review. It removes one LLM call from ~80% of requests. The original review called it out as the second-biggest risk after the per-entity maintenance ceremony.
+
+**Design.**
+
+```python
+def classify_modules(prompt: str, menu: KGMenu) -> list[str]:
+    tokens = set(re.findall(r"[a-z]+", prompt.lower()))
+    modules = set()
+    for term, entity in menu.entity_synonyms.items():
+        if term in tokens:
+            entity_module = menu.entity_modules.get(entity)
+            if entity_module:
+                modules.add(entity_module)
+    return list(modules)
+```
+
+The LLM classifier is called only when the gazetteer returns an empty set. The fallback is logged with `[classifier] fallback=llm` so its rate is visible.
+
+**Target: 1 LLM call per request for most prompts.**
+
+After Phase 3f, the pipeline is:
+
+```
+gazetteer (code)  →  parse (LLM)  →  plan (code)  →  execute (code)  →  synthesize (local 90% / LLM 10%)
+```
+
+For the majority of prompts, the classify call disappears entirely. Combined with Phase 6c (intent cache) and Phase 6d (plan cache), the LLM-call count for repeated or common prompts approaches one.
+
+**Acceptance.**
+
+- Gazetteer handles ≥80% of prompts in the corpora without LLM fallback.
+- Zero new failures in `--validate`.
+- One fewer LLM call per request for gazetteer-handled prompts.
+- Byte-identical answers for prompts where the gazetteer and LLM agree.
+- The fallback rate is reported in the phase's evidence block.
+- The classifier-teaching and parser-teaching drift (S-class bug) is structurally eliminated: both read from the same generated menu.
+
+**Rollback.** Revert to LLM classifier by removing the gazetteer dispatch; the LLM path remains present as fallback.
+
+#### 9.3.7 Phase 3g — KG versioning
+
+**Objective.** The KG carries a version stamp. The menu exposes it. Caches use it as an invalidation key.
+
+**Why here.** Phase 6's caches (tool cache 6a, intent cache 6c, plan cache 6d) need an invalidation key. Without a KG version, a cache can serve stale intents or plans after a KG rebuild. This is infrastructure that Phase 6 depends on, and it belongs in Phase 3 because it is about the KG's integrity as the single source of truth.
+
+**Design.**
+
+- A `kg_version` table (or a row in an existing metadata table) holding a monotonic version or a content hash.
+- `load_kg_menu()` returns `(menu, kg_version)`.
+- The KG rebuild increments the version.
+- Cache keys include the version. Phase 6c and 6d reference this.
+
+**Acceptance.**
+
+- KG version is present and stable across reads.
+- KG rebuild changes the version.
+- `load_kg_menu()` returns the version alongside the menu.
+- No answer changes.
+- Cache invalidation on KG rebuild is testable.
+
+**Rollback.** Remove the `kg_version` table and the tuple return from `load_kg_menu()`. Phase 6 caches must then be disabled or keyed on a coarser signal.
+
 ### 9.4 Tasks
 
 | # | Task | Branch |
@@ -763,6 +944,12 @@ The failure mode is: the generic executor passes the golden prompts and the corp
 | 3.9 | Delete legacy tool files | same |
 | 3.10 | Regenerate corpora | same |
 | 3.11 | **Produce the tool-by-tool diff table** | same |
+| 3.12 | **Implement gazetteer `classify_modules`** | `phase-3f-deterministic-classifier` |
+| 3.13 | **Wire LLM fallback for empty-gazetteer prompts** | same |
+| 3.14 | **Measure gazetteer coverage on all corpora** | same |
+| 3.15 | **Add `kg_version` to the KG schema** | `phase-3g-kg-versioning` |
+| 3.16 | **Expose version from `load_kg_menu()`** | same |
+| 3.17 | **Document cache-key usage for Phase 6** | same |
 
 ### 9.5 Acceptance criteria
 
@@ -774,10 +961,12 @@ The failure mode is: the generic executor passes the golden prompts and the corp
 - The full prompt suite passes.
 - Tool count is 12 (1 generic + 11 semantic), down from 34.
 - **Every endpoint quirk is declared in its spec; every quirk kind has a test; the tool-by-tool diff table is documented.**
+- **The gazetteer handles ≥80% of prompts without LLM fallback.**
+- **The KG version is exposed and caches can key on it.**
 
 ### 9.6 Rollback
 
-Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the deleted files in a `legacy/` directory for one sprint. If any per-quirk test fails in production data, the legacy tool can be restored.
+Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the deleted files in a `legacy/` directory for one sprint. If any per-quirk test fails in production data, the legacy tool can be restored. Phase 3f falls back to the LLM classifier by removing the gazetteer dispatch. Phase 3g removes the `kg_version` table; caches must then be disabled or re-keyed.
 
 ### 9.7 Phase 3 Status
 
@@ -843,6 +1032,13 @@ spire/
 │   ├── rendering/                ← new: display layer
 │   │   ├── __init__.py
 │   │   └── formatters.py
+│   ├── api/                      ← new (Phase 4d): FastAPI server
+│   │   ├── __init__.py
+│   │   ├── server.py
+│   │   └── models.py
+│   ├── ui/                       ← new (Phase 4d): Streamlit app
+│   │   ├── __init__.py
+│   │   └── app.py
 │   ├── executor/
 │   ├── fusion/
 │   ├── graph/
@@ -883,6 +1079,8 @@ spire/
 spire = "spire.cli.run:main"
 spire-promptkit = "spire.cli.promptkit:main"
 spire-kg = "spire.ops.kg.print:main"
+spire-api = "spire.api.server:main"
+spire-ui = "spire.ui.app:main"
 ```
 
 **The documented-command problem.**
@@ -965,6 +1163,81 @@ Examples (actual splits depend on Phase 3's findings):
 
 This is the smallest sub-phase and the most judgement-dependent. It's also the one where doing it *after* consistency matters most — before Phase 3, you'd split things along the wrong seams.
 
+#### 10.3.4 Phase 4a task — `docs/architecture/`
+
+Create a top-level `docs/architecture/` directory for the "how does this fit together" documents. Move `spire_architecture.md` and related overview documents there. Add a README explaining what belongs there. This separates "design of X" documents from "overview of the system" documents, so a new contributor knows what to read first.
+
+#### 10.3.5 Phase 4d — UI and API layer
+
+**Objective.** Give SPIRE a minimal browser interface and the HTTP backend that serves it. One input. One output. One page. No multi-set, no batch, no multi-turn.
+
+**Why here.** The API and UI are clients of the pipeline, so the pipeline must be stable first (Phase 3). They are packaging artefacts — new packages, new console scripts — which is Phase 4 territory. They must be in place before Phase 5 so their spans and metrics are instrumented from day one, and before Phase 6 so caching and parallelism can be observed end-to-end. They change nothing in the pipeline. No answer changes.
+
+**Scope.**
+
+- `src/spire/api/` — FastAPI server. Two endpoints. No state. No auth.
+- `src/spire/ui/` — Streamlit app. One page. One prompt. One answer.
+- Console scripts `spire-api` (default `:8000`) and `spire-ui` (default `:8501`).
+
+**Non-goals.** Streaming, multi-turn history, authentication, file upload, batch or multi-set execution, custom CSS or JS, persistence, rate limiting, caching, metrics export. All are deferred to their respective phases or to §4.6 non-goals.
+
+**Backend design.** FastAPI + Uvicorn + Pydantic. Async-native; the pipeline is called via `await`; any sync code runs inside `run_in_threadpool`.
+
+Two endpoints.
+
+- `GET /status` — liveness and version banner.
+  - 200: `{"ok": true, "service": "spire-api", "version": "0.1.0", "started_at": "...", "uptime_s": 3600, "kg_version": "abc123", "pipeline_ready": true}`
+  - 503: `{"ok": false, "service": "spire-api", "error": "pipeline not initialised", "pipeline_ready": false}`
+
+- `POST /prompt` — the prompt endpoint. Request: `{"prompt": "...", "session_id": "optional-client-uuid"}`. `session_id` is optional and used only for log grouping; SPIRE is single-turn.
+
+Every response uses the same top-level envelope:
+
+- `request_id` — opaque identifier
+- `kind` — discriminator: `text` · `table` · `refusal` · `partial` · `error`
+- `answer` — shape varies by `kind`
+- `metadata` — always present
+
+`answer` by `kind`:
+
+- `text` — `{"text": "...", "records": [], "truncated": false, "truncation_note": null}`
+- `table` — same, with `records` populated
+- `refusal` — `{"text": null, "refusal": {"reason": "...", "solution": "...", "example": "..."}}`
+- `partial` — text + records + `coverage: "partial"` + `failed_steps: [...]` (see §8.3.7)
+- `error` — `{"text": "...", "error": {"stage": "...", "message": "...", "retryable": true}}`
+
+`metadata` — `latency_ms`, `llm_calls`, `tokens_in`, `tokens_out`, `kg_version`, and `stages` (an array of `{name, ms}` entries: classify, parse, plan, execute, synthesize).
+
+HTTP status codes reflect reality: `200` for `kind ∈ {text, table, refusal, partial}`; `422` for malformed request; `500` for `kind = "error"`; `503` when `pipeline_ready` is false.
+
+Configuration via environment: `SPIRE_API_HOST` (default `0.0.0.0`), `SPIRE_API_PORT` (default `8000`), `SPIRE_UI_ORIGIN` (CORS allowlist; default `http://localhost:8501`), `SPIRE_KG_VERSION` (read from KG). OpenAPI docs at `/docs` for debugging.
+
+**Frontend design.** Streamlit only. No custom CSS. No JS. One page, three zones.
+
+- Zone 1 — header: title "SPIRE" and a connection indicator that calls `/status` on load.
+- Zone 2 — input: `st.text_input("Ask a question")` and `st.button("Submit")`; Enter also submits.
+- Zone 3 — answer: renders one of the five `kind` values. Text via `st.markdown`. Records via `st.dataframe`. Refusal via three styled blocks (warning/info/code). Partial via `st.warning` + records. Error via `st.error`. Truncation warning above records. Metadata in a collapsed `st.expander("Metadata")`.
+
+States the UI handles: idle (empty), loading (`st.spinner`), text, table, refusal, partial, error, disconnected (`/status` fails → top banner).
+
+No history. No settings. No persistence. Configuration via `SPIRE_API_URL` (default `http://localhost:8000`).
+
+**Acceptance criteria.**
+
+- `pip install -e .` installs `spire-api` and `spire-ui`.
+- `spire-api` starts on `:8000` with `/status` and `/prompt`.
+- `spire-ui` starts on `:8501` and reaches the API.
+- All five `kind` values render correctly.
+- Truncation warnings appear when `truncated = true`.
+- Metadata expander shows the stage breakdown.
+- Three golden prompts produce byte-identical answers via CLI, API, and UI.
+- No answer changes.
+
+**Rollback.** Delete `src/spire/api/` and `src/spire/ui/`; remove the two console scripts and the two tree entries. The CLI path (`scripts/run_graph.py`, `spire`) is untouched and continues to work.
+
+**A note on future UI replacement.** The API is a plain JSON HTTP service. Streamlit is one client; React (or anything else) is another. When the UI is rewritten, the API does not change. This is why the API and the UI are separate packages and separate processes.
+
+
 ### 10.4 Tasks
 
 | # | Task | Branch |
@@ -980,6 +1253,12 @@ This is the smallest sub-phase and the most judgement-dependent. It's also the o
 | 4.9 | Split `tests/` by component | `phase-4b-test-split` |
 | 4.10 | Add `tests/conftest.py` auto-marker | same |
 | 4.11 | Split bundled modules | `phase-4c-module-boundaries` |
+| 4.12 | **Create `docs/architecture/` and move overview docs there** | `phase-4a-source-tree` |
+| 4.13 | **Create `src/spire/api/`** — FastAPI app, models, `/status`, `/prompt` | `phase-4d-ui-api` |
+| 4.14 | **Add `spire-api` console script** | same |
+| 4.15 | **Create `src/spire/ui/`** — Streamlit app, one page | same |
+| 4.16 | **Add `spire-ui` console script** | same |
+| 4.17 | **Add API smoke tests (`tests/integration/api/`) and UI smoke tests (`tests/manual/ui/`)** | same |
 
 ### 10.5 Acceptance criteria
 
@@ -990,10 +1269,17 @@ This is the smallest sub-phase and the most judgement-dependent. It's also the o
 - Three golden prompts still byte-identical.
 - Every import that referenced a moved file is updated.
 - **Every doc reference to a `scripts/*.py` command is either updated or covered by a shim.**
+- **`spire-api` starts on `:8000` with `/status` and `/prompt`.**
+- **`spire-ui` starts on `:8501` and reaches the API.**
+- **All five `kind` values render correctly in the UI.**
+- **Three golden prompts produce byte-identical answers via CLI, API, and UI.**
+- **`docs/architecture/` exists with a README and the overview documents.**
 
 ### 10.6 Rollback
 
 Each sub-phase reverts independently. The `src/spire/cli/` and `src/spire/ops/` moves are the largest single change; the rest is mechanical. The forwarding shims mean that even a full revert of the tree move leaves old commands working.
+
+Phase 4d reverts by deleting `src/spire/api/` and `src/spire/ui/` and removing the two console scripts. The CLI path is untouched and continues to work.
 
 ### 10.7 Phase 4 Status
 
@@ -1094,7 +1380,7 @@ Remove the span wrappers. The observability module can stay as dead code or be d
 
 ### 12.1 Objective
 
-Reduce latency and cost without changing answers. Add caching and parallel execution.
+Reduce latency and cost without changing answers. Add caching, parallel execution, and concurrency handling.
 
 ### 12.2 Why here
 
@@ -1138,7 +1424,55 @@ A parser prompt cache was implemented earlier (branch `feat/parser-prompt-cache`
 
 Phase 6c's acceptance criteria must include: **for a sample of prompts, the cache hit and the cache miss produce byte-identical Intents.** If they don't, the difference must be investigated before shipping the cache.
 
+**Dependency on Phase 3g.** Cache keys include the KG version. On KG rebuild, the version changes and the cache invalidates.
+
 **Acceptance.** Ten repeats of one prompt → one LLM parse call. Zero new failures in `--validate`. Cache invalidates on KG rebuild. Cache hits and misses produce identical Intents on the sample.
+
+#### 12.3.4 Phase 6d — Plan cache
+
+**Objective.** Cache the planner's output keyed on `(intent_hash, kg_version)`.
+
+**Why here.** Sibling of the tool cache (6a) and intent cache (6c). The planner is deterministic, so the plan for a given intent and KG version is stable. Caching it removes a planner invocation from repeated identical requests.
+
+**Design.**
+
+- New `src/spire/planner/cache.py`.
+- Key: `hash(intent, kg_version)`.
+- Value: `Plan`.
+- TTL: 3600s (configurable).
+- Env flag: `SPIRE_PLAN_CACHE_DISABLE=1`.
+- Depends on Phase 3g (KG version) and Phase 6c (intent cache).
+
+**Acceptance.**
+
+- Two identical Intents with the same KG version → one planner invocation.
+- Cache hit and miss produce byte-identical Plans.
+- Cache invalidates on KG version change.
+- No answer changes.
+
+**Rollback.** Delete `planner/cache.py` and remove the cache lookup from the planner. The planner falls back to computing every plan.
+
+#### 12.3.5 Phase 6e — Concurrency and back-pressure
+
+**Objective.** Handle concurrent requests without saturating the LLM or the pod.
+
+**Why here.** Performance must handle concurrency, not just latency. The current implementation has one `_persona` and one `FusionClient` per tool call, no connection pooling, no rate limiting, and no queue. With 10 concurrent users, the LLM quota and the pod saturate.
+
+**Design.**
+
+- **Connection pooling** for the Fusion client: a shared pool with request-level isolation.
+- **Rate limiting** on LLM calls: a token bucket or semaphore, so 100 prompts don't all queue on the LLM.
+- **A bounded queue** for incoming requests with a clear rejection path.
+- **Back-pressure signal** to the caller when the queue is full.
+
+**Acceptance.**
+
+- 10 concurrent identical requests → pooled client, no connection exhaustion.
+- LLM calls are rate-limited; no thundering herd.
+- Queue overflow returns a clear error, not a hang.
+- No answer changes.
+
+**Rollback.** Remove the pool, the rate limiter, and the queue. The executor falls back to one client per tool call.
 
 ### 12.4 Tasks
 
@@ -1150,6 +1484,11 @@ Phase 6c's acceptance criteria must include: **for a sample of prompts, the cach
 | 6.4 | Implement three-stage intent cache | `phase-6c-intent-cache` |
 | 6.5 | **Test cache-hit vs cache-miss Intent identity** | same |
 | 6.6 | Verify no byte-diff changes | same |
+| 6.7 | **Implement plan cache** | `phase-6d-plan-cache` |
+| 6.8 | **Test cache-hit vs cache-miss Plan identity** | same |
+| 6.9 | **Pool the Fusion client** | `phase-6e-concurrency` |
+| 6.10 | **Rate-limit LLM calls** | same |
+| 6.11 | **Bounded queue + rejection path** | same |
 
 ### 12.5 Acceptance criteria
 
@@ -1157,11 +1496,13 @@ Phase 6c's acceptance criteria must include: **for a sample of prompts, the cach
 - All answers byte-identical to pre-Phase-6 output.
 - Cache respects truncation.
 - **Cache hit and cache miss produce identical Intents on the sample.**
+- **Cache hit and cache miss produce identical Plans on the sample.**
+- **10 concurrent requests are handled without connection exhaustion or LLM thundering herd.**
 - All tests pass.
 
 ### 12.6 Rollback
 
-Each sub-phase reverts independently. The cache is disableable by env flag.
+Each sub-phase reverts independently. The caches are disableable by env flag. The pool, rate limiter, and queue are removable individually.
 
 ### 12.7 Phase 6 Status
 
@@ -1398,6 +1739,8 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 - [ ] Full prompt suite runs with no new failures.
 - [ ] For probabilistic-bug fixes: N-run evidence collected (see Appendix B.2).
 - [ ] For Phase 3e: per-quirk tests pass.
+- [ ] For Phase 3f: gazetteer coverage measured.
+- [ ] For Phase 3g: KG version exposure verified.
 
 ### 14.2 Byte-diffs
 
@@ -1411,6 +1754,7 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 - [ ] `spire-ops kg rebuild` succeeds.
 - [ ] `spire-ops kg print --counts-only` matches expected.
 - [ ] `tests/integration/kg/test_kg_metadata.py` passes.
+- [ ] KG version is present and stable.
 
 ### 14.4 Branch and PR
 
@@ -1423,7 +1767,10 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 
 - [ ] §6 Phase Index row updated.
 - [ ] §{N} Status section updated.
-- [ ] §15 Session Log has a new entry.
+- [ ] §15 Session Log has a one-line pointer to the session entry.
+- [ ] **Doc B §1 snapshot updated.**
+- [ ] **Doc B §2 registers updated (bugs, investigations, decisions, questions).**
+- [ ] **Doc B §4 has the full session entry (work items, commands, outputs, evidence).**
 - [ ] **Every doc reference to a moved/renamed file is updated, or covered by a shim.**
 
 ### 14.6 PR template
@@ -1445,6 +1792,8 @@ Before merging any sub-phase's PR, run this checklist. Every box must be ticked.
 - Byte-diff of three golden prompts: {identical / diff link}
 - (For probabilistic fixes) N-run evidence: {link}
 - (For Phase 3e) Per-quirk test results: {link}
+- (For Phase 3f) Gazetteer coverage: {percentage}
+- (For Phase 3g) KG version exposure: {link}
 
 ### Rollback
 `git revert {sha}`. Delete: {new files}.
@@ -1462,37 +1811,26 @@ After merge, update §6 Phase Index and §15 Session Log.
 
 **Append-only. Newest entry at the top.**
 
-### Template
+**This section is a pointer index, not a full log.** The full forensic record for every session lives in the companion document:
+
+`SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md` §4.
+
+Each entry here is three lines: phase, branch, summary, and a pointer. That keeps Doc A small enough to paste into a new window without dragging history with it. Detail lives in Doc B.
+
+### Pointer template
 
 ```markdown
-### YYYY-MM-DD — Session N
+### YYYY-MM-DD — Session S###
 
-**Phase in progress:** {phase}
+**Phase:** {phase number and name}
 **Branch:** `{branch}`
-**Session goal:** {what you set out to do}
-
-**Done:**
-- {bullet}
-
-**Evidence:**
-- `pytest -q`: {pass count}
-- Full prompt suite: {pass count}
-- Byte-diff of three golden prompts: {identical / diff}
-- (For probabilistic fixes) N-run distribution: {summary}
-
-**Blockers / open questions:**
-- {bullet}
-
-**Next session should:**
-- {bullet}
-
-**Commits on branch:**
-- `{sha}` — {message}
+**Summary:** {one sentence — what was done}
+**Full record:** Doc B §4 S###.
 ```
 
 ### Entries
 
-*(No entries yet. The first session will add the first entry.)*
+*(No entries yet. Session S001 will add the first pointer.)*
 
 ---
 
@@ -1611,6 +1949,7 @@ real  0m{N}.{M}s
 ```
 $ spire-ops kg rebuild
 $ spire-ops kg print --counts-only
+$ spire-ops kg version
 ```
 
 ### B.5 Phase 3e per-quirk evidence block
@@ -1633,6 +1972,42 @@ Tool: suppliers.py
     - {"status": "ACTIVE"}  ✓
     - {"country": "US"}  ✓
     - {"status": "ACTIVE", "country": "US"}  ✓  (composite-q case)
+```
+
+### B.6 Phase 3f gazetteer evidence block
+
+For the deterministic-classifier phase:
+
+```
+$ python -m spire.ops.classifier.coverage --corpora prompts/corpora/
+Corpora: {N} prompts
+Gazetteer-resolved: {N_g} ({percentage}%)
+LLM-fallback: {N_l} ({percentage}%)
+
+Sample fallback prompts:
+  - {prompt_1}
+  - {prompt_2}
+```
+
+### B.7 Phase 6e concurrency evidence block
+
+For the concurrency & back-pressure phase:
+
+```
+$ python -m spire.ops.loadtest --concurrency 10 --prompt "Count of suppliers"
+Requests: 10
+  Completed: 10
+  Failures: 0
+  Mean latency: {N}ms
+  Pool saturation: none
+  LLM rate-limited: {N} calls throttled
+
+$ python -m spire.ops.loadtest --concurrency 100 --prompt "Count of suppliers"
+Requests: 100
+  Completed: {N}
+  Rejected (queue full): {N}
+  Mean latency: {N}ms
+  Rejection message: "{...}"
 ```
 
 ---
@@ -1660,6 +2035,20 @@ Cross-session decisions that affect multiple phases.
 | 2026-09-13 (v3.1) | **LLM-boundary changes require N-run evidence (N ≥ 20), not single-pass tests.** | Probabilistic bugs pass a single-run test 95% of the time when live. The caching regression this session was caught by running 40 times, not once. |
 | 2026-09-13 (v3.1) | **Per-endpoint quirks are declared in the spec, not re-derived from code.** | The generic executor must reproduce each legacy tool's quirks. Making them declarative makes consolidation auditable. Phase 3d defines the `quirks` block; Phase 3e's acceptance bar requires per-quirk tests before deleting any legacy tool. |
 | 2026-09-13 (v3.1) | **Entry-point moves require thin forwarding shims, not just a move.** | Moving `scripts/*.py` to `src/spire/cli/` breaks every documented command in the repo. The shims preserve muscle memory and prevent doc rot; Phase 4a also greps and updates every doc reference. |
+| 2026-09-14 (v3.2) | **Deterministic classifier merged into Phase 3f.** | Tier 1 item from the initial review. Fits Phase 3's thesis: replace an LLM call with a KG lookup. Removes one LLM call from ~80% of requests. |
+| 2026-09-14 (v3.2) | **KG versioning merged into Phase 3g.** | Infrastructure required by Phase 6 caches. Belongs in Phase 3 because it is about the KG's integrity as the single source of truth. |
+| 2026-09-14 (v3.2) | **Plan cache merged into Phase 6d.** | Sibling of tool cache (6a) and intent cache (6c). The planner is deterministic; caching it is cheap and effective. |
+| 2026-09-14 (v3.2) | **Partial results merged into Phase 2 §8.3.7.** | Expands Phase 2's thesis from "fix bugs" to "fix bugs and behave correctly under partial failure." This is a correctness concern, not a UX detail. |
+| 2026-09-14 (v3.2) | **Concurrency and back-pressure merged into Phase 6e.** | Production concern. Fits Phase 6's performance thesis. Pooled client, LLM rate limiting, bounded queue. |
+| 2026-09-14 (v3.2) | **Page-cap-at-scale, multi-tenancy, streaming, auth marked explicit non-goals in §4.6.** | Deferred with revisit triggers. More honest than silent omission. |
+| 2026-09-14 (v3.2) | **`docs/architecture/` added as a Phase 4a task.** | Separates "design of X" documents from "overview of the system" documents. Helps new contributors know what to read first. |
+| 2026-09-14 (v3.2) | **No phase renumbering. No phase reordering. Merge only.** | The dependency argument (Appendix D) is unchanged. The seven phases cover every kind of work. Merge preserves every prior session log, PR, and branch reference. |
+| 2026-09-14 (v3.2 Addendum A) | **Two-document model: Doc A frozen plan, Doc B append-only status.** | Separates the invariant plan from the evolving forensic record. The plan never drifts; history never gets lost to a window limit. Doc A carries one-line pointers only; session detail, bugs, investigations, commands, and outputs live in Doc B. |
+| 2026-09-14 (v3.2 Addendum B) | **UI and API layer merged into Phase 4d.** | Fits Phase 4 (Structure) because it is a packaging change: new packages, new console scripts. Must follow Phase 3 (stable pipeline) and precede Phase 5 (instrumentation) and Phase 6 (performance observation). |
+| 2026-09-14 (v3.2 Addendum B) | **Backend is FastAPI, async, with two endpoints (`GET /status`, `POST /prompt`).** | Async is the scalable choice; the pipeline is already async. Two endpoints is the minimum: one for health, one for work. No other endpoints are required. |
+| 2026-09-14 (v3.2 Addendum B) | **HTTP status codes reflect reality (200 for normal answers, 5xx for pipeline errors).** | Lets the UI distinguish "SPIRE answered" from "SPIRE broke" before parsing JSON. Plays well with load balancers and monitoring. |
+| 2026-09-14 (v3.2 Addendum B) | **Frontend is Streamlit, one page, no history, no settings.** | The requirement is a minimal prompt-in / answer-out interface. Streamlit is the least-code path. History, settings, and multi-turn are out of scope. |
+| 2026-09-14 (v3.2 Addendum B) | **API and UI are separate packages and separate processes.** | The API is a plain JSON HTTP service. Streamlit is one client; React (or anything else) is another. When the UI is rewritten, the API does not change. |
 
 ---
 
@@ -1691,13 +2080,19 @@ A system that is correct, consistent, structured, observable, and fast is extens
 **What the old order (v2.0) got wrong.**
 It put Structure first and Extensibility last-but-one, with Consistency and Correctness in between. That ordering forces rework: Structure (Phase 0) reshapes the tree; Consistency (Phase 2) reveals a different architecture; Extensibility (Phase 6) wants to write into a third. Three tree changes for one goal.
 
-The v3.1 order eliminates the rework. Structure is Phase 4, after Consistency has revealed the true shape. Extensibility is Phase 7, after everything else has stabilized. No phase forces a later phase to undo it.
+The v3.1 order eliminated the rework. Structure is Phase 4, after Consistency has revealed the true shape. Extensibility is Phase 7, after everything else has stabilized. No phase forces a later phase to undo it.
 
-**The v3.1 additions strengthen the argument in two places.**
+**The v3.1 additions strengthened the argument in two places.**
 
 The first is the ordering's *evidence*: S1 and S4 prove that the drift class is real, not theoretical. Correctness + Consistency aren't just good ideas; they address a defect class with shipped instances.
 
-The second is the ordering's *risk*: Phase 3e is the phase where consolidation can go wrong, and v3.1 makes the acceptance bar per-quirk rather than per-sample. This doesn't change the ordering; it makes the hardest phase in it survivable.
+The second is the ordering's *risk*: Phase 3e is the phase where consolidation can go wrong, and v3.1 made the acceptance bar per-quirk rather than per-sample. This doesn't change the ordering; it makes the hardest phase in it survivable.
+
+**v3.2 note.** The initial-review merge adds sub-phases inside existing phases (3f, 3g, 6d, 6e) and one section inside Phase 2 (§8.3.7). The dependency argument is unchanged. The seven-phase order remains Audit → Correctness → Consistency → Structure → Observability → Performance → Extensibility. No phase was renumbered. No phase was reordered. Every prior session log, PR, and branch reference remains valid.
+
+**Addendum A note.** The two-document model is a tracking change, not a design change. Doc A stays frozen; Doc B (`SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md`) carries the append-only forensic record. The seven-phase order and the dependency argument are unchanged. Every prior session log, PR, and branch reference remains valid.
+
+**Addendum B note.** Phase 4d (UI and API layer) is a sub-phase inside Phase 4 (Structure). It adds two clients of the pipeline — a FastAPI server and a Streamlit app — with no change to the pipeline itself. The dependency argument is unchanged: it is placed after Phase 3 (stable pipeline) and before Phase 5 (instrumentation). No phase was renumbered. No phase was reordered. Every prior session log, PR, and branch reference remains valid.
 
 ---
 
@@ -1709,6 +2104,8 @@ The second is the ordering's *risk*: Phase 3e is the phase where consolidation c
 
 ---
 
-**Document version:** 3.1
-**Last updated:** 2026-09-13
+**Document version:** 3.2
+**Last updated:** 2026-09-14
 **Next revision:** After Phase 1 completes, add the first Session Log entry and update §6 Phase Index.
+
+---
