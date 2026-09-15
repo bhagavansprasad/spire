@@ -39,3 +39,4 @@ promptkit_overnight_*.log
 *:Zone.Identifier
 logs/
 .streamlit/
+.spire-dev.env
