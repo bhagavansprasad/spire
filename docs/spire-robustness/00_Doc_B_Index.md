@@ -81,7 +81,7 @@ Integration branch:  hardening-master
 Current branch:      phase-1
 master:              frozen at 14dce82 (PR #145, phase-4d-ui-api)
 Last commit on
-hardening-master:    c57cf67 (PR #147, tooling-dev-ports)
+Phase1 branch:       131a9db — Phase 1.4: remove isolation/
 Working tree:        clean (dev tree at ~/pocs/spire)
 Runtime tree:        ~/pocs/spire-runtime — running 3333/8000/8888, ngrok-exposed
 pytest -q:           1008 passed / 22 deselected (integration — deferred per D-002)
@@ -90,7 +90,7 @@ KG version:          — (to be established in Phase 3g)
 Open bugs:           0
 Open investigations: 0
 Open questions:      2 (Q-001, Q-002)
-Next action:         WI-S002-03 — task 1.3 (move PDFs and XLSX out of source tree)
+Next action:         WI-S002-05 — task 1.5 (registry drift map)
 ```
 
 ---
