@@ -1,0 +1,1 @@
+"""SPIRE API — FastAPI backend for the Streamlit UI (Phase 4d, §5.1)."""

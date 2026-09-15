@@ -325,7 +325,7 @@ Some in-flight items naturally belong to phases later in the plan — the parser
 | 4a | Structure — Source-tree reorg | ⬜ Not started | — | — | — | — |
 | 4b | Structure — Test suite split | ⬜ Not started | — | — | — | — |
 | 4c | Structure — Module boundaries | ⬜ Not started | — | — | — | — |
-| 4d | Structure — UI and API layer | ⬜ Not started | — | — | — | — |
+| 4d | Structure — UI and API layer | 🟢 Complete | `phase-4d-ui-api` | 2026-09-15 | 2026-09-15 | — |
 | 5 | Observability | ⬜ Not started | — | — | — | — |
 | 6a | Performance — Tool-result cache | ⬜ Not started | — | — | — | — |
 | 6b | Performance — Parallel execution | ⬜ Not started | — | — | — | — |
@@ -1283,11 +1283,41 @@ Phase 4d reverts by deleting `src/spire/api/` and `src/spire/ui/` and removing t
 
 ### 10.7 Phase 4 Status
 
-**Current status:** ⬜ Not started
+**Current status:** 🟡 In progress — sub-phase 4d complete; 4a–4c not started.
 
 **Evidence:**
 
+**Sub-phase 4d (UI and API layer), completed 2026-09-15.**
+Recorded early — built before Phases 1–3 per S001. Rationale: the API
+contract in §10.3.5 already anticipates Phase 2's `partial` kind
+(§8.3.7) and Phase 3g's `kg_version`; the contract is forward-
+compatible, and the UI is a client of the contract, not of the
+pipeline internals. Building it now unblocks tester work.
+
+Delivered:
+- `src/spire/api/` — FastAPI backend, `GET /status`, `POST /prompt`.
+- `src/spire/ui/` — Streamlit frontend, one page, five `kind` values.
+- Console scripts `spire-api` (`:8000`) and `spire-ui` (`:8888`).
+- 12 unit + 4 integration tests, all passing.
+- Three golden prompts captured to `docs/audit/golden/` (§7.3.3 G).
+
+Acceptance (§10.5): the three golden prompts return the same **summary
+text** via CLI and API. Verified — see S001/WI-S001-07.
+
+Full forensic record: Doc B §4 S001 and §5.1.
+
 **Deviations from plan:**
+- **§10.3.5 sub-phase 4d built early.** Phase 4d was scheduled after
+  Phases 1–3. It was built before them. No version bump, no renumber,
+  no reorder. Recorded here per the plan's "record deviations in that
+  phase's §{N}.7 Status section" rule.
+- **Stage timings via `astream_events`, not callbacks.** §5.1.3.4 in
+  Doc B documents the change. LangGraph does not surface node
+  boundaries through `BaseCallbackHandler`; `astream_events` is the
+  correct API.
+- **`metadata.llm_calls`, `tokens_in`, `tokens_out` return 0.** Not in
+  `GraphState`. Phase 5 wires real counters. Documented in Doc B
+  §5.1.3.3.
 
 ---
 
@@ -1830,7 +1860,12 @@ Each entry here is three lines: phase, branch, summary, and a pointer. That keep
 
 ### Entries
 
-*(No entries yet. Session S001 will add the first pointer.)*
+### 2026-09-15 — Session S001
+
+**Phase:** 4d — Structure — UI and API layer
+**Branch:** `phase-4d-ui-api`
+**Summary:** Built and verified the FastAPI backend + Streamlit frontend. Three golden prompts captured. Byte-equality of summary text confirmed CLI↔API.
+**Full record:** Doc B §4 S001.
 
 ---
 
