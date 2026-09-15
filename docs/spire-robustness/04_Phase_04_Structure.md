@@ -1,269 +1,10 @@
-# SPIRE — Status and Evidence Log
+# SPIRE — Phase 4 — Structure
 
-**Companion to:** `SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md` (Doc A)
-**Document version:** 1.0
-**Created:** 2026-09-14
-**Last revised:** 2026-09-15
-
-**What this file is.** Doc A is the frozen plan. This file is the append-only forensic record of implementing it. Every session, every bug, every investigation, every test, every command, and every result lives here. Nothing is deleted. Newest session at the top.
-
-**What this file is not.** This file does not change the plan. If the plan needs to change, record it as a session-level decision in §2.3 and, if it warrants a permanent change, propose a Doc A amendment at the next checkpoint.
+**Session log and design for Phase 4** (Doc A §10).
+**Index:** `00_Doc_B_Index.md` in this folder.
+**Newest session at the top.** Append-only within the phase.
 
 ---
-
-## 0. How to use this file
-
-1. **Append, never overwrite.** Corrections are new entries that reference old IDs.
-2. **Newest session at the top of §4.** The registers in §2 are updated in place — they are indices, not history.
-3. **Assign IDs once.** Session `S###`, bug `B-###`, investigation `INV-###`, decision `D-###`, question `Q-###`. Never reuse.
-4. **Every claim has a command and an output.** If you cannot paste the command and its output, it is not evidence.
-5. **Cross-reference Doc A.** Every work item names the phase and section it belongs to.
-6. **Checkpoint discipline.** At every checkpoint, update §1 (snapshot) and §2 (registers), then add the full session entry to §4, then emit the checkpoint block for the next window.
-
-### ID schemes
-
-| Type | Format | Example | Meaning |
-|---|---|---|---|
-| Session | `S###` | `S001` | A work session in one window |
-| Bug | `B-###` | `B-007` | A defect found during a session |
-| Investigation | `INV-###` | `INV-003` | A diagnostic that did not (yet) produce a bug fix |
-| Decision | `D-###` | `D-012` | A session-level decision not yet in Doc A's Appendix C |
-| Question | `Q-###` | `Q-004` | An open question carried across sessions |
-| Work item | `WI-S###-NN` | `WI-S001-03` | A single unit of work inside a session |
-
-### Growth and rollover
-
-Doc B is append-only, so §4 grows without bound. This is by design — nothing is ever deleted — but a single file cannot grow forever and stay usable in a fresh window. This rule says what happens when it gets too large.
-
-**The line: registers are central; session detail is local.**
-
-- **§1 snapshot, §2 registers, §3 taxonomy** stay in Doc B. Always. They are indices, and their value is that they are readable in one place. They do not move, ever.
-- **§4 session entries** are the part that grows. They roll off.
-
-**The trigger.** When Doc B exceeds roughly 150KB, or §4 holds more than 8 session entries — whichever comes first.
-
-**What happens at the trigger.**
-
-1. All but the most recent 3 session entries move to `docs/status/sessions/phase-{N}{letter}.md`, one file per phase. The most recent 3 stay in Doc B §4 so the current context is always local.
-2. Doc B §4 becomes a pointer list, formatted exactly like Doc A §15: date, session ID, phase, branch, one-line summary, and a pointer to the rollover file.
-3. Nothing is deleted. The rollover files are themselves append-only.
-4. The registers in §2 do not change. A bug opened in S003 is still `B-###` after S003's entry has rolled off.
-
-**Why not split by feature.** Bugs and investigations cross subsystem boundaries — S1 and S4 are both instances of cross-registry drift, which is the exact failure class this plan exists to eliminate. A bug that touches the parser and the planner has no single feature to live in. Splitting the registers by feature would make "what is open right now" unanswerable in one look. So the registers stay central; only the session narrative rolls off.
-
-**Why decide now.** Doc B is currently empty, so the trigger is far away. The rule is cheap to write now and expensive to retrofit mid-phase. Writing it now means the split happens at a calm moment, not under pressure with a strained window.
-
-**Calibration.** The 150KB / 8-session threshold is an estimate. After the first few sessions we will know the actual growth rate. The threshold may be adjusted; the structure — central registers, splittable session detail — does not depend on it.
-
-**Interaction with Doc A.** Doc A §15 is already a pointer index. Its pointers name sessions; their destination changes when §4 rolls off, but the pointer format does not. No change to Doc A is required.
-
----
-
-## 1. Current status snapshot
-
-*Update at every checkpoint. Keep to one screen.*
-
-```
-Date:                2026-09-15
-Last session:        S001 (complete)
-Current phase:       Phase 4d complete (merged to master); next session opens Phase 1
-Branch:              master (phase-4d-ui-api merged)
-Last commit:         14dce82 — Merge pull request #145 (phase-4d-ui-api)
-Working tree:        clean
-pytest -q:           1008 collected / 22 deselected — all pass
-Prompt suite:        — (Phase 1 baseline capture pending)
-KG version:          — (to be established in Phase 3g)
-Open bugs:           0
-Open investigations: 0
-Open questions:      2 (Q-001, Q-002)
-Next action:         S002 — begin Phase 1 Audit & Baseline (Doc A §7)
-```
-
----
-
-## 2. Registers
-
-*Indices, not history. Updated in place at every checkpoint. State changes are recorded in the session entry in §4, not here.*
-
-### 2.1 Bug register
-
-| ID | Phase | Section | Title | Severity | State | First seen | Closed |
-|---|---|---|---|---|---|---|---|
-| *(none yet)* | | | | | | | |
-
-**Severity values:** wrong-data · crash · missing-capability · cosmetic
-**State values:** open · investigating · fixed-pending-test · fixed · deferred · closed-as-evidence
-
-### 2.2 Investigation register
-
-| ID | Phase | Title | Outcome | Session |
-|---|---|---|---|---|
-| *(none yet)* | | | | |
-
-**Outcome values:** no-defect · defect-found (→ bug ID) · inconclusive · abandoned
-
-### 2.3 Session-level decision register
-
-*Decisions made during a session that are not yet in Doc A's Appendix C. Promote to Doc A when stable.*
-
-| ID | Date | Session | Decision | Rationale | Proposed for Doc A? |
-|---|---|---|---|---|---|
-| *(none yet)* | | | | | |
-
-### 2.4 Open questions register
-
-| ID | Raised | Session | Question | Owner | State |
-|---|---|---|---|---|---|
-| Q-001 | 2026-09-15 | S001 | API port — defaulting to `8000`. Confirm or override. | Bhagavan | open |
-| Q-002 | 2026-09-15 | S001 | Tester's browser — same machine or same network? Defaulting to `0.0.0.0` bind. | Bhagavan | open |
-
-**State values:** open · resolved (→ decision ID) · abandoned
-
----
-
-## 3. Test taxonomy (reference)
-
-Every work item in §4 names the kind of testing used.
-
-| Test kind | When used | Evidence required |
-|---|---|---|
-| Deterministic | Bug fires every time | Single-run pass/fail |
-| Probabilistic | Bug fires some fraction of the time | N ≥ 20 runs; distribution |
-| Byte-equality | Behaviour must not change | `diff` against golden file |
-| Per-quirk | Endpoint quirk must be honoured | One test per quirk kind |
-| KG integrity | KG rows and counts must match | `spire-ops kg` output |
-| Timing | Latency change claimed | `time` output; mean/median/p95 |
-| Load | Concurrency claimed | Concurrency N; failures; latency |
-| Corpus validation | Prompt suite coverage | `--validate` pass count |
-| Prompt suite | End-to-end answers | Pass count on all sets |
-| Manual probe | Exploratory, not automated | Command + raw output |
-| Unit | Isolated function behaviour | `pytest tests/unit/...` |
-| Integration | Cross-module with external services | `pytest tests/integration/...` |
-
----
-
-## 4. Session entries
-
-*Newest at the top. One entry per session.*
-
-### 4.0 Session entry template
-
-~~~markdown
-### S### — YYYY-MM-DD — {short title}
-
-**Phase:** {Doc A phase and section}
-**Branch:** `{branch}`
-**Session goal:** {one sentence}
-**Outcome:** {completed / partial / blocked}
-
----
-
-#### Work items
-
-##### WI-S###-01 — {title}
-
-| Field | Value |
-|---|---|
-| Type | bug · feature · refactor · investigation · test · doc |
-| Test kind(s) | {from §3} |
-| Doc A reference | {phase, section} |
-| Bug ID | {B-### or —} |
-| Investigation ID | {INV-### or —} |
-| State | {open · fixed · verified · deferred} |
-
-**Symptom / objective.**
-{What was wrong, or what was being built. One paragraph.}
-
-**Where observed.**
-{Prompt, test, file, or log line that surfaced it.}
-
-**Investigation.**
-{Numbered steps. What was tried, what was ruled out, what was learned.}
-
-1. {step}
-2. {step}
-3. {step}
-
-**Commands and output.**
-
-~~~bash
-$ {command}
-{output}
-~~~
-
-~~~bash
-$ {command}
-{output}
-~~~
-
-**Root cause.**
-{One paragraph. The mechanism, not the symptom.}
-
-**Fix.**
-{What changed. Files and lines.}
-
-**Test that proves it.**
-{Test file, test name, what it asserts.}
-- Test kind: {from §3}
-- Without fix: {fails / passes}
-- With fix: {passes}
-
-**Evidence.**
-
-*Deterministic:*
-~~~
-$ pytest -q {test_path}
-{output}
-~~~
-
-*Probabilistic (if applicable):*
-~~~
-$ for i in $(seq 1 20); do ... done
-{Runs: 20
-  correct: 19 (95%)
-  incorrect: 1 (5%)}
-~~~
-
-*Byte-equality (if applicable):*
-~~~
-$ diff docs/audit/golden/{file}.txt /tmp/after.txt
-{empty}
-~~~
-
-**Files touched.**
-- `{path}` — {what changed}
-- `{path}` — {what changed}
-
-**Commits.**
-- `{sha}` — {message}
-
-**Cross-references.**
-- Relates to: {B-### / INV-### / WI-###}
-- Doc A section: {§X.Y}
-- Follow-up: {what remains}
-
----
-
-#### Phase status update
-
-- Phase Index row for {phase}: {state change}
-- Doc A §{N}.7 Status section: {updated / not yet}
-
-#### Blockers / open questions
-
-- {Q-###: question}
-- {blocker}
-
-#### Next session should
-
-- {bullet}
-- {bullet}
-
-#### Commits on branch
-
-- `{sha}` — {message}
-- `{sha}` — {message}
-~~~
 
 ### S001 — 2026-09-15 — Phase 4d (UI + API), built early
 
@@ -428,7 +169,7 @@ latency_ms: 53015
 stages: [{'name': 'parse', 'ms': 6770}, {'name': 'plan', 'ms': 778}, {'name': 'execute', 'ms': 45462}, {'name': 'synthesize', 'ms': 1}]
 ---
 Showing 25 of 433 suppliers. These 25 suppliers have 67 open purchase orders between them.
-~~~
+```
 
 All three returned the correct `kind`. Stage timings fire. `synthesize` at 0–1ms confirms the local summary path.
 
@@ -636,9 +377,8 @@ The **summary text** in each case is byte-identical:
 
 ---
 
-## 5. Feature designs
 
-Design documents for work that spans multiple sessions. The session record (§4) points here; this section holds the plan that survives across windows.
+---
 
 ### 5.1 Phase 4d — UI and API layer (built early)
 
@@ -855,4 +595,47 @@ spire-ui  = "spire.ui.__main__:main"
 
 ---
 
-*End of document.*
+## 6. Dev / runtime separation
+
+**Why this exists.** The tester runtime clone at `~/pocs/spire-runtime` must keep running undisturbed while development continues in `~/pocs/spire`. Two instances of SPIRE at once means two sets of ports.
+
+**Topology.**
+
+| Instance | Path | Branch | Ports (MCP/API/UI) | Tunnel |
+|---|---|---|---|---|
+| Runtime | `~/pocs/spire-runtime` | `hardening-master` | 3333 / 8000 / 8888 | ngrok → 8888 |
+| Dev | `~/pocs/spire` | feature branches | 4444 / 9000 / 9999 | none |
+
+**Mechanism.** `.spire-dev.env` (gitignored) exists only in the dev tree. `run-all.sh` sources it if present; otherwise uses runtime defaults. No flag, no remembering.
+
+**Runtime untouched.** The runtime clone never sees `.spire-dev.env` because the file is gitignored, so it always runs on the default ports. Testers are not affected by dev work.
+
+**Runtime updates (deliberate, rare).** When a phase is proven and testers should see it:
+
+~~~bash
+cd ~/pocs/spire-runtime
+git fetch origin hardening-master
+git reset --hard origin/hardening-master
+pip install -e .   # in the runtime venv
+./run-all.sh
+~~~
+
+No promotion script exists. Promotion is a manual, deliberate action.
+
+---
+
+## 7. Working-style decisions (informal index)
+
+Cross-references to §2.3. Listed here so a fresh window sees the rules without hunting.
+
+- **D-001** — `hardening-master` is the integration branch. All phase work spawns off it and merges back.
+- **D-002** — Integration tests deferred during Phase 1.
+- **PR-based merges always.** No local `git merge` into long-lived branches.
+- **Branch-first for code, tooling, and non-README docs.** README and pure doc updates may go direct.
+- **`personas.yaml` untrack (task 1.1) deferred** per user instruction.
+- **One command at a time in interactive sessions.** The user prefers to run commands individually and confirm output before the next one.
+
+---
+
+
+*End of Phase 4 file.*

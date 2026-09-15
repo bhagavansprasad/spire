@@ -476,13 +476,26 @@ Revert the merge commit. Restore the moved files. If credentials were rotated, n
 
 ### 7.7 Phase 1 Status
 
-**Current status:** ⬜ Not started
+**Current status:** 🟡 In progress — 1.1 deferred (see below); 1.2 complete; 1.3 onwards pending.
 
 **Evidence:**
 
-*(to be filled in after Phase 1 completes)*
+**Task 1.2 complete, 2026-09-15.** `scripts/display_formatters.py` moved to `src/spire/rendering/formatters.py`, with `src/spire/rendering/__init__.py` re-exporting the public surface. All 1008 tests pass (22 deselected). PR #146 merged to `hardening-master`. Full forensic record: Doc B §4 S002 / WI-S002-01.
 
 **Deviations from plan:**
+
+- **§7.3.1 task 1.1 (`personas.yaml` untrack) — deferred** per user instruction. To be handled at the end of the plan.
+- **§7.3.2 task 1.2 — actual import sites exceeded the plan.** §7.3.2 says "Update four imports." The actual count was:
+  - 8 import statements across 6 files (`scripts/promptkit.py` × 2, `scripts/run_prompt_set.py`, `scripts/run_graph.py`, `scripts/verify_bug1_step3.py`, `tests/test_display_summary_only.py` × 2, `tests/test_bug1_step3_supplier_details.py`)
+  - 1 hard path reference (`scripts/verify_bug1_step3.py` line 37)
+  - 2 docstring/print-string edits in the moved module's consumers
+  This is recorded as a Phase 1 finding: the plan's inventory of import sites was itself incomplete. Direct input to §7.3.3 §A (registry drift map) — the same class of "information appears in more than one place, all must move together" the audit exists to enumerate.
+- **Task 1.3/1.4 numbering preserved; branch renamed.** The plan (§6, §14.4) implies a per-phase branch. `phase-1-hygiene` was created for task 1.2 and merged to `hardening-master` via PR #146. A fresh `phase-1` branch carries the remaining Phase 1 tasks (1.3–1.12), one commit per task, one PR at the end. No renumbering; the branch name changed, not the task order.
+
+**New working-style decision recorded in Doc B §2.3:**
+
+- `D-001` — `hardening-master` is the integration branch for the entire v3.2 plan. Phase sub-branches spawn off it and merge back to it. `master` stays frozen until the plan completes.
+- `D-002` — Integration tests (the 22 marked `integration`) are deferred. Not run, not investigated, not fixed during Phase 1.
 
 ---
 
