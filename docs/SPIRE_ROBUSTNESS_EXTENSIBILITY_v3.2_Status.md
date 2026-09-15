@@ -68,7 +68,7 @@ Date:                2026-09-15
 Last session:        S001 (complete)
 Current phase:       Phase 4d complete (merged to master); next session opens Phase 1
 Branch:              master (phase-4d-ui-api merged)
-Last commit:         (paste merge SHA after `git merge`)
+Last commit:         14dce82 — Merge pull request #145 (phase-4d-ui-api)
 Working tree:        clean
 pytest -q:           1008 collected / 22 deselected — all pass
 Prompt suite:        — (Phase 1 baseline capture pending)
@@ -631,8 +631,8 @@ The **summary text** in each case is byte-identical:
 
 #### Commits on branch
 
-- `<pending>` — `phase 4d: FastAPI backend + Streamlit UI for SPIRE`
-- `<pending>` — merge commit on `master`
+- `1b7733e` — phase 4d: FastAPI backend + Streamlit UI for SPIRE (branch `phase-4d-ui-api`)
+- `14dce82` — Merge pull request #145 (into `master`)
 
 ---
 
