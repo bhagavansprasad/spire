@@ -389,7 +389,7 @@ def _emit_run_graph_output(state, menu):
     using the same loggers/answer(). Honors pyproject.toml + --show-*."""
     from spire.diagnostics import answer, get_logger
     from spire.nl_parser.capability import capability_message
-    from display_formatters import (
+    from spire.rendering.formatters import (
         _format_intent, _format_outputs, _format_plan,
         _format_projected_table, _format_summary, _format_synthesized,
     )
@@ -479,7 +479,7 @@ def _print_stage_breakdown(rpt):
 
 async def _run_async(files, single_prompt, show_stages) -> int:
     from fastmcp import Client
-    from display_formatters import MCP_SERVER_URL
+    from spire.rendering.formatters import MCP_SERVER_URL
 
     menu = load_kg_menu()
 

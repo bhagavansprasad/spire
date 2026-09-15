@@ -3,3 +3,4 @@ pytest-asyncio>=0.23
 fastapi
 streamlit
 httpx
+pytest-xdist>=3
