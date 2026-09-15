@@ -1,0 +1,1 @@
+"""SPIRE UI — Streamlit frontend (Phase 4d, §5.1.6)."""

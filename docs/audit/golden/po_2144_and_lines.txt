@@ -1,0 +1,65 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=548 out=64 total=612
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=548 out=64 total=612
+Router: modules=['procurement']
+[llm] stage=parse in=3926 out=487 total=4413
+[cache] HIT   cached=3915  fresh=11  total_in=3926
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['PurchaseOrderLine']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_lines
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    purchaseorderline
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+  purchaseorderline: 2 record(s)
+    [1] {'POLineId': 19782, 'POHeaderId': 2144, 'LineNumber': 1, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+    [2] {'POLineId': 19783, 'POHeaderId': 2144, 'LineNumber': 2, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'purchaseorderline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    548  out=     64  total=    612
+  classify     in=    548  out=     64  total=    612
+  parse        in=   3926  out=    487  total=   4413
+  TOTAL        in=   5022  out=    615  total=   5637
+

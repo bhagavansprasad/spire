@@ -10,12 +10,17 @@ where = ["src"]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+spire-api = "spire.api.server:main"
+spire-ui  = "spire.ui.__main__:main"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
     "integration: marks tests requiring external services (MCP server, Gemini, Fusion pod)",
 ]
 addopts = "-m 'not integration'"
+testpaths = ["tests"]
 
 # Diagnostic output, the committed team default (OBS-02).
 #
