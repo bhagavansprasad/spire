@@ -38,3 +38,4 @@ promptkit_*/
 promptkit_overnight_*.log
 *:Zone.Identifier
 logs/
+.streamlit/
