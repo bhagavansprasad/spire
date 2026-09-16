@@ -68,7 +68,9 @@ bundles:
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/scorer/parser_stress.txt
   - scripts/prompts/scorer/tool_selection.txt
-
+  - scripts/run_prompt_set.py
+  - src/spire/rendering/formatters.py
+  
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora:
   - scripts/prompts/00_dipstick.json
