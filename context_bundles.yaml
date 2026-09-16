@@ -12,8 +12,12 @@ bundles:
   - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
+  - docs/spire-robustness/00_Doc_B_Index.md
+  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/04_Phase_04_Structure.md
+  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/spire-robustness/TEMPLATE_Session_Entry.md
+  - docs/spire-robustness/WORKING_STYLE.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire_architecture.md
   - docs/spire_plan.md
@@ -40,8 +44,11 @@ bundles:
   # ── the master plan + its append-only status log ──
   # This bundle is exactly what a new window needs to resume work.
   plan:
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
+  - docs/spire-robustness/00_Doc_B_Index.md
+  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/04_Phase_04_Structure.md
+  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/spire-robustness/TEMPLATE_Session_Entry.md
 
   prompts:
   - scripts/prompts/00_dipstick.txt
@@ -87,7 +94,6 @@ bundles:
   - scripts/rebuild_kg.sh
   - scripts/run_graph.py
   - scripts/run_prompt_set.py
-  - scripts/display_formatters.py
   - scripts/flag_matrix.sh
   - scripts/test_kg_connection.py
   - scripts/verify_invoices.py
