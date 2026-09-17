@@ -77,6 +77,99 @@ Cross-references Doc B index §7.
 15. **Every claim needs a command and an output.** If a command and its
     output cannot be pasted, it is not evidence.
 
+## Evidence standard for findings (S0–S8)
+
+Before anything is written into a findings log as a bug, the claim
+walks through S0–S8 in order. If a step fails, the claim stops at that
+step and is classified accordingly. The point is not caution for its
+own sake — it is that a wrong finding costs as much as a missed one,
+because a later session acts on it.
+
+**S0 — State the claim in one sentence.**
+Either "X is a bug" or "X is not a bug." No other forms. "X looks
+wrong," "X is drift," "X is odd" are hunches. Hunches live in
+conversation; they do not enter a document.
+
+**S1 — Name the harm.**
+A bug is a harm. Pick exactly one:
+  - wrong data returned
+  - wrong narration (data right, words wrong)
+  - crash
+  - refusal of an in-scope prompt
+  - silent omission
+  - cost regression (extra calls, tokens)
+  - inconsistency between two paths
+
+No harm → stop. It is an observation, not a bug. Observations can be
+attached to a related finding as a note; they do not get their own
+F-NNN.
+
+**S2 — Paste the evidence.**
+Evidence tiers, best to worst:
+  1. curl-verified — the pod directly confirms or refutes
+  2. runtime, output pasted — a prompt run, output pasted verbatim
+  3. static, cited by `file:line` — grep or code read
+  4. "I recall the code does X"
+
+Tier 4 is not evidence. It is a hypothesis. It may be investigated;
+it may not be written up.
+
+**S3 — Name the mechanism.**
+Cite the specific `file:line` or function that causes the harm. No
+line, no mechanism — just a correlation.
+
+**S4 — Disprove the alternative.**
+Name one alternative explanation and show it is not the cause. Common
+ones:
+  - the pod data changed between runs
+  - a different code path was actually taken
+  - the diagnostic is lying; the pipeline is fine
+  - it is by design (read the design doc first)
+
+If no alternative can be named, the cause has not been isolated.
+
+**S5 — Name the falsifier.**
+If someone said "no, this isn't a bug," what one command would prove
+them right? If no such command can be named, the claim is not
+falsifiable and cannot enter the log.
+
+**S6 — Classify.** Only now write the F-NNN entry:
+  - **Confirmed** — S1–S5 all passed.
+  - **Candidate** — some steps failed; note which.
+  - **Observation** — S1 failed; goes as a note under a related
+    finding, not its own entry.
+  - **Closed-as-not-a-bug** — a prior claim disproven by stronger
+    evidence; cite the old entry ID.
+
+**S7 — Cross-link.**
+Every entry cites at least one §A / §B / §D row or another F-NNN.
+Orphan entries get re-checked before the next session.
+
+**S8 — List what was NOT checked.**
+Explicit. This is what a future session reads to decide where to look
+next. "Nothing else was checked" is a valid and useful entry.
+
+**The contract.** Every time an F-NNN is proposed, the steps S0–S8 are
+walked in order and it is shown which passed. Any time the question
+"is this a bug?" is asked, the answer names the step, not a paragraph.
+
+**A worked example — F-006, wrongly filed as a bug.** The claim was
+"`top_invoices_by_amount` is in `draft.py` but not in
+`modes/m_aggregation.sysprompt`; that is a bug." Under this standard:
+
+  - S0 passed — the claim was stated.
+  - S1 failed — no harm was named. No prompt broke because of the
+    disagreement; no wrong answer, no crash, no refusal.
+  - Under the standard, the claim should have stopped at S1 as an
+    observation, attached to F-003 (which it turned out to belong to)
+    rather than given its own F-NNN.
+  - It was instead written up as F-006 and only disproven later, at the
+    cost of a probe and a rewrite.
+
+The lesson is not "F-006 was hard." It is that a label ("drift") was
+treated as a finding before a harm had been shown. S1 is the step that
+was skipped.
+
 ## Deferred items
 
 16. **`personas.yaml` untrack (task 1.1) — deferred.** Handled at the
@@ -88,29 +181,34 @@ Cross-references Doc B index §7.
 ## Dev / runtime separation
 
 18. **Runtime clone at `~/pocs/spire-runtime` is never disturbed.**
-    Ports 3333/8000/8888. Testers reach it via ngrok.
+    Ports 3001/3002/3003. Testers reach it via ngrok.
 
-19. **Dev tree at `~/pocs/spire` uses 4444/9000/9999.** Set via
-    `.spire-dev.env` (gitignored). Runtime never sees this file, so it
-    stays on defaults.
+19. **Dev tree at `~/pocs/spire` uses 4001/4002/4003.** Set by the
+    `spire()` shell function from `SPIRE-PORTS.env`. The two sets are
+    `X00Y`, X=3 for runtime and 4 for dev.
 
-20. **No promotion script.** Runtime updates are manual, deliberate,
+20. **The `run-all.sh --dev | --runtime` flag is required.** There is
+    no default mode. `SPIRE_MODE` is set by `spire()` / `spirer()` in
+    `~/.bashrc`. `--status` and `--stop` are scoped to the current
+    mode and never touch the other tree's ports.
+
+21. **No promotion script.** Runtime updates are manual, deliberate,
     rare — `git fetch && git reset --hard` in the runtime tree.
 
 ## Auth
 
-21. **No auth at the tunnel or app layer.** When auth lands, SPIRE owns
+22. **No auth at the tunnel or app layer.** When auth lands, SPIRE owns
     it. Do not add an extra module in front.
 
 ## Reply discipline
 
-22. **Short, plain, no preamble.** Skip "Great question!" and similar.
+23. **Short, plain, no preamble.** Skip "Great question!" and similar.
     Answer, then stop.
 
-23. **Ask before assuming.** If something is ambiguous and the answer
+24. **Ask before assuming.** If something is ambiguous and the answer
     changes what you produce, ask — but ask once, concisely.
 
-24. **No re-litigating resolved points.** If the answer was given in a
+25. **No re-litigating resolved points.** If the answer was given in a
     prior turn, use it.
 
 ---
