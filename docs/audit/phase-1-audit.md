@@ -19,7 +19,7 @@ notes). ¬ßH has twelve observations, three of which closed on
 - Doc B index — `00_Doc_B_Index.md`
 - Phase 1 log — `01_Phase_01_Audit_and_Baseline.md`
 
----
+--- 
 
 ## Methodology
 
@@ -101,7 +101,7 @@ recorded in §B.4 as positive examples.
 | entity_synonym | many | Classifier menu shows a subset; parser infers from prompt examples | partial (by design) |
 | field_synonym | many | `expand_field_synonyms` runs post-parse; `b_who_columns.sysprompt` teaches the `who columns` term | partial (by design) |
 | po_status | 18 | No rule teaches these values — no `b_po_status.sysprompt`, no menu rendering | **disagree** — parser works from model prior. Probed 2026-09-18 at four representative values (`closed for receiving`, `held`, `pending signature`, `pending approval`); the parser emitted either the pod value or a case/synonym variant the KG resolves, and the pod filtered correctly in every case that produced output. No F-NNN; risk measured and low. |
-| relationship_phrase | 8 | Not loaded by `load_kg_menu`; not referenced in parser_planner, parser_context, or executor | **disagree** — dead vocabulary |
+| relationship_phrase | 8 | Corrected 2026-09-18: loaded by `load_kg_menu` (loader.py:182 includes it in `kind_order`; line 190 iterates). Not consumed by any downstream reader — `grep -rn "relationship_phrase" src/` finds only the loader's own three references. | **disagree** — loaded-but-never-read vocabulary (see C-07) |
 
 **A-16 recommendation — closed 2026-09-18.** The probe ran; see the `po_status` row above. No fix warranted for `po_status` — the vocab-resolution path handles case differences and divergent user words without the parser needing the pod's exact forms. `relationship_phrase` (8 rows, unread by every consumer) is a §C dead-code cleanup: delete the rows or wire them into a rule; leaving them is a maintenance hazard.
 
@@ -261,12 +261,12 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | ID | Where | What | Confirm |
 |---|---|---|---|
 | C-01 | `src/spire/mcp_server/tools/suppliers_by_country.py` | Module not registered in `server.py`; not in `kg_entity_tool` or `kg_edge_tool`. Its replacement (`suppliers.py::search_suppliers`) documents the supersession. **Not a clean delete:** `tests/test_suppliers_by_country_tool.py` imports and tests the module directly, and `tests/test_executor.py` uses `search_suppliers_by_country` as a mock tool name in ~15 fixtures. Deleting requires renaming those mocks. | `grep -rn "search_suppliers_by_country\|suppliers_by_country" src/ tests/ scripts/` — ran 2026-09-18 |
-| C-02 | `src/spire/planner/plan_builders.py::_previous_entity` | Declared, docstring reads "v1 does NOT use this helper... do not call it. Kept here as a stub so the design-doc contract is visible." | `grep -rn "_previous_entity" src/` — expect only the definition |
-| C-03 | `src/spire/synthesizer/capability.py::capabilities_sentence` | Public helper. Docstring reads "No longer used by `capability_message`... Kept public because 'what can you do?' is a fair question." No caller found. | `grep -rn "capabilities_sentence\|_capabilities_sentence" src/ tests/` |
-| C-04 | `src/spire/synthesizer/p2p.py::SupplierSummaryResponse` | Pydantic model, re-exported, no construction site found. Docstring describes an LLM summary-only path that has since gone fully local. | `grep -rn "SupplierSummaryResponse" src/ tests/` |
+| C-02 | `src/spire/planner/plan_builders.py::_previous_entity` | Declared, docstring reads "v1 does NOT use this helper... do not call it. Kept here as a stub so the design-doc contract is visible." Confirmed 2026-09-18: the definition is the only production hit; `planner.py:66` imports the name but never calls it, so the import is a second, latent orphan. The `previous_entity` local variable in `planner.py:410,417,435` is unrelated to the stub. | `grep -rn "_previous_entity" src/` — ran 2026-09-18: 1 def, 1 dead import |
+| C-03 | `src/spire/nl_parser/capability.py::capabilities_sentence` (path corrected 2026-09-18) | Public helper. Docstring reads "No longer used by `capability_message`... Kept public because 'what can you do?' is a fair question." Reclassified from "orphan" to "test-guarded public helper": `tests/test_nl_parser_capability.py:62,276,279` imports and exercises it. The original row's path (`src/spire/synthesizer/capability.py`) was wrong; no such file exists. No production caller — the test guard is the only consumer. | `grep -rn "capabilities_sentence\|_capabilities_sentence" src/ tests/` — ran 2026-09-18 |
+| C-04 | `src/spire/synthesizer/p2p.py::SupplierSummaryResponse` | Pydantic model, no construction site. Docstring describes an LLM summary-only path that has since gone fully local. Confirmed 2026-09-18: the only production hit outside the definition is an unused import in `synthesizer.py:89`. The original row's "re-exported" claim is not proven — there is no `__all__` entry and no consumer. Latent cleanup: delete the import and the model together. | `grep -rn "SupplierSummaryResponse" src/ tests/` — ran 2026-09-18 |
 | C-05 | `src/spire/planner/lookup.py::find_entity` | Function defined and re-exported from `planner.py:50`. No call site in production: `planner.py` body, `plan_builders.py`, `kg_db.py`, and the parser modules do not call it. Only consumers are tests. | `grep -rn "find_entity\b" src/ tests/ scripts/` — ran 2026-09-18 |
-| C-06 | `src/spire/nl_parser/context/modes/*.sysprompt` (6 files) | `m_account_balance`, `m_aggregation`, `m_comparison`, `m_count`, `m_open_invoices`, `m_topn_open_invoices`. Listed in `order.manifest` under folder `modes`, which is in neither `_TIER1` nor `KNOWN_MODULES`; `assemble_subset` never loads them. **Cross-ref: F-003.** | `grep -c "modes/" src/spire/nl_parser/context/order.manifest` — expect 6 |
-| C-07 | `scripts/sql/kg_schema.sql`, `kg_vocabulary` — `relationship_phrase` rows (8) | KG kind seeded but no consumer reads it. `load_kg_menu` loads 5 kinds; `_format_menu` renders only `country`. **Cross-ref: A-16.** | `grep -rn "relationship_phrase" src/` — expect only the seed file |
+| C-06 | `src/spire/nl_parser/context/modes/*.sysprompt` (6 files) | `m_account_balance`, `m_aggregation`, `m_comparison`, `m_count`, `m_open_invoices`, `m_topn_open_invoices`. Listed in `order.manifest` under folder `modes`, which is in neither `_TIER1` nor `KNOWN_MODULES`; `assemble_subset` never loads them. **Cross-ref: F-003.** Confirmed 2026-09-18: the manifest carries exactly 6 `modes/` entries. | `grep -c "modes/" src/spire/nl_parser/context/order.manifest` — ran 2026-09-18: 6 |
+| C-07 | `scripts/sql/kg_schema.sql`, `kg_vocabulary` — `relationship_phrase` rows (8) | KG kind seeded but no downstream consumer reads it. Corrected 2026-09-18: the loader DOES iterate it — `src/spire/kg/loader.py:182` includes `relationship_phrase` in `kind_order`, and line 190 loops over that list, so the rows ARE loaded into the menu. The dead-code claim survives on a different mechanism: no downstream reader consumes the loaded value (`grep -rn "relationship_phrase" src/` finds only the loader's own three references — the comment on line 181, the `kind_order` list, and the label map). This is "loaded-but-never-read", not "never loaded". Also note `kind_order` lists 4 kinds, not the 5 the prior wording claimed. **Cross-ref: A-16.** | `grep -rn "relationship_phrase" src/` — ran 2026-09-18: 3 hits, all in `loader.py` |
 
 ### C.2 Candidates — need a grep outside the read bundles
 
@@ -275,7 +275,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | C-08 | `_read_clob` in `kg_db.py`, `vocabulary.py`, `loader.py` | Three separate definitions of the same helper. Each is used by a different module; the duplication is real, not an orphan. §C-adjacent — a consolidation item, not a delete item. | `grep -rn "def _read_clob" src/` — expect 3 |
 | C-09 | `src/spire/planner/registries.py::_OUTPUT_NAME_BY_ENTITY` (partial) | The map has 11 entries. Several entities (`Site`, `Classification`, `Contact`, `POSchedule`, `PurchaseOrderLine`, `PODistribution`) have no entry; their `output_name` falls back to `entity_name.lower()`. The fallback makes the map's coverage invisible. | `grep -c "_OUTPUT_NAME_BY_ENTITY\[" src/` — if 0, the map is only read via `.get()`, silent partial coverage |
 | C-10 | `src/spire/mcp_server/tools/purchase_order_schedules.py` — `ReceivedAmount` | Projected and returned on every schedule row; `po_lifecycle.py` docstring says the value is 0 or null on every row on this pod (~4,500 checked). The lifecycle derives received from quantities; the field is dead weight on the wire. | `grep -rn "ReceivedAmount" src/` |
-| C-11 | `scripts/verify_bug*.py`, `scripts/apply_bug1_step2_context_assembly.py`, `scripts/t_s1_*.py`, `scripts/probe_cache*.py` | Scratch scripts from S1 remediation and cache-probing. Not referenced by any module in the read bundles; each is self-contained. | `grep -rn "verify_bug1\|t_s1_repro\|probe_cache" src/ tests/` — expect zero |
+| C-11 | `scripts/verify_bug*.py`, `scripts/apply_bug1_step2_context_assembly.py`, `scripts/t_s1_*.py`, `scripts/probe_cache*.py` | Scratch scripts from S1 remediation and cache-probing. Not referenced by any module in the read bundles; each is self-contained. Confirmed 2026-09-18: no module imports any of these; the only grep hit is a docstring reference, not an import. | `grep -rn "verify_bug1\|t_s1_repro\|probe_cache" src/ tests/` — ran 2026-09-18: one hit, a docstring in `tests/test_bug1_step3_supplier_details.py` naming `scripts/verify_bug1_step3.py`. Not an import. |
 | C-12 | `docs/designs/*.puml` and `*.svg` | Excluded from bundles by `build_context.py` (`.puml`, `.svg` in `DEFAULT_EXCLUDES`). §C candidate only if "dead code" is read broadly to include documentation artifacts. | Not applicable — the exclusion itself is the classification |
 
 ### C.3 Unreachable — need a bundle share
@@ -284,6 +284,28 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 - `scripts/*` — unused imports in `promptkit.py`, `run_graph.py`, `rebuild_kg.py`, `draw_graph.py`, `build_classifier_context.py`.
 - `promptkit_sets.yaml` and `scripts/prompts/*` — unused prompt entries.
 - `personas.example.yaml` — drift from `personas.yaml` if any.
+
+### C.3 — Closed 2026-09-18
+
+The four remaining bundles were read (`prompts` earlier; `scripts`, `tests`, `corpora` this session). Findings:
+
+| ID | Where | What | Confirm |
+|---|---|---|---|
+| C-13 | `scripts/prompts/scorer/tool_selection.txt` | Corpus file whose header names its runner as `scripts/validate_tool_selection.py`. That script does not exist in the repository. The corpus is dead — nothing reads it. | `grep -rn "validate_tool_selection" src/ scripts/ tests/` — expect one hit, the header comment in this file. `ls scripts/validate_tool_selection.py` — expect not found. |
+| C-14 | `scripts/prompts/README.md` Layout section | Lists 10 prompt files (`00`–`10`, `qa_testcases`, `README.md`, `scorer/parser_stress.txt`). The source tree has 15 — missing `11_column_vocabulary.txt`, `12_po_supplier_include.txt`, `mini.txt`/`mini.json`, `new/retest_prompts.txt`, `scorer/tool_selection.txt`. | `ls scripts/prompts/` vs the README's Layout block. |
+| C-15 | `scripts/prompts/mini.txt` / `mini.json` | Six-prompt ad-hoc test set. Not in `promptkit_sets.yaml`. Not in the README's Layout. No runner references it. | `grep -rn "mini" scripts/promptkit_sets.yaml scripts/prompts/README.md` — expect zero. |
+| C-16 | `scripts/prompts/new/retest_prompts.txt` | One-off re-test set whose header names a past analysis ("the dumps ran on gemini-3.6-flash") and a model version not used today. No runner references it. | `grep -rn "retest_prompts" src/ scripts/ tests/` — expect zero. |
+
+**Two scripts kept alive by tests** (recorded because §C would otherwise read as if all scripts are unreferenced):
+
+- `scripts/promptkit.py` — loaded by `tests/test_promptkit.py` via `importlib.util.spec_from_file_location`.
+- `scripts/inspect_trace.py` — loaded by `tests/test_inspect_trace.py` via `sys.path.insert`.
+
+**Unused-import check on the five named files:** clean. No unused imports found.
+
+**Test-skip check:** no permanently-skipped tests. Every `pytest.mark.skipif` in the tests bundle has a satisfiable condition.
+
+**Not checked:** `personas.example.yaml` vs `personas.yaml` drift — `personas.yaml` is excluded from every bundle for credential reasons. The comparison needs both files pasted directly, or `diff personas.example.yaml personas.yaml`.
 
 ### C.4 Notes
 
@@ -295,9 +317,21 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 
 ### C.5 What I did not do
 
-- No grep was run for C-02, C-03, C-04, C-06, C-07 — those rows carry proposed commands, not executed ones.
-- No claim is made that a caller does not exist in `scripts/` or `tests/` except where the grep above covered it (C-01, C-05).
-- `src/spire/agent/`, `src/spire/api/`, `src/spire/ui/`, `src/spire/oracle/`, `src/spire/rendering/`, and parts of `src/spire/executor/` were read only via what appeared in other bundles.
+Updated 2026-09-18. The earlier version of this section listed proposed-but-unrun greps and unnamed "not checked" scopes; most are now closed by the §C.5 greps (2026-09-18) and the §C.3 sweep (2026-09-18).
+
+Still not checked:
+
+- (closed 2026-09-18) `personas.example.yaml` vs `personas.yaml` — diffed. No schema drift: both files carry the same key structure (`fusion.{base_url, username, password, auth_type}` and `oracle.{dsn, username, password}`). The differences are three, all benign at the schema level: (1) the example carries a ten-line documentation header the live file does not need; (2) the example's values are placeholders where the live file's are real; (3) the live file carries multiple commented-out persona blocks, which the example does not. Items (1) and (2) are expected; item (3) is a credential-hygiene note that belongs with the deferred personas.yaml-untrack task (E-05), not with §C.
+- `src/spire/agent/`, `src/spire/api/`, `src/spire/ui/`, `src/spire/oracle/` — read only via what appeared in other bundles.
+- Parts of `src/spire/executor/` beyond what appeared in the `graph_kg` bundle.
+- `tests/manual/ui/` (a checklist file only, per source-tree.txt).
+- `docs/archive/` (excluded from bundles by design).
+
+Resolved this session:
+
+- C-02, C-04, C-06 confirmed; C-03 and C-07 corrected (2026-09-18 §C.5 greps).
+- §C.3's three parts swept; C-13 through C-16 added.
+- C-11's Confirm expectation corrected: the grep returns one hit (a docstring, not an import).
 
 ---
 
@@ -367,17 +401,17 @@ None.
 
 | ID | Item | Note |
 |---|---|---|
-| E-11 | **`phase-4d-ui-api` branch.** Not part of the v3.2 hardening plan. | Parked. Confirm with `git log --oneline phase-4d-ui-api \| head` whether it holds unmerged work or is stale. |
-| E-12 | **`feature/ar-prompt-18-parking` (referenced in KG seed comments).** A `lag_query` filter and a `get_receipts_with_lag` entity tool were live in the KG database but in neither the seed nor `hardening-master`; the code sits on this parked branch. The KG rows were removed to reconcile seed and database (per the `kg_schema.sql` `kg_entity_filter` seed comment). | Parked. Confirm with `git branch -a \| grep prompt-18`; the branch is not in the visible branch list. |
-| E-13 | **`fix/overnight-20260904`, `fix/overnight-batch2`.** Named as overnight fix batches; whether they are merged into `hardening-master` or carry unmerged work is not visible from the branch list alone. | Confirm with `git log hardening-master..fix/overnight-20260904 --oneline` and the same for batch2. |
-| E-14 | **`feat/parser-prompt-cache`, `feat/router-show-parser-diagnostic`.** Per the handoff, the router diagnostic is merged (`34044d8`, `16a22f6`, `b0cb73e`); whether the branches themselves are still live is a hygiene question. | Confirm with `git branch --merged hardening-master \| grep feat/`. |
+| E-11 | **`phase-4d-ui-api` branch.** Corrected 2026-09-18: this is Phase 4d of the v3.2 plan, marked Complete in Doc A §6 and §10.7 on 2026-09-15 — not a parked off-plan branch. | `git log --oneline phase-4d-ui-api \| head` ran 2026-09-18: branch exists locally; tip is `1b7733e phase 4d: FastAPI backend + Streamlit UI for SPIRE`, with no commits on top of the 4d work. Recent history also carries the parser-prompt-cache merges (PRs #143, #144) and three "Defining/Reordering scope" commits from earlier phases. Merge state into `hardening-master` confirmed 2026-09-18: `git log hardening-master..phase-4d-ui-api --oneline` is empty — every commit on the branch is in `hardening-master`. |
+| E-12 | **`feature/ar-prompt-18-parking` (referenced in KG seed comments).** A `lag_query` filter and a `get_receipts_with_lag` entity tool were live in the KG database but in neither the seed nor `hardening-master`; the code sits on this parked branch. The KG rows were removed to reconcile seed and database (per the `kg_schema.sql` `kg_entity_filter` seed comment). | `git branch -a \| grep prompt-18` ran 2026-09-18: branch exists on origin as `remotes/origin/feature/ar-prompt-18-parking`. Remote-only; not checked out locally. The earlier "not in the visible branch list" clause was true of the local list only. The branch's commits were not inspected beyond the grep — what prompt-18 carries beyond the lag work is still unknown. **Cross-ref: F-029.** |
+
+| E-13 | **`fix/overnight-20260904`, `fix/overnight-batch2`.** Named as overnight fix batches; whether they are merged into `hardening-master` or carry unmerged work is not visible from the branch list alone. | `git log hardening-master..fix/overnight-20260904 --oneline` and the batch2 equivalent both ran 2026-09-18: **both empty.** No commits on either branch are outside `hardening-master`. Both are fully merged; no unmerged work to absorb. Row closes. |
+| E-14 | **`feat/parser-prompt-cache`, `feat/router-show-parser-diagnostic`.** Per the handoff, the router diagnostic is merged (`34044d8`, `16a22f6`, `b0cb73e`); whether the branches themselves are still live is a hygiene question. | `git branch --merged hardening-master \| grep feat/` ran 2026-09-18: outputs `feat/parser-prompt-cache` and `feat/router-show-parser-diagnostic`. Both feature branches exist locally and are merged into `hardening-master`. No further hygiene work required; optional cleanup is `git branch -d` on each. |
 
 ### E.5 Not inspected
 
-- Git history, branch divergence, unmerged commits — none checked this session.
 - `docs/spire_overnight_findings.md` (the "main register" E-04 refers to) — not read.
 - Uncommitted work on any branch — not inspected.
-- The status of `phase-4d-ui-api`, `fix/overnight-*`, and the two feature branches — named in the branch list, not verified.
+- The commits on `feature/ar-prompt-18-parking` beyond the lag work — not inspected; what prompt-18 carries is unknown.
 
 ### E.6 Notes
 
@@ -395,7 +429,7 @@ None.
 
 | Metric | Value | Source | Status |
 |---|---|---|---|
-| Test suite (master) | 913 passed, 18 deselected | `SPIRE_SESSION_HANDOFF.md` | cited; not re-run this session — verify with `pytest -q` |
+| Test suite (master) | 1011 passed, 22 deselected | `pytest -q`, 2026-09-18 | measured — 3m43s. Supersedes the prior handoff's cited 913/18; suite grew ~95 tests since that snapshot. |
 | `--validate` pass rate (12-set, `gemini-3.5-flash`) | 236 / 240 | `SPIRE_SESSION_HANDOFF.md` | cited; not re-run this session |
 | `--validate` pass rate (`gemini-3.1-flash-lite`) | 205 / 240 | `SPIRE_SESSION_HANDOFF.md`, S2 | cited; the degradation that motivated S2 |
 | KG tables matching seed (9 tables) | 9 / 9 | `print_kg.py --counts-only`, 2026-09-18 | measured (A-17) |
@@ -437,7 +471,7 @@ Twenty-one prompts run this session with full `--show-stages`. Totals are the `T
 
 ### F.3 Not measured
 
-- No run of `pytest -q` this session — the 913 figure is cited from the handoff.
+- `pytest -q` re-run 2026-09-18. A first attempt with the pod down returned `957 passed, 54 failed, 22 deselected` — every failure a `503 Service Unavailable` against `eqjz.ds-fa.oraclepdemos.com`. Not a code regression. After pod recovery, the same suite returned `1011 passed, 22 deselected in 3:43` — the two runs reconcile exactly (`957 + 54 = 1011`). The prior handoff's cited 913/18 is superseded. Design note for Phase 4b: the 54 pod-dependent tests are NOT `@pytest.mark.integration` — they only `skipif(not PERSONAS_FILE.exists())`, so with `personas.yaml` present and the pod down they fail rather than skip. The 22 deselected are the genuinely-marked integration tests. `pytest -q` is therefore not a pod-independent gate today.
 - No `--validate` run this session — the 236/240 figure is cited from the handoff.
 - No latency figures. Wall-clock timing was not captured; the F-022 and F-023 loops ran to completion without timing instrumentation.
 - No cost-in-currency figures. Token totals are the raw counts from the `Token usage:` block.
