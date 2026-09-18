@@ -115,11 +115,12 @@ Usually too broad for one focused task.
 
 Contains the master plan (`SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md`),
 the Phase 1 audit (`docs/audit/phase-1-audit.md`), the findings log
-(`docs/audit/findings-log.md`), the Phase 1 session log
+(`docs/audit/findings-log.md`), the three golden files
+(`docs/audit/golden/*.txt`), the Phase 1 session log
 (`01_Phase_01_Audit_and_Baseline.md`), the Phase 4 structure file, the
-session template, and the Doc B index. The audit and log were added
-2026-09-18 — this bundle is now the single request that reproduces the
-audit's current state, which is what the handoff says a new window
+session template, and the Doc B index. The audit, log, and goldens were
+added 2026-09-18 — this bundle is now the single request that reproduces
+the audit's current state, which is what the handoff says a new window
 should read first.
 
 **When to request it:** starting a new phase, resuming audit work, or
