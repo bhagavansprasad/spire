@@ -25,7 +25,10 @@ Cross-references Doc B index §7.
 
 4. **No nested code fences.** Nested ` ``` ` inside ` ``` ` breaks copy
    and download. Use `~~~` for the outer fence, or move the inner
-   content to a separate file.
+   content to a separate file. **This applies to every pasteable block
+   you produce** — findings, audit edits, handoffs. If the content
+   contains even one ` ``` ` inside it, the outer wrapper is `~~~`.
+   The user pastes verbatim; a mis-fenced block is a wasted turn.
 
 ## Generation and approval
 
@@ -71,11 +74,37 @@ Cross-references Doc B index §7.
     - `TEMPLATE_Session_Entry.md` — the session template.
     - Created only as phases begin.
 
-14. **Append-only.** Corrections are new entries referencing old IDs.
-    Nothing is deleted.
+14. **Three update disciplines, three documents.**
+    - **Doc A — frozen.** No design edits, no renumbering. Status and
+      deviation notes only (see §12).
+    - **The phase-1 audit — working document.** Rows close in place: a
+      `pending` state changes to `agree` / `disagree`, with a closure
+      clause naming the F-NNN. Appending rather than editing a stale
+      state is the exception, not the rule.
+    - **The findings log — append-only.** Corrections are new entries
+      referencing old IDs. Nothing is deleted. Newest at the top.
+
+    In practice: an audit row that says "Pending — needs bundle X"
+    becomes "agree" or "disagree" once the bundle is read; the audit
+    keeps a clean current state. A finding that was written wrong is
+    not edited — a new finding cites the old and corrects it.
 
 15. **Every claim needs a command and an output.** If a command and its
     output cannot be pasted, it is not evidence.
+
+    **And every pasteable edit ships with its verification commands.**
+    When handing over a block for the user to search-and-replace into a
+    document, include the two or three commands that confirm:
+    - the anchor was unique before the paste (a `grep -c` on the anchor,
+      expecting `1`);
+    - the anchor is intact after (a `grep -n` on the anchor and the
+      lines below it);
+    - the file's sentinel — its end-marker, its newest-entry header —
+      is still unique.
+
+    Paste-and-verify is one motion, not two. The user runs the commands
+    and reports back; the finding is not considered landed until the
+    verification output has been seen.
 
 ## Evidence standard for findings (S0–S8)
 
@@ -141,6 +170,30 @@ falsifiable and cannot enter the log.
   - **Closed-as-not-a-bug** — a prior claim disproven by stronger
     evidence; cite the old entry ID.
 
+**S6-notes — the two `closed-as-not-a-bug` shapes.**
+
+When a prior claim is disproven, it falls into one of two shapes.
+Naming which one it is clarifies what future sessions should and should
+not re-open.
+
+  - **Nondeterminism cleared at N≥20.** The audit recorded an
+    intermittent symptom; N runs of the same prompt (the audit's own
+    threshold is N≥20) produce identical output. The specific
+    reproducer does not fire; the audit row stays as written. Re-open
+    only if the same prompt starts varying again or the underlying
+    fetch/aggregation tool changes.
+  - **Audit-time observation diverged.** The audit's recorded symptom
+    does not appear at its own reproducer. Either the code changed
+    (silently, or with a fix whose comment names the prompt) or the pod
+    state changed. No git archaeology is done at closure time; the
+    audit row stays as written; the finding records both the closure
+    and the "not checked" clause about which side moved. Re-open only
+    if the original shape reappears or a change touches the named site.
+
+Both shapes cite the audit row in `Cross-refs` and both include the
+audit's original claim in the `Evidence` block for comparison. Neither
+edits the audit row's text.
+
 **S7 — Cross-link.**
 Every entry cites at least one §A / §B / §D row or another F-NNN.
 Orphan entries get re-checked before the next session.
@@ -148,6 +201,14 @@ Orphan entries get re-checked before the next session.
 **S8 — List what was NOT checked.**
 Explicit. This is what a future session reads to decide where to look
 next. "Nothing else was checked" is a valid and useful entry.
+
+**Nondeterminism claims need N≥20.** A claim that a prompt behaves
+differently across runs is not falsifiable from one observation or
+seven. Twenty runs of the same prompt, same invocation, is the
+threshold. Report the raw pass/fail shape across the N; a rate as high
+as ~14% is not formally excluded by 20 clean runs, but the audit's
+own threshold is N≥20 and empirical clean results at that N are a
+closed finding, not a suspended one.
 
 **The contract.** Every time an F-NNN is proposed, the steps S0–S8 are
 walked in order and it is shown which passed. Any time the question
