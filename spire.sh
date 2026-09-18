@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 #
-# run-all.sh — start, inspect, and stop the SPIRE MCP / API / UI services.
+# spire.sh — start, inspect, and stop the SPIRE MCP / API / UI services.
 #
-#   ./run-all.sh                 start the current mode (from SPIRE_MODE)
-#   ./run-all.sh &               same, in the background
-#   ./run-all.sh --status        show the current mode's three ports
-#   ./run-all.sh --stop          stop the current mode
-#   ./run-all.sh --tail          start, then tail the UI log
-#
-#   --dev / --runtime            override the current mode for one command
+#   ./spire.sh --dev              start dev services (background)
+#   ./spire.sh --runtime          start runtime services (background)
+#   ./spire.sh --dev --mcp-only   start ONLY the MCP server (foreground,
+#                                 with --reload — for MCP development)
+#   ./spire.sh --status           show the current mode's ports and PIDs
+#   ./spire.sh --stop             stop the current mode's services
+#   ./spire.sh --tail             start, then tail the UI log
+#   ./spire.sh --help             show this help
+#   ./spire.sh                    show this help (no args)
 #
 # The current mode comes from $SPIRE_MODE, set by spire() / spirer() in
-# ~/.bashrc when you cd into a tree. If it is not set, the script refuses
-# to start/status/stop and tells you to run 'spire' or 'spirer' first.
+# ~/.bashrc when you cd into a tree. If it is not set, pass --dev or
+# --runtime explicitly.
 #
-# --stop sweeps only the current mode's three ports, so stopping dev can
-# never touch runtime and vice versa — even when orphans are involved.
+# Started services run in the BACKGROUND: this script spawns them under
+# nohup, writes their PIDs to logs/spire.pid, and exits. Use
+# ./spire.sh --stop to stop them. --stop sweeps only the current mode's
+# three ports, so stopping dev can never touch runtime and vice versa.
 #
 # Ports live in ONE place: SPIRE-PORTS.env at the repo root.
 
@@ -29,7 +33,7 @@ cd "$REPO_ROOT"
 source "$REPO_ROOT/SPIRE-PORTS.env"
 
 LOG_DIR="${LOG_DIR:-logs}"
-PIDFILE="$LOG_DIR/run-all.pid"
+PIDFILE="$LOG_DIR/spire.pid"
 mkdir -p "$LOG_DIR"
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -68,23 +72,20 @@ is_our_process() {
 }
 
 PIDFILE_MODE=""
-PIDFILE_SUPERVISOR=""
 PIDFILE_MCP=""
 PIDFILE_API=""
 PIDFILE_UI=""
 read_pidfile() {
-  PIDFILE_MODE=""; PIDFILE_SUPERVISOR=""
-  PIDFILE_MCP="";  PIDFILE_API=""; PIDFILE_UI=""
+  PIDFILE_MODE=""; PIDFILE_MCP=""; PIDFILE_API=""; PIDFILE_UI=""
   [ -f "$PIDFILE" ] || return 0
   local line key value
   while IFS= read -r line; do
     key="${line%%=*}"; value="${line#*=}"
     case "$key" in
-      MODE)       PIDFILE_MODE="$value" ;;
-      SUPERVISOR) PIDFILE_SUPERVISOR="$value" ;;
-      MCP)        PIDFILE_MCP="$value" ;;
-      API)        PIDFILE_API="$value" ;;
-      UI)         PIDFILE_UI="$value" ;;
+      MODE) PIDFILE_MODE="$value" ;;
+      MCP)  PIDFILE_MCP="$value" ;;
+      API)  PIDFILE_API="$value" ;;
+      UI)   PIDFILE_UI="$value" ;;
     esac
   done < "$PIDFILE"
 }
@@ -104,15 +105,18 @@ ports_for_mode() {
 
 usage() {
   cat >&2 <<EOF
-Usage: ./run-all.sh [--dev | --runtime] [--status | --stop | --tail]
+Usage: ./spire.sh [--dev | --runtime] [--status | --stop | --tail | --mcp-only]
 
-  (no flags)    start the current mode (from \$SPIRE_MODE)
+  (no args)     show this help
+  (no action)   start the current mode's services in the background
   --status      show the current mode's ports, PIDs, and owner
   --stop        stop the current mode's services (only that mode)
   --tail        start, then tail the UI log
+  --mcp-only    start ONLY the MCP server (foreground, --reload)
 
   --dev         override the current mode to dev
   --runtime     override the current mode to runtime
+  --help, -h    show this help
 
 The current mode is \$SPIRE_MODE, set by spire() / spirer() in ~/.bashrc.
 If it is not set, run 'spire' or 'spirer' first, or pass --dev / --runtime.
@@ -125,10 +129,16 @@ EOF
 
 # ── Argument parsing ──────────────────────────────────────────────────
 
-# SPIRE_MODE is the default; explicit --dev / --runtime overrides.
+# No arguments at all -> show help and exit.
+if [ "$#" -eq 0 ]; then
+  usage
+  exit 0
+fi
+
 MODE="${SPIRE_MODE:-}"
 ACTION=""
 TAIL_UI=0
+MCP_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --dev)      MODE="dev" ;;
@@ -136,19 +146,22 @@ for arg in "$@"; do
     --status)   ACTION="status" ;;
     --stop)     ACTION="stop" ;;
     --tail)     TAIL_UI=1 ;;
+    --mcp-only) MCP_ONLY=1 ;;
     --help|-h)  usage; exit 0 ;;
     *) echo "Unknown argument: $arg" >&2; usage; exit 2 ;;
   esac
 done
 
 if [ -z "$MODE" ]; then
-  echo "run-all.sh: \$SPIRE_MODE is not set and no --dev / --runtime was given." >&2
-  echo "             Run 'spire' or 'spirer' first, or pass --dev / --runtime." >&2
+  echo "spire.sh: \$SPIRE_MODE is not set and no --dev / --runtime was given." >&2
+  echo "          Run 'spire' or 'spirer' first, or pass --dev / --runtime." >&2
+  echo >&2
+  usage
   exit 2
 fi
 
 if [ "$MODE" != "dev" ] && [ "$MODE" != "runtime" ]; then
-  echo "run-all.sh: \$SPIRE_MODE has invalid value '$MODE' (want 'dev' or 'runtime')." >&2
+  echo "spire.sh: \$SPIRE_MODE has invalid value '$MODE' (want 'dev' or 'runtime')." >&2
   exit 2
 fi
 
@@ -161,23 +174,16 @@ stop_mode() {
   if [ -f "$PIDFILE" ]; then
     read_pidfile
     if [ -n "$PIDFILE_MODE" ] && [ "$PIDFILE_MODE" != "$target_mode" ]; then
-      echo "run-all.sh: pidfile is for mode '$PIDFILE_MODE'; not touching it."
-    elif pid_alive "$PIDFILE_SUPERVISOR"; then
-      echo "run-all.sh: stopping $target_mode supervisor PID $PIDFILE_SUPERVISOR"
-      kill -TERM "$PIDFILE_SUPERVISOR" 2>/dev/null || true
-      local i=0
-      while [ -f "$PIDFILE" ] && [ "$i" -lt 50 ]; do
-        sleep 0.1
-        i=$((i + 1))
-      done
-      if [ -f "$PIDFILE" ]; then
-        echo "run-all.sh: graceful stop timed out; forcing supervisor"
-        kill -KILL "$PIDFILE_SUPERVISOR" 2>/dev/null || true
-      fi
-      stopped=1
-      rm -f "$PIDFILE"
+      echo "spire.sh: pidfile is for mode '$PIDFILE_MODE'; not touching it."
     else
-      echo "run-all.sh: stale pidfile (supervisor $PIDFILE_SUPERVISOR not alive); removing"
+      local pid
+      for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
+        if pid_alive "$pid"; then
+          echo "spire.sh: stopping PID $pid"
+          kill -TERM "$pid" 2>/dev/null || true
+          stopped=1
+        fi
+      done
       rm -f "$PIDFILE"
     fi
   fi
@@ -187,7 +193,7 @@ stop_mode() {
     port="${line%%|*}"; svc="${line#*|}"
     for pid in $(pids_on_port "$port"); do
       if is_our_process "$pid"; then
-        echo "run-all.sh: killing orphan $svc on port $port (PID $pid)"
+        echo "spire.sh: killing orphan $svc on port $port (PID $pid)"
         kill -TERM "$pid" 2>/dev/null || true
         stopped=1
       fi
@@ -204,9 +210,9 @@ stop_mode() {
         fi
       done
     done < <(ports_for_mode "$target_mode")
-    echo "run-all.sh: $target_mode stopped."
+    echo "spire.sh: $target_mode stopped."
   else
-    echo "run-all.sh: no $target_mode processes to stop."
+    echo "spire.sh: no $target_mode processes to stop."
   fi
 }
 
@@ -215,23 +221,11 @@ stop_mode() {
 show_status() {
   local filter_mode="$1"
 
-  echo "run-all.sh status  (mode: $filter_mode)"
+  echo "spire.sh status  (mode: $filter_mode)"
   echo "───────────────────────────────────"
   echo
 
   read_pidfile
-  local sup_pid="$PIDFILE_SUPERVISOR"
-  local sup_alive=0
-  pid_alive "$sup_pid" && sup_alive=1
-
-  if [ -n "$sup_pid" ] && [ "$sup_alive" = "1" ] && [ "$PIDFILE_MODE" = "$filter_mode" ]; then
-    echo "Supervisor:  running  (PID $sup_pid, mode $PIDFILE_MODE)"
-  elif [ -n "$sup_pid" ] && [ "$PIDFILE_MODE" = "$filter_mode" ]; then
-    echo "Supervisor:  NOT running  (stale pidfile: $sup_pid)"
-  else
-    echo "Supervisor:  NOT running  (no pidfile for $filter_mode)"
-  fi
-  echo
 
   printf '%-7s %-6s %-6s %-8s %s\n' "Port" "Svc" "State" "PID" "Owner"
   printf '%-7s %-6s %-6s %-8s %s\n' "----" "---" "-----" "---" "-----"
@@ -250,7 +244,9 @@ show_status() {
     else
       state="up"
       pid="$(echo "$pids" | head -n1)"
-      if [ "$sup_alive" = "1" ] && [ "$PIDFILE_MODE" = "$filter_mode" ]; then
+      if [ -n "$recorded" ] \
+        && [ "$pid" = "$recorded" ] \
+        && [ "$PIDFILE_MODE" = "$filter_mode" ]; then
         owner="us"
       elif is_our_process "$pid"; then
         owner="external"
@@ -262,7 +258,7 @@ show_status() {
   done < <(ports_for_mode "$filter_mode")
 
   echo
-  echo "Owner:  us       = started by this tree's supervisor"
+  echo "Owner:  us       = matches the PID we started for this mode"
   echo "        external = a SPIRE process on our port, not from this tree"
   echo "        other    = not a SPIRE process; --stop will NOT kill it"
 }
@@ -279,15 +275,20 @@ esac
 if [ -f "$PIDFILE" ]; then
   read_pidfile
   if [ -n "$PIDFILE_MODE" ] && [ "$PIDFILE_MODE" != "$MODE" ]; then
-    echo "run-all.sh: a pidfile exists for mode '$PIDFILE_MODE'." >&2
-    echo "             that is the OTHER mode — leaving it alone." >&2
-  elif pid_alive "$PIDFILE_SUPERVISOR"; then
-    echo "run-all.sh: already running (PID $PIDFILE_SUPERVISOR, mode $MODE)." >&2
-    echo "             use './run-all.sh --stop' first." >&2
+    echo "spire.sh: a pidfile exists for mode '$PIDFILE_MODE'." >&2
+    echo "          that is the OTHER mode — leaving it alone." >&2
     exit 1
-  else
-    rm -f "$PIDFILE"
   fi
+  any_alive=0
+  for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
+    pid_alive "$pid" && any_alive=1
+  done
+  if [ "$any_alive" = "1" ]; then
+    echo "spire.sh: already running for mode $MODE." >&2
+    echo "          use './spire.sh --stop' first." >&2
+    exit 1
+  fi
+  rm -f "$PIDFILE"
 fi
 
 if [ -f "$REPO_ROOT/.spire-dev.env" ]; then
@@ -304,79 +305,68 @@ else
   UI_PORT="$SPIRE_RUNTIME_UI_PORT"
 fi
 
-PIDS=()
-CLEANED=0
+# ── --mcp-only: foreground, reload, blocking ──────────────────────────
+# Preserves what run-server.sh used to be. For MCP development, where
+# you want the reload loop's output on the terminal.
+if [ "$MCP_ONLY" = "1" ]; then
+  echo "Mode:   $MODE (MCP only, foreground)"
+  echo "Port:   MCP $MCP_PORT"
+  echo
+  exec fastmcp run src/spire/mcp_server/server.py \
+    -t http \
+    --host 127.0.0.1 \
+    --port "$MCP_PORT" \
+    --reload \
+    --reload-dir src/spire
+fi
 
-cleanup() {
-  if [ "$CLEANED" -eq 1 ]; then return; fi
-  CLEANED=1
-  echo ""
-  echo "Stopping services..."
-  local pid
-  for pid in "${PIDS[@]:-}"; do
-    if [ -n "$pid" ] && pid_alive "$pid"; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
-  sleep 1
-  for pid in "${PIDS[@]:-}"; do
-    if [ -n "$pid" ] && pid_alive "$pid"; then
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-  done
-  local line pid2
-  while IFS= read -r line; do
-    local p="${line%%|*}"
-    for pid2 in $(pids_on_port "$p"); do
-      if is_our_process "$pid2"; then
-        kill -9 "$pid2" 2>/dev/null || true
-      fi
-    done
-  done < <(ports_for_mode "$MODE")
-  rm -f "$PIDFILE"
-  echo "Stopped."
-}
-trap cleanup EXIT INT TERM HUP
+# ── Full start: MCP + API + UI, background ────────────────────────────
 
-echo "Mode:   $MODE"
-echo "Log directory: $LOG_DIR"
+echo "Mode:   $MODE (background)"
+echo "Logs:   $LOG_DIR/"
 echo "Ports:  MCP $MCP_PORT   API $API_PORT   UI $UI_PORT"
+echo
 
-SPIRE_MCP_PORT="$MCP_PORT" bash run-server.sh > "$LOG_DIR/mcp.log" 2>&1 &
-PIDS+=("$!")
-echo "MCP   pid=${PIDS[-1]}   http://127.0.0.1:$MCP_PORT     log: $LOG_DIR/mcp.log"
+SPIRE_MCP_PORT="$MCP_PORT" \
+  nohup fastmcp run src/spire/mcp_server/server.py \
+    -t http \
+    --host 127.0.0.1 \
+    --port "$MCP_PORT" \
+    --reload \
+    --reload-dir src/spire \
+    > "$LOG_DIR/mcp.log" 2>&1 &
+MCP_PID=$!
+echo "MCP   pid=$MCP_PID   http://127.0.0.1:$MCP_PORT     log: $LOG_DIR/mcp.log"
 sleep 2
 
 SPIRE_API_PORT="$API_PORT" \
 SPIRE_MCP_URL="http://127.0.0.1:$MCP_PORT/mcp" \
 SPIRE_UI_ORIGIN="http://localhost:$UI_PORT" \
-  python -m spire.api.server > "$LOG_DIR/api.log" 2>&1 &
-PIDS+=("$!")
-echo "API   pid=${PIDS[-1]}   http://localhost:$API_PORT     log: $LOG_DIR/api.log"
+  nohup python -m spire.api.server \
+    > "$LOG_DIR/api.log" 2>&1 &
+API_PID=$!
+echo "API   pid=$API_PID   http://localhost:$API_PORT     log: $LOG_DIR/api.log"
 sleep 1
 
 SPIRE_UI_PORT="$UI_PORT" \
 SPIRE_API_URL="http://localhost:$API_PORT" \
-  spire-ui > "$LOG_DIR/ui.log" 2>&1 &
-PIDS+=("$!")
-echo "UI    pid=${PIDS[-1]}   http://localhost:$UI_PORT     log: $LOG_DIR/ui.log"
+  nohup spire-ui \
+    > "$LOG_DIR/ui.log" 2>&1 &
+UI_PID=$!
+echo "UI    pid=$UI_PID   http://localhost:$UI_PORT     log: $LOG_DIR/ui.log"
 
 {
   echo "MODE=$MODE"
-  echo "SUPERVISOR=$$"
-  echo "MCP=${PIDS[0]}"
-  echo "API=${PIDS[1]}"
-  echo "UI=${PIDS[2]}"
+  echo "MCP=$MCP_PID"
+  echo "API=$API_PID"
+  echo "UI=$UI_PID"
 } > "$PIDFILE"
 
-echo ""
-echo "All three started. Supervisor PID $$ (pidfile: $PIDFILE)."
-echo "  ./run-all.sh --status   show ports, PIDs, and owner"
-echo "  ./run-all.sh --stop     stop these services only"
-echo ""
+echo
+echo "Started. PIDs written to $PIDFILE."
+echo "  ./spire.sh --status   show ports and PIDs"
+echo "  ./spire.sh --stop     stop these services only"
 
 if [ "$TAIL_UI" -eq 1 ]; then
   tail -f "$LOG_DIR/ui.log" || true
-else
-  wait
 fi
