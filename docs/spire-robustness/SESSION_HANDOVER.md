@@ -26,16 +26,16 @@ Fixes happen in Phase 2, later, as a separate pass.
 - Branch `Phase1-Audit-and-Baseline`, up to date with origin, working tree
   clean, 2 commits ahead of `origin/Phase1-Audit-and-Baseline` (unpushed).
 - Integration branch is `hardening-master`. `master` frozen.
-- Runtime tree at `~/pocs/spire-runtime` — still has the OLD `run-all.sh`
-  and `run-server.sh`. Do NOT touch it without a deliberate plan.
-
+- Runtime tree at `~/pocs/spire-runtime` — has the OLD launcher scripts
+  (pre-`spire.sh`). Do NOT touch it without a deliberate plan.
+  
 **Ports (new, working)**
 - Dev:     MCP 4001 / API 4002 / UI 4003
 - Runtime: MCP 3001 / API 3002 / UI 3003
 - Single source of truth: `SPIRE-PORTS.env` at repo root.
-- `run-all.sh --dev | --runtime` — mode is required, no default.
+- `spire.sh --dev | --runtime` — mode is required, no default.
   `--status` and `--stop` are scoped to the current mode.
-- `run-server.sh` reads `SPIRE_MCP_PORT`; fails loudly if unset.
+- `spire.sh` reads `SPIRE_MCP_PORT`; fails loudly if unset.
 - Shell functions `spire()` / `spirer()` in `~/.bashrc` export
   `SPIRE_MODE`, `SPIRE_MCP_URL`, `SPIRE_API_URL` and echo the port set.
 - `.spire-dev.env` is retired. The script warns if it is still present.
@@ -164,13 +164,13 @@ the way, write it up separately.
   (harm) was checked. It was never a bug. Every claim now walks S0–S8.
 - **The audit is the report; the findings log is the notebook.** Update
   the notebook freely. Update the report in batches.
-- **`--stop` requires a mode.** `./run-all.sh --dev --stop` or
-  `./run-all.sh --runtime --stop`. Running `./run-all.sh --stop` with no
+- **`--stop` requires a mode.** `./spire.sh --dev --stop` or
+  `./spire.sh --runtime --stop`. Running `./spire.sh --stop` with no
   mode errors out on purpose. Stopping one mode never touches the other.
 - **Curl against Fusion uses `IKS_*` env vars** (already exported).
   `SPIRE_MCP_URL` is for promptkit only, not curl.
 - **`SPIRE_MODE` is set by `spire()` / `spirer()`.** If it is empty in a
-  shell, run one of those functions before any `run-all.sh` command.
+  shell, run one of those functions before any `spire.sh` command.
 
 ---
 

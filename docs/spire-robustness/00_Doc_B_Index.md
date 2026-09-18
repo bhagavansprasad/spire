@@ -200,7 +200,7 @@ must keep running undisturbed while development continues in
 | Dev | `~/pocs/spire` | feature branches | 4444 / 9000 / 9999 | none |
 
 **Mechanism.** `.spire-dev.env` (gitignored) exists only in the dev tree.
-`run-all.sh` sources it if present; otherwise uses runtime defaults. No
+`spire.sh` sources it if present; otherwise uses runtime defaults. No
 flag, no remembering.
 
 **Runtime untouched.** The runtime clone never sees `.spire-dev.env`
@@ -212,7 +212,7 @@ run:
 - `git fetch origin hardening-master`
 - `git reset --hard origin/hardening-master`
 - `pip install -e .` in the runtime venv
-- `./run-all.sh`
+- `./spire.sh`
 
 No promotion script exists. Promotion is a manual, deliberate action.
 

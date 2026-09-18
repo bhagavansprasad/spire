@@ -102,7 +102,7 @@ The general front door. Contains `README.md`, `how-to-run.md`,
 `docs/spire-robustness/`, the handoff, `docs/developer/context_bundles.md`
 (this document), the endpoints reference, the SME checklist, the cache
 architecture doc, the feature docs under `docs/features/`, the launcher
-scripts `run-server.sh` / `run-all.sh` / `SPIRE-PORTS.env`, and the four
+scripts `spire.sh` / `spire.sh` / `SPIRE-PORTS.env`, and the four
 `.puml` design sketches.
 
 **When to request it:** a new session that needs repo orientation.

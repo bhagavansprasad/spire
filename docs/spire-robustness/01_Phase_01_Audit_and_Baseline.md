@@ -160,23 +160,23 @@ run at the same time without port collision.
 2. **`SPIRE_DEV=1` environment flag.** Rejected: forgetting the flag
    silently points dev at runtime ports.
 3. **File presence.** `.spire-dev.env` in the repo root. If the file
-   exists, `run-all.sh` sources it. Dev tree has the file; runtime tree
+   exists, `spire.sh` sources it. Dev tree has the file; runtime tree
    does not. **Chosen.**
 
 **Design.**
 
 - `.spire-dev.env` (gitignored) in the dev tree: `SPIRE_MCP_PORT=4444`,
   `SPIRE_API_PORT=9000`, `SPIRE_UI_PORT=9999`.
-- `run-all.sh` sources it if present; otherwise 3333/8000/8888.
-- `run-server.sh` reads `SPIRE_MCP_PORT` from env, default 3333.
-- `run-all.sh` passes `SPIRE_MCP_URL` and `SPIRE_API_URL` down to
+- `spire.sh` sources it if present; otherwise 3333/8000/8888.
+- `spire.sh` reads `SPIRE_MCP_PORT` from env, default 3333.
+- `spire.sh` passes `SPIRE_MCP_URL` and `SPIRE_API_URL` down to
   children.
 - `.gitignore` includes `.spire-dev.env`.
 
 **Verification.**
 
 ```
-$ ./run-all.sh
+$ ./spire.sh
 Log directory: logs
 Ports:  MCP 4444   API 9000   UI 9999
 MCP   pid=239687   http://127.0.0.1:4444     log: logs/mcp.log
@@ -187,7 +187,7 @@ UI    pid=239722   http://localhost:9999     log: logs/ui.log
 No port-collision warnings. Dev instance runs alongside the runtime.
 
 **Files touched.**
-- `run-all.sh`, `run-server.sh`, `.gitignore`, `.spire-dev.env` (local)
+- `spire.sh`, `.gitignore`, `.spire-dev.env` (local)
 
 **Commits.**
 - PR #147 — `tooling: dev port overrides via .spire-dev.env` — merged

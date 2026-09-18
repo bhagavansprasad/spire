@@ -27,8 +27,7 @@ bundles:
   - docs/features/parser_context_modularization.md
   - docs/features/prompt_to_intent_framework.md
   - docs/features/actionable_refusals.md
-  - run-server.sh
-  - run-all.sh
+  - spire.sh
   - SPIRE-PORTS.env
   - docs/designs/01_kg_as_mcp_tool.puml
   - docs/designs/02_kg_as_preLLM.puml

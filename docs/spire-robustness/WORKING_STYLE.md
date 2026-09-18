@@ -249,7 +249,7 @@ was skipped.
     `spire()` shell function from `SPIRE-PORTS.env`. The two sets are
     `X00Y`, X=3 for runtime and 4 for dev.
 
-20. **The `run-all.sh --dev | --runtime` flag is required.** There is
+20. **The `spire.sh --dev | --runtime` flag is required.** There is
     no default mode. `SPIRE_MODE` is set by `spire()` / `spirer()` in
     `~/.bashrc`. `--status` and `--stop` are scoped to the current
     mode and never touch the other tree's ports.
