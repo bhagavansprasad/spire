@@ -16,10 +16,16 @@
 # ~/.bashrc when you cd into a tree. If it is not set, pass --dev or
 # --runtime explicitly.
 #
+# MODE ISOLATION. Dev and runtime never touch each other:
+#   - different ports (from SPIRE-PORTS.env)
+#   - different pidfiles (logs/spire-dev.pid vs logs/spire-runtime.pid)
+#   - --stop and --preflight sweep ONLY the target mode's three ports
+# Running `./spire.sh --dev` cannot affect a runtime process, and
+# `./spire.sh --runtime --stop` cannot affect a dev process.
+#
 # Started services run in the BACKGROUND: this script spawns them under
-# nohup, writes their PIDs to logs/spire.pid, and exits. Use
-# ./spire.sh --stop to stop them. --stop sweeps only the current mode's
-# three ports, so stopping dev can never touch runtime and vice versa.
+# nohup, writes their PIDs to the mode's pidfile, and exits. Use
+# ./spire.sh --stop to stop them.
 #
 # Ports live in ONE place: SPIRE-PORTS.env at the repo root.
 
@@ -33,8 +39,11 @@ cd "$REPO_ROOT"
 source "$REPO_ROOT/SPIRE-PORTS.env"
 
 LOG_DIR="${LOG_DIR:-logs}"
-PIDFILE="$LOG_DIR/spire.pid"
 mkdir -p "$LOG_DIR"
+
+# PIDFILE is set after MODE is parsed — one pidfile per mode, so dev and
+# runtime can never read or clobber each other's state.
+PIDFILE=""
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -71,21 +80,20 @@ is_our_process() {
   return 1
 }
 
-PIDFILE_MODE=""
 PIDFILE_MCP=""
 PIDFILE_API=""
 PIDFILE_UI=""
 read_pidfile() {
-  PIDFILE_MODE=""; PIDFILE_MCP=""; PIDFILE_API=""; PIDFILE_UI=""
+  PIDFILE_MCP=""; PIDFILE_API=""; PIDFILE_UI=""
+  [ -n "$PIDFILE" ] || return 0
   [ -f "$PIDFILE" ] || return 0
   local line key value
   while IFS= read -r line; do
     key="${line%%=*}"; value="${line#*=}"
     case "$key" in
-      MODE) PIDFILE_MODE="$value" ;;
-      MCP)  PIDFILE_MCP="$value" ;;
-      API)  PIDFILE_API="$value" ;;
-      UI)   PIDFILE_UI="$value" ;;
+      MCP) PIDFILE_MCP="$value" ;;
+      API) PIDFILE_API="$value" ;;
+      UI)  PIDFILE_UI="$value" ;;
     esac
   done < "$PIDFILE"
 }
@@ -129,7 +137,6 @@ EOF
 
 # ── Argument parsing ──────────────────────────────────────────────────
 
-# No arguments at all -> show help and exit.
 if [ "$#" -eq 0 ]; then
   usage
   exit 0
@@ -165,29 +172,43 @@ if [ "$MODE" != "dev" ] && [ "$MODE" != "runtime" ]; then
   exit 2
 fi
 
+# ── Mode-scoped pidfile ───────────────────────────────────────────────
+# One pidfile per mode. Dev and runtime never read or write the same
+# file, so neither can see the other's state or sweep the other's PIDs.
+PIDFILE="$LOG_DIR/spire-$MODE.pid"
+
 # ── --stop ─────────────────────────────────────────────────────────────
 
 stop_mode() {
   local target_mode="$1"
+  local pidfile="$LOG_DIR/spire-$target_mode.pid"
   local stopped=0
 
-  if [ -f "$PIDFILE" ]; then
-    read_pidfile
-    if [ -n "$PIDFILE_MODE" ] && [ "$PIDFILE_MODE" != "$target_mode" ]; then
-      echo "spire.sh: pidfile is for mode '$PIDFILE_MODE'; not touching it."
-    else
-      local pid
-      for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
-        if pid_alive "$pid"; then
-          echo "spire.sh: stopping PID $pid"
-          kill -TERM "$pid" 2>/dev/null || true
-          stopped=1
-        fi
-      done
-      rm -f "$PIDFILE"
-    fi
+  if [ -f "$pidfile" ]; then
+    local line key value
+    local mcp_pid="" api_pid="" ui_pid=""
+    while IFS= read -r line; do
+      key="${line%%=*}"; value="${line#*=}"
+      case "$key" in
+        MCP) mcp_pid="$value" ;;
+        API) api_pid="$value" ;;
+        UI)  ui_pid="$value" ;;
+      esac
+    done < "$pidfile"
+
+    local pid
+    for pid in "$mcp_pid" "$api_pid" "$ui_pid"; do
+      if pid_alive "$pid"; then
+        echo "spire.sh: stopping PID $pid"
+        kill -TERM "$pid" 2>/dev/null || true
+        stopped=1
+      fi
+    done
+    rm -f "$pidfile"
   fi
 
+  # Sweep the target mode's ports. Because dev and runtime use different
+  # ports, this can never touch the other mode's processes.
   local line port svc pid
   while IFS= read -r line; do
     port="${line%%|*}"; svc="${line#*|}"
@@ -225,42 +246,24 @@ show_status() {
   echo "───────────────────────────────────"
   echo
 
-  read_pidfile
+  printf '%-7s %-6s %-6s %s\n' "Port" "Svc" "State" "PID"
+  printf '%-7s %-6s %-6s %s\n' "----" "---" "-----" "---"
 
-  printf '%-7s %-6s %-6s %-8s %s\n' "Port" "Svc" "State" "PID" "Owner"
-  printf '%-7s %-6s %-6s %-8s %s\n' "----" "---" "-----" "---" "-----"
-
-  local line port svc state pid owner pids recorded
+  local line port svc state pid pids
   while IFS= read -r line; do
     port="${line%%|*}"; svc="${line#*|}"
-    case "$svc" in
-      MCP) recorded="$PIDFILE_MCP" ;;
-      API) recorded="$PIDFILE_API" ;;
-      UI)  recorded="$PIDFILE_UI" ;;
-    esac
     pids="$(pids_on_port "$port")"
     if [ -z "$pids" ]; then
-      state="down"; pid="-"; owner="-"
+      state="down"; pid="-"
     else
       state="up"
       pid="$(echo "$pids" | head -n1)"
-      if [ -n "$recorded" ] \
-        && [ "$pid" = "$recorded" ] \
-        && [ "$PIDFILE_MODE" = "$filter_mode" ]; then
-        owner="us"
-      elif is_our_process "$pid"; then
-        owner="external"
-      else
-        owner="other"
-      fi
     fi
-    printf '%-7s %-6s %-6s %-8s %s\n' "$port" "$svc" "$state" "$pid" "$owner"
+    printf '%-7s %-6s %-6s %s\n' "$port" "$svc" "$state" "$pid"
   done < <(ports_for_mode "$filter_mode")
 
   echo
-  echo "Owner:  us       = matches the PID we started for this mode"
-  echo "        external = a SPIRE process on our port, not from this tree"
-  echo "        other    = not a SPIRE process; --stop will NOT kill it"
+  echo "--stop stops every SPIRE process on these ports; others are left alone."
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────
@@ -272,20 +275,38 @@ esac
 
 # ── Start ─────────────────────────────────────────────────────────────
 
+# Pre-flight: refuse to start if the target mode's ports are already held
+# by another SPIRE process. Without this, the child processes fail to
+# bind and exit, but the script still prints "Started" — the pidfile
+# records dead PIDs and the ports stay held by whatever was already there.
+_preflight_ports() {
+  local check_ports="$1"   # newline-separated "port|svc" entries
+  local held=0
+  local line port svc pid
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    port="${line%%|*}"; svc="${line#*|}"
+    for pid in $(pids_on_port "$port"); do
+      if is_our_process "$pid"; then
+        echo "spire.sh: port $port ($svc) is already held by SPIRE PID $pid" >&2
+        held=1
+      fi
+    done
+  done <<< "$check_ports"
+  return "$held"
+}
+
+# Check this mode's OWN pidfile. Other modes are invisible here — their
+# pidfiles have a different name.
 if [ -f "$PIDFILE" ]; then
   read_pidfile
-  if [ -n "$PIDFILE_MODE" ] && [ "$PIDFILE_MODE" != "$MODE" ]; then
-    echo "spire.sh: a pidfile exists for mode '$PIDFILE_MODE'." >&2
-    echo "          that is the OTHER mode — leaving it alone." >&2
-    exit 1
-  fi
   any_alive=0
   for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
     pid_alive "$pid" && any_alive=1
   done
   if [ "$any_alive" = "1" ]; then
     echo "spire.sh: already running for mode $MODE." >&2
-    echo "          use './spire.sh --stop' first." >&2
+    echo "          use './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
     exit 1
   fi
   rm -f "$PIDFILE"
@@ -303,6 +324,19 @@ else
   MCP_PORT="$SPIRE_RUNTIME_MCP_PORT"
   API_PORT="$SPIRE_RUNTIME_API_PORT"
   UI_PORT="$SPIRE_RUNTIME_UI_PORT"
+fi
+
+# Pre-flight port check for THIS mode only.
+if [ "$MCP_ONLY" = "1" ]; then
+  if ! _preflight_ports "$MCP_PORT|MCP"; then
+    echo "spire.sh: run './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
+    exit 1
+  fi
+else
+  if ! _preflight_ports "$(ports_for_mode "$MODE")"; then
+    echo "spire.sh: run './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
+    exit 1
+  fi
 fi
 
 # ── --mcp-only: foreground, reload, blocking ──────────────────────────
@@ -367,6 +401,6 @@ echo "Started. PIDs written to $PIDFILE."
 echo "  ./spire.sh --status   show ports and PIDs"
 echo "  ./spire.sh --stop     stop these services only"
 
-if [ "$TAIL_UI" -eq 1 ]; then
+if [ "$TAIL_UI" = "1" ]; then
   tail -f "$LOG_DIR/ui.log" || true
 fi
