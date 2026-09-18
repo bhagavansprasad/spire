@@ -52,8 +52,8 @@ live in `context_bundles.yaml`, also at the repo root. If the YAML is
 missing, the script writes out its built-in defaults on first run so you
 can edit them.
 
-Output goes to `./context_out/context_<name>.md`. The directory is
-created if missing.
+Output goes to `./context_out/<name>.md`. The directory is created
+if missing.
 
 ### Common commands
 
@@ -93,29 +93,37 @@ are from a run on 2026-09-18; they grow as the repo grows.
 
 ### `root` — project root and content files
 
-**Files:** 29. **Size:** ~462 KB, ~118k tokens.
+**Files:** 32. **Size:** ~487 KB, ~125k tokens.
 
 The general front door. Contains `README.md`, `how-to-run.md`,
 `prompt_coverage.md`, `pyproject.toml`, `requirements.txt`,
 `personas.example.yaml`, `src/spire/config.py`,
 `src/spire/diagnostics.py`, the Doc A/B files under
-`docs/spire-robustness/`, the handoff, the endpoints reference, the
-SME checklist, the cache architecture doc, the feature docs under
-`docs/features/`, `run-server.sh`, and the four `.puml` design sketches.
+`docs/spire-robustness/`, the handoff, `docs/developer/context_bundles.md`
+(this document), the endpoints reference, the SME checklist, the cache
+architecture doc, the feature docs under `docs/features/`, the launcher
+scripts `run-server.sh` / `run-all.sh` / `SPIRE-PORTS.env`, and the four
+`.puml` design sketches.
 
 **When to request it:** a new session that needs repo orientation.
 Usually too broad for one focused task.
 
-### `plan` — the master plan and its status log
 
-**Files:** 5. **Size:** ~154 KB, ~39k tokens.
+### `plan` — the master plan, the audit, and the log
+
+**Files:** 10. **Size:** ~437 KB, ~112k tokens.
 
 Contains the master plan (`SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md`),
-the Phase 1 audit and log, the Phase 4 structure file, the session
-template, and the Doc B index.
+the Phase 1 audit (`docs/audit/phase-1-audit.md`), the findings log
+(`docs/audit/findings-log.md`), the Phase 1 session log
+(`01_Phase_01_Audit_and_Baseline.md`), the Phase 4 structure file, the
+session template, and the Doc B index. The audit and log were added
+2026-09-18 — this bundle is now the single request that reproduces the
+audit's current state, which is what the handoff says a new window
+should read first.
 
-**When to request it:** starting a new phase, or needing the audit /
-plan state at a glance.
+**When to request it:** starting a new phase, resuming audit work, or
+needing the plan + audit + findings at a glance.
 
 ### `prompts` — the prompt-set `.txt` files
 
