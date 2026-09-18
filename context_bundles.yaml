@@ -18,6 +18,7 @@ bundles:
   - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
   - docs/spire-robustness/WORKING_STYLE.md
+  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md  
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/developer/context_bundles.md
   - docs/spire_fusion_endpoints_reference.md

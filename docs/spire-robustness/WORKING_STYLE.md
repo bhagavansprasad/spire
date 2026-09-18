@@ -1,7 +1,8 @@
 # SPIRE — Working Style
 
 **Reference for every session.** Read at the start of a new window.
-Cross-references Doc B index §7.
+For the procedural checklist that accompanies this file, see
+`SESSION_STARTUP_CHECKLIST.md`. Cross-references Doc B index §7.
 
 ---
 
