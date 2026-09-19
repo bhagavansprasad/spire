@@ -122,7 +122,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | not-started | — | — |
 | F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |
 | Reg #30 | perf | 8 | `plan_builders.py`, `compare_orders_to_invoices.py` | not-started | — | — |
-| F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | not-started | — | — |
+| F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
