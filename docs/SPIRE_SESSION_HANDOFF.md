@@ -42,6 +42,10 @@ pad, not a document to maintain.
 
 **Findings-log range:** F-001 through F-040. All closed or classified.
 
+**Merged:** PR #148, `Phase1-Audit-and-Baseline` → `hardening-master`,
+2026-09-19. `hardening-master` is now at `7165f84`. Phase 2 spawns from
+here.
+
 ---
 
 ## Baseline metrics — measured 2026-09-18/19
@@ -251,8 +255,9 @@ Not investigative. Do not bundle bugs.
 ## First steps in the new window
 
 1. **Confirm ground truth.**
-   - `git log --oneline -3` (should be on `Phase1-Audit-and-Baseline` or
-     a Phase 2 branch).
+   - `git log --oneline -3` (should show Phase 1's merge on
+     `hardening-master` at `7165f84`; Phase 2 spawns its own branch from
+     here).
    - `pytest -q` (expect 1011 passed / 22 deselected — but only if the
      pod is up; otherwise expect 957 passed / 54 failed, all 503).
    - MCP server up; `personas.yaml` resolves to pod `eqjz`.
