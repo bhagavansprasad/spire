@@ -123,6 +123,11 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |
 | Reg #30 | perf | 8 | `plan_builders.py`, `compare_orders_to_invoices.py` | not-started | — | — |
 
+**Session log.** The window label for each fix is recorded in the
+fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
+This session (`_01`) closed F-002. The `NN` counts windows, not
+fixes — F-033 and its neighbours in the same window share the label.
+
 ---
 
 ## 6. Verification standard V0–V9
