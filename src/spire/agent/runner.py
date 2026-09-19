@@ -1,7 +1,7 @@
 """Agent runner — LangGraph + Gemini + MCP HTTP transport.
 
-Connects to the Spire MCP server (must already be running on
-http://127.0.0.1:3333/mcp/), pulls tools via langchain-mcp-adapters,
+Connects to the Spire MCP server (URL from SPIRE_MCP_URL), pulls tools
+via langchain-mcp-adapters,
 binds them to the configured Gemini model, and runs a single-pass
 graph:
 
@@ -34,7 +34,7 @@ from mcp.client.streamable_http import streamablehttp_client
 
 from spire.agent.prompts import build_system_prompt
 from spire.agent.tracing import make_trace_logger
-from spire.config import load_persona
+from spire.config import load_persona, mcp_server_url
 from spire.kg.loader import load_kg_context
 
 import logging
@@ -49,7 +49,6 @@ logging.getLogger("langchain_google_genai").setLevel(logging.ERROR)
 # under investigation for whether LLM capability was the real bottleneck.
 MODEL = "gemini-2.5-pro"
 
-MCP_SERVER_URL = "http://127.0.0.1:3333/mcp/"
 PERSONA_NAME = "default_dev"
 
 
@@ -131,10 +130,10 @@ async def run_agent(prompt: str, kg_enabled: bool = True) -> str:
     system_prompt = build_system_prompt(kg_context)
     logger.info("system_prompt_built", chars=len(system_prompt))
 
-    async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
+    async with streamablehttp_client(mcp_server_url()) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            logger.info("mcp_session_initialized", url=MCP_SERVER_URL)
+            logger.info("mcp_session_initialized", url=mcp_server_url())
 
             graph = await _build_graph(session, system_prompt, logger)
             logger.info("graph_built")

@@ -261,4 +261,11 @@ def route_and_parse(
 
     get_logger("parser").debug("Router: modules=%s", modules)
     scoped = assemble_subset(modules, menu)
-    return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)
+    result = parse(prompt, llm=llm, menu=menu, system_prompt=scoped)
+    # Surface the classified modules on the result so downstream
+    # consumers can read the SAME classification that scoped this
+    # parse, rather than re-running the classifier themselves.
+    # This is what lets promptkit drop its own standalone classify
+    # call (F-002).
+    result.modules = modules
+    return result

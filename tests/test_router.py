@@ -190,6 +190,18 @@ def test_structured_output_requested_with_schema():
 # (that route_and_parse produces the SAME Intent as a full parse) is step 5.
 
 
+class _ParseStub:
+    """Minimal stand-in for the object parse() returns.
+
+    F-002 makes route_and_parse write .modules onto the result
+    before returning it, so the stub provides the attribute slot
+    the router writes. The pre-F-002 tests used the bare string
+    "PARSE_RESULT" — a string does not accept the assignment.
+    """
+    def __init__(self):
+        self.modules: list[str] | None = None
+
+
 class _Recorder:
     """Captures the arguments each patched collaborator was called with."""
 
@@ -201,9 +213,11 @@ class _Recorder:
 
 
 def _install_patches(monkeypatch, rec, modules=("payables",),
-                     scoped="SCOPED_PROMPT", parse_ret="PARSE_RESULT",
+                     scoped="SCOPED_PROMPT", parse_ret=None,
                      classify_exc=None):
     sentinel_menu = object()  # identity check: same menu passed to both
+    if parse_ret is None:
+        parse_ret = _ParseStub()
 
     def fake_load_kg_menu():
         rec.menu_loads += 1
@@ -238,7 +252,9 @@ def test_route_and_parse_happy_flow(monkeypatch):
     menu = _install_patches(monkeypatch, rec)
     out = route_and_parse("show unpaid bills")
 
-    assert out == "PARSE_RESULT"
+    # F-002: route_and_parse attaches the classified modules to the
+    # result before returning it.
+    assert out.modules == ["payables"]
     # menu loaded exactly once
     assert rec.menu_loads == 1
     # classified modules reached assemble_subset, with the shared menu
@@ -291,7 +307,10 @@ def test_route_and_parse_falls_back_to_full_parse_on_no_module(monkeypatch):
     )
     out = route_and_parse("what is the weather today")
     # It did NOT raise; it fell back to parse.
-    assert out == "PARSE_RESULT"
+    assert out is not None
+    # F-002: the no-module fallback does NOT set .modules — no
+    # classification was made, so consumers correctly see None.
+    assert getattr(out, "modules", None) is None
     # parse WAS called, with system_prompt=None (full context), not a scoped one.
     assert rec.parse_kwargs is not None
     assert rec.parse_kwargs["system_prompt"] is None

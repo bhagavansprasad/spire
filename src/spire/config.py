@@ -69,6 +69,38 @@ LLM_MODEL = _os.environ.get("SPIRE_LLM_MODEL", "")
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
 OPENAI_MODEL = "gpt-5"
 
+# ─────────────────────────────────────────────────────────────────────
+# MCP server URL (single source of truth)
+#
+# The URL is composed by the shell — spire() / spirer() in ~/.bashrc
+# source SPIRE-PORTS.env and export SPIRE_MCP_URL — and read here. The
+# port number lives in ONE place: SPIRE-PORTS.env. This module
+# deliberately has NO fallback: a missing env var means the shell
+# function was not run, and the correct answer is to say so, not to
+# guess a port. The other two Python locations that once held a
+# hardcoded 3333 (rendering/formatters.py, agent/runner.py) now call
+# this function.
+# ─────────────────────────────────────────────────────────────────────
+
+def mcp_server_url() -> str:
+    """Return the MCP server URL from the environment.
+
+    Raises RuntimeError if SPIRE_MCP_URL is unset, naming the shell
+    functions that set it. No fallback: SPIRE-PORTS.env is the single
+    source of the port number, and a default here would duplicate it.
+
+    A function rather than an import-time constant so that importing
+    this module (e.g. during pytest collection) does not require the
+    env var to be present — only calling the function does.
+    """
+    url = _os.environ.get("SPIRE_MCP_URL")
+    if not url:
+        raise RuntimeError(
+            "SPIRE_MCP_URL is not set. Run 'spire' (dev) or 'spirer' "
+            "(runtime) first — those shell functions source "
+            "SPIRE-PORTS.env and export this variable."
+        )
+    return url
 
 def build_llm(temperature: float = GEMINI_TEMPERATURE):
     """Return a LangChain chat model for the configured provider.

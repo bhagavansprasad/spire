@@ -35,7 +35,7 @@ import sys
 from fastmcp import Client
 
 from spire.graph.pipeline import GRAPH
-from spire.config import reset_usage, usage_report
+from spire.config import mcp_server_url, reset_usage, usage_report
 from spire.diagnostics import (
     add_diagnostic_arguments,
     answer,
@@ -47,7 +47,6 @@ from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
 from spire.rendering.formatters import (
-    MCP_SERVER_URL,
     _format_intent,
     _format_outputs,
     _format_plan,
@@ -82,7 +81,7 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
     reset_usage()
     menu = load_kg_menu()
 
-    async with Client(MCP_SERVER_URL) as client:
+    async with Client(mcp_server_url()) as client:
 
         async def _on_progress(progress, total, message=None):
             # Forward the tool's message as it stands. It used to be

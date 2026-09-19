@@ -70,6 +70,14 @@ class GraphState(TypedDict, total=False):
     cache_mode: Optional[str]
     cache_slot: Optional[str]
 
+    # The classifier's module selection, written by parse_node
+    # from the ParseResult the router returns. None when the
+    # router did not run (a direct parse() call) or when the
+    # router fell back to a full-context parse after a
+    # ClassificationError. Read by promptkit for its diagnostic
+    # line; the pipeline itself does not consume it.
+    _modules_got: Optional[list[str]]
+
     intent: Optional[Any]
     refusal: Optional[Any]
     plan: Optional[Any]
@@ -94,9 +102,23 @@ class GraphState(TypedDict, total=False):
 
 def parse_node(state: GraphState) -> dict:
     result = parse_prompt(state["prompt"], menu=state["menu"])
+    # Surface the classifier's module selection (route_and_parse
+    # stashes it on the ParseResult). Downstream consumers —
+    # promptkit's diagnostic in particular — read this from the
+    # state instead of re-running the classifier for themselves.
+    #
+    # getattr, not attribute access: the graph's own unit tests
+    # exercise parse_node with minimal test doubles (_ParseOK /
+    # _ParseRefused) that carry is_refusal / intent / refusal but
+    # not .modules. parse_node only needs "something shaped like
+    # a ParseResult"; requiring the exact class would couple a
+    # leaf node to the router's return type for no benefit.
+    out: dict = {"_modules_got": getattr(result, "modules", None)}
     if result.is_refusal:
-        return {"refusal": result.refusal}
-    return {"intent": result.intent}
+        out["refusal"] = result.refusal
+    else:
+        out["intent"] = result.intent
+    return out
 
 
 def plan_node(state: GraphState) -> dict:

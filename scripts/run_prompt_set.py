@@ -82,9 +82,10 @@ from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
 
+from spire.config import mcp_server_url
+
 # Formatters live in spire.rendering.formatters (run_plan.py is deprecated).
 from spire.rendering.formatters import (
-    MCP_SERVER_URL,
     _format_intent,
     _format_outputs,
     _format_plan,
@@ -256,7 +257,7 @@ async def _run_all(sets: list[tuple[str, list[str]]]) -> int:
     print("(Requires the MCP server up, the pod reachable, and Gemini.)")
 
     # One connection for the whole batch.
-    async with Client(MCP_SERVER_URL) as client:
+    async with Client(mcp_server_url()) as client:
         for set_name, prompts in sets:
             header = "#" * 78
             print(
