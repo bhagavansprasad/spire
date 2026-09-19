@@ -1009,6 +1009,22 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AR invoice',           'Rec
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receivables invoice',  'ReceivablesInvoice', 'AR invoice.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AR invoices',          'ReceivablesInvoice', 'Plural form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receivables invoices', 'ReceivablesInvoice', 'Plural form.');
+
+-- F-041 (router layer): leading-noun synonyms for AR child entities. The
+-- classifier menu is generated from entity_synonym rows; without these, a
+-- prompt that opens with the child noun ("invoice lines for invoice X")
+-- registers only "invoice" (payables), the router sends the parse to the
+-- wrong module, and the receivables sysprompt blocks never load. The
+-- parser edits alone would be unreachable.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice line',          'ReceivablesInvoiceLine', 'Leading-noun form (a line on an AR invoice).');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice lines',         'ReceivablesInvoiceLine', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax line',              'ReceivablesTaxLine', 'A tax line on an AR invoice line.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax lines',             'ReceivablesTaxLine', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax breakdown',         'ReceivablesTaxLine', 'Colloquial synonym.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'DFF',                   'ReceivablesInvoiceTransactionDFF', 'Descriptive flexfield (acronym).');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'flexfield',             'ReceivablesInvoiceTransactionDFF', 'Descriptive flexfield.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'flexfields',            'ReceivablesInvoiceTransactionDFF', 'Plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'descriptive flexfield', 'ReceivablesInvoiceTransactionDFF', 'Full form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'purchase order',   'PurchaseOrder', NULL);
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'PO',               'PurchaseOrder', 'Acronym.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'order',            'PurchaseOrder', 'Ambiguous; resolved to PO in this domain.');
