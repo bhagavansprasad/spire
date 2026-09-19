@@ -1,1 +1,2 @@
 - 'and its lines' / 'show its lines' / 'with the line items' on an AR-invoice question -> add 'ReceivablesInvoiceLine' to include (alongside the 'by_id' filter).
+- 'invoice lines for invoice X' / 'lines of invoice X' / 'lines on invoice X' / 'show line items for invoice X' / 'what lines does invoice X have' / "invoice X's lines" -> target_entity 'ReceivablesInvoice' with a 'by_id' filter, AND add 'ReceivablesInvoiceLine' to include. Same rule as the trailing form above; only the word order differs.
