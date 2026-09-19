@@ -335,4 +335,14 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
 # change how the parser maps the phrasing to the include).
 _FIELDS_SATISFIED_BY_INCLUDE: dict[str, set[str]] = {
     "Address": {"address", "addresses", "country", "city", "state"},
+    # F-041 residual: DFF columns live on the included DFF child, not
+    # on ReceivablesInvoice. Without this entry the field-split moves
+    # them to unresolved_fields and the display prints a false
+    # "column not available" note over data the pipeline already
+    # fetched. Same pattern as the Address entry above.
+    "ReceivablesInvoiceTransactionDFF": {
+        "__flex_context",
+        "__flex_context_displayvalue",
+        "customertrxid",
+    },
 }
