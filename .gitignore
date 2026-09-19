@@ -42,3 +42,4 @@ logs/
 .spire-dev.env
 isolation/
 source-tree.txt
+t_after*.txt
