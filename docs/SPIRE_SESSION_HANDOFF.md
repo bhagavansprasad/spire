@@ -1,10 +1,9 @@
+# SPIRE — Session Handoff, 2026-09-19
 
-# SPIRE — Session Handoff, 2026-09-18
-
-**This file supersedes the 2026-09-11 handoff.** The router / lifecycle-flip
-work it teed up is DONE and merged. The current state is: Phase 1 audit
-essentially complete, findings log through F-040, three small housekeeping
-batches remaining.
+**This file supersedes the 2026-09-18 handoff.** The Phase 1 audit is
+**complete**. Every section (§A through §H) is closed. The findings log
+runs F-001 through F-040. This handoff is the launch pad for Phase 2 —
+correctness work — not a document to maintain.
 
 **Read this first.** Then read `docs/audit/phase-1-audit.md` (the audit)
 and `docs/audit/findings-log.md` (the log). This handoff is a launch
@@ -12,257 +11,130 @@ pad, not a document to maintain.
 
 ---
 
-## What was done this session
+## What is closed
 
-The Phase 1 audit's §B was the primary work. Thirty-five findings were
-written to the findings log (F-006 through F-040). Every §B row and §B.2
-candidate now has an F-NNN. §D.1 is fully covered. §A is closed. §C, §E,
-§F, §G were drafted from in-hand bundles. §H had four nondeterminism
-observations closed.
+**Phase 1 — Audit & Baseline — complete.**
 
-Findings-log range: **F-001 through F-040.**
+- **§A — Registry drift map.** Closed. Every §A.1 and §A.2 row has a
+  state. A-16 (po_status untaught, relationship_phrase dead KG rows) and
+  A-20 (aggregate tools registered in code, not KG) are `disagree`, with
+  A-16 probed clean.
+- **§B — Bug inventory.** Closed. §B.6 is the audit-row-to-finding map.
+  Every §B row and candidate carries an F-NNN or a documented closure.
+- **§C — Dead code inventory.** Closed. C.1 confirmed orphans; C.2
+  candidates; C.3 swept 2026-09-18 with C-13 through C-16 added. C-11's
+  Confirm corrected. §C.5 lists what was not checked — one item
+  (`personas.example.yaml` drift) closed 2026-09-18 with a no-schema-
+  drift finding.
+- **§D — Inconsistency inventory.** Closed. D-01 through D-15 all
+  resolved.
+- **§E — In-flight work inventory.** E.4 closed — all four rows
+  resolved (E-11 merge path confirmed, E-12 branch found on origin,
+  E-13 both merged, E-14 both merged). E.5 accurate.
+- **§F — Baseline metrics.** F.1 measured. F.2 token table measured
+  (three cells `—`, deliberately deferred). F.3 lists what was not
+  measured.
+- **§G — Behavioural byte-diffs.** Closed. Two goldens pod-drift only;
+  one byte-identical.
+- **§H — Probabilistic-behaviour map.** Four nondeterminism closures
+  landed (F-022, F-023, F-024, F-040). Remaining observations are map
+  content, not action items.
 
----
-
-## The working process — four steps
-
-The user and I worked in this loop for every entry. Continue it exactly.
-
-**Step 1 — I name a command or a bundle.** For each finding under
-investigation, I ask for one command to run (usually a
-`promptkit.py --run --prompt "..." --show-stages` invocation or a `grep`)
-or one bundle to share (`context_out/context_<bundle>.md`).
-
-**Step 2 — User runs it, pastes the output.** One command at a time. No
-batched commands unless they are clearly independent and stated as such.
-
-**Step 3 — I generate the finding text.** I walk S0–S8 (see the evidence
-standard below), name the mechanism with a `file:line` where possible,
-disprove at least one alternative, name a falsifier, classify,
-cross-ref, and list what was not checked.
-
-**Step 4 — User search-and-replaces into the findings log.** I give the
-finding as a `~~~`-fenced block plus a **single-line anchor** to search
-for. The anchor is always:
-
-```
-## F-005 — `orderBy=Ordered:desc` silently ignored on `/purchaseOrders`
-```
-
-The user replaces that anchor with `[new finding block]\n\n---\n\n## F-005 — ...`
-(the F-005 line stays). The new finding lands between the newest F-NNN
-and F-005.
-
-**Step 5 — User verifies with four commands.** After each paste:
-
-```
-grep -n "^## F-" docs/audit/findings-log.md
-grep -c "^## F-005 — \`orderBy=Ordered:desc\` silently ignored on \`/purchaseOrders\`$" docs/audit/findings-log.md
-sed -n '/^## F-005 —/,/^## F-004 —/p' docs/audit/findings-log.md | head -20
-grep -c "^\*End of findings log\.\*$" docs/audit/findings-log.md
-```
-
-Expected: newest F-NNN appears between the previous newest and F-005;
-anchor count is `1`; F-005 is intact; end-marker count is `1`.
-
-**Step 6 — Audit file updates.** When a §D or §H row is closed, I give a
-matching search-and-replace for `phase-1-audit.md` to add the closure
-note. Same anchor discipline: single-line search, replace-with-block.
-
-**Every finding ships with its verification commands.** Do not skip this.
+**Findings-log range:** F-001 through F-040. All closed or classified.
 
 ---
 
-## The evidence standard (S0–S8)
+## Baseline metrics — measured 2026-09-18/19
 
-Non-negotiable. Every finding walks:
-
-- **S0** — one-sentence claim.
-- **S1** — the harm, picked from: wrong data, wrong narration, crash,
-  refusal of an in-scope prompt, silent omission, cost regression,
-  inconsistency between two paths. **No harm → stop.** Observation, not
-  bug.
-- **S2** — pasted evidence (curl-verified > runtime output > static code
-  > recall; recall is not evidence).
-- **S3** — mechanism, `file:line` where possible.
-- **S4** — disprove one alternative.
-- **S5** — name a falsifier.
-- **S6** — classify (Confirmed / Candidate / Observation /
-  Closed-as-not-a-bug).
-- **S7** — cross-link (§A / §B / §D row, or another F-NNN).
-- **S8** — list what was NOT checked.
-
-Several findings this session closed at S1 (B-c3, B-12, B-18, D-03) —
-**the S1 gate is real, use it**.
-
-**Two `closed-as-not-a-bug` shapes.**
-
-- **Nondeterminism cleared at N≥20.** Audit recorded an intermittent
-  symptom; N=20 runs of the same prompt produce identical output. Re-open
-  only if the same prompt starts varying again or the underlying
-  fetch/aggregation tool changes.
-- **Audit-time observation diverged.** Audit's recorded symptom does not
-  appear at its own reproducer. Either the code changed (silently, or
-  with a fix whose comment names the prompt) or the pod state changed.
-  No git archaeology is done at closure time; the audit row stays as
-  written; the finding records both the closure and the "not checked"
-  clause about which side moved.
+- **Test suite:** `1011 passed, 22 deselected in 3:43`. Supersedes the
+  prior handoff's cited 913/18; the suite grew ~95 tests since that
+  snapshot. Confirmed by two runs: `957 passed + 54 failed` with the pod
+  down (all 503s), then `1011 passed` after pod recovery. The two
+  reconcile exactly.
+- **Test-suite design note for Phase 4b.** The 54 pod-dependent tests
+  are NOT `@pytest.mark.integration` — they only `skipif(not
+  PERSONAS_FILE.exists())`. With `personas.yaml` present and the pod
+  down they fail rather than skip. The 22 deselected are the genuinely-
+  marked integration tests. `pytest -q` is therefore not a pod-
+  independent gate today.
+- **`--validate`:** cited from the prior handoff at 236/240
+  (`gemini-3.5-flash`); not re-run this session. The `gemini-3.1-flash-
+  lite` figure of 205/240 is also cited, and is CF-2's motivation.
+- **KG tables matching seed:** 9 / 9 (measured A-17).
+- **Golden files:** 1 / 3 byte-identical; 2 / 3 pod-drift only (§G).
 
 ---
 
-## The findings log's shape
+## Carry-forward status
 
-Newest at top, directly below the header. Each entry:
+- **CF-1 — closed 2026-09-18.** The unsatisfiable-include / raw-KeyError
+  shape. Seven shapes probed directly through `generate_plan`. Six
+  refuse with `RefusalError` (flavor `UNSUPPORTED_OPERATION`, offending
+  element named): PO + `['Supplier']`, PO + `['POSchedule','Supplier']`,
+  PO + `['BogusEntityXYZ']`, Supplier + `['Buyer']` (no edge), Invoice +
+  `['Supplier']`, CustomerAccount + `['Supplier']`. One plans — Supplier
+  + `['Classification']` — because `HAS_CLASSIFICATION` exists; its
+  reverse-only tool makes it unsatisfiable downstream, but
+  `validate_intent` gates it before `generate_plan` runs
+  (`test_bug2_include_gate.py::test_classification_include_refused`). No
+  raw `KeyError` path remains.
 
-```
-## F-NNN — one-line title
+- **CF-2 — OPEN, parked by user decision.** `GEMINI_MODEL` silent
+  dependency. The swap from `gemini-3.5-flash` to `gemini-3.1-flash-lite`
+  measurably degrades routing (236/240 → 205/240) with no warning.
+  **Do not action.** User asked not to change `config.py` at this time.
+  The shape was decided (warn-not-raise at import, Gemini-only whitelist
+  `{"gemini-3.5-flash"}`), documented in this session's conversation, and
+  available if the decision reverses. Re-open only if the user asks.
 
-**Date:** YYYY-MM-DD
-**Status:** open · root-caused · fix-in-progress · fixed · closed-as-not-a-bug
-**Cross-refs:** bug IDs from phase-1-audit.md
+- **CF-3 — closed 2026-09-18.** Corpus-consistency guard. New file
+  `tests/test_corpus_consistency.py`, 116 lines, 3 tests passing. Asserts
+  byte-identical and case-normalized prompt groups carry identical module
+  sets. Baseline: 19 byte-identical groups, 2 case-normalized, zero drift
+  at both layers. Paraphrases are deliberately not checked — Phase 3f's
+  deterministic classifier makes the module set a function of entity
+  synonyms, not a model's one-shot judgement.
 
-**Evidence.** Command run, output pasted. Copy-paste, not paraphrase.
-
-**Root cause.** One paragraph. The mechanism.
-
-**Fix location (for Phase 2).** Where the change goes, not the change.
-
-**Not checked.** Explicit. What a future session reads to know where to look next.
-```
-
-Append-only. Corrections are new entries citing old IDs.
-
----
-
-## The nested-fence rule
-
-Nested ` ``` ` inside ` ``` ` breaks copy-paste in the user's terminal.
-When a finding contains code fences (it usually does — the evidence
-paste has its own fences), the outer wrapper must be `~~~`, not ` ``` `.
-Same for this handoff file itself.
-
-I got this wrong twice this session. The user had to ask for a re-emit
-both times. Do not make the same mistake.
-
----
-
-## Where the audit stands
-
-**§A — Registry drift map.** Closed. Every row in §A.1 and §A.2 has a
-state. Notable: A-16 (`po_status` untaught, `relationship_phrase` dead
-KG rows) and A-20 (aggregate tools registered in code, not KG) are
-`disagree`, with A-16 probed clean this session.
-
-**§B — Bug inventory.** Closed. §B.6 is the audit-row-to-finding map.
-Summary:
-- Confirmed bugs written up: B-01→F-006, B-02→F-007, B-03→F-008,
-  B-04→F-010, B-05→F-009, B-06→F-011, B-07→F-012, B-17→F-014,
-  B-19→F-015, B-22→F-017, B-23→F-021, B-24→F-018, B-25→F-019,
-  B-26→F-016, B-27→F-020.
-- Cross-referenced into another finding: B-09→F-002, B-13→F-001,
-  B-20→F-003/F-004.
-- Closed-as-not-a-bug: B-10→F-022, B-11→F-013, B-12→F-026,
-  B-15→F-025, B-16→F-028, B-18→F-029, B-21→F-023, B-c1→F-030,
-  B-c2→F-024, B-c3→F-031.
-- Folded: B-c4 → F-024 class note.
-
-**§C — Dead code inventory.** Drafted (partial). C.1 confirmed orphans
-(C-01 through C-07); C.2 candidates (C-08 through C-12); C.3 unreachable
-(needs `tests` / `scripts` / `prompts` / `corpora` bundles). §C.5 has
-five unrun confirmation greps for C-02 through C-07.
-
-**§D — Inconsistency inventory.** Closed. D-01→F-032, D-02→F-034,
-D-03→F-035, D-04→F-036, D-05→F-040, D-07→F-013 (cross), D-09→F-025
-(cross), D-10→F-037, D-11→F-039, D-12→F-038, D-13→F-019 (cross),
-D-14→F-024 (cross), D-15→F-016 (cross).
-
-**§E — In-flight work inventory.** Drafted. E-01 through E-14 named.
-E.4 has four unrun branch-state checks (E-11 through E-14).
-
-**§F — Baseline metrics.** Drafted. §F.1 cites test-suite (913) and
-validate (236/240) from the previous handoff, not re-measured. §F.2 has
-a per-prompt-class token table from this session's runs.
-
-**§G — Behavioural byte-diffs.** Drafted. Three goldens re-run:
-`po_2144_and_lines.txt` identical; `count_suppliers.txt` and
-`suppliers_with_open_pos.txt` diverge only on pod-grown counts and
-module-set ordering.
-
-**§H — Probabilistic-behaviour map.** Twelve observations. Four now
-closed (three originally on 2026-09-18, plus the §H.1 truncation-metadata
-observation closed by F-040). Eight remain as map content, not action
-items.
+- **CF-4 — closed 2026-09-18.** Register cross-index. The register at
+  `docs/archive/pre-plan/spire_overnight_findings.md` (handoff pointer
+  was to a nonexistent path; correct path recorded here). Cross-walk of
+  its 35 items against the F-NNN log: 6 covered directly (register #7 →
+  F-027, #26 → F-036, #29 → F-035, #32 → F-001, #33 → F-010/B-04, #35 →
+  F-016), 4 by class (#6 → F-034, #27 → F-012, #31 → F-014/F-021, #34 →
+  F-014), 4 uncovered — disposed of as: register #9 retired (stale —
+  corpora show all three 1252 prompts refusing identically); register #5
+  folded into F-015 (same mechanism, same shape); register #1 → Phase 4
+  (LLM-synthesis theme, not a §B finding); register #30 → Phase 2
+  (genuine perf defect — top-N compare fetches the entire 17,447-PO
+  universe before narrowing and times out; fix direction: select top-N
+  suppliers first, then fetch only their POs).
 
 ---
 
-## Pending work — three small batches
+## The register's #30 — Phase 2 pickup
 
-**Batch 1 — §C.5 confirmation greps.** Five proposed commands for C-02
-through C-07. Expected output and the reference "already confirmed" for
-each is in §C.1's `Confirm` column. One batch, ~5 commands.
+Not in §B.1 because §B was scoped to prompt failures, not performance
+defects. It is a real defect with a named fix. Phase 2 opens it directly
+from the register; no F-NNN needed.
 
-**Batch 2 — §E.4 branch-state checks.** Four `git log` / `git branch`
-inspections:
-- `git log --oneline phase-4d-ui-api | head` (E-11)
-- `git branch -a | grep prompt-18` (E-12)
-- `git log hardening-master..fix/overnight-20260904 --oneline` and the
-  same for `fix/overnight-batch2` (E-13)
-- `git branch --merged hardening-master | grep feat/` (E-14)
-
-**Batch 3 — §C.3 unreachable sweep.** Would need `tests`, `scripts`,
-`prompts`, `corpora` bundles read. Each will surface unused imports,
-dead helpers, stale prompt entries. This is the only remaining
-substantive audit work.
-
----
-
-## Carry-forward from the 2026-09-11 handoff (still open)
-
-These items were flagged in the previous handoff and are **not closed**
-this session. They belong here so a new window does not lose them.
-
-**CF-1 — S1: planner raw-KeyError path.** The prior handoff's S1 is
-"planner throws raw KeyError instead of degrading/refusing". This
-session's F-006 fixed the specific `get_purchase_order_by_id` +
-alpha-OrderNumber crash, but the broader "planner NEVER throws raw"
-goal is unverified. F-025 closed the specific PO→Supplier include case
-as by-design, but whether any other unsatisfiable-include shape still
-raises raw is unmeasured. **Re-open:** run an Intent with an
-unsatisfiable include directly and confirm the RefusalError wrap fires
-for every shape.
-
-**CF-2 — S2: LLM model silent dependency.** Switching `GEMINI_MODEL`
-from `gemini-3.5-flash` to `gemini-3.1-flash-lite` measurably degrades
-routing (per the previous handoff: 236/240 → 205/240). Untouched this
-session. **Re-open:** consider pinning / enforcing the validated model
-in production, or a config-time assertion that the model matches.
-
-**CF-3 — S3: `--generate` freezes classifier flakiness.** `--generate`
-runs each prompt through the non-deterministic classifier ONCE and
-writes that as the corpus `module` value. A fix direction from the
-previous handoff: a corpus-consistency guard (generate-time or a test)
-— "structurally identical prompts must have identical expected module
-sets". Untouched this session. **Re-open:** design and land the guard.
-
-**CF-4 — Overnight register verification pass.** `docs/spire_overnight_findings.md`
-(last updated 2026-08-14) still lists ~14 issues as open/verified, not
-re-verified against current code. This session closed three of the
-likely candidates incidentally (nondeterminism class: F-022, F-023,
-F-024). The register itself has not been re-read. **Re-open:** sweep the
-register and mark which issues still reproduce.
+`Compare ordered vs invoiced for our top 3 suppliers` issues an
+unfiltered PO fetch — pages all 17,447 POs before narrowing client-side.
+Exceeds the pod's upstream timeout (145.7s on the 06_slow run; the run's
+only errored prompt). The single/named compare is bounded and completes
+in ~26s. Fix: rank top-N suppliers first (cheap), then fetch only their
+POs — mirroring the spend-ranking path's select-then-detail order.
 
 ---
 
 ## Pod-state observations to carry forward
 
 - **Pod growth is real and ongoing.** Supplier count: 431 (golden
-  capture) → 450–455 (audit) → 593 → 600 → 620 → 656 (this session).
-  PO count: 15,839 (2026-08-04) → 17,740 (today's aggregation).
-  Golden files and pod-dependent counts will keep drifting.
+  capture) → 450–455 (audit) → 593 → 600 → 620 → 656 → 1011 tests
+  passed on the current pod. Golden files and pod-dependent counts will
+  keep drifting.
 - **Module-set ordering varies run-to-run** without affecting the
-  answer. `classify_modules` preserves the model's returned order.
-  Confirmed in F-023, F-032, and §G's diff. Goldens that capture the
-  `Router:` line will show spurious diffs.
+  answer. Confirmed in F-023, F-032, and §G's diff. The module set is a
+  diagnostic, not a correctness signal.
 - **Model-prose variance** in `Reason:` lines is real (F-035, F-038).
   Same flavor, same Solution, different Reason text. Not a bug — a
   §H.1-class observation.
@@ -273,6 +145,40 @@ register and mark which issues still reproduce.
   credentials; Spire reads `personas.yaml` ONLY. A wrong pod usually
   means the MCP server is stale — restart after any change under
   `src/spire/mcp_server/`.
+
+---
+
+## `personas.yaml` — status
+
+Tracked, modified, and (per the user) carried into a recent commit. It
+contains live credentials including several commented-out alternates.
+§7.3.1's untrack-and-rotate task and E-05's deferred-untrack item both
+apply; E-05 remains deferred per plan. **E-05's next-session entry must
+record that the file rode into a commit** — the values are in the
+current tree's history, not just an old branch.
+
+Do not add `personas.yaml` to any future commit. Named `git add`, never
+`-A`.
+
+---
+
+## Working process — unchanged
+
+The S0–S8 evidence standard, the one-command-at-a-time rule, the
+anchor-block-verify loop, the nested-fence rule, the three update
+disciplines — all unchanged from the 2026-09-18 handoff. Read
+`docs/spire-robustness/WORKING_STYLE.md` before any finding work.
+
+**For batch audit-file edits**, a python-heredoc script that reads the
+file, applies a list of `(label, old, new)` string replacements, asserts
+each anchor's count is exactly 1, and writes only on success — is faster
+and safer than sed, and was the pattern used for the last three batches
+this session. The script is atomic: one bad anchor and nothing is
+written.
+
+**For findings-log inserts**, the anchor-block-verify loop remains the
+pattern — the anchor IS the thing that must survive (append-only
+discipline).
 
 ---
 
@@ -287,73 +193,78 @@ at the repo root defines them; `build_context.py` builds them into
 - **`parser_context`** — every `.sysprompt` block plus `order.manifest` and `classifier_menu.sysprompt`.
 - **`mcp_server_tools`** — the 34 MCP tools and the server.
 - **`synthesizer`** — synthesizer, ar, p2p, aggregation, response_validation, local_summary, ranking_summary, prompts, pipeline.
+- **`scripts`**, **`tests`**, **`prompts`**, **`corpora`** — used in the C.3 sweep.
 
-To build all of them:
+To build all:
 
-```
-python build_context.py --all
-```
+    python build_context.py --all
 
 To build one:
 
-```
-python build_context.py parser_planner
-```
+    python build_context.py parser_planner
 
-Output lands in `context_out/`. Ask the user for the bundle (not the file);
-they will share it. A full explainer — what a bundle is, the complete
-list, per-bundle contents, and how to build each — lives in
+Output lands in `context_out/`. A full explainer lives in
 `docs/developer/context_bundles.md`.
-
----
-
-## Working-style reminders specific to this audit
-
-- **One command at a time.** Never a block of commands. If a command
-  fails mid-block, the rest fire against an unintended state.
-- **No nested code fences.** `~~~` outer, ` ``` ` inner.
-- **Complete files, not fragments.** Produce the whole block, not
-  "insert this between X and Y".
-- **Approval before generating.** Ask before writing code or long
-  findings; a one-line confirmation is enough.
-- **S0–S8 walk, every finding.**
-- **Three update disciplines, three documents.** Doc A is frozen
-  (status and deviation notes only). The phase-1 audit is a working
-  document — rows close in place. The findings log is append-only —
-  corrections cite old IDs.
-- **Every pasteable edit ships with its verification commands.**
-- **The user's audit file is UTF-8 shown under a non-UTF-8 terminal
-  encoding.** `§` renders as `¬ß`, `—` as `‚Äî`. Search strings must
-  match the bytes the file on disk carries. In practice this means
-  matching on ASCII-only fragments where possible.
 
 ---
 
 ## What to read first, in order
 
 1. This file.
-2. `docs/audit/phase-1-audit.md` — top paragraph for state, then §A.1,
-   §B.6, §C.1/C.2, §D.1, §E.1–E.4, §G, §H.1.
+2. `docs/audit/phase-1-audit.md` — top paragraph for state, then §B.6
+   (the audit-row-to-finding map).
 3. `docs/audit/findings-log.md` — skim F-001 through F-040.
-4. `docs/spire-robustness/WORKING_STYLE.md` — the evidence standard's
-   home.
+4. `docs/spire-robustness/WORKING_STYLE.md` — the evidence standard.
+5. `docs/archive/pre-plan/spire_overnight_findings.md` — the register;
+   CF-4's cross-index is in this handoff, not in that file.
+
+---
+
+## Phase 2 — the next window's work
+
+Phase 2 is Correctness. The audit produced the bug list; Phase 2 turns
+it into zero. Doc A §8 defines the design. The register's theme map
+(`docs/archive/pre-plan/spire_overnight_findings.md`) is a defensible
+ordering and the audit does not contradict it:
+
+- **Theme C — field synonyms & projection safety.** Largest cluster,
+  highest payoff. Fixes #7, #12, #31, #34 in the register; closes F-027,
+  F-014, F-021, and F-017 by class in the audit.
+- **Theme B — refusal correctness & format.** #6, #11, #29 in the
+  register; F-034, F-035, and the refusal-rendering fixes in the audit.
+- **Theme D — parser robustness & PO reference.** #4, #10, #32 in the
+  register; F-001, F-006, F-013 in the audit.
+- **Theme A — local synthesis (LLM elimination).** Register #1; the
+  umbrella. Measured at 56 → 5 synth calls; two shapes remain (address-
+  target list, single PO + buyer).
+- **Theme E — count / sample consistency.** Register #2, #14, #26, #27,
+  #33, #35, #30; audit F-010, F-012, F-016, F-036.
+
+Phase 2 opens with the register's own Phase 0 — curl the four suspected
+items (#2, #4, #7, #9) to promote them to verified, then begin Theme C.
+
+Phase 2 is **fixing**, one bug per branch/PR, with a regression test each.
+Not investigative. Do not bundle bugs.
 
 ---
 
 ## First steps in the new window
 
-1. **Confirm ground truth.** `git log --oneline -3` (should be on the
-   audit branch). `pytest -q` (expect 913 passed, 18 deselected — per
-   the previous handoff; not re-run this session). MCP server up.
-2. **Run Batch 1** (§C.5 greps) — five commands, one batch.
-3. **Run Batch 2** (§E.4 branch checks) — four commands, one batch.
-4. **Update the audit's §C.1 and §E.4 rows** from the results, using
-   the same search-and-replace pattern with single-line anchors.
-5. **Address the four carry-forward items (CF-1 through CF-4)** — each
-   is a small investigation. CF-3 (corpus-consistency guard) is the
-   most self-contained.
-6. **Decide on Batch 3** — read the four remaining bundles and extend
-   §C, or leave §C partial and close the audit, or move to Phase 2.
+1. **Confirm ground truth.**
+   - `git log --oneline -3` (should be on `Phase1-Audit-and-Baseline` or
+     a Phase 2 branch).
+   - `pytest -q` (expect 1011 passed / 22 deselected — but only if the
+     pod is up; otherwise expect 957 passed / 54 failed, all 503).
+   - MCP server up; `personas.yaml` resolves to pod `eqjz`.
+
+2. **Read the five files listed above.** Confirm the summary in this
+   handoff matches what the audit and log actually say.
+
+3. **Open Phase 2.** Per Doc A §8. Start with the register's Phase 0
+   curls, then Theme C.
+
+4. **Do not touch `config.py` (CF-2) unless the user asks.** It is
+   parked.
 
 ---
 
