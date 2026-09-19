@@ -12,26 +12,23 @@ bundles:
   - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
+  - docs/spire-robustness/00_Doc_B_Index.md
+  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/04_Phase_04_Structure.md
+  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/spire-robustness/TEMPLATE_Session_Entry.md
+  - docs/spire-robustness/WORKING_STYLE.md
+  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md  
   - docs/SPIRE_SESSION_HANDOFF.md
-  - docs/spire_architecture.md
-  - docs/spire_plan.md
+  - docs/developer/context_bundles.md
   - docs/spire_fusion_endpoints_reference.md
-  - docs/spire_pipeline_playbook.md
-  - docs/spire_enhancement_requirements.md
-  - docs/spire_enhancement_status.md
-  - docs/spire_lifecycle_sme_update.md
   - tests/spire_sme_validation_checklist.md
-  - docs/spire_overnight_findings.md
   - docs/cache_architecture.md
-  - docs/spire_test_plan.md
   - docs/features/parser_context_modularization.md
   - docs/features/prompt_to_intent_framework.md
   - docs/features/actionable_refusals.md
-  - docs/four_bugs.md
-  - docs/spire_findings_11-Sep-2026.md
-  - run-server.sh
+  - spire.sh
+  - SPIRE-PORTS.env
   - docs/designs/01_kg_as_mcp_tool.puml
   - docs/designs/02_kg_as_preLLM.puml
   - docs/designs/03_static_kg_summary_prompt.puml
@@ -40,9 +37,20 @@ bundles:
   # ── the master plan + its append-only status log ──
   # This bundle is exactly what a new window needs to resume work.
   plan:
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2_Status.md
-
+  - docs/spire-robustness/00_Doc_B_Index.md
+  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/04_Phase_04_Structure.md
+  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
+  - docs/spire-robustness/TEMPLATE_Session_Entry.md
+  # the audit + findings log — the two documents the handoff says to read
+  # first. Were unbundled until 2026-09-18; a new session asking for the
+  # plan bundle now gets the full working state.
+  - docs/audit/phase-1-audit.md
+  - docs/audit/findings-log.md
+  - docs/audit/golden/count_suppliers.txt
+  - docs/audit/golden/po_2144_and_lines.txt
+  - docs/audit/golden/suppliers_with_open_pos.txt
+  
   prompts:
   - scripts/prompts/00_dipstick.txt
   - scripts/prompts/01_supplier.txt
@@ -61,7 +69,9 @@ bundles:
   - scripts/prompts/qa_testcases.txt
   - scripts/prompts/scorer/parser_stress.txt
   - scripts/prompts/scorer/tool_selection.txt
-
+  - scripts/run_prompt_set.py
+  - src/spire/rendering/formatters.py
+  
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora:
   - scripts/prompts/00_dipstick.json
@@ -87,7 +97,6 @@ bundles:
   - scripts/rebuild_kg.sh
   - scripts/run_graph.py
   - scripts/run_prompt_set.py
-  - scripts/display_formatters.py
   - scripts/flag_matrix.sh
   - scripts/test_kg_connection.py
   - scripts/verify_invoices.py

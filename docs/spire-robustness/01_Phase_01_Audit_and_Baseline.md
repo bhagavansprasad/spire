@@ -160,23 +160,23 @@ run at the same time without port collision.
 2. **`SPIRE_DEV=1` environment flag.** Rejected: forgetting the flag
    silently points dev at runtime ports.
 3. **File presence.** `.spire-dev.env` in the repo root. If the file
-   exists, `run-all.sh` sources it. Dev tree has the file; runtime tree
+   exists, `spire.sh` sources it. Dev tree has the file; runtime tree
    does not. **Chosen.**
 
 **Design.**
 
 - `.spire-dev.env` (gitignored) in the dev tree: `SPIRE_MCP_PORT=4444`,
   `SPIRE_API_PORT=9000`, `SPIRE_UI_PORT=9999`.
-- `run-all.sh` sources it if present; otherwise 3333/8000/8888.
-- `run-server.sh` reads `SPIRE_MCP_PORT` from env, default 3333.
-- `run-all.sh` passes `SPIRE_MCP_URL` and `SPIRE_API_URL` down to
+- `spire.sh` sources it if present; otherwise 3333/8000/8888.
+- `spire.sh` reads `SPIRE_MCP_PORT` from env, default 3333.
+- `spire.sh` passes `SPIRE_MCP_URL` and `SPIRE_API_URL` down to
   children.
 - `.gitignore` includes `.spire-dev.env`.
 
 **Verification.**
 
 ```
-$ ./run-all.sh
+$ ./spire.sh
 Log directory: logs
 Ports:  MCP 4444   API 9000   UI 9999
 MCP   pid=239687   http://127.0.0.1:4444     log: logs/mcp.log
@@ -187,7 +187,7 @@ UI    pid=239722   http://localhost:9999     log: logs/ui.log
 No port-collision warnings. Dev instance runs alongside the runtime.
 
 **Files touched.**
-- `run-all.sh`, `run-server.sh`, `.gitignore`, `.spire-dev.env` (local)
+- `spire.sh`, `.gitignore`, `.spire-dev.env` (local)
 
 **Commits.**
 - PR #147 — `tooling: dev port overrides via .spire-dev.env` — merged
@@ -204,20 +204,48 @@ No port-collision warnings. Dev instance runs alongside the runtime.
 | Doc A reference | §7.3.2, §7.4 (task 1.3) |
 | Bug ID | — |
 | Investigation ID | — |
-| State | open |
+| State | verified |
 
-**Objective.** Move `docs/*.pdf` and `tests/*.pdf` to `docs/pdf/`, and
-`docs/spire_tools_modules.xlsx` to `docs/data/`. Doc A §7.3.2.
+**Objective.** Move `docs/*.pdf`, `tests/*.pdf`, and `docs/spire_tools_modules.xlsx` out of the source tree. Doc A §7.3.2.
 
-**Commands and output.** *(to be filled)*
+**Recon.** Seven files:
 
-**Files touched.** *(to be filled)*
+- `docs/cache_architecture.pdf`
+- `docs/designs/spire_design_alternatives.pdf`
+- `docs/spire_lifecycle_sme_update.pdf`
+- `docs/spire_test_plan.pdf`
+- `docs/tester-intro.pdf`
+- `tests/spire_sme_validation_checklist.pdf`
+- `docs/spire_tools_modules.xlsx`
 
-**Commits.** *(to be filled)*
+A grep for references to any of the seven found only the plan documents themselves (Doc A §7.3.2 and WI-S002-03). No live links to break.
 
-**Cross-references.**
-- Doc A §7.3.2
-- Follow-up: task 1.4
+**Commands.**
+
+- `mkdir -p docs/pdf docs/data`
+- `git mv docs/cache_architecture.pdf docs/pdf/`
+- `git mv docs/designs/spire_design_alternatives.pdf docs/pdf/`
+- `git mv docs/spire_lifecycle_sme_update.pdf docs/pdf/`
+- `git mv docs/spire_test_plan.pdf docs/pdf/`
+- `git mv docs/tester-intro.pdf docs/pdf/`
+- `git mv tests/spire_sme_validation_checklist.pdf docs/pdf/`
+- `git mv docs/spire_tools_modules.xlsx docs/data/`
+
+**Verification.**
+
+```
+$ python -m pytest -q -n auto --dist loadfile
+1008 passed in 57.52s
+```
+
+All seven moved as pure renames (`git status` shows `renamed:` on each). No code changes. Nothing broken.
+
+**Files touched.** Seven renames, no edits.
+
+**Commits.**
+- `8e30a6b` — Phase 1.3: move PDFs and XLSX out of source tree *(check actual SHA with `git log --oneline -3`)*
+
+**Cross-references.** Doc A §7.3.2. Follow-up: task 1.4.
 
 ---
 
@@ -230,20 +258,45 @@ No port-collision warnings. Dev instance runs alongside the runtime.
 | Doc A reference | §7.3.2, §7.4 (task 1.4) |
 | Bug ID | — |
 | Investigation ID | — |
-| State | open |
+| State | verified |
 
-**Objective.** Remove `source-tree.txt` and `isolation/` from the repo.
-Add both to `.gitignore`. Doc A §7.3.2.
+**Objective.** Remove `source-tree.txt` and `isolation/` from the repo; add both to `.gitignore`. Doc A §7.3.2.
 
-**Commands and output.** *(to be filled)*
+**Recon.**
 
-**Files touched.** *(to be filled)*
+- `source-tree.txt` — not tracked, not on disk. Already gitignored from an earlier session. Nothing to do.
+- `isolation/` — tracked, five files: `classify_system.txt`, `files.zip`, `isolate_standalone.py`, `out.txt`, `parse_system.txt`.
 
-**Commits.** *(to be filled)*
+**Commands.**
 
-**Cross-references.**
-- Doc A §7.3.2
-- Follow-up: task 1.5 (registry drift map) — first audit task
+- `git rm -r isolation/`
+- `grep -qxF "isolation/" .gitignore || echo "isolation/" >> .gitignore`
+
+**Verification.**
+
+```
+$ git status
+Changes to be committed:
+  deleted:    isolation/classify_system.txt
+  deleted:    isolation/files.zip
+  deleted:    isolation/isolate_standalone.py
+  deleted:    isolation/out.txt
+  deleted:    isolation/parse_system.txt
+Changes not staged for commit:
+  modified:   .gitignore
+
+$ grep -n "isolation\|source-tree" .gitignore
+43:isolation/
+```
+
+**Files touched.**
+- Deleted: `isolation/` (5 files)
+- Modified: `.gitignore` (added `isolation/`)
+
+**Commits.**
+- `131a9db` — Phase 1.4: remove isolation/ from repo; gitignore it
+
+**Cross-references.** Doc A §7.3.2. Follow-up: task 1.5 (registry drift map) — first audit task.
 
 ---
 

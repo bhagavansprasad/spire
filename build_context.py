@@ -326,7 +326,7 @@ def build_bundle(
     body = "".join(parts)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"context_{name}.md"
+    out_path = out_dir / f"{name}.md"
     out_path.write_text(body, encoding="utf-8")
 
     return BundleResult(

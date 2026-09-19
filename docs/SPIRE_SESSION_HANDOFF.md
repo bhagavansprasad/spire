@@ -1,235 +1,271 @@
-# Handoff — Spire (classifier flip fixed; planner robustness is next)
+# SPIRE — Session Handoff, 2026-09-19
 
-Paste this into the new window to continue. This SUPERSEDES the prior handoff:
-the **multi-module router / lifecycle-flip** work it teed up is DONE and merged.
-It resolved differently than that handoff anticipated — see "How the router work
-actually resolved" below. The open work is now **planner robustness (S1)** and a
-few smaller items.
+**This file supersedes the 2026-09-18 handoff.** The Phase 1 audit is
+**complete**. Every section (§A through §H) is closed. The findings log
+runs F-001 through F-040. This handoff is the launch pad for Phase 2 —
+correctness work — not a document to maintain.
+
+**Read this first.** Then read `docs/audit/phase-1-audit.md` (the audit)
+and `docs/audit/findings-log.md` (the log). This handoff is a launch
+pad, not a document to maintain.
 
 ---
 
-## What Spire is
+## What is closed
 
-AI-native NL query over Oracle Fusion Cloud (P2P + AR). Deterministic KG
-pipeline: **route → parse → plan → execute → synthesize**. Two LLM boundaries —
-the module **classifier** and the **parser** (words → Intent); planning,
-execution, and synthesis are deterministic (no LLM synthesis call). The KG is
-the deterministic oracle: plans are COMPUTED from KG edges/filters/tools, not
-chosen by a model. This is the core design bet and it is sound — keep it.
+**Phase 1 — Audit & Baseline — complete.**
 
-- Repo: `github.com/bhagavansprasad/spire`, working dir `~/pocs/spire`
-- Current pod: `eqjz` (creds in `personas.yaml`). **Spire reads `personas.yaml`
-  ONLY** — the `IKS_FUSION_*` shell env vars are for curl scripts, NOT Spire. A
-  wrong pod usually means the MCP server is stale (loads the persona once at
-  startup) — restart it. Restart the MCP server after ANY change under
+- **§A — Registry drift map.** Closed. Every §A.1 and §A.2 row has a
+  state. A-16 (po_status untaught, relationship_phrase dead KG rows) and
+  A-20 (aggregate tools registered in code, not KG) are `disagree`, with
+  A-16 probed clean.
+- **§B — Bug inventory.** Closed. §B.6 is the audit-row-to-finding map.
+  Every §B row and candidate carries an F-NNN or a documented closure.
+- **§C — Dead code inventory.** Closed. C.1 confirmed orphans; C.2
+  candidates; C.3 swept 2026-09-18 with C-13 through C-16 added. C-11's
+  Confirm corrected. §C.5 lists what was not checked — one item
+  (`personas.example.yaml` drift) closed 2026-09-18 with a no-schema-
+  drift finding.
+- **§D — Inconsistency inventory.** Closed. D-01 through D-15 all
+  resolved.
+- **§E — In-flight work inventory.** E.4 closed — all four rows
+  resolved (E-11 merge path confirmed, E-12 branch found on origin,
+  E-13 both merged, E-14 both merged). E.5 accurate.
+- **§F — Baseline metrics.** F.1 measured. F.2 token table measured
+  (three cells `—`, deliberately deferred). F.3 lists what was not
+  measured.
+- **§G — Behavioural byte-diffs.** Closed. Two goldens pod-drift only;
+  one byte-identical.
+- **§H — Probabilistic-behaviour map.** Four nondeterminism closures
+  landed (F-022, F-023, F-024, F-040). Remaining observations are map
+  content, not action items.
+
+**Findings-log range:** F-001 through F-040. All closed or classified.
+
+---
+
+## Baseline metrics — measured 2026-09-18/19
+
+- **Test suite:** `1011 passed, 22 deselected in 3:43`. Supersedes the
+  prior handoff's cited 913/18; the suite grew ~95 tests since that
+  snapshot. Confirmed by two runs: `957 passed + 54 failed` with the pod
+  down (all 503s), then `1011 passed` after pod recovery. The two
+  reconcile exactly.
+- **Test-suite design note for Phase 4b.** The 54 pod-dependent tests
+  are NOT `@pytest.mark.integration` — they only `skipif(not
+  PERSONAS_FILE.exists())`. With `personas.yaml` present and the pod
+  down they fail rather than skip. The 22 deselected are the genuinely-
+  marked integration tests. `pytest -q` is therefore not a pod-
+  independent gate today.
+- **`--validate`:** cited from the prior handoff at 236/240
+  (`gemini-3.5-flash`); not re-run this session. The `gemini-3.1-flash-
+  lite` figure of 205/240 is also cited, and is CF-2's motivation.
+- **KG tables matching seed:** 9 / 9 (measured A-17).
+- **Golden files:** 1 / 3 byte-identical; 2 / 3 pod-drift only (§G).
+
+---
+
+## Carry-forward status
+
+- **CF-1 — closed 2026-09-18.** The unsatisfiable-include / raw-KeyError
+  shape. Seven shapes probed directly through `generate_plan`. Six
+  refuse with `RefusalError` (flavor `UNSUPPORTED_OPERATION`, offending
+  element named): PO + `['Supplier']`, PO + `['POSchedule','Supplier']`,
+  PO + `['BogusEntityXYZ']`, Supplier + `['Buyer']` (no edge), Invoice +
+  `['Supplier']`, CustomerAccount + `['Supplier']`. One plans — Supplier
+  + `['Classification']` — because `HAS_CLASSIFICATION` exists; its
+  reverse-only tool makes it unsatisfiable downstream, but
+  `validate_intent` gates it before `generate_plan` runs
+  (`test_bug2_include_gate.py::test_classification_include_refused`). No
+  raw `KeyError` path remains.
+
+- **CF-2 — OPEN, parked by user decision.** `GEMINI_MODEL` silent
+  dependency. The swap from `gemini-3.5-flash` to `gemini-3.1-flash-lite`
+  measurably degrades routing (236/240 → 205/240) with no warning.
+  **Do not action.** User asked not to change `config.py` at this time.
+  The shape was decided (warn-not-raise at import, Gemini-only whitelist
+  `{"gemini-3.5-flash"}`), documented in this session's conversation, and
+  available if the decision reverses. Re-open only if the user asks.
+
+- **CF-3 — closed 2026-09-18.** Corpus-consistency guard. New file
+  `tests/test_corpus_consistency.py`, 116 lines, 3 tests passing. Asserts
+  byte-identical and case-normalized prompt groups carry identical module
+  sets. Baseline: 19 byte-identical groups, 2 case-normalized, zero drift
+  at both layers. Paraphrases are deliberately not checked — Phase 3f's
+  deterministic classifier makes the module set a function of entity
+  synonyms, not a model's one-shot judgement.
+
+- **CF-4 — closed 2026-09-18.** Register cross-index. The register at
+  `docs/archive/pre-plan/spire_overnight_findings.md` (handoff pointer
+  was to a nonexistent path; correct path recorded here). Cross-walk of
+  its 35 items against the F-NNN log: 6 covered directly (register #7 →
+  F-027, #26 → F-036, #29 → F-035, #32 → F-001, #33 → F-010/B-04, #35 →
+  F-016), 4 by class (#6 → F-034, #27 → F-012, #31 → F-014/F-021, #34 →
+  F-014), 4 uncovered — disposed of as: register #9 retired (stale —
+  corpora show all three 1252 prompts refusing identically); register #5
+  folded into F-015 (same mechanism, same shape); register #1 → Phase 4
+  (LLM-synthesis theme, not a §B finding); register #30 → Phase 2
+  (genuine perf defect — top-N compare fetches the entire 17,447-PO
+  universe before narrowing and times out; fix direction: select top-N
+  suppliers first, then fetch only their POs).
+
+---
+
+## The register's #30 — Phase 2 pickup
+
+Not in §B.1 because §B was scoped to prompt failures, not performance
+defects. It is a real defect with a named fix. Phase 2 opens it directly
+from the register; no F-NNN needed.
+
+`Compare ordered vs invoiced for our top 3 suppliers` issues an
+unfiltered PO fetch — pages all 17,447 POs before narrowing client-side.
+Exceeds the pod's upstream timeout (145.7s on the 06_slow run; the run's
+only errored prompt). The single/named compare is bounded and completes
+in ~26s. Fix: rank top-N suppliers first (cheap), then fetch only their
+POs — mirroring the spend-ranking path's select-then-detail order.
+
+---
+
+## Pod-state observations to carry forward
+
+- **Pod growth is real and ongoing.** Supplier count: 431 (golden
+  capture) → 450–455 (audit) → 593 → 600 → 620 → 656 → 1011 tests
+  passed on the current pod. Golden files and pod-dependent counts will
+  keep drifting.
+- **Module-set ordering varies run-to-run** without affecting the
+  answer. Confirmed in F-023, F-032, and §G's diff. The module set is a
+  diagnostic, not a correctness signal.
+- **Model-prose variance** in `Reason:` lines is real (F-035, F-038).
+  Same flavor, same Solution, different Reason text. Not a bug — a
+  §H.1-class observation.
+- **The parser prompt is at its token ceiling.** Any sysprompt edit
+  risks degenerate generation. A parser-prompt fix needs a full 12-set
+  `--validate` re-run.
+- **The pod (eqjz) is the current demo pod.** `personas.yaml` holds
+  credentials; Spire reads `personas.yaml` ONLY. A wrong pod usually
+  means the MCP server is stale — restart after any change under
   `src/spire/mcp_server/`.
-- LLM: Gemini `gemini-3.5-flash` via Vertex AI, `GEMINI_TEMPERATURE = 0.0`,
-  `LLM_MAX_OUTPUT_TOKENS = 8000` in `src/spire/config.py`. **The model is set by
-  `GEMINI_MODEL` in config.py — this matters, see S2 below.** All this session's
-  verification was on `gemini-3.5-flash`; `gemini-3.1-flash-lite` measurably
-  degrades routing.
-- master is green: **913 passed, 18 deselected**. Everything below is merged.
 
 ---
 
-## Architecture note (keep the KG — asked and answered repeatedly)
+## `personas.yaml` — status
 
-The user periodically asks whether the KG is the source of Spire's bugs and
-whether multi-agent orchestration (orchestrator → per-module agent → LLM picks
-tool) would be better. **Answer, consistently: no — keep the KG.** Nearly every
-bug lives in the CODE THAT READS the KG (planner traversal, parser
-include-handling, router scoping), NOT in the KG data; the KG is repeatedly the
-ORACLE that catches the incorrect code. Moving determinism into an LLM would
-multiply the silent-failure + non-determinism problems the KG design avoids. For
-a read-only NL-query system over ERP data with zero tolerance for wrong figures,
-KG-deterministic is the more scalable and more correct choice. What actually
-costs the user: KG COVERAGE (new capability = new rows + rebuild + tripwires) and
-KG-change ERGONOMICS — both improvable WITHIN the approach.
+Tracked, modified, and (per the user) carried into a recent commit. It
+contains live credentials including several commented-out alternates.
+§7.3.1's untrack-and-rotate task and E-05's deferred-untrack item both
+apply; E-05 remains deferred per plan. **E-05's next-session entry must
+record that the file rode into a commit** — the values are in the
+current tree's history, not just an old branch.
+
+Do not add `personas.yaml` to any future commit. Named `git add`, never
+`-A`.
 
 ---
 
-## How the router / lifecycle-flip work actually resolved (THIS session)
+## Working process — unchanged
 
-The prior handoff framed the lifecycle flip as "build increment-2 multi-module
-routing properly." The work uncovered a simpler, more important truth that
-changed the whole approach. Recorded here so it stays settled.
+The S0–S8 evidence standard, the one-command-at-a-time rule, the
+anchor-block-verify loop, the nested-fence rule, the three update
+disciplines — all unchanged from the 2026-09-18 handoff. Read
+`docs/spire-robustness/WORKING_STYLE.md` before any finding work.
 
-### The key discovery: the module set does NOT affect the answer
+**For batch audit-file edits**, a python-heredoc script that reads the
+file, applies a list of `(label, old, new)` string replacements, asserts
+each anchor's count is exactly 1, and writes only on success — is faster
+and safer than sed, and was the pattern used for the last three batches
+this session. The script is atomic: one bad anchor and nothing is
+written.
 
-The classifier's module set (the "bucket" list) ONLY selects which
-`.sysprompt` grounding blocks the parser sees. It is **discarded after the
-parse** — `route_and_parse` uses it to scope, then returns only the
-ParseResult; the pipeline (`graph/pipeline.py parse_node`) keeps only
-`result.intent`. **Nothing downstream reads the module set.** The TOOL is chosen
-from the Intent by the planner, not from the buckets.
-
-Consequence, verified repeatedly: across every lifecycle prompt, the module set
-varied run-to-run but the **tool stayed constant** and the **answer was
-identical**. The original flip (`[procurement]` vs `[procurement, payables]`)
-produced the same tool and same answer both ways. So the module set is NOT a
-correctness signal — it is (a) a token-cost signal (more buckets = more grounding
-sent = more tokens) and (b) a DIAGNOSTIC breadcrumb for backtracing a wrong
-result ("which grounding was loaded when this broke").
-
-This reframed the whole task: it is NOT about making the module set "correct"
-(there is no single correct set — extra buckets are harmless surplus). It is
-about (1) killing the non-determinism where cheap, and (2) grading validation by
-the thing that matters (the tool).
-
-### What shipped (all merged to master; branch feat/router-show-parser-diagnostic)
-
-1. **Router diagnostic** (`router.py`) — `route_and_parse` logs
-   `Router: modules=[...]` (success) and
-   `Router: no module matched -> full-context parse` (fallback) on the
-   `spire.parser` logger, gated by the existing `show_parser` flag (NO new
-   flag). Makes the classifier's choice visible under `--show-parser` for
-   backtracing. Commit `34044d8`.
-
-2. **Classifier lifecycle flip fixed** (`router.py`) — a MINIMAL grounding rule
-   added to `_CLASSIFIER_INSTRUCTION` (the classifier's own hand-authored prompt
-   — NOT the generated `classifier_menu.sysprompt`): a status question about ONE
-   named PO is procurement even when it says invoiced/paid; "Do NOT add payables
-   for such a question." It deliberately says NOTHING about supplier or
-   invoices-as-subject. The prompt that flipped 4x/2x is now **20/20
-   deterministic `[procurement]`** on `gemini-3.5-flash`; genuine cross-bucket
-   prompts (invoices-for-supplier, etc.) are UNAFFECTED. Commit `16a22f6`.
-
-   IMPORTANT LESSON: a FIRST, broader version of this rule ("drop payables AND
-   supplier" + a cross-bucket counter-example) caused 11 regressions — it taught
-   the classifier to UNDER-include supplier on invoice prompts across several
-   sets. A classifier-prompt edit has wide blast radius; the minimal, narrowly
-   scoped rule is what worked. If you touch `_CLASSIFIER_INSTRUCTION`, re-run the
-   FULL 12-set `--validate`, not just lifecycle.
-
-3. **Routing corpus curated** (`08_lifecycle.json`, `02_purchase_order.json`) —
-   corpus module values set to routing verified BY EVIDENCE: a correct
-   end-to-end run (right tool + right answer) plus a stable 10x classify on the
-   target model. Method matters — do NOT curate the corpus by copying one
-   classifier run (that froze the original contradiction, see S3) or by
-   reasoning about what the tool "should" need. Lifecycle entries that flipped →
-   `[procurement]`; genuinely multi-bucket phrasings ("with supplier details",
-   "supplier setup through payment") KEEP their multi-bucket sets; compare-PO and
-   compare-supplier → `[procurement]` (each is one self-reconciling tool).
-   Commit `16a22f6`.
-
-4. **`--validate` philosophy changed** (`promptkit.py`) — pass/fail is now
-   decided by the TOOL alone. A module-set mismatch on a tool-correct row is
-   marked `OK*`, counted as a PASS, and listed under a "MODULE WARNINGS" section
-   — visible for backtracing but non-failing. Exit code is driven by tools only.
-   The decision is a pure `_classify_mark(m_ok, t_ok)` helper with unit tests
-   (`tests/test_promptkit.py`). This is the correct model: the tool is
-   correctness; the module set is a diagnostic. Commit `b0cb73e`.
-
-Full suite green at 913 before merge.
+**For findings-log inserts**, the anchor-block-verify loop remains the
+pattern — the anchor IS the thing that must survive (append-only
+discipline).
 
 ---
 
-## OPEN WORK (next session) — see docs/spire_findings_2026-09-11.md for detail
+## Context bundles — how to request code
 
-### S1 🔴 — planner throws a raw KeyError instead of degrading/refusing (HIGHEST)
+Code is shared as **bundles**, not individual files. `context_bundles.yaml`
+at the repo root defines them; `build_context.py` builds them into
+`context_out/context_<name>.md`. The bundles that matter for audit work:
 
-`generate_plan` raises an UNHANDLED `KeyError: "No edge to include 'Supplier':
-..."` when the parsed Intent carries an include the KG can't wire up (here
-`include: Supplier` off `PurchaseOrder`). The user gets an exception, not an
-answer or a clean refusal.
+- **`graph_kg`** — KG schema, loader, rebuild scripts, executor, fusion client.
+- **`parser_planner`** — draft, parser, router, context_assembly, vocabulary, planner, plan_builders, lookup, registries, cached_llm, prompt_cache.
+- **`parser_context`** — every `.sysprompt` block plus `order.manifest` and `classifier_menu.sysprompt`.
+- **`mcp_server_tools`** — the 34 MCP tools and the server.
+- **`synthesizer`** — synthesizer, ar, p2p, aggregation, response_validation, local_summary, ranking_summary, prompts, pipeline.
+- **`scripts`**, **`tests`**, **`prompts`**, **`corpora`** — used in the C.3 sweep.
 
-- **Contrast:** the planner ALREADY refuses cleanly for unsupported *filters*
-  (`refuse:unsupported_filter (planner)`). The unsupported-*include* path lacks
-  the same graceful handling. Fix: make it degrade (drop the include, plan the
-  rest) or refuse cleanly, matching the filter path.
-- **Model-agnostic / latent on any model.** Surfaced on `gemini-3.1-flash-lite`
-  (which classified `[procurement]`, dropping supplier, so the parser's
-  supplier-include had no grounding and the planner couldn't satisfy it). On
-  `gemini-3.5-flash` this specific prompt classifies `[procurement, supplier]`
-  and does NOT crash — but the crash PATH exists regardless of model. Any Intent
-  with an unsatisfiable include hits it.
-- **Related:** main-register #32 (parser drops PO id → planner list-dumps) is the
-  same theme (planner robustness / safe fallback), distinct mechanism. Worth a
-  single "planner NEVER throws raw; always degrades or refuses" pass covering
-  both.
-- Ships with a test. Needs a small harness proving the unsatisfiable-include
-  path now refuses/degrades instead of raising.
+To build all:
 
-### S2 🟠 — the LLM model is a silent dependency
+    python build_context.py --all
 
-Switching `GEMINI_MODEL` `3.5-flash` → `3.1-flash-lite` (config only) dropped a
-full 12-set `--validate` from 236/240 to 205/240 and triggered S1. The weaker
-model systematically UNDER-classifies cross-bucket prompts (drops the 2nd
-bucket). Nothing warns that the model changed. Consider pinning/enforcing the
-validated model in production so a downstream change can't silently degrade
-routing. (S1's planner hardening reduces the blast radius either way.) The new
-`--validate` design partially defends this — model-induced bucket drift shows up
-as visible `OK*` warnings, not silently — but does NOT cover the S1 crash.
+To build one:
 
-### S3 🟡 — `--generate` freezes classifier flakiness into the corpus
+    python build_context.py parser_planner
 
-`--generate` runs each prompt through the non-deterministic classifier ONCE and
-writes that as the corpus `module` value; a flip gets frozen as ground truth.
-This is how the original lifecycle corpus got a self-contradiction (two identical
-prompts, differing only in PO number, with different expected sets). Fix
-direction: a corpus-consistency guard (generate-time or a test) — "structurally
-identical prompts must have identical expected module sets." The underlying
-lifecycle flip is now fixed, so this is for the general/future case.
-
-### Carry-forward — main register verification pass
-
-`docs/spire_overnight_findings.md` (last updated 2026-08-14) still lists ~14
-issues as open/verified (11 open + 3 verified), NOT re-verified against current
-code. Some may already be resolved incidentally. A pass to re-run them and mark
-what still reproduces is owed. Highest-value real defects in that register:
-#27/#35 (credit-memo truncated-sum labelled as total; top-N dropped on that
-path), #32 (dropped-id list-dump — pair with S1), #34/#31 (projection binds to
-wrong step-output → em-dash on a present value).
+Output lands in `context_out/`. A full explainer lives in
+`docs/developer/context_bundles.md`.
 
 ---
 
-## Working style the user relies on (STRICT)
+## What to read first, in order
 
-One step at a time; ONE command per turn, verify before proceeding. Ask before
-generating code — diagnose first, propose, wait for go-ahead. Deliver COMPLETE
-files, never patches; read the CURRENT file (they share bundles) before editing —
-files drift. "Verified" means actually RUN, not inferred from reading — a green
-tally is NOT a verdict; read the actual output. Every fix ships with its test;
-`pytest -q` always; FULL suite before any SOURCE commit. One branch per logical
-change; named files in `git add` (NEVER `-A` — there are always scratch `.txt`
-files around); heredoc commit messages. They share files as BUNDLES (see
-`context_bundles.yaml`) — ask for the bundle, not individual files. Correct your
-own wrong diagnoses out loud rather than defending them.
+1. This file.
+2. `docs/audit/phase-1-audit.md` — top paragraph for state, then §B.6
+   (the audit-row-to-finding map).
+3. `docs/audit/findings-log.md` — skim F-001 through F-040.
+4. `docs/spire-robustness/WORKING_STYLE.md` — the evidence standard.
+5. `docs/archive/pre-plan/spire_overnight_findings.md` — the register;
+   CF-4's cross-index is in this handoff, not in that file.
 
-The user is thoughtful and will challenge framing — often correctly. This
-session's biggest course-corrections came from them (the model confound, the
-tool-vs-bucket distinction, "who's wrong, LLM or corpus", verify-don't-guess on
-corpus edits). When they push on "does this actually matter / is this the right
-thing to check", take it seriously — twice it collapsed an over-engineered plan
-to a simpler correct one.
+---
+
+## Phase 2 — the next window's work
+
+Phase 2 is Correctness. The audit produced the bug list; Phase 2 turns
+it into zero. Doc A §8 defines the design. The register's theme map
+(`docs/archive/pre-plan/spire_overnight_findings.md`) is a defensible
+ordering and the audit does not contradict it:
+
+- **Theme C — field synonyms & projection safety.** Largest cluster,
+  highest payoff. Fixes #7, #12, #31, #34 in the register; closes F-027,
+  F-014, F-021, and F-017 by class in the audit.
+- **Theme B — refusal correctness & format.** #6, #11, #29 in the
+  register; F-034, F-035, and the refusal-rendering fixes in the audit.
+- **Theme D — parser robustness & PO reference.** #4, #10, #32 in the
+  register; F-001, F-006, F-013 in the audit.
+- **Theme A — local synthesis (LLM elimination).** Register #1; the
+  umbrella. Measured at 56 → 5 synth calls; two shapes remain (address-
+  target list, single PO + buyer).
+- **Theme E — count / sample consistency.** Register #2, #14, #26, #27,
+  #33, #35, #30; audit F-010, F-012, F-016, F-036.
+
+Phase 2 opens with the register's own Phase 0 — curl the four suspected
+items (#2, #4, #7, #9) to promote them to verified, then begin Theme C.
+
+Phase 2 is **fixing**, one bug per branch/PR, with a regression test each.
+Not investigative. Do not bundle bugs.
+
+---
 
 ## First steps in the new window
 
-1. Read this handoff and `docs/spire_findings_2026-09-11.md`.
-2. Confirm ground truth: `git log --oneline -8`, `python -m pytest -q` (expect
-   913), MCP server up on eqjz, and CONFIRM the model is `gemini-3.5-flash`
-   (`python -c "from spire.config import build_llm; print(build_llm().model)"`
-   or check `GEMINI_MODEL` in config.py — S2).
-3. If tackling S1: reproduce the crash first. On `3.5-flash` the supplier-details
-   lifecycle prompt won't crash (it classifies `[procurement, supplier]`), so
-   reproduce via an Intent that carries an unsatisfiable include directly, or by
-   temporarily forcing the classifier to drop supplier — then read the actual
-   `generate_plan` traceback, find where the edge lookup raises, and design the
-   degrade-or-refuse there. Diagnose before proposing.
+1. **Confirm ground truth.**
+   - `git log --oneline -3` (should be on `Phase1-Audit-and-Baseline` or
+     a Phase 2 branch).
+   - `pytest -q` (expect 1011 passed / 22 deselected — but only if the
+     pod is up; otherwise expect 957 passed / 54 failed, all 503).
+   - MCP server up; `personas.yaml` resolves to pod `eqjz`.
 
-## Do NOT
+2. **Read the five files listed above.** Confirm the summary in this
+   handoff matches what the audit and log actually say.
 
-- Do NOT hard-collapse multi-module classifications to single-module — genuine
-  cross-module prompts are first-class. (The lifecycle fix does NOT do this; it
-  only stops payables attaching to single-PO status prompts.)
-- Do NOT hand-edit the generated `classifier_menu.sysprompt` (regeneration
-  overwrites it). Classifier rules go in `_CLASSIFIER_INSTRUCTION`.
-- Do NOT curate the corpus by copying one classifier run or by reasoning about
-  what a tool "should" need — curate from a correct end-to-end run + stable
-  repeat classify on the target model (S3).
-- Do NOT treat a module-set mismatch as a correctness failure — the tool is
-  correctness; the module set is a diagnostic (that is now baked into
-  `--validate`).
-- Do NOT change `_CLASSIFIER_INSTRUCTION` without re-running the FULL 12-set
-  `--validate` — it has wide blast radius (11 regressions from an over-broad
-  version this session).
+3. **Open Phase 2.** Per Doc A §8. Start with the register's Phase 0
+   curls, then Theme C.
+
+4. **Do not touch `config.py` (CF-2) unless the user asks.** It is
+   parked.
+
+---
+
+*End of handoff.*

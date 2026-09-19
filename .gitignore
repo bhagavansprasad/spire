@@ -40,3 +40,5 @@ promptkit_overnight_*.log
 logs/
 .streamlit/
 .spire-dev.env
+isolation/
+source-tree.txt

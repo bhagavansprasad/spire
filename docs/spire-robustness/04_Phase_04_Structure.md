@@ -606,7 +606,7 @@ spire-ui  = "spire.ui.__main__:main"
 | Runtime | `~/pocs/spire-runtime` | `hardening-master` | 3333 / 8000 / 8888 | ngrok → 8888 |
 | Dev | `~/pocs/spire` | feature branches | 4444 / 9000 / 9999 | none |
 
-**Mechanism.** `.spire-dev.env` (gitignored) exists only in the dev tree. `run-all.sh` sources it if present; otherwise uses runtime defaults. No flag, no remembering.
+**Mechanism.** `.spire-dev.env` (gitignored) exists only in the dev tree. `spire.sh` sources it if present; otherwise uses runtime defaults. No flag, no remembering.
 
 **Runtime untouched.** The runtime clone never sees `.spire-dev.env` because the file is gitignored, so it always runs on the default ports. Testers are not affected by dev work.
 
@@ -617,7 +617,7 @@ cd ~/pocs/spire-runtime
 git fetch origin hardening-master
 git reset --hard origin/hardening-master
 pip install -e .   # in the runtime venv
-./run-all.sh
+./spire.sh
 ~~~
 
 No promotion script exists. Promotion is a manual, deliberate action.
