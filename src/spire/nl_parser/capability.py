@@ -410,7 +410,14 @@ _NOT_A_ROOT_GUIDANCE: dict[str, tuple[str, str]] = {
     ),
     "ReceivablesInvoiceLine": (
         "Ask for the invoice and its lines together.",
-        "Show invoice lines for invoice 300000248096352",
+        # F-033: a refusal's Example is a PROMISE made to someone who
+        # has just been told no. The previous example was byte-identical
+        # to the prompt that triggers this very refusal, so following
+        # the advice landed the user straight back in the same refusal.
+        # This example is a DIFFERENT prompt that succeeds: it roots on
+        # the invoice (a valid target) by its queryable id, and is
+        # already in scripts/prompts/10_refusal_examples.txt.
+        "Get the AR invoice with CustomerTransactionId 300000248096352",
     ),
     "ReceivablesTaxLine": (
         "Ask for the invoice and its tax lines together.",
