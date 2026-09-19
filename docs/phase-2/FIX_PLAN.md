@@ -98,7 +98,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 
 | ID | Kind | Cluster | Primary fix site | State | PR | Date |
 |---|---|---|---|---|---|---|
-| F-002 | cost | 8 | `scripts/promptkit.py`, `src/spire/config.py` | fixed | — | 2026-09-19 |
+| F-002 | cost | 8 | `scripts/promptkit.py`, `src/spire/config.py` | verified | #149 | 2026-09-19 |
 | F-033 | wrong-narration | 7 | `nl_parser/capability.py` | not-started | — | — |
 | F-006 | crash | 6 | `planner/plan_builders.py` | not-started | — | — |
 | F-007 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
