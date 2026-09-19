@@ -44,8 +44,6 @@ from spire.synthesizer.synthesizer import (
     POLifecycleResponse,
 )
 
-MCP_SERVER_URL = "http://127.0.0.1:3333/mcp"
-
 
 def _format_intent(intent) -> str:
     lines = ["Intent:"]

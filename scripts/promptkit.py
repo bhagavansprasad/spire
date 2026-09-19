@@ -50,7 +50,7 @@ from spire.nl_parser.router import (
 from spire.nl_parser.result import RefusalError
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.planner.planner import generate_plan
-from spire.config import reset_usage, usage_report
+from spire.config import mcp_server_url, reset_usage, usage_report
 
 
 # ==========================================================================
@@ -448,12 +448,16 @@ def _emit_run_graph_output(state, menu):
 
 
 async def _run_one(prompt, exp_module, exp_tool, menu, client):
-    """Run one prompt through the graph; return (state, stage_report)."""
+    """Run one prompt through the graph; return (state, stage_report).
+
+    The classifier's module selection is read from the graph state
+    (`_modules_got`), written there by parse_node from the
+    ParseResult the router produced. It is NOT re-classified here:
+    running the classifier a second time from promptkit was a
+    wasted LLM call and reported a DIFFERENT classification than
+    the one the pipeline actually used (F-002).
+    """
     from spire.graph.pipeline import GRAPH
-    try:
-        modules_got = classify_modules(prompt, menu_text=None)
-    except ClassificationError as exc:
-        modules_got = f"<classify-error: {exc}>"
     try:
         state = await GRAPH.ainvoke({
             "prompt": prompt, "menu": menu, "session": client,
@@ -461,7 +465,6 @@ async def _run_one(prompt, exp_module, exp_tool, menu, client):
         })
     except Exception as exc:  # noqa: BLE001
         state = {"error": f"pipeline crash: {type(exc).__name__}: {exc}"}
-    state["_modules_got"] = modules_got
     rpt = _stage_report(prompt, exp_module, exp_tool, state)
     return state, rpt
 
@@ -479,7 +482,6 @@ def _print_stage_breakdown(rpt):
 
 async def _run_async(files, single_prompt, show_stages) -> int:
     from fastmcp import Client
-    from spire.rendering.formatters import MCP_SERVER_URL
 
     menu = load_kg_menu()
 
@@ -497,7 +499,7 @@ async def _run_async(files, single_prompt, show_stages) -> int:
     passed = failed = 0
     failures = []
 
-    async with Client(MCP_SERVER_URL) as client:
+    async with Client(mcp_server_url()) as client:
         current_file = object()
         for exp_module, exp_tool, prompt, fname in work:
             # Reset the token accumulator per prompt so each prompt's

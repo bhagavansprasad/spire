@@ -20,5 +20,4 @@ from spire.rendering.formatters import (  # noqa: F401
     _render_records,
     _with_truncation,
     _is_quantity,
-    MCP_SERVER_URL,
 )
