@@ -115,7 +115,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-021 | missing-projection | 2 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | not-started | — | — |
 | F-001 | missing-capability | 3 | `nl_parser/parser.py`, `planner/models.py` | not-started | — | — |
 | F-016 | missing-capability | 3 | `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py` | not-started | — | — |
-| F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | not-started | — | — |
+| F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
 | F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
 | F-018 | wrong-refusal | 4 | `nl_parser/capability.py`, parser sysprompt, tool args, KG | not-started | — | — |
 | F-019 | wrong-data | 4 | parser sysprompt, tool args, KG | not-started | — | — |
@@ -123,6 +123,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |
 | Reg #30 | perf | 8 | `plan_builders.py`, `compare_orders_to_invoices.py` | not-started | — | — |
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
+| F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
 
 **Session log.** The window label for each fix is recorded in the

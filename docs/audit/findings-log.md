@@ -55,6 +55,112 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-043 — Site and Classification includes refuse; both tools were reverse-only and a hardcoded Site gate blocked the include path
+
+**Date:** 2026-09-19
+**Status:** verified (PR #152, 2026-09-19)
+**Cross-refs:** F-025 (sibling design decision — PO cannot reach Supplier children), F-042 (same branch)
+
+**Evidence.**
+
+Discovered during the same Phase 2 sweep as F-042. The prompts
+`show sites for supplier EIP Inc` (and four variants) and
+`show classifications for supplier EIP Inc` (and four variants) refuse
+in `scripts/prompts/13_child_as_root.txt`.
+
+    $ python scripts/promptkit.py --run --prompt "show sites for supplier EIP Inc"
+    Reason:   Supplier sites aren't available as a standalone listing.
+      (refusal: unsupported_operation — Supplier sites aren't available as a standalone listing.)
+
+    $ python scripts/promptkit.py --run --prompt "show classifications for supplier EIP Inc"
+    Reason:   Classification is not available as an include on Supplier.
+      (refusal: unsupported_operation — Classification is not available as an include on Supplier.)
+
+Two mechanisms, stacked:
+
+1. `intent_validation.py` had a hardcoded refusal for any intent with
+   `include=['Site']` — "Supplier sites aren't available as a standalone
+   listing" — with `offending_entity='SupplierSiteListing'`.
+2. `_NON_INCLUDABLE_ENTITIES = frozenset({"Site", "Classification"})`
+   caused the general include gate to refuse Classification includes
+   as well.
+
+Both refusals were honest given the tools' shape:
+`search_suppliers_by_site_bu` and `search_suppliers_by_classification`
+took the BU / classification as a **required** argument, so the only way
+to use them was as a reverse filter — "find suppliers BY a
+site/classification". A forward include had no tool to call.
+
+**Root cause.**
+
+The two reverse-only tools were also the natural forward tools; they
+just required the wrong argument shape. The Site gate and the
+`_NON_INCLUDABLE_ENTITIES` entry were both downstream of that
+constraint. Making the child filter argument optional (return all
+children when omitted) turned both tools dual-purpose and made both
+includes valid — no new tool, no new edge, no new KG row.
+
+**Fix location (Phase 2 — shipped).**
+
+Eleven files, one branch, one commit:
+
+- `src/spire/mcp_server/server.py` — `business_unit` / `classification`
+  optional on the two MCP tool wrappers.
+- `src/spire/mcp_server/tools/supplier_sites.py` — optional filter;
+  stamps `SupplierId` on each row so the synthesizer can join.
+- `src/spire/mcp_server/tools/supplier_classifications.py` — same shape.
+- `src/spire/nl_parser/intent_validation.py` — hardcoded Site gate
+  deleted; `_NON_INCLUDABLE_ENTITIES` emptied; the general include gate
+  now validates Site and Classification against the KG edge graph like
+  any other include.
+- `src/spire/nl_parser/vocabulary.py` — `Site` and `Classification`
+  added to `_CHILD_INCLUDE_WHEN_PRESENT` with multi-word triggers
+  (`"sites for"`, `"'s sites"`, etc.) so the include rule fires on the
+  include phrasing and does not collide with the filter phrasing.
+- `src/spire/nl_parser/context/supplier/b_classification.sysprompt`
+  and `b_site_in_bu.sysprompt` — leading "X for supplier NAME" rules
+  added.
+- `src/spire/nl_parser/context_assembly.py` — the inline copies of
+  those two rules extended.
+- `src/spire/nl_parser/capability.py` — the dead `SupplierSiteListing`
+  entries (fallback example, operation solution) retired; the
+  internal-marker comment rewritten.
+- `src/spire/synthesizer/p2p.py` — `SiteInfo` and `ClassificationInfo`
+  models; `sites` and `classifications` fields on `SupplierRecord`;
+  `_supplier_with_sites` / `_supplier_with_classifications` shape
+  detectors; `build_suppliers_with_sites` /
+  `build_suppliers_with_classifications` builders — parallel to the
+  existing `_supplier_with_contacts` path.
+- `src/spire/synthesizer/synthesizer.py` — the two local dispatch
+  branches, before the LLM fallback.
+- `src/spire/rendering/formatters.py` — the two indented sub-tables.
+- `tests/test_bug2_include_gate.py` — the two tests that asserted Site
+  and Classification includes were refused are flipped to assert
+  they pass. Full suite 1028 passed.
+
+**Verification.**
+
+- All six F-043 prompts answer: 22 sites / 3 classifications per supplier.
+- `pytest -q`: 1028 passed, 0 failed, 22 deselected.
+- Full sweep `13_child_as_root.txt`: 64/64 clean; the 10 previously-
+  refused prompts (4 address, 3 site, 3 classification) now answer.
+- Site include renders the new `EIP Inc — sites:` sub-table.
+- Classification include renders the new
+  `EIP Inc — classifications:` sub-table.
+
+**Not checked.**
+
+- Whether the same dual-purpose pattern generalises to other
+  reverse-only edges. `HAS_SITE` and `HAS_CLASSIFICATION` were the only
+  two remaining in the KG's reverse-only set; the sweep found no
+  others.
+- Whether the parser prompt's token ceiling was approached by the two
+  sysprompt additions. Sweep passed clean; a targeted `--validate` on
+  the full 12-set corpus is warranted per the handoff's caveat but was
+  not run this session.
+
+---
+
 ## F-042 — supplier-address phrasings refuse; collapses into F-009 (block in wrong module, unreachable from a supplier-scoped parse)
 
 **Date:** 2026-09-19
@@ -118,7 +224,7 @@ row in the ledger.
 ## F-041 — AR invoice children named first ("invoice lines for invoice X", "DFF for invoice X", "tax breakdown for invoice X") refuse or silently drop; three AR sysprompt blocks lack a leading-phrasing rule
 
 **Date:** 2026-09-19
-**Status:** root-caused, not fixed
+**Status:** verified (PR #151, 2026-09-19)
 **Cross-refs:** B-22 (family — child-field scope), F-025 (reverse-only children excluded), F-033 (adjacent — same class of parser/prompt gap, message-layer)
 
 **Evidence.**
@@ -486,7 +592,7 @@ The first fix alone resolves the audit row (the EXPIRED match disappears). The s
 ## F-009 — addresses rule lives in `payables/` but parses for `Address` (a `supplier` entity); the rule is unreachable from the scoped parse
 
 **Date:** 2026-09-18
-**Status:** root-caused, not fixed
+**Status:** fixed (as F-042's branch, PR #152, 2026-09-19)
 **Cross-refs:** B-05, F-003 (same class), B-13 / F-001 (same family)
 
 **Evidence.**
