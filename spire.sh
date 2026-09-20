@@ -23,9 +23,16 @@
 # Running `./spire.sh --dev` cannot affect a runtime process, and
 # `./spire.sh --runtime --stop` cannot affect a dev process.
 #
-# Started services run in the BACKGROUND: this script spawns them under
+# STARTED SERVICES run in the BACKGROUND: this script spawns them under
 # nohup, writes their PIDs to the mode's pidfile, and exits. Use
 # ./spire.sh --stop to stop them.
+#
+# STALE PIDFILES. A pidfile records PIDs, and PIDs are reused by the
+# kernel after a reboot. A recorded PID that is "alive" may therefore
+# belong to an unrelated process. Every liveness check below is
+# consequently pid_alive AND is_our_process: only a live PID that is
+# also one of our processes counts. A stale pidfile is removed silently
+# on start; --stop never kills a PID it cannot confirm as ours.
 #
 # Ports live in ONE place: SPIRE-PORTS.env at the repo root.
 
@@ -50,6 +57,13 @@ PIDFILE=""
 pid_alive() {
   local pid="$1"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# True only when the PID is alive AND belongs to one of our services.
+# The extra check protects against PID reuse — see the header note.
+pid_is_ours() {
+  local pid="$1"
+  pid_alive "$pid" && is_our_process "$pid"
 }
 
 pids_on_port() {
@@ -117,7 +131,7 @@ Usage: ./spire.sh [--dev | --runtime] [--status | --stop | --tail | --mcp-only]
 
   (no args)     show this help
   (no action)   start the current mode's services in the background
-  --status      show the current mode's ports, PIDs, and owner
+  --status      show the current mode's ports and PIDs
   --stop        stop the current mode's services (only that mode)
   --tail        start, then tail the UI log
   --mcp-only    start ONLY the MCP server (foreground, --reload)
@@ -196,9 +210,12 @@ stop_mode() {
       esac
     done < "$pidfile"
 
+    # Only kill PIDs that are alive AND ours. A live PID from a
+    # pre-reboot pidfile may now belong to an unrelated process — see
+    # the header note. Skipping those protects the system.
     local pid
     for pid in "$mcp_pid" "$api_pid" "$ui_pid"; do
-      if pid_alive "$pid"; then
+      if pid_is_ours "$pid"; then
         echo "spire.sh: stopping PID $pid"
         kill -TERM "$pid" 2>/dev/null || true
         stopped=1
@@ -298,17 +315,27 @@ _preflight_ports() {
 
 # Check this mode's OWN pidfile. Other modes are invisible here — their
 # pidfiles have a different name.
+#
+# The check requires pid_is_ours (alive AND ours), not just pid_alive.
+# After a reboot the kernel reassigns PIDs, so a live PID recorded in a
+# pre-reboot pidfile may now belong to an unrelated process. Treating
+# that as "already running" would refuse to start forever.
 if [ -f "$PIDFILE" ]; then
   read_pidfile
-  any_alive=0
+  any_ours=0
   for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
-    pid_alive "$pid" && any_alive=1
+    if pid_is_ours "$pid"; then
+      any_ours=1
+    fi
   done
-  if [ "$any_alive" = "1" ]; then
+  if [ "$any_ours" = "1" ]; then
     echo "spire.sh: already running for mode $MODE." >&2
-    echo "          use './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
+    echo "          use './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
     exit 1
   fi
+  # No live SPIRE process matches the pidfile. It is stale (post-reboot
+  # PID reuse, or a crashed run). Remove it and proceed.
+  echo "spire.sh: removing stale pidfile $PIDFILE" >&2
   rm -f "$PIDFILE"
 fi
 
@@ -329,12 +356,12 @@ fi
 # Pre-flight port check for THIS mode only.
 if [ "$MCP_ONLY" = "1" ]; then
   if ! _preflight_ports "$MCP_PORT|MCP"; then
-    echo "spire.sh: run './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
+    echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
     exit 1
   fi
 else
   if ! _preflight_ports "$(ports_for_mode "$MODE")"; then
-    echo "spire.sh: run './spire.sh $MODE --stop' first, or './spire.sh --status'." >&2
+    echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
     exit 1
   fi
 fi

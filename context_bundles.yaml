@@ -220,7 +220,6 @@ bundles:
   - src/spire/nl_parser/context/modes/m_count.sysprompt
   - src/spire/nl_parser/context/modes/m_open_invoices.sysprompt
   - src/spire/nl_parser/context/modes/m_topn_open_invoices.sysprompt
-  - src/spire/nl_parser/context/payables/b_addresses.sysprompt
   - src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt
   - src/spire/nl_parser/context/payables/b_invoice_date.sysprompt
   - src/spire/nl_parser/context/payables/b_invoices_for_po.sysprompt
@@ -254,6 +253,7 @@ bundles:
   - src/spire/nl_parser/context/supplier/b_created_date.sysprompt
   - src/spire/nl_parser/context/supplier/b_invoice_over_amount.sysprompt
   - src/spire/nl_parser/context/supplier/b_name_fragment.sysprompt
+  - src/spire/nl_parser/context/supplier/b_addresses.sysprompt
   - src/spire/nl_parser/context/supplier/b_site_in_bu.sysprompt
   - src/spire/nl_parser/context/supplier/b_status.sysprompt
   - src/spire/nl_parser/context/supplier/b_suppliers_addresses.sysprompt

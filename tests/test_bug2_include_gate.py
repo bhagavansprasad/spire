@@ -22,6 +22,11 @@ These tests pin the behaviour. They are integration tests — they hit the
 live KG via load_kg_menu — so they are skipped when personas.yaml is
 absent, matching the pattern used by the other KG-backed tests in this
 suite.
+
+2026-09-19 (F-043): the Site and Classification cases were flipped. Those
+two includes are no longer refused — their tools became dual-purpose
+(filter OR include) and the hardcoded Site gate was deleted. See the
+"Site and Classification includes (F-043)" section near the bottom.
 """
 
 from __future__ import annotations
@@ -141,42 +146,44 @@ def test_two_hop_chain_passes(menu: KGMenu) -> None:
     assert validate_intent(intent, menu) is None
 
 
-# ── Site preservation ──────────────────────────────────────────────────
+# ── Site and Classification includes (F-043) ──────────────────────────
+#
+# 2026-09-19 (F-043): the Site and Classification gates that this file
+# originally pinned were REMOVED. Their tools
+# (search_suppliers_by_site_bu / search_suppliers_by_classification) were
+# made dual-purpose — the filter argument (business_unit / classification)
+# is now optional; when omitted, the tool returns ALL children of the
+# parent. That gives both entities a real forward fetch, so an include is
+# now valid and the validator must let it through.
+#
+# The two tests below used to assert the opposite. They are flipped, not
+# deleted, so the new intent stays documented next to the S1 case that
+# still requires the general gate.
 
 
-def test_site_gate_message_preserved(menu: KGMenu) -> None:
-    """The Site refusal's wording and offending_entity are load-bearing for
-    capability.py (the Solution/Example are keyed on
-    offending_entity='SupplierSiteListing'). Must survive the general
-    include gate unchanged."""
+def test_site_include_passes(menu: KGMenu) -> None:
+    """F-043: search_suppliers_by_site_bu is now dual-purpose. With only
+    supplier_id it returns all sites for the supplier, so a Site include
+    is a valid forward fetch and must pass validation."""
     intent = Intent(
         target_entity="Supplier",
         filters=[{"type": "name_fragment", "value": "Lee"}],
         include=["Site"],
     )
-    refusal = validate_intent(intent, menu)
-    assert refusal is not None
-    assert refusal.flavor.name == "UNSUPPORTED_OPERATION"
-    assert refusal.offending_entity == "SupplierSiteListing"
+    assert validate_intent(intent, menu) is None
 
 
-# ── The Classification case (second defect caught by this gate) ────────
-
-
-def test_classification_include_refused(menu: KGMenu) -> None:
-    """HAS_CLASSIFICATION (Supplier -> Classification) exists in the KG,
-    but its only tool is a REVERSE filter that needs a 'classification'
-    argument the executor will not supply. Planning succeeds, execution
-    crashes. The gate refuses it cleanly instead."""
+def test_classification_include_passes(menu: KGMenu) -> None:
+    """F-043: search_suppliers_by_classification is now dual-purpose.
+    With only supplier_id it returns all classifications for the supplier,
+    so a Classification include is a valid forward fetch and must pass
+    validation."""
     intent = Intent(
         target_entity="Supplier",
         filters=[{"type": "name_fragment", "value": "Lee"}],
         include=["Classification"],
     )
-    refusal = validate_intent(intent, menu)
-    assert refusal is not None
-    assert refusal.flavor.name == "UNSUPPORTED_OPERATION"
-    assert refusal.offending_entity == "Classification"
+    assert validate_intent(intent, menu) is None
 
 
 # ── Valid includes that must not regress ───────────────────────────────

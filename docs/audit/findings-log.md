@@ -55,6 +55,66 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-042 — supplier-address phrasings refuse; collapses into F-009 (block in wrong module, unreachable from a supplier-scoped parse)
+
+**Date:** 2026-09-19
+**Status:** closed-as-duplicate (F-009)
+**Cross-refs:** F-009 (the same bug), F-041 (same fix pattern)
+
+**Evidence.**
+
+Filed during the Phase 2 child-as-root sweep. Four prompts were
+observed to refuse in `scripts/prompts/13_child_as_root.txt`.
+Initial hypothesis: a leading verb ("show", "list", "what") breaks the
+parse. The probe below disproves that. All four phrasings refuse —
+including bare `addresses for supplier 1252`, which the audit cited as
+working. It is not.
+
+    $ python scripts/promptkit.py --run --prompt "addresses for supplier 1252"
+    Router: modules=['supplier']
+    Reason:   Filtering suppliers by supplier number is not supported; only
+              name-based filters are available.
+
+    $ python scripts/promptkit.py --run --prompt "Addresses for supplier 1252"
+    Router: modules=['supplier']
+    Reason:   Supplier number is not supported as a filter.
+
+    $ python scripts/promptkit.py --run --prompt "supplier 1252 addresses"
+    Router: modules=['supplier']
+    Reason:   A bare supplier number cannot be used to look up a supplier
+              because there is no supplier-number filter available.
+
+    $ python scripts/promptkit.py --run --prompt "show addresses for supplier 1252"
+    Router: modules=['supplier']
+    Reason:   Filtering a supplier by a bare supplier number is not supported;
+              a supplier name is required to resolve the query.
+
+Every phrasing routes correctly to `supplier` and every one refuses for
+the same reason: the parser has no reachable rule that says
+"addresses for supplier X" is a valid shape.
+
+**Root cause — same as F-009.**
+
+The rule that WOULD answer these prompts lives in
+`src/spire/nl_parser/context/payables/b_addresses.sysprompt`. It lists
+`'addresses for supplier X'` and `'supplier 1252 addresses'` as its first
+worked examples. But the block lives under `payables/` in
+`order.manifest`, and the classifier scopes every one of these prompts
+to `['supplier']`. `assemble_subset(['supplier'], menu)` loads
+`{core, refusals, supplier}` and never reaches the payables block.
+
+F-009 documents exactly this — a block-folder/module mismatch. The rule
+lives in a folder that IS valid, loaded for other prompts, just not for
+this one.
+
+**Closure.**
+
+F-042 is a duplicate of F-009. Filed here (append-only) so the sweep's
+observation is recorded, and closed with the fix attributed to F-009's
+row in the ledger.
+
+---
+
 ## F-041 — AR invoice children named first ("invoice lines for invoice X", "DFF for invoice X", "tax breakdown for invoice X") refuse or silently drop; three AR sysprompt blocks lack a leading-phrasing rule
 
 **Date:** 2026-09-19
