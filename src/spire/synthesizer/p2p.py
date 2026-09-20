@@ -162,6 +162,56 @@ class SupplierRecord(BaseModel):
         "(a 'contact' bucket in the data). Empty otherwise. Each "
         "supplier_contact_id must appear in the executor's output.",
     )
+    sites: list[SiteInfo] = Field(
+        default_factory=list,
+        description="This supplier's sites, when the query asked for them "
+        "(a 'site' bucket in the data). F-043.",
+    )
+    classifications: list[ClassificationInfo] = Field(
+        default_factory=list,
+        description="This supplier's business classifications, when the "
+        "query asked for them (a 'classification' bucket in the data). F-043.",
+    )
+
+
+class SiteInfo(BaseModel):
+    """One supplier site nested under a supplier. F-043.
+
+    supplier_site_id is validated against the executor's output after
+    synthesis — it MUST appear there."""
+
+    supplier_site_id: int = Field(
+        description="The site's SupplierSiteId (numeric key)."
+    )
+    supplier_site: str = Field(
+        default="", description="The site display name (e.g. 'EIP US1')."
+    )
+    procurement_bu: str = Field(
+        default="", description="ProcurementBU display string (e.g. 'US1 Business Unit')."
+    )
+    procurement_bu_id: int | None = Field(
+        default=None, description="ProcurementBUId (numeric), if present."
+    )
+
+
+class ClassificationInfo(BaseModel):
+    """One supplier business classification nested under a supplier. F-043."""
+
+    classification_id: int = Field(
+        description="The classification's ClassificationId (numeric key)."
+    )
+    classification: str = Field(
+        default="", description="Display name (e.g. 'Small Business')."
+    )
+    classification_code: str = Field(
+        default="", description="Code form (e.g. 'SMALL_BUSINESS')."
+    )
+    status: str = Field(
+        default="", description="Status ('CURRENT' / 'EXPIRED')."
+    )
+    certifying_agency: str = Field(
+        default="", description="Certifying agency (e.g. 'SBA')."
+    )
 
 
 class InvoiceRecord(BaseModel):
@@ -587,6 +637,127 @@ def build_suppliers_with_contacts(
                 supplier_number=str(row.get("SupplierNumber") or ""),
                 supplier_name=row.get("Supplier") or "",
                 contacts=contacts,
+            )
+        )
+    return records
+
+
+def _supplier_with_sites(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, site_bucket) for the "suppliers + sites" join. F-043.
+
+    Two buckets: a supplier list (rows with SupplierId and Supplier) and a
+    site list (rows with SupplierSiteId). Site rows carry their parent
+    SupplierId (stamped by the supplier_sites tool), so they can be grouped
+    back to their supplier here instead of by the LLM.
+    """
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    site_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "SupplierSiteId" in first:
+            site_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or site_bucket is None:
+        return None
+    return supplier_bucket, site_bucket
+
+
+def build_suppliers_with_sites(
+    supplier_rows: list[dict], site_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + site rows -> SupplierRecords with nested sites. F-043."""
+    by_supplier: dict[int, list[dict]] = {}
+    for s in site_rows:
+        sid = s.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(s)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        sites = [
+            SiteInfo(
+                supplier_site_id=s.get("SupplierSiteId") or 0,
+                supplier_site=s.get("SupplierSite") or "",
+                procurement_bu=s.get("ProcurementBU") or "",
+                procurement_bu_id=s.get("ProcurementBUId"),
+            )
+            for s in group
+        ]
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                sites=sites,
+            )
+        )
+    return records
+
+
+def _supplier_with_classifications(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, classification_bucket) for "suppliers + classifications".
+    F-043."""
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    classification_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "ClassificationId" in first:
+            classification_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or classification_bucket is None:
+        return None
+    return supplier_bucket, classification_bucket
+
+
+def build_suppliers_with_classifications(
+    supplier_rows: list[dict], classification_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + classification rows -> SupplierRecords with nested
+    classifications. F-043."""
+    by_supplier: dict[int, list[dict]] = {}
+    for c in classification_rows:
+        sid = c.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(c)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        classifications = [
+            ClassificationInfo(
+                classification_id=c.get("ClassificationId") or 0,
+                classification=c.get("Classification") or "",
+                classification_code=c.get("ClassificationCode") or "",
+                status=c.get("Status") or "",
+                certifying_agency=c.get("CertifyingAgency") or "",
+            )
+            for c in group
+        ]
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                classifications=classifications,
             )
         )
     return records

@@ -495,6 +495,43 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                         )
                     )
                 )
+            if s.sites:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"{s.supplier_name} — sites",
+                            [
+                                {
+                                    "Site": st.supplier_site,
+                                    "Procurement BU": st.procurement_bu,
+                                    "SiteId": st.supplier_site_id,
+                                }
+                                for st in s.sites
+                            ],
+                            ["Site", "Procurement BU", "SiteId"],
+                            "",
+                        )
+                    )
+                )
+            if s.classifications:
+                lines.extend(
+                    _indent(
+                        _render_records(
+                            f"{s.supplier_name} — classifications",
+                            [
+                                {
+                                    "Classification": c.classification,
+                                    "Code": c.classification_code,
+                                    "Status": c.status,
+                                    "Agency": c.certifying_agency,
+                                }
+                                for c in s.classifications
+                            ],
+                            ["Classification", "Code", "Status", "Agency"],
+                            "",
+                        )
+                    )
+                )
         return _with_truncation(lines, response)
 
     if isinstance(response, InvoiceResponse):

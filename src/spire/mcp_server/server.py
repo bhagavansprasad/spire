@@ -318,7 +318,7 @@ async def search_purchase_orders(
 @mcp.tool()
 async def search_suppliers_by_site_bu(
     supplier_id: int,
-    business_unit: str,
+    business_unit: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Check whether one supplier has a site in a given business unit.
@@ -352,7 +352,7 @@ async def search_suppliers_by_site_bu(
 @mcp.tool()
 async def search_suppliers_by_classification(
     supplier_id: int,
-    classification: str,
+    classification: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Check whether one supplier has a given business classification.

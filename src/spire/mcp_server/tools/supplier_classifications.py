@@ -47,36 +47,54 @@ _PROJECTED_FIELDS = [
 async def search_suppliers_by_classification(
     client: FusionClient,
     supplier_id,
-    classification: str,
+    classification: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
-    """Fetch one supplier's business classifications matching a value.
+    """Fetch a supplier's business classifications, optionally filtered.
 
-    Called once per parent supplier by the executor. A non-empty result
-    means the supplier has at least one matching classification (keep the
-    parent).
+    Serves two call shapes, both driven by the same edge
+    (HAS_CLASSIFICATION, Supplier -> Classification):
+
+    - FILTER path (edge-traversal filter `has_classification`): executor
+      passes a `classification` value; server-side q= filters; a non-empty
+      result keeps the parent supplier.
+    - INCLUDE path (Block 3 include on a Supplier target): executor passes
+      only `supplier_id`; the tool returns ALL classifications for that
+      supplier. F-043: previously `classification` was required, so the
+      include path raised TypeError and a Classification-include intent
+      refused before dispatch.
 
     Args:
-        supplier_id: The SupplierId of the parent supplier to check.
-        classification: Exact Classification display string, e.g.
-            "Small Business". Matched server-side via q= on the child.
-        limit: Max classification records to return (existence is what
-            matters, but we return the matches for transparency).
+        supplier_id: The SupplierId of the parent supplier.
+        classification: Optional exact Classification display string, e.g.
+            "Small Business". When provided, filters server-side via q=.
+            When None/empty, no q= clause is sent and all classifications
+            are returned.
+        limit: Max classification records to return.
 
     Returns:
         ToolResult whose items are the matching classification dicts for
-        this supplier. Empty items means no matching classification.
+        this supplier. Empty items means no classifications matched.
     """
     path = CLASSIFICATIONS_PATH_TEMPLATE.format(supplier_id=supplier_id)
     params = {
         "onlyData": "true",
         "limit": limit,
         "fields": ",".join(_PROJECTED_FIELDS),
-        "q": f"Classification='{classification}'",
     }
+    if classification:
+        params["q"] = f"Classification='{classification}'"
     response = await client.get(path, params=params)
     items = response.get("items", [])
-    projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
+    # F-043: stamp the parent SupplierId onto each classification row —
+    # the child body does not carry it; the synthesizer groups by it.
+    projected = [
+        {
+            **{k: item.get(k) for k in _PROJECTED_FIELDS},
+            "SupplierId": supplier_id,
+        }
+        for item in items
+    ]
 
     return ToolResult.build(
         items=projected,

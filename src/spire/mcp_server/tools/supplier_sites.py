@@ -36,35 +36,57 @@ _PROJECTED_FIELDS = [
 async def search_suppliers_by_site_bu(
     client: FusionClient,
     supplier_id,
-    business_unit: str,
+    business_unit: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
-    """Fetch one supplier's sites in a given ProcurementBU.
+    """Fetch a supplier's sites, optionally filtered by ProcurementBU.
 
-    Called once per parent supplier by the executor. A non-empty result
-    means the supplier has at least one site in that BU (keep the parent).
+    Serves two call shapes, both driven by the same edge (HAS_SITE,
+    Supplier -> Site):
+
+    - FILTER path (edge-traversal filter `has_site_in_bu`): executor passes
+      a `business_unit` value; the pod filters server-side via single-clause
+      q=, and a non-empty result keeps the parent supplier.
+    - INCLUDE path (Block 3 include on a Supplier target): executor passes
+      only `supplier_id`; the tool returns ALL sites for that supplier with
+      no server filter. This is F-043: previously the tool required
+      `business_unit`, so the include path raised TypeError, and a
+      Site-include intent refused before dispatch.
 
     Args:
-        supplier_id: The SupplierId of the parent supplier to check.
-        business_unit: Exact ProcurementBU display string, e.g.
-            "US1 Business Unit". Matched server-side via q= on the child.
-        limit: Max site records to return (existence is what matters, but
-            we return the matches for transparency).
+        supplier_id: The SupplierId of the parent supplier.
+        business_unit: Optional exact ProcurementBU display string, e.g.
+            "US1 Business Unit". When provided, filters server-side via q=.
+            When None/empty, no q= clause is sent and all sites are returned.
+        limit: Max site records to return.
 
     Returns:
         ToolResult whose items are the matching site dicts for this
-        supplier. Empty items means no site in that BU.
+        supplier. Empty items means no sites matched (either no sites at
+        all, or none in the requested BU).
     """
     path = SITES_PATH_TEMPLATE.format(supplier_id=supplier_id)
     params = {
         "onlyData": "true",
         "limit": limit,
         "fields": ",".join(_PROJECTED_FIELDS),
-        "q": f"ProcurementBU='{business_unit}'",
     }
+    if business_unit:
+        params["q"] = f"ProcurementBU='{business_unit}'"
     response = await client.get(path, params=params)
     items = response.get("items", [])
-    projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
+    # F-043: stamp the parent SupplierId onto each site row. The pod's
+    # child body does NOT carry it (the endpoint knows the parent only
+    # from the URL path), so without this the join key is lost the
+    # moment the executor unwraps the ToolResult. build_suppliers_with_sites
+    # groups site rows back to their supplier by this key.
+    projected = [
+        {
+            **{k: item.get(k) for k in _PROJECTED_FIELDS},
+            "SupplierId": supplier_id,
+        }
+        for item in items
+    ]
 
     return ToolResult.build(
         items=projected,

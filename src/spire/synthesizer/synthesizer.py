@@ -151,6 +151,10 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_suppliers_with_open_pos,
     _supplier_with_contacts,
     build_suppliers_with_contacts,
+    _supplier_with_sites,
+    build_suppliers_with_sites,
+    _supplier_with_classifications,
+    build_suppliers_with_classifications,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -713,6 +717,81 @@ def synthesize_response(
         if admin_names:
             label = "administrative contact" if len(admin_names) == 1 else "administrative contacts"
             summary += f" {', '.join(admin_names)} — {label}."
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+        )
+
+    # Suppliers with their sites (join): no LLM. F-043.
+    supplier_sites = (
+        _supplier_with_sites(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_sites is not None:
+        supplier_bucket, site_bucket = supplier_sites
+        supplier_rows = outputs[supplier_bucket]
+        site_rows = outputs[site_bucket]
+        records = build_suppliers_with_sites(supplier_rows, site_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_sites = sum(len(r.sites) for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        site_word = "site" if total_sites == 1 else "sites"
+        if examined == 1:
+            summary = f"{records[0].supplier_name} has {total_sites} {site_word}."
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_sites} {site_word} "
+                "between them."
+            )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+        )
+
+    # Suppliers with their classifications (join): no LLM. F-043.
+    supplier_classifications = (
+        _supplier_with_classifications(outputs)
+        if target_entity == "Supplier"
+        else None
+    )
+    if supplier_classifications is not None:
+        supplier_bucket, classification_bucket = supplier_classifications
+        supplier_rows = outputs[supplier_bucket]
+        classification_rows = outputs[classification_bucket]
+        records = build_suppliers_with_classifications(
+            supplier_rows, classification_rows
+        )
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_classifications = sum(len(r.classifications) for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        c_word = (
+            "classification" if total_classifications == 1 else "classifications"
+        )
+        if examined == 1:
+            summary = (
+                f"{records[0].supplier_name} has "
+                f"{total_classifications} {c_word}."
+            )
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_classifications} "
+                f"{c_word} between them."
+            )
         return SupplierResponse(
             summary=summary,
             suppliers=records,

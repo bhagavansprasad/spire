@@ -114,7 +114,15 @@ from spire.planner.planner import Intent
 # gate below (for its specific user-facing message, keyed in capability.py),
 # so this set is really just Classification today. Kept as a set so a
 # future reverse-tool entity is one line, not a new branch.
-_NON_INCLUDABLE_ENTITIES = frozenset({"Site", "Classification"})
+# F-043: Site and Classification were reverse-only — the pod could list
+# a supplier's sites/classifications, but SPIRE's only tools for them ran
+# the OTHER direction (find suppliers BY a site/classification), so a
+# Site or Classification include had no forward fetch and refused. The
+# reverse tools now accept their filter as optional, serving both
+# directions on the same edge, so both entities are includable. Kept as
+# an empty frozenset so the check below stays a no-op if a future
+# reverse-only entity is added.
+_NON_INCLUDABLE_ENTITIES: frozenset[str] = frozenset()
 
 
 def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
@@ -205,17 +213,6 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
     # Site is checked unconditionally — it is a hardcoded string test and
     # does not consult edge data, so the "menu has no edges" precondition
     # below does not apply to it.
-    if "Site" in intent.include:
-        # Preserved verbatim so capability.py's SupplierSiteListing
-        # Solution/Example keep working. The general loop below would
-        # not catch Site (HAS_SITE exists from Supplier to Site), so
-        # this specific gate is load-bearing for that refusal's wording.
-        return Refusal(
-            flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
-            detail="Supplier sites aren't available as a standalone listing.",
-            offending_entity="SupplierSiteListing",
-        )
-
     # The general include gate requires the menu to declare edges. When it
     # does not (hand-built minimal fixtures, or any caller that constructs
     # KGMenu by hand without edges), the gate cannot validate and declines
