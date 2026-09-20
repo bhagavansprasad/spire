@@ -43,3 +43,4 @@ logs/
 isolation/
 source-tree.txt
 t_after*.txt
+trash/
