@@ -221,7 +221,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 |---|---|---|
 | B-01 | F-006 | fixed 2026-09-22 |
 | B-02 | F-007 | fixed 2026-09-22 |
-| B-03 | F-008 | confirmed |
+| B-03 | F-008 | fixed 2026-09-22 |
 | B-04 | F-010 | fixed 2026-09-22 |
 | B-05 | F-009 | fixed 2026-09-19 |
 | B-06 | F-011 | confirmed |
