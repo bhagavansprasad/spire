@@ -2,17 +2,19 @@
 
 **Phase:** Phase 1 — Audit & Baseline (Doc A §7.3.3)
 **Session:** S002, opened 2026-09-15
-**Last revised:** 2026-09-16
+**Last revised:** 2026-09-22
 **Status:** All prompt-set files classified (12 files, ~200 prompts).
-¬ßA.1 is complete for the `graph_kg` scope. ¬ßA.2 closed 2026-09-18 in full:
+§A.1 is complete for the `graph_kg` scope. §A.2 closed 2026-09-18 in full:
 A-12 through A-16 and A-20 verified from the three pending bundles, A-17
 verified live (`print_kg.py --counts-only`, all 9 tables match the seed).
-¬ßB is complete from the prompt-set evidence. Findings-log coverage as of
-2026-09-18: 25 rows carry their own F-NNN entry; 3 rows (B-09, B-13,\nB-20) are covered by cross-reference in another finding; no §B.1 rows\nand no §B.2 candidates remain unwritten. ¬ßB is complete. ¬ßB.6
-is the full audit-row-to-finding map. ¬ßD has 14 confirmed rows and 2
-closures. ¬ßC, ¬ßE‚Äì¬ßG drafted 2026-09-18 (partial; see each section's
-notes). ¬ßH has twelve observations, three of which closed on
-2026-09-18 at their own N≥20 thresholds — see F-022, F-023, F-024.
+§B is complete from the prompt-set evidence. Findings-log coverage as of
+2026-09-22: 23 §B.1 rows carry their own F-NNN entry; 3 rows (B-09, B-13,
+B-20) are covered by cross-reference; all 4 §B.2 candidates have entries
+(B-c4 folded into F-024's class note). No unwritten §B rows remain. §B.6
+is the full audit-row-to-finding map. §D has 13 confirmed rows and 2
+closures. §C, §E, §F, §G drafted 2026-09-18 (partial; see each section's
+notes). §H has twelve observations, four of which closed at their own
+N≥20 thresholds — F-022, F-023, F-024, F-040.
 
 **Companion documents:**
 - Doc A — `SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md`
@@ -221,9 +223,9 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-02 | F-007 | fixed 2026-09-22 |
 | B-03 | F-008 | confirmed |
 | B-04 | F-010 | confirmed |
-| B-05 | F-009 | confirmed |
+| B-05 | F-009 | fixed 2026-09-19 |
 | B-06 | F-011 | confirmed |
-| B-07 | F-012 | fixed 2026-09-22 |
+| B-07 | F-012 | closed 2026-09-22 (PR #157) |
 | B-09 | F-002 (cross-ref) | confirmed |
 | B-10 | F-022 | closed-as-not-a-bug |
 | B-11 | F-013 | closed-as-not-a-bug |
@@ -248,9 +250,9 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-c3 | F-031 | closed-as-not-a-bug (observation) |
 | B-c4 | F-024 (class note) | folded |
 
-**Tally.** 19 rows with own F-NNN; 3 cross-referenced; 4 §B.1 rows unwritten; 2 candidates unwritten (1 candidate folded, 1 candidate closed).
+**Tally.** 23 §B.1 rows with own F-NNN; 3 cross-referenced (B-09, B-13, B-20); all 4 §B.2 candidates have entries (B-c4 folded into F-024's class note). No unwritten rows.
 
-**Next passes to close §B.** The 6 unwritten rows are each one command or one inspection: B-12 (invoiced-vs-ordered for a zero-PO supplier → "fully invoiced"), B-14 (country phrase routed to Address include), B-16 (NL field name with no `field_synonym` row), B-18 (lag regression — endpoints reference says lag worked twice), B-c1 (risk-rating curl against lifecycle source fields), B-c3 (`not inactive` → `status=ACTIVE`; may close as-not-a-bug on inspection).
+**§B is complete.** Every §B.1 row and every §B.2 candidate carries a findings-log entry or a cross-reference; no unwritten rows remain. §B.6 stays as the audit-row-to-finding map for future sessions.
 
 ---
 
@@ -345,7 +347,7 @@ Resolved this session:
 | D-02 | `suppliers with the highest quality score` refusal | Solution: "…total or average." | Aggregation template applied to a field-availability refusal. |
 | D-03 | `Addresses for supplier 1252` vs `everything about supplier 1252` | Two different messages for the same root cause. | The second is factually wrong about `name_fragment`. |
 | D-04 | Truncation wording | `Suppliers with their addresses` prints "25 examined for filtering" when no filter requested. | Fixed in F-036 (PR #157). |
-| D-05 | `Purchase orders created before 2015` | Truncation block present in one run, absent in another. | Cross-reference §H.1. |
+| D-05 | `Purchase orders created before 2015` | Truncation block present in one run, absent in another. | Closed in F-040 (N=20 clean). |
 | D-07 | `Show PO 2144 and its lines` vs `How much of PO 2144 was received?` | `"PO 2144"` routed to `by_id` vs `lifecycle_status`. | Cross-reference B-11. |
 | D-09 | `12_po_supplier_include.txt` prompts 7–15 | Seven prompts produce byte-identical answers. | Cross-reference B-15. |
 | D-10 | `07_alacarte.txt` and `11_column_vocabulary.txt` | Duplicated prompts within and between files. | Test-set hygiene. |
@@ -536,4 +538,4 @@ Golden files at `docs/audit/golden/`. Re-run 2026-09-18. Each run filtered to th
 
 ---
 
-*End of Phase 1 audit (partial). ¬ßC, ¬ßE‚Äì¬ßG to be written. ¬ßA is complete as of 2026-09-18.*
+*End of Phase 1 audit. §A complete 2026-09-18; §B complete 2026-09-18; §C, §E, §F, §G drafted 2026-09-18; §D, §H under active revision. Last refreshed 2026-09-22.*

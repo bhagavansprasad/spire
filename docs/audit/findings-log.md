@@ -1010,7 +1010,7 @@ The first is the honest minimum; the second is what the KG note was suggesting. 
 ## F-012 — composite invoice filter hits the over-fetch cap, drops `total_available`; the answer reads as if 20 were the count
 
 **Date:** 2026-09-18
-**Status:** root-caused, not fixed
+**Status:** closed (PR #157, 2026-09-22)
 **Cross-refs:** B-07, F-010 (same class), F-003 (unavailable capability)
 
 **Evidence.**
@@ -3000,7 +3000,7 @@ Under S1's harm classes, none applies:
 ## F-036 — truncation note says "examined for filtering" on an unfiltered fetch
 
 **Date:** 2026-09-18
-**Status:** confirmed, not fixed
+**Status:** closed (PR #157, 2026-09-22)
 **Cross-refs:** D-04, F-012 (adjacent — same note function)
 
 **Evidence.**
