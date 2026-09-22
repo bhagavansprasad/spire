@@ -100,7 +100,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 |---|---|---|---|---|---|---|
 | F-002 | cost | 8 | `scripts/promptkit.py`, `src/spire/config.py` | verified | #149 | 2026-09-19 |
 | F-033 | wrong-narration | 7 | `nl_parser/capability.py` | verified | #150 | 2026-09-19 |
-| F-006 | crash | 6 | `mcp_server/server.py` (annotation, not `plan_builders`) | fixed | (this PR) | 2026-09-22 |
+| F-006 | crash | 6 | `mcp_server/server.py` (annotation, not `plan_builders`) | fixed | #154 | 2026-09-22 |
 | F-007 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
 | F-015 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
 | F-012 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `local_summary.py` | not-started | — | — |

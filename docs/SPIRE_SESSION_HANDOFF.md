@@ -25,8 +25,8 @@ Shipped:
 - F-009 — its fix landed as F-042's branch — `verified`, PR #152
 - F-001 — filter-less PO lists now answer — `verified`, PR #153
 - F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `fixed`
-  (2026-09-22), branch `phase-2-fix-F006-alpha-order-number`, commit
-  `8bacc34`, PR pending
+  (2026-09-22), branch `phase-2-fix-F006-alpha-order-number`, commits
+  `8bacc34` + `630c30f`, PR #154
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 PR #153 merged):

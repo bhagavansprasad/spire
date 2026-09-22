@@ -383,7 +383,7 @@ data. The F-025 exclusions (Site, Classification) must still refuse.
 ## F-006 — alpha-prefixed PO OrderNumber crashes `get_purchase_order_by_id` before the tool can resolve it
 
 **Date:** 2026-09-17
-**Status:** fixed (2026-09-22, `phase-2-fix-F006-alpha-order-number`, PR pending)
+**Status:** fixed (2026-09-22, `phase-2-fix-F006-alpha-order-number`, PR #154)
 **Cross-refs:** B-01, A-13
 
 **Evidence.**
