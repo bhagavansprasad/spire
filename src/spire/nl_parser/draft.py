@@ -391,6 +391,16 @@ class DraftIntent(BaseModel):
             "true"            -> True   (JSON bool)
             "{\\"months\\":6}" -> {...}  (JSON object)
             "GB"              -> "GB"   (not JSON -> taken as the string "GB")
+
+        DOUBLE-ENCODED VALUES (F-044): the model intermittently emits a
+        JSON-encoded STRING whose content is the object text — the JSON
+        string `"{\\"min\\": 50000}"` rather than `{"min": 50000}`
+        itself. One ``json.loads`` yields the string
+        ``{"min": 50000}``, which the planner forwards unchanged to a
+        tool whose schema rejects it (crash). If the decoded value is
+        itself a string whose first character is ``{`` and whose
+        content parses as a JSON object, decode a second time. On
+        genuine string values the guard is false and nothing changes.
         The planner still validates values downstream, so leniency here costs
         nothing and removes a whole class of flaky failures.
         """
@@ -401,6 +411,27 @@ class DraftIntent(BaseModel):
             except (json.JSONDecodeError, TypeError):
                 # Not valid JSON — treat the raw text as a plain string value.
                 value = f.value_json
+            # F-044: the model intermittently double-encodes an OBJECT
+            # value — emitting the JSON-string `"{\\"min\\": 50000}"`
+            # instead of the object text `{"min": 50000}`. The first
+            # json.loads above then yields the STRING `{"min": 50000}`,
+            # which the planner forwards unchanged to a tool whose
+            # float-typed arg rejects it at Pydantic validation (crash).
+            # No filter on this codebase takes a string whose content is
+            # a JSON object, so if the decoded string itself parses as
+            # one, decode again. On genuine string values ("US", "50000",
+            # prose) the first-character test is false and the branch is
+            # skipped, and on strings that start with `{` but are not
+            # valid JSON the second decode raises and the original string
+            # is kept — same leniency as the outer try/except.
+            if isinstance(value, str) and value[:1] == "{":
+                try:
+                    inner = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                else:
+                    if isinstance(inner, dict):
+                        value = inner
             decoded_filters.append({"type": f.type, "value": value})
 
         return Intent(
