@@ -1153,7 +1153,7 @@ Both is the honest fix: prevention at the parser, defense at the pipeline. The p
 ## F-015 — a truncated-to-zero result is narrated as a clean "not found"; the empty-bucket shortcut discards the truncation flag
 
 **Date:** 2026-09-18
-**Status:** fixed (2026-09-22, `phase-2-fix-F015-empty-bucket-truncation`, PR #156)
+**Status:** verified (PR #156, 2026-09-22)
 **Cross-refs:** B-19, F-012 (same family — sampling not disclosed)
 
 **Evidence.**
