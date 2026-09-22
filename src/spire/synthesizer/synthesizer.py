@@ -240,6 +240,44 @@ def _all_buckets_empty(outputs: dict[str, list[dict]]) -> bool:
     return all(not rows for rows in outputs.values())
 
 
+# F-007: AR-invoice children whose empty result deserves an acknowledgement.
+#
+# Each entry maps a child bucket the executor produces to the human
+# phrase naming it. Populated buckets render their own content — lines
+# and tax lines as indented sub-tables, DFF as a header field — so this
+# only fires on an empty-but-present bucket. That is the case where the
+# user asked and the answer would otherwise stay silent.
+_AR_INVOICE_CHILD_PHRASES: dict[str, str] = {
+    "receivables_invoice_lines": "line items",
+    "receivablestaxline": "tax lines",
+    "receivablesinvoicetransactiondff": "flexfield values",
+}
+
+
+def _empty_ar_invoice_child_notes(
+    children: dict[str, list[dict]],
+) -> list[str]:
+    """One sentence per requested AR-invoice child that returned no rows.
+
+    Presence of the bucket is the signal. The executor emits a bucket
+    for every step the plan ran, and the plan runs a step for every
+    child the parser put in the intent's include list. An empty bucket
+    therefore means the user asked and there were none; an ABSENT bucket
+    means the user never asked. Silence is only honest for the second
+    case.
+
+    Before this, both cases read identically: a prompt asking for tax
+    lines on an untaxed invoice got an answer that never mentioned tax,
+    and a prompt that never asked for tax got the same silence. The
+    user could not tell "no tax lines exist" from "I didn't look".
+    """
+    return [
+        f"This invoice has no {phrase}."
+        for bucket, phrase in _AR_INVOICE_CHILD_PHRASES.items()
+        if bucket in children and not children[bucket]
+    ]
+
+
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
 # its result, not by target_entity (an aggregation Intent carries an
 # aggregate block instead of a target entity). The executor puts that
@@ -1043,6 +1081,11 @@ def synthesize_response(
                                 "InvoiceStatus": "Status",
                             },
                         )
+                        # F-007: acknowledge a requested child that came
+                        # back empty. Silent when nothing was asked (an
+                        # absent bucket), loud when the user asked and
+                        # there were none (a present, empty bucket).
+                        + _empty_ar_invoice_child_notes(children)
                     ),
                     receivables_invoices=build_receivables_invoice_records(
                         rows, children

@@ -218,7 +218,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | Audit row | Finding | Finding state |
 |---|---|---|
 | B-01 | F-006 | fixed 2026-09-22 |
-| B-02 | F-007 | confirmed |
+| B-02 | F-007 | fixed 2026-09-22 |
 | B-03 | F-008 | confirmed |
 | B-04 | F-010 | confirmed |
 | B-05 | F-009 | confirmed |
