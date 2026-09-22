@@ -58,7 +58,7 @@ The two layers are one fix; neither half alone solves the user's problem.
 ## F-044 — double-encoded `value_json` crashes the tool at schema validation (intermittent)
 
 **Date:** 2026-09-22
-**Status:** root-caused (fix in progress on `phase-2-fix-F044-double-encoded-value`)
+**Status:** verified (PR #158, 2026-09-22)
 **Cross-refs:** F-006 (same class — a value shape the tool's schema rejects), F-012 (the L2 run that surfaced it)
 
 **Evidence.**
@@ -175,6 +175,10 @@ value's own encoding. Both would be caught by a two-layer regression:
 the parser unit test plus the tool's Pydantic schema. Recorded here
 because the F-012/F-036 L2 pass surfaced it and the finding went from
 candidate to root-caused within the same session.
+
+**Merged 2026-09-22 as PR #158** (`de5da26`). Full V0–V8 in
+`docs/phase-2/fixes/F-044.md`. Suite at merge: 1062 passed, 22
+deselected. No golden was affected.
 
 ---
 

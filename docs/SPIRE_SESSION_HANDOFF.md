@@ -28,7 +28,7 @@ Shipped:
 - F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
 - F-012 — a capped fetch with no source total now narrates the sample — `closed`, PR #157
 - F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `closed`, PR #157
-- F-044 — double-encoded `value_json` no longer crashes the tool at schema validation — `verified`, PR pending
+- F-044 — double-encoded `value_json` no longer crashes the tool at schema validation — `closed`, PR #158
 
 Confirmed (S0–S8 walked) — none outstanding.
 
@@ -102,6 +102,33 @@ that shape (`fixed` in the handoff, `verified` everywhere else).
 
 If you find another invariant violation in the next window, fix it as
 part of the first commit of that session.
+
+---
+
+## Session-shape observation — 2026-09-22 window
+
+This window closed three findings: F-012, F-036, and F-044. FIX_PLAN
+§4 schedules one per window, so three is a departure. The first two
+were the handoff's named next task; F-044 surfaced mid-session during
+their L2 prompt-set run and was fixed while the failure was live and
+the mechanism could be pinned with one diagnostic pass.
+
+Cost: the session ran ~4 hours, spanning fix → merge → L2 discovery →
+fix → merge again. The two fixes themselves were each small (~30
+lines of code, ~200 lines of tests). The time went to verification —
+prompt probes, N>=20 variance runs, lockstep doc updates — not to
+code.
+
+Benefit: F-044's reproducer was right there, and the S0–S8 walk that
+would have been needed to promote it from candidate to root-caused
+was done in-window rather than deferred. A future session picking it
+up cold from the findings log would have had to reconstruct the
+diagnostic.
+
+Recommendation for the next window: hold to one finding, unless the
+same "surface mid-session with the mechanism already in hand" pattern
+recurs. The plan's one-per-window default is still the right shape for
+findings found in the audit or filed earlier.
 
 ---
 

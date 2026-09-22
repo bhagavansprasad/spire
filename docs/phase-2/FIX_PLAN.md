@@ -80,7 +80,7 @@ order is a queue, not a batch.
 | 7 | Cluster 4 (4) | One `--validate` re-run covers all four sysprompt edits. Do them in sequence, run validate once after the last. |
 | 8 | Cluster 5 (2) | Fix F-003; F-004 may fall out. If it does, close F-004 as a side-effect and note it in its fix file. |
 | 9 | Reg #30 | Perf. Independent; can slip to Phase 6 if the fix turns out to be architectural. |
-| 10 | F-044 | Crash, mechanism settled (double-encoded `value_json`, `draft.py::to_intent`). Fixed on `phase-2-fix-F044-double-encoded-value`, ahead of F-010 — a deliberate §8.3.1 reorder recorded in the fix file. |
+| 10 | F-044 | Crash, mechanism settled (double-encoded `value_json`, `draft.py::to_intent`). Closed as PR #158, ahead of F-010 — the deliberate §8.3.1 reorder is recorded in the fix file. |
 
 ---
 
@@ -126,7 +126,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
-| F-044 | crash | 3 | `nl_parser/draft.py` | verified | pending | 2026-09-22 |
+| F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
