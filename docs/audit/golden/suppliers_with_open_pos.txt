@@ -84,7 +84,7 @@ Suppliers:
   Howell Engineering Inc.                    | 300000047507170 | 1257           |        1 | Roth, Calvin                                   
 
 Truncation:
-  - suppliers: 431 total in source; 25 examined for filtering.
+  - suppliers: 431 total in source; 25 returned.
 
 ─── Tip ───
 Reading all 431 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.

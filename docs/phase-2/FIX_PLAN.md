@@ -80,6 +80,7 @@ order is a queue, not a batch.
 | 7 | Cluster 4 (4) | One `--validate` re-run covers all four sysprompt edits. Do them in sequence, run validate once after the last. |
 | 8 | Cluster 5 (2) | Fix F-003; F-004 may fall out. If it does, close F-004 as a side-effect and note it in its fix file. |
 | 9 | Reg #30 | Perf. Independent; can slip to Phase 6 if the fix turns out to be architectural. |
+| 10 | F-044 | Crash (filed 2026-09-22 by F-012/F-036's L2 pass). Parser-vs-tool arg-type mismatch on `amount_min` for `above 50000`. Mechanism TBD; settle before sequencing. |
 
 ---
 
@@ -103,8 +104,8 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-006 | crash | 6 | `mcp_server/server.py` (annotation, not `plan_builders`) | verified | #154 | 2026-09-22 |
 | F-007 | wrong-narration | 1 | `synthesizer/synthesizer.py` | verified | #155 | 2026-09-22 |
 | F-015 | wrong-narration | 1 | `synthesizer/synthesizer.py` | verified | #156 | 2026-09-22 |
-| F-012 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `local_summary.py` | not-started | — | — |
-| F-036 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
+| F-012 | wrong-data | 1 | `synthesizer/synthesizer.py`, `local_summary.py` | verified | pending | 2026-09-22 |
+| F-036 | wrong-narration | 1 | `synthesizer/synthesizer.py` | verified | pending | 2026-09-22 |
 | F-010 | wrong-data | 1 | `synthesizer/aggregation.py` | not-started | — | — |
 | F-008 | wrong-data | 1 | `synthesizer/aggregation.py`, `synthesizer.py` | not-started | — | — |
 | F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
@@ -125,6 +126,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
+| F-044 | crash | 4 | TBD (parser or plan_builders) | not-started | — | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.

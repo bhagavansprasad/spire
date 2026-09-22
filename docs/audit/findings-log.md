@@ -55,6 +55,95 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-044 — `above 50000` on a supplier+amount invoice query stringifies the amount filter; the tool's float parser rejects it at execute
+
+**Date:** 2026-09-22
+**Status:** open (mechanism to be established)
+**Cross-refs:** F-006 (same class — a value shape the tool's schema rejects), F-012 (the L2 run that surfaced it)
+
+**Evidence.**
+
+Discovered during the L2 prompt-set run for F-012 + F-036
+(`scripts/prompts/14_truncation_narration.txt`, prompt 3 of 14). The
+same intent that succeeds for `over 10000` and `above 10000` crashes
+when the threshold is `50000`. Operator is NOT the variable — prompt 2
+uses `above` and works.
+
+Working sibling (prompt 1):
+
+    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000" --show-stages
+    Intent:
+      target_entity: Invoice
+      filters:
+        - {'type': 'supplier', 'value': '1252'}
+        - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+    Plan:
+      Step 1: search_invoices
+        tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+
+Failing prompt (prompt 3):
+
+    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 above 50000" --show-stages
+    ERROR: execute: 1 validation error for call[search_invoices]
+    amount_min
+      Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='{"min": 50000}', input_type=str]
+        For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+
+The Intent block is not visible in the failing run's capture; the
+mechanism below is inferred from the error text and the working
+sibling's shape.
+
+**Root cause.**
+
+Not established. Candidate mechanism: the parser emitted
+`invoice_amount` with a `value` that is a JSON **string**
+(`'{"min": 50000}'`) rather than a dict (`{'min': 50000}`), so
+`_build_entity_fetcher_args` passed the entire string to the tool's
+`amount_min` kwarg, which is typed as a float. The failure is at
+Pydantic input validation, before the tool body runs. This is the same
+class as F-006 (an int annotation rejecting a string form the pipeline
+legitimately produces) but the fault is upstream: F-006's was a wrapper
+annotation, this is the parser's value encoding or the builder's
+handling of the value shape.
+
+Alternative not yet ruled out: the parser DID produce a dict, and
+`_build_entity_fetcher_args` stringified it. Same bug class, different
+file. The distinguishing evidence is the Intent block on a failing run,
+which the capture does not show; a `--show-parser` re-run of prompt 3
+would settle it.
+
+**Fix location (for Phase 2).**
+
+TBD. Candidates:
+
+1. `src/spire/nl_parser/parser.py` — the draft's `value_json` decode
+   path, if the value arrives as a double-encoded JSON string.
+2. `src/spire/planner/plan_builders.py::_build_entity_fetcher_args` —
+   the handling of the `invoice_amount` value shape.
+3. `src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt` —
+   if the sysprompt's guidance produces the wrong shape and the builder
+   faithfully forwards it.
+
+**Not checked.** Why prompt 2 (`above 10000`) and prompt 3
+(`above 50000`) route differently — same operator, same entity, same
+filter type; the only difference is the numeric value. This looks like
+parser variance rather than a value-specific bug, but the mechanism is
+not yet established and a re-run of prompt 3 would say whether it
+reproduces. Whether the same double-encoding affects other numeric
+filters (`has_invoice_over_amount`, `invoice_limit`, `top_n`). Whether
+the composite-filter path through `search_invoices` has any other
+value-shape traps not exercised by prompts 1, 2, 4, 5, 6.
+
+**Class note.** Same class as F-006 (a value shape the tool's input
+schema rejects). F-006's was a wrapper type annotation; this is the
+value's own encoding. Both would be caught by a two-layer regression:
+the parser unit test plus the tool's Pydantic schema. Recording here
+because the fix's L2 pass surfaced it and the ledger would otherwise
+lose the observation.
+
+---
+
 ## F-043 — Site and Classification includes refuse; both tools were reverse-only and a hardcoded Site gate blocked the include path
 
 **Date:** 2026-09-19
@@ -974,6 +1063,56 @@ total: 0 items: 0
 ```
 
 The pod accepts the clause syntax and silently returns nothing for it — the "composite clauses combine to empty result" behaviour the tool's docstring asserts is confirmed. Fix option 3 (compute an honest total via a composite `q=` call) is therefore unavailable; options 1 and 2 are the routes. `total_available=None` in the tool is honest, not a code gap.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F012-F036-truncation-wording`.**
+
+Fixed alongside F-036 (shared branch; same f-string in
+`synthesizer/synthesizer.py::_local_truncation`).
+
+The mechanism ended up narrower than the entry's two named options. The
+signal needed — "the fetch was capped" — was already on
+`truncation_by_step` / `metadata_by_step`, populated by the executor for
+every step. It needed a reader, not a new field.
+
+Fix, two files:
+
+- `src/spire/synthesizer/local_summary.py` — `local_list_summary` gains
+  a `truncated: bool = False` parameter. When `truncated` is True AND
+  `total_available` is None, it emits
+  `"Showing N <entity> from an examined sample; the true matching count
+  is not known."` before the uniformity observations. With a known
+  total the existing `"Showing N of M"` line fires instead; with
+  neither, nothing is claimed. The branch only fires on BOTH
+  conditions.
+- `src/spire/synthesizer/synthesizer.py` — new `_bucket_truncated()`
+  helper (a single-bucket view of `_truncated_steps`, F-015's helper),
+  threaded as `truncated=` into the eight `local_list_summary` calls
+  across the plain-list branches: Supplier, PurchaseOrder (plain),
+  Invoice, PO-with-children, CreditMemo, ReceivablesInvoice,
+  CustomerAccount, StandardReceipt.
+
+Verification:
+
+- Reproducer `invoices for supplier 1252 over 10000` now answers with
+  `Showing 19 invoices from an examined sample; the true matching count
+  is not known.` Pre-fix: no count line — 19 rows read as the count.
+- Sibling unchanged: `invoices for supplier 1252` (non-composite,
+  `total_available=1329`) still shows `Showing 25 of 1,329 invoices.`;
+  the sample sentence does not fire.
+- Negative unchanged: `invoices` still refuses with `missing_identifier`.
+- New file `tests/test_f012_truncation_sample.py` — 4 tests. Two fail
+  without the fix (reproducer + metadata-by-step variant); two are
+  over-reach guards that pass on both trees by design.
+- Full suite: 1054 passed, 22 deselected (baseline 1048 + 6 new tests
+  across both findings).
+
+Deviation from the entry: none in mechanism-shape (synthesizer-side, per
+the entry's preference for option 1). The signal source is different —
+the entry suggested threading the intent's `include`; the fix reads the
+truncation metadata the executor already produces.
+
+Falsifier-run note above remains accurate: the composite `q=` route for
+a real total is unavailable; the sample sentence is the honest ceiling.
 
 ---
 
@@ -2887,6 +3026,45 @@ The note is produced in one place (`_local_truncation`), so whichever option is 
 **Regression test.** Assert that `Suppliers with their addresses` produces a truncation note that does not contain the phrase "for filtering". Assert that a filtered prompt (e.g. `active suppliers in US`) also produces a note whose wording is consistent with the fix — either no "for filtering" (option 1/3) or the correct filtered phrasing (option 2). Both must pass.
 
 **Not checked.** Whether the "for filtering" phrase appears in the same note across the other 05/07/08 baselines the docstring names — one prompt run this session; the class-level check is a small sweep, not run. Whether the code's own "total in source" looseness is worth fixing in the same pass — separate concern, deliberately deferred per the docstring. Whether the note is worth replacing entirely with a structured field (`examined`, `total_available`) that the display formats — a formatting-layer change, not read this session. Whether the note appears in golden files (`docs/audit/golden/`) that would need regenerating with the new wording — the three goldens seen this session carry the note in the two with a truncation; regenerating them is part of the fix, not this finding.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F012-F036-truncation-wording`.**
+
+Fixed alongside F-012 (shared branch; same f-string in
+`synthesizer/synthesizer.py::_local_truncation`).
+
+One-word change: `"{examined} examined for filtering."` ->
+`"{examined} returned."` The count and source total stay; only the
+false claim is removed. The entry's three options were (1) drop the
+phrase, (2) parameterise on a `filtered: bool`, (3) canonical wording
+that fits both cases. The landed wording is closer in spirit to (1),
+but with a verb that reads as prose rather than as a truncated
+sentence, and without the `"N of M"` duplication option (3) would have
+introduced against the `total in source` count already in the same
+line.
+
+Verification:
+
+- Reproducer `Suppliers with their addresses` now answers with
+  `25 returned.` in the Truncation block. Pre-fix: `25 examined for
+  filtering.`
+- Paraphrase `List suppliers with their address` — same wording.
+- Filtered sibling `active suppliers in US` — same wording (the fix
+  does not distinguish filtered from unfiltered; the filter is visible
+  in the Intent block above the answer, so no claim about it is needed
+  in the note).
+- Negative unchanged: `show me contract renewals` still refuses with
+  `unknown_entity`.
+- Golden `docs/audit/golden/suppliers_with_open_pos.txt` line 87
+  updated in the same commit: `431 total in source; 25 examined for
+  filtering.` -> `431 total in source; 25 returned.` (the `431` stays —
+  pod-growth drift is not folded into the fix's diff; see §G of the
+  audit).
+- New file `tests/test_f036_truncation_wording.py` — 2 tests. Both fail
+  without the fix.
+- Full suite: 1054 passed, 22 deselected.
+
+Deviation from the entry: minor (specific verb). See
+`docs/phase-2/fixes/F-036.md` for the full reasoning.
 
 **Class note.** Same note-producing function as F-012 (composite-filter over-fetch cap), different defect: F-012's note under-reports because `examined` was read from the output bucket rather than the fetch size; this finding's note over-claims because "for filtering" presupposes a filter. Both are the same f-string, and a single fix pass could address both — the phase's call whether to do so or treat them separately.
 

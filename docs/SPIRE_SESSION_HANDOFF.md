@@ -26,6 +26,8 @@ Shipped:
 - F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`, PR #154
 - F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`, PR #155
 - F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
+- F-012 — a capped fetch with no source total now narrates the sample — `verified`, PR pending
+- F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `verified`, PR pending
 
 Confirmed (S0–S8 walked) — none outstanding.
 
