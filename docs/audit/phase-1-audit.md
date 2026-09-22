@@ -344,7 +344,7 @@ Resolved this session:
 | D-01 | `Show invoice lines for invoice 300000248096352` refusal | Router chose `payables`; reason names `ReceivablesInvoiceLine`. | Entity family named does not match routing decision. |
 | D-02 | `suppliers with the highest quality score` refusal | Solution: "…total or average." | Aggregation template applied to a field-availability refusal. |
 | D-03 | `Addresses for supplier 1252` vs `everything about supplier 1252` | Two different messages for the same root cause. | The second is factually wrong about `name_fragment`. |
-| D-04 | Truncation wording | `Suppliers with their addresses` prints "25 examined for filtering" when no filter requested. | Fixed in F-036 (PR pending). |
+| D-04 | Truncation wording | `Suppliers with their addresses` prints "25 examined for filtering" when no filter requested. | Fixed in F-036 (PR #157). |
 | D-05 | `Purchase orders created before 2015` | Truncation block present in one run, absent in another. | Cross-reference §H.1. |
 | D-07 | `Show PO 2144 and its lines` vs `How much of PO 2144 was received?` | `"PO 2144"` routed to `by_id` vs `lifecycle_status`. | Cross-reference B-11. |
 | D-09 | `12_po_supplier_include.txt` prompts 7–15 | Seven prompts produce byte-identical answers. | Cross-reference B-15. |

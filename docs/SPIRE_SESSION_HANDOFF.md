@@ -26,8 +26,8 @@ Shipped:
 - F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`, PR #154
 - F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`, PR #155
 - F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
-- F-012 — a capped fetch with no source total now narrates the sample — `verified`, PR pending
-- F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `verified`, PR pending
+- F-012 — a capped fetch with no source total now narrates the sample — `closed`, PR #157
+- F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `closed`, PR #157
 
 Confirmed (S0–S8 walked) — none outstanding.
 
@@ -50,34 +50,41 @@ Confirmed (S0–S8 walked) — none outstanding.
    - how to reproduce / classify / fix / verify / track,
    - the recovery path if context is lost.
 
-3. **Open F-012 + F-036.** They are the next task per
+3. **Open F-010.** It is the next task per
    `docs/phase-2/FIX_PLAN.md` §4 order. Cluster 1 (synthesizer
-   narration); the plan places them together because they share the
-   `_local_truncation` f-string in `synthesizer/synthesizer.py` — one
-   fix pass closes both.
+   narration); the finding's own text and the plan's §5 row both name
+   `synthesizer/aggregation.py` as the fix site.
 
-   F-012 reproducer:
-   `python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000" --show-stages`
+   F-010 reproducer:
+   `python scripts/promptkit.py --run --prompt "count of suppliers with classification Minority Owned" --show-stages`
 
-   F-036 reproducer:
-   `python scripts/promptkit.py --run --prompt "Suppliers with their addresses" --show-stages`
+   Read the F-010 entry in `docs/audit/findings-log.md` and its
+   `docs/phase-2/FIX_PLAN.md` §5 row, then follow Phase 2 §8.3:
+   - F-010 severity: wrong-data — a filtered count returns the
+     unfiltered source total. Mechanism (from the finding entry):
+     `_build_count_response` does `next(iter(outputs.values()))` and
+     reads the SOURCE bucket, not the filtered `{source}_{suffix}`
+     bucket the executor also produced.
+   - Deterministic: single-run test suffices.
+   - Branch: `phase-2-fix-F010-count-filtered`.
+   - Regression test: the composite-filter prompt returns the size of
+     the filtered bucket; the plain `count of suppliers` still returns
+     the pod-wide figure.
+   - Byte-diff: no golden carries this prompt.
 
-   Read both findings in `docs/audit/findings-log.md` and their
-   `docs/phase-2/FIX_PLAN.md` §5 rows, then follow Phase 2 §8.3:
-   - F-012 severity: wrong-data (a sampled result read as the whole).
-   - F-036 severity: wrong-narration (a filter-less fetch says
-     "examined for filtering").
-   - Deterministic: single-run test suffices for each.
-   - Branch: one branch, both fixes —
-     `phase-2-fix-F012-F036-truncation-wording`.
-   - Regression tests: F-012 — the composite-filter prompt produces a
-     summary that mentions the sample, OR a truncation note that states
-     the true examined count, not `20`; a non-composite query is
-     unaffected. F-036 — the unfiltered prompt's truncation note no
-     longer contains the phrase "for filtering"; a filtered prompt's
-     note stays consistent with whichever wording the fix picks.
-   - Byte-diff: the note is user-visible and appears in the 05/07/08
-     prompt-set baselines. Regenerate any golden that carries the note.
+   Two carry-forwards from the 2026-09-22 session, for whoever picks
+   up the next task:
+
+   - **F-044** (crash, filed this session by F-012/F-036's L2 pass).
+     Sits in FIX_PLAN §4 as row 10. Not the next task per §4 — F-010
+     comes first — but a crash, so the phase's severity rule
+     (wrong-data > crash > missing-capability > cosmetic) may reorder
+     it once its mechanism is settled.
+   - **`promptkit.py` `.txt` support.** Not filed. `--run` currently
+     requires a `.json` corpus; `14_truncation_narration.txt` was run
+     this session via a shell loop over `--run --prompt` instead. A
+     future session may wish to add `.txt` handling to `--run`; that
+     is tooling, its own branch, not a fix.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 
