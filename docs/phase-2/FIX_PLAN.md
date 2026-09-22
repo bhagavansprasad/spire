@@ -106,7 +106,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-015 | wrong-narration | 1 | `synthesizer/synthesizer.py` | verified | #156 | 2026-09-22 |
 | F-012 | wrong-data | 1 | `synthesizer/synthesizer.py`, `local_summary.py` | closed | #157 | 2026-09-22 |
 | F-036 | wrong-narration | 1 | `synthesizer/synthesizer.py` | closed | #157 | 2026-09-22 |
-| F-010 | wrong-data | 1 | `synthesizer/aggregation.py` | fixed | — | 2026-09-22 |
+| F-010 | wrong-data | 1 | `synthesizer/aggregation.py` | verified | #159 | 2026-09-22 |
 | F-008 | wrong-data | 1 | `synthesizer/aggregation.py`, `synthesizer.py` | not-started | — | — |
 | F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
 | F-039 | wrong-narration | 1 | `synthesizer/aggregation.py` | not-started | — | — |
