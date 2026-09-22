@@ -477,7 +477,7 @@ by the two tests above but still uncovered in the corpus.
 ## F-007 — empty requested tax lines produce no acknowledgement; the user can't tell "none exist" from "fetch failed"
 
 **Date:** 2026-09-18
-**Status:** fixed (2026-09-22, `phase-2-fix-F007-empty-child-ack`, PR pending)
+**Status:** fixed (2026-09-22, `phase-2-fix-F007-empty-child-ack`, PR #155)
 **Cross-refs:** B-02, B-23 (adjacent), F-001 (same class)
 
 **Evidence.**

@@ -27,8 +27,8 @@ Shipped:
 - F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`,
   PR #154
 - F-007 — requested-and-empty AR-invoice children now acknowledged — `fixed`
-  (2026-09-22), branch `phase-2-fix-F007-empty-child-ack`, commit
-  `779cd12`, PR pending
+  (2026-09-22), branch `phase-2-fix-F007-empty-child-ack`, commits
+  `779cd12` + `09ab128`, PR #155
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 PR #153 merged):
