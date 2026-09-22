@@ -28,6 +28,7 @@ Shipped:
 - F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
 - F-012 — a capped fetch with no source total now narrates the sample — `closed`, PR #157
 - F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `closed`, PR #157
+- F-044 — double-encoded `value_json` no longer crashes the tool at schema validation — `verified`, PR pending
 
 Confirmed (S0–S8 walked) — none outstanding.
 

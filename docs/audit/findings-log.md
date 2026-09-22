@@ -55,92 +55,126 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
-## F-044 — `above 50000` on a supplier+amount invoice query stringifies the amount filter; the tool's float parser rejects it at execute
+## F-044 — double-encoded `value_json` crashes the tool at schema validation (intermittent)
 
 **Date:** 2026-09-22
-**Status:** open (mechanism to be established)
+**Status:** root-caused (fix in progress on `phase-2-fix-F044-double-encoded-value`)
 **Cross-refs:** F-006 (same class — a value shape the tool's schema rejects), F-012 (the L2 run that surfaced it)
 
 **Evidence.**
 
-Discovered during the L2 prompt-set run for F-012 + F-036
-(`scripts/prompts/14_truncation_narration.txt`, prompt 3 of 14). The
-same intent that succeeds for `over 10000` and `above 10000` crashes
-when the threshold is `50000`. Operator is NOT the variable — prompt 2
-uses `above` and works.
+Surfaced during the L2 prompt-set run for F-012 + F-036
+(`scripts/prompts/14_truncation_narration.txt`, prompt 3 of 14). Prompt:
 
-Working sibling (prompt 1):
+    invoices for supplier 1252 above 50000
 
-    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000" --show-stages
-    Intent:
-      target_entity: Invoice
-      filters:
-        - {'type': 'supplier', 'value': '1252'}
-        - {'type': 'invoice_amount', 'value': {'min': 10000}}
+Failed intermittently with:
 
-    Plan:
-      Step 1: search_invoices
-        tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
-
-Failing prompt (prompt 3):
-
-    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 above 50000" --show-stages
     ERROR: execute: 1 validation error for call[search_invoices]
     amount_min
       Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='{"min": 50000}', input_type=str]
         For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
 
-The Intent block is not visible in the failing run's capture; the
-mechanism below is inferred from the error text and the working
-sibling's shape.
+The value that reached the tool's `amount_min` was the JSON-string
+`'{"min": 50000}'`, not the number `50000`. The tool correctly refused
+a value it never should have received.
 
-**Root cause.**
+**Diagnostic run (2026-09-22 14:46, 9 prompts, captured to
+`docs/phase-2/fixes/F-044-diag.txt`).** The failure is intermittent
+and threshold-independent:
 
-Not established. Candidate mechanism: the parser emitted
-`invoice_amount` with a `value` that is a JSON **string**
-(`'{"min": 50000}'`) rather than a dict (`{'min': 50000}`), so
-`_build_entity_fetcher_args` passed the entire string to the tool's
-`amount_min` kwarg, which is typed as a float. The failure is at
-Pydantic input validation, before the tool body runs. This is the same
-class as F-006 (an int annotation rejecting a string form the pipeline
-legitimately produces) but the fault is upstream: F-006's was a wrapper
-annotation, this is the parser's value encoding or the builder's
-handling of the value shape.
+    A-RUN-1  "invoices for supplier 1252 above 50000"  PASS
+    A-RUN-2  same                                        PASS
+    B-20000  "invoices for supplier 1252 above 20000"  PASS
+    B-30000  same                                        PASS
+    B-40000  same                                        PASS
+    B-60000  same                                        PASS
+    B-100000 "invoices for supplier 1252 above 100000" FAIL  input_value='{"min":100000}'
+    C-1      "suppliers with invoices over 50000"      PASS  (different filter, different code path)
+    C-2      "suppliers with an invoice over 50000"    PASS
 
-Alternative not yet ruled out: the parser DID produce a dict, and
-`_build_entity_fetcher_args` stringified it. Same bug class, different
-file. The distinguishing evidence is the Intent block on a failing run,
-which the capture does not show; a `--show-parser` re-run of prompt 3
-would settle it.
+Eight of nine pass; two different thresholds failed in two different
+sessions on the same phrasing. The failure rate on the affected
+phrasing was approximately 1 in 6.
 
-**Fix location (for Phase 2).**
+**Root cause — established.**
 
-TBD. Candidates:
+The chain, cited by `file:line`:
 
-1. `src/spire/nl_parser/parser.py` — the draft's `value_json` decode
-   path, if the value arrives as a double-encoded JSON string.
-2. `src/spire/planner/plan_builders.py::_build_entity_fetcher_args` —
-   the handling of the `invoice_amount` value shape.
-3. `src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt` —
-   if the sysprompt's guidance produces the wrong shape and the builder
-   faithfully forwards it.
+1. The model intermittently double-encodes an object-valued
+   `value_json`: instead of emitting the object text
+   `{"min": 50000}`, it emits a JSON-string whose content is that
+   object text, i.e. `"{\"min\": 50000}"`.
+2. `src/spire/nl_parser/draft.py::to_intent` line 400 —
+   `value: Any = json.loads(f.value_json)`. Double-encoded input
+   parses successfully at this call; it simply yields a **string**.
+   The surrounding `try/except (json.JSONDecodeError, TypeError)`
+   catches only unparseable input, and this case never hits it.
+3. `src/spire/planner/plan_builders.py::_build_entity_fetcher_args`
+   line 290 — `if isinstance(raw_value, dict):`. `raw_value` is a
+   string, so this branch is skipped.
+4. Same function, line 302 — `args[arg_name] = raw_value`. The
+   string is passed through unchanged as `amount_min`.
+5. The MCP boundary: `search_invoices(amount_min: float)` rejects
+   the string at Pydantic input validation, before the tool body
+   runs. Crash.
 
-**Not checked.** Why prompt 2 (`above 10000`) and prompt 3
-(`above 50000`) route differently — same operator, same entity, same
-filter type; the only difference is the numeric value. This looks like
-parser variance rather than a value-specific bug, but the mechanism is
-not yet established and a re-run of prompt 3 would say whether it
-reproduces. Whether the same double-encoding affects other numeric
-filters (`has_invoice_over_amount`, `invoice_limit`, `top_n`). Whether
-the composite-filter path through `search_invoices` has any other
-value-shape traps not exercised by prompts 1, 2, 4, 5, 6.
+**S4 — alternatives disproved.** The only alternative worth naming
+was "the planner stringifies a dict". Disproved by two observations:
+
+- On the seven passing runs, `_build_entity_fetcher_args` produces
+  `{'amount_min': 50000}` (an int) — it does not call `str()` on a
+  dict; it passes `raw_value` through verbatim.
+- The failed run's `input_value` is `'{"min": 50000}'` — a string
+  whose content is JSON object text, exactly what one `json.loads`
+  of a double-encoded value yields. A `str()`-of-dict would be
+  `"{'min': 50000}"` (single quotes, Python repr spacing).
+  Different shape; not what we see.
+
+So the fault is upstream of the planner: the model double-encodes,
+and `draft.py:400` decodes once when it should decode twice.
+
+**Fix location (Phase 2 — shipped on
+`phase-2-fix-F044-double-encoded-value`).**
+
+`src/spire/nl_parser/draft.py::to_intent`, immediately after the
+existing `json.loads`:
+
+    if isinstance(value, str) and value[:1] == "{":
+        try:
+            inner = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        else:
+            if isinstance(inner, dict):
+                value = inner
+
+The guard is a first-character test, so genuine string values
+(`"US"`, `"50000"`, prose) are untouched, and strings that start
+with `{` but do not parse leave the original value in place — the
+same leniency as the outer try/except. A defensive re-parse in
+`plan_builders.py:290` was considered and left out: there is no
+second entry point to the planner that bypasses `to_intent`, so the
+extra branch would have no reproducer.
+
+**Verification.** See `docs/phase-2/fixes/F-044.md`. Key numbers:
+8 unit tests (3 fail without the fix, 5 regression guards), full
+suite 1062 passed, 20-run N>=20 on the reproducer shows 20/20 pass
+with zero errors, and the same on the paraphrase. V0–V8 passed; V9
+not applicable (no `.sysprompt` touched).
+
+**Not checked.** Whether the same double-encoding affects other
+JSON-shaped draft values on other filters. Whether a list-shaped
+value has the same defect (current guard accepts only dicts).
+Whether the double-encoding rate varies by prompt length or entity.
+Whether a sysprompt-side change would further reduce the rate.
 
 **Class note.** Same class as F-006 (a value shape the tool's input
 schema rejects). F-006's was a wrapper type annotation; this is the
 value's own encoding. Both would be caught by a two-layer regression:
-the parser unit test plus the tool's Pydantic schema. Recording here
-because the fix's L2 pass surfaced it and the ledger would otherwise
-lose the observation.
+the parser unit test plus the tool's Pydantic schema. Recorded here
+because the F-012/F-036 L2 pass surfaced it and the finding went from
+candidate to root-caused within the same session.
 
 ---
 
