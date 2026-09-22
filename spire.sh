@@ -4,35 +4,36 @@
 #
 #   ./spire.sh --dev              start dev services (background)
 #   ./spire.sh --runtime          start runtime services (background)
-#   ./spire.sh --dev --mcp-only   start ONLY the MCP server (foreground,
-#                                 with --reload — for MCP development)
-#   ./spire.sh --status           show the current mode's ports and PIDs
+#   ./spire.sh --dev --mcp-only   start ONLY the MCP server (foreground, --reload)
+#   ./spire.sh --status           show the current mode's ports and holder PIDs
 #   ./spire.sh --stop             stop the current mode's services
 #   ./spire.sh --tail             start, then tail the UI log
 #   ./spire.sh --help             show this help
 #   ./spire.sh                    show this help (no args)
 #
-# The current mode comes from $SPIRE_MODE, set by spire() / spirer() in
-# ~/.bashrc when you cd into a tree. If it is not set, pass --dev or
-# --runtime explicitly.
+# DESIGN
+#   PORTS ARE THE SOURCE OF TRUTH.
+#     "Is it running?"  -> query the port.
+#     "Stop it."        -> sweep the port.
+#   A pidfile is kept for a best-effort extra kill of processes that are
+#   alive but not yet bound (mid-startup), and for diagnostics. It is
+#   never consulted to decide whether the system is running.
 #
-# MODE ISOLATION. Dev and runtime never touch each other:
-#   - different ports (from SPIRE-PORTS.env)
-#   - different pidfiles (logs/spire-dev.pid vs logs/spire-runtime.pid)
-#   - --stop and --preflight sweep ONLY the target mode's three ports
-# Running `./spire.sh --dev` cannot affect a runtime process, and
-# `./spire.sh --runtime --stop` cannot affect a dev process.
+#   Why not trust the pidfile:
+#     - `fastmcp run --reload` forks; the recorded PID is the supervisor,
+#       not the port holder.
+#     - After a reboot the kernel reassigns PIDs; a recorded PID may
+#       belong to an unrelated process.
+#     - The API and UI take 5-15s to bind their ports, so a "running"
+#       pidfile can precede a bound port by many seconds.
 #
-# STARTED SERVICES run in the BACKGROUND: this script spawns them under
-# nohup, writes their PIDs to the mode's pidfile, and exits. Use
-# ./spire.sh --stop to stop them.
+#   START waits (bounded) for each port to bind and reports OK/FAILED
+#   per service, so "Started" means what it says.
 #
-# STALE PIDFILES. A pidfile records PIDs, and PIDs are reused by the
-# kernel after a reboot. A recorded PID that is "alive" may therefore
-# belong to an unrelated process. Every liveness check below is
-# consequently pid_alive AND is_our_process: only a live PID that is
-# also one of our processes counts. A stale pidfile is removed silently
-# on start; --stop never kills a PID it cannot confirm as ours.
+# MODE ISOLATION
+#   Dev and runtime use different ports, different pidfiles, and --stop
+#   sweeps only the target mode's three ports. Neither can touch the
+#   other.
 #
 # Ports live in ONE place: SPIRE-PORTS.env at the repo root.
 
@@ -41,16 +42,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
-# ── Ports ──────────────────────────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$REPO_ROOT/SPIRE-PORTS.env"
 
 LOG_DIR="${LOG_DIR:-logs}"
 mkdir -p "$LOG_DIR"
 
-# PIDFILE is set after MODE is parsed — one pidfile per mode, so dev and
-# runtime can never read or clobber each other's state.
-PIDFILE=""
+# How long to wait for a newly-spawned service to bind its port.
+BIND_TIMEOUT_SECS="${BIND_TIMEOUT_SECS:-20}"
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -59,13 +58,8 @@ pid_alive() {
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
-# True only when the PID is alive AND belongs to one of our services.
-# The extra check protects against PID reuse — see the header note.
-pid_is_ours() {
-  local pid="$1"
-  pid_alive "$pid" && is_our_process "$pid"
-}
-
+# Any PID listening on the given TCP port. Own sockets only for -p info;
+# other users' sockets return the line without a PID, which we skip.
 pids_on_port() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -79,6 +73,9 @@ pids_on_port() {
   fi
 }
 
+# Does the given PID look like one of ours? Used only to avoid killing
+# unrelated processes during a port sweep. Falls back to "assume ours"
+# for a bare port sweep if the cmdline is unreadable.
 is_our_process() {
   local pid="$1"
   local f="/proc/$pid/cmdline"
@@ -88,28 +85,10 @@ is_our_process() {
   case "$cmd" in
     *spire/mcp_server/server.py*|*spire.mcp_server*|\
     *spire/api/server.py*|*spire.api.server*|\
-    *spire/ui/app.py*|*spire-ui*)
+    *spire/ui/app.py*|*spire-ui*|*fastmcp*spire*)
       return 0 ;;
   esac
   return 1
-}
-
-PIDFILE_MCP=""
-PIDFILE_API=""
-PIDFILE_UI=""
-read_pidfile() {
-  PIDFILE_MCP=""; PIDFILE_API=""; PIDFILE_UI=""
-  [ -n "$PIDFILE" ] || return 0
-  [ -f "$PIDFILE" ] || return 0
-  local line key value
-  while IFS= read -r line; do
-    key="${line%%=*}"; value="${line#*=}"
-    case "$key" in
-      MCP) PIDFILE_MCP="$value" ;;
-      API) PIDFILE_API="$value" ;;
-      UI)  PIDFILE_UI="$value" ;;
-    esac
-  done < "$PIDFILE"
 }
 
 ports_for_mode() {
@@ -125,13 +104,29 @@ ports_for_mode() {
   esac
 }
 
+read_pidfile_into() {
+  # Args: pidfile. Sets globals PF_MCP PF_API PF_UI.
+  PF_MCP=""; PF_API=""; PF_UI=""
+  local pf="$1"
+  [ -f "$pf" ] || return 0
+  local line key value
+  while IFS= read -r line; do
+    key="${line%%=*}"; value="${line#*=}"
+    case "$key" in
+      MCP) PF_MCP="$value" ;;
+      API) PF_API="$value" ;;
+      UI)  PF_UI="$value" ;;
+    esac
+  done < "$pf"
+}
+
 usage() {
   cat >&2 <<EOF
 Usage: ./spire.sh [--dev | --runtime] [--status | --stop | --tail | --mcp-only]
 
   (no args)     show this help
   (no action)   start the current mode's services in the background
-  --status      show the current mode's ports and PIDs
+  --status      show the current mode's ports and holder PIDs
   --stop        stop the current mode's services (only that mode)
   --tail        start, then tail the UI log
   --mcp-only    start ONLY the MCP server (foreground, --reload)
@@ -186,57 +181,54 @@ if [ "$MODE" != "dev" ] && [ "$MODE" != "runtime" ]; then
   exit 2
 fi
 
-# ── Mode-scoped pidfile ───────────────────────────────────────────────
-# One pidfile per mode. Dev and runtime never read or write the same
-# file, so neither can see the other's state or sweep the other's PIDs.
 PIDFILE="$LOG_DIR/spire-$MODE.pid"
 
 # ── --stop ─────────────────────────────────────────────────────────────
+#
+# Order of business:
+#   1. Sweep the target mode's ports and kill any of our processes found.
+#      This is the reliable path — the port holder is what --status
+#      shows and what --start refuses to collide with.
+#   2. If a pidfile exists, kill its PIDs too — but only if they are
+#      alive AND still look like ours. This catches mid-startup
+#      processes that have not yet bound, and is a no-op for stale
+#      files (dead PIDs, or live PIDs reassigned to another process).
+#   3. Remove the pidfile.
 
 stop_mode() {
   local target_mode="$1"
   local pidfile="$LOG_DIR/spire-$target_mode.pid"
   local stopped=0
 
-  if [ -f "$pidfile" ]; then
-    local line key value
-    local mcp_pid="" api_pid="" ui_pid=""
-    while IFS= read -r line; do
-      key="${line%%=*}"; value="${line#*=}"
-      case "$key" in
-        MCP) mcp_pid="$value" ;;
-        API) api_pid="$value" ;;
-        UI)  ui_pid="$value" ;;
-      esac
-    done < "$pidfile"
+  # 1. Port sweep — primary.
+  local line port svc pid
+  while IFS= read -r line; do
+    port="${line%%|*}"; svc="${line#*|}"
+    for pid in $(pids_on_port "$port"); do
+      if is_our_process "$pid"; then
+        echo "spire.sh: stopping $svc on port $port (PID $pid)"
+        kill -TERM "$pid" 2>/dev/null || true
+        stopped=1
+      else
+        echo "spire.sh: port $port is held by non-SPIRE PID $pid; leaving it alone" >&2
+      fi
+    done
+  done < <(ports_for_mode "$target_mode")
 
-    # Only kill PIDs that are alive AND ours. A live PID from a
-    # pre-reboot pidfile may now belong to an unrelated process — see
-    # the header note. Skipping those protects the system.
-    local pid
-    for pid in "$mcp_pid" "$api_pid" "$ui_pid"; do
-      if pid_is_ours "$pid"; then
-        echo "spire.sh: stopping PID $pid"
+  # 2. Pidfile kill — best effort, for not-yet-bound processes.
+  if [ -f "$pidfile" ]; then
+    local pf_mcp pf_api pf_ui
+    read_pidfile_into "$pidfile"
+    pf_mcp="$PF_MCP"; pf_api="$PF_API"; pf_ui="$PF_UI"
+    for pid in "$pf_mcp" "$pf_api" "$pf_ui"; do
+      if pid_alive "$pid" && is_our_process "$pid"; then
+        echo "spire.sh: stopping PID $pid from $pidfile"
         kill -TERM "$pid" 2>/dev/null || true
         stopped=1
       fi
     done
     rm -f "$pidfile"
   fi
-
-  # Sweep the target mode's ports. Because dev and runtime use different
-  # ports, this can never touch the other mode's processes.
-  local line port svc pid
-  while IFS= read -r line; do
-    port="${line%%|*}"; svc="${line#*|}"
-    for pid in $(pids_on_port "$port"); do
-      if is_our_process "$pid"; then
-        echo "spire.sh: killing orphan $svc on port $port (PID $pid)"
-        kill -TERM "$pid" 2>/dev/null || true
-        stopped=1
-      fi
-    done
-  done < <(ports_for_mode "$target_mode")
 
   if [ "$stopped" = "1" ]; then
     sleep 1
@@ -255,6 +247,10 @@ stop_mode() {
 }
 
 # ── --status ───────────────────────────────────────────────────────────
+#
+# Ports only. The holder PID comes from ss/lsof. The pidfile's recorded
+# PIDs are shown separately, marked "recorded", purely for diagnostics —
+# a mismatch is expected for MCP (fork) and harmless for the rest.
 
 show_status() {
   local filter_mode="$1"
@@ -279,8 +275,18 @@ show_status() {
     printf '%-7s %-6s %-6s %s\n' "$port" "$svc" "$state" "$pid"
   done < <(ports_for_mode "$filter_mode")
 
+  local pf="$LOG_DIR/spire-$filter_mode.pid"
+  if [ -f "$pf" ]; then
+    local pf_mcp pf_api pf_ui
+    read_pidfile_into "$pf"
+    pf_mcp="$PF_MCP"; pf_api="$PF_API"; pf_ui="$PF_UI"
+    echo
+    echo "recorded PIDs in $pf (informational; may differ from holders):"
+    printf '  MCP=%s  API=%s  UI=%s\n' "${pf_mcp:--}" "${pf_api:--}" "${pf_ui:--}"
+  fi
+
   echo
-  echo "--stop stops every SPIRE process on these ports; others are left alone."
+  echo "--stop sweeps these three ports and kills any SPIRE process found."
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────
@@ -292,12 +298,11 @@ esac
 
 # ── Start ─────────────────────────────────────────────────────────────
 
-# Pre-flight: refuse to start if the target mode's ports are already held
-# by another SPIRE process. Without this, the child processes fail to
-# bind and exit, but the script still prints "Started" — the pidfile
-# records dead PIDs and the ports stay held by whatever was already there.
+# Pre-flight: refuse if any target port is already held by ANY process.
+# Anything on our ports is either us or an explicit conflict; either way
+# we should not spawn a duplicate.
 _preflight_ports() {
-  local check_ports="$1"   # newline-separated "port|svc" entries
+  local check_ports="$1"
   local held=0
   local line port svc pid
   while IFS= read -r line; do
@@ -306,38 +311,36 @@ _preflight_ports() {
     for pid in $(pids_on_port "$port"); do
       if is_our_process "$pid"; then
         echo "spire.sh: port $port ($svc) is already held by SPIRE PID $pid" >&2
-        held=1
+      else
+        echo "spire.sh: port $port ($svc) is already held by PID $pid (not SPIRE)" >&2
       fi
+      held=1
     done
   done <<< "$check_ports"
   return "$held"
 }
 
-# Check this mode's OWN pidfile. Other modes are invisible here — their
-# pidfiles have a different name.
-#
-# The check requires pid_is_ours (alive AND ours), not just pid_alive.
-# After a reboot the kernel reassigns PIDs, so a live PID recorded in a
-# pre-reboot pidfile may now belong to an unrelated process. Treating
-# that as "already running" would refuse to start forever.
-if [ -f "$PIDFILE" ]; then
-  read_pidfile
-  any_ours=0
-  for pid in "$PIDFILE_MCP" "$PIDFILE_API" "$PIDFILE_UI"; do
-    if pid_is_ours "$pid"; then
-      any_ours=1
+# Refuse if any PID recorded in this mode's pidfile is still alive AND
+# still looks like ours. This catches a mid-startup process that has not
+# bound a port yet (so the port check above would have passed).
+_preflight_pidfile() {
+  [ -f "$PIDFILE" ] || return 0
+  local pf_mcp pf_api pf_ui
+  read_pidfile_into "$PIDFILE"
+  pf_mcp="$PF_MCP"; pf_api="$PF_API"; pf_ui="$PF_UI"
+  local pid
+  for pid in "$pf_mcp" "$pf_api" "$pf_ui"; do
+    if pid_alive "$pid" && is_our_process "$pid"; then
+      echo "spire.sh: PID $pid from $PIDFILE is still alive and ours." >&2
+      echo "          run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
+      return 1
     fi
   done
-  if [ "$any_ours" = "1" ]; then
-    echo "spire.sh: already running for mode $MODE." >&2
-    echo "          use './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
-    exit 1
-  fi
-  # No live SPIRE process matches the pidfile. It is stale (post-reboot
-  # PID reuse, or a crashed run). Remove it and proceed.
+  # All recorded PIDs are either dead or reassigned. Stale file.
   echo "spire.sh: removing stale pidfile $PIDFILE" >&2
   rm -f "$PIDFILE"
-fi
+  return 0
+}
 
 if [ -f "$REPO_ROOT/.spire-dev.env" ]; then
   echo "[warn] .spire-dev.env exists but is IGNORED — ports come from SPIRE-PORTS.env." >&2
@@ -353,22 +356,23 @@ else
   UI_PORT="$SPIRE_RUNTIME_UI_PORT"
 fi
 
-# Pre-flight port check for THIS mode only.
+# Pre-flight — ports must be free, and the pidfile must not name a live
+# process of ours. Both checks are mode-scoped.
+check_ports="$(ports_for_mode "$MODE")"
 if [ "$MCP_ONLY" = "1" ]; then
-  if ! _preflight_ports "$MCP_PORT|MCP"; then
-    echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
-    exit 1
-  fi
-else
-  if ! _preflight_ports "$(ports_for_mode "$MODE")"; then
-    echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
-    exit 1
-  fi
+  check_ports="$MCP_PORT|MCP"
+fi
+
+if ! _preflight_ports "$check_ports"; then
+  echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
+  exit 1
+fi
+
+if ! _preflight_pidfile; then
+  exit 1
 fi
 
 # ── --mcp-only: foreground, reload, blocking ──────────────────────────
-# Preserves what run-server.sh used to be. For MCP development, where
-# you want the reload loop's output on the terminal.
 if [ "$MCP_ONLY" = "1" ]; then
   echo "Mode:   $MODE (MCP only, foreground)"
   echo "Port:   MCP $MCP_PORT"
@@ -397,8 +401,6 @@ SPIRE_MCP_PORT="$MCP_PORT" \
     --reload-dir src/spire \
     > "$LOG_DIR/mcp.log" 2>&1 &
 MCP_PID=$!
-echo "MCP   pid=$MCP_PID   http://127.0.0.1:$MCP_PORT     log: $LOG_DIR/mcp.log"
-sleep 2
 
 SPIRE_API_PORT="$API_PORT" \
 SPIRE_MCP_URL="http://127.0.0.1:$MCP_PORT/mcp" \
@@ -406,15 +408,12 @@ SPIRE_UI_ORIGIN="http://localhost:$UI_PORT" \
   nohup python -m spire.api.server \
     > "$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
-echo "API   pid=$API_PID   http://localhost:$API_PORT     log: $LOG_DIR/api.log"
-sleep 1
 
 SPIRE_UI_PORT="$UI_PORT" \
 SPIRE_API_URL="http://localhost:$API_PORT" \
   nohup spire-ui \
     > "$LOG_DIR/ui.log" 2>&1 &
 UI_PID=$!
-echo "UI    pid=$UI_PID   http://localhost:$UI_PORT     log: $LOG_DIR/ui.log"
 
 {
   echo "MODE=$MODE"
@@ -423,9 +422,40 @@ echo "UI    pid=$UI_PID   http://localhost:$UI_PORT     log: $LOG_DIR/ui.log"
   echo "UI=$UI_PID"
 } > "$PIDFILE"
 
+# Wait (bounded) for each port to bind. Print OK / FAILED per service.
+# A service that never binds is reported as FAILED even if its process
+# is still alive — the user asked "is the port serving?", and the answer
+# is no.
+wait_for_bind() {
+  local port="$1" name="$2" deadline=$((SECONDS + BIND_TIMEOUT_SECS))
+  local pids
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    pids="$(pids_on_port "$port")"
+    if [ -n "$pids" ]; then
+      printf '%-5s OK    port %-5s  PID %s\n' "$name" "$port" "$(echo "$pids" | head -n1)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  printf '%-5s FAILED port %-5s  not bound within %ss (see %s/%s.log)\n' \
+    "$name" "$port" "$BIND_TIMEOUT_SECS" "$LOG_DIR" "$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+  return 1
+}
+
+echo "Waiting up to ${BIND_TIMEOUT_SECS}s for each port to bind..."
+all_ok=0
+wait_for_bind "$MCP_PORT" "MCP"  || all_ok=1
+wait_for_bind "$API_PORT" "API"  || all_ok=1
+wait_for_bind "$UI_PORT"  "UI"   || all_ok=1
+
 echo
-echo "Started. PIDs written to $PIDFILE."
-echo "  ./spire.sh --status   show ports and PIDs"
+if [ "$all_ok" = "0" ]; then
+  echo "All three up. Supervisor PIDs in $PIDFILE."
+else
+  echo "At least one service failed to bind. Inspect $LOG_DIR/*.log." >&2
+  echo "PIDs recorded in $PIDFILE — './spire.sh --stop' cleans up." >&2
+fi
+echo "  ./spire.sh --status   show ports and holder PIDs"
 echo "  ./spire.sh --stop     stop these services only"
 
 if [ "$TAIL_UI" = "1" ]; then
