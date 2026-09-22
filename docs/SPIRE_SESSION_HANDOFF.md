@@ -1,9 +1,7 @@
-# SPIRE — Session Handoff, 2026-09-20
+# SPIRE — Session Handoff, 2026-09-22
 
-**This file supersedes the 2026-09-19 handoff.** Phase 1 is closed; Phase 2
-has begun. Three findings from the Phase 2 sweep are already shipped:
-F-041 (AR invoice child phrasings, PR #151), F-042 (address phrasings,
-PR #152), and F-043 (Site/Classification includes, PR #152).
+**This file supersedes the 2026-09-20 handoff.** Phase 1 is closed; Phase 2
+has begun. Eight findings from the Phase 2 sweep are shipped.
 
 **Read this first.** Then `docs/AUDIT_AND_FIX.md` — the playbook — which
 points to everything else. The audit (`docs/audit/phase-1-audit.md`) and
@@ -19,32 +17,17 @@ source-of-truth documents.
 **Phase 2 — Correctness — in progress.**
 
 Shipped:
+
 - F-041 — AR invoice children named first — `verified`, PR #151
 - F-042 — supplier-address phrasings refuse — `closed-as-duplicate (F-009)`, PR #152
 - F-043 — Site and Classification includes refuse — `verified`, PR #152
 - F-009 — its fix landed as F-042's branch — `verified`, PR #152
 - F-001 — filter-less PO lists now answer — `verified`, PR #153
-- F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`,
-  PR #154
-- F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`,
-  PR #155
-- F-015 — an empty result from a capped fetch now says so — `fixed`
-  (2026-09-22), branch `phase-2-fix-F015-empty-bucket-truncation`, commits
-  `a7276b3` + `f697b96`, PR #156
+- F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`, PR #154
+- F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`, PR #155
+- F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
 
-Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
-PR #153 merged):
-- **F-001** (fixed) — `list_all` is declared (`models.py:141`), read by the
-  planner's guard (`planner.py:199`), and never written. `parser.py:120`
-  defines `_is_explicit_po_list(prompt: str) -> bool`; the only other
-  reference is a comment at `router.py:216` naming it as a "deterministic
-  code" step that should run post-parse. No source file calls it. So
-  `intent.list_all` stays `False` on every parse, and any filter-less
-  PurchaseOrder intent refuses with `missing_identifier` — "no explicit
-  list request" — even when the user typed exactly that. Reproducer:
-  `python scripts/promptkit.py --run --prompt "list purchase orders"`.
-  S0–S8 all pass; the harm (S1) is refusal of an in-scope prompt; the
-  falsifier (S5) is any caller setting `list_all=True`.
+Confirmed (S0–S8 walked) — none outstanding.
 
 ---
 
@@ -53,9 +36,10 @@ PR #153 merged):
 1. **Confirm ground truth.**
    - `git log --oneline -5`
    - `git status`
-   - `pytest -q` (expect the same count as the last green run;
-     if the pod is down, expect `957 passed, 54 failed` — the 54 are
-     pod-dependent, per the 2026-09-19 handoff's design note)
+   - `pytest -q` (expect `1048 passed, 22 deselected` with the pod up;
+     if the pod is down, the pod-dependent tests fail rather than skip
+     — see the audit's §F.3 note for the reconciliation. Compare
+     against the last green count, not a stale figure.)
 
 2. **Read the playbook first.** `docs/AUDIT_AND_FIX.md`. It has:
    - where everything lives,
@@ -64,73 +48,62 @@ PR #153 merged):
    - how to reproduce / classify / fix / verify / track,
    - the recovery path if context is lost.
 
-3. **Open F-016.** It is the next task — F-015 shipped 2026-09-22 (see
-   the Shipped list above). Cluster 3 (parser schema gaps); per
-   `docs/phase-2/FIX_PLAN.md` §4 order, F-016 goes next: a "top 5" on a
-   plain-list query is silently dropped and the tool returns its
-   default 25.
+3. **Open F-012 + F-036.** They are the next task per
+   `docs/phase-2/FIX_PLAN.md` §4 order. Cluster 1 (synthesizer
+   narration); the plan places them together because they share the
+   `_local_truncation` f-string in `synthesizer/synthesizer.py` — one
+   fix pass closes both.
 
-   Reproducer:
-   `python scripts/promptkit.py --run --prompt "List recent credit memos, top 5" --show-stages`
+   F-012 reproducer:
+   `python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000" --show-stages`
 
-   The finding lives in `docs/audit/findings-log.md`. Read it and its
-   `docs/phase-2/FIX_PLAN.md` §5 row, then follow Phase 2 §8.3:
-   - Severity: missing-capability (a cap the user named is silently
-     ignored; the tool returns its default instead).
-   - Deterministic: single-run test suffices.
-   - Branch: `phase-2-fix-F016-list-row-cap`.
-   - Regression test: the prompt produces an intent carrying the cap
-     and a plan whose `tool_args` includes `limit=5`, and the answer
-     shows 5 rows; `List recent credit memos` (no cap) still returns
-     25.
-   - Byte-diff: the prompt is not one of the three goldens; no golden
-     update expected.
-   - Mechanism (already in the finding): `DraftIntent` / planner
-     `Intent` have no field for a plain-list row cap. Every numeric
-     cap is scoped to a shape (`aggregate.top_n`, `invoice_limit`);
-     none carries a list cap. The parser hears "top 5", has no field
-     to write it into, and drops it. Two candidate fix shapes are in
-     the finding — a new schema field (token-ceiling risk) or a
-     post-parse deterministic extractor matching the pattern
-     `_is_explicit_po_list` already uses (no schema change). The
-     finding leans toward the second; the phase picks after reading
-     both.
-   - Note also: the current session's F-015 fix touched
-     `synthesizer/synthesizer.py` only; F-016 touches
-     `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py`.
-     Different files, no conflict with the F-015 branch.
+   F-036 reproducer:
+   `python scripts/promptkit.py --run --prompt "Suppliers with their addresses" --show-stages`
+
+   Read both findings in `docs/audit/findings-log.md` and their
+   `docs/phase-2/FIX_PLAN.md` §5 rows, then follow Phase 2 §8.3:
+   - F-012 severity: wrong-data (a sampled result read as the whole).
+   - F-036 severity: wrong-narration (a filter-less fetch says
+     "examined for filtering").
+   - Deterministic: single-run test suffices for each.
+   - Branch: one branch, both fixes —
+     `phase-2-fix-F012-F036-truncation-wording`.
+   - Regression tests: F-012 — the composite-filter prompt produces a
+     summary that mentions the sample, OR a truncation note that states
+     the true examined count, not `20`; a non-composite query is
+     unaffected. F-036 — the unfiltered prompt's truncation note no
+     longer contains the phrase "for filtering"; a filtered prompt's
+     note stays consistent with whichever wording the fix picks.
+   - Byte-diff: the note is user-visible and appears in the 05/07/08
+     prompt-set baselines. Regenerate any golden that carries the note.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 
 ---
 
-## Ledger reconciliation done this session
+## Lockstep invariant — where it drifts
 
-Invariants in `AUDIT_AND_FIX.md` were broken before this session:
-
-- F-041's findings-log status said `root-caused, not fixed` while its
-  FIX_PLAN row said `verified`. Both now `verified`.
-- F-009's FIX_PLAN row said `not-started` while its fix had shipped as
-  F-042's branch. Both findings-log and FIX_PLAN now record it as
-  fixed via F-042 / PR #152.
-- F-043 was missing from both documents. Both now carry it.
+The four-place lockstep (`AUDIT_AND_FIX.md` §How to track) is per fix,
+and this session ran it four times (F-001, F-006, F-007, F-015). One
+invariant drifts most: "every F-NNN status line matches its FIX_PLAN
+row." A merge landing between a lockstep commit and window close leaves
+the handoff one bump behind — F-015 arrived this session with exactly
+that shape (`fixed` in the handoff, `verified` everywhere else).
 
 If you find another invariant violation in the next window, fix it as
 part of the first commit of that session.
 
 ---
 
-## Open work beyond F-001
+## Open work
 
-Ordered by §8.3.1 severity. Reference for planning the window after
-the next one.
+Ordered by §8.3.1 severity.
 
 **Missing-capability:**
 - F-003 — three PO aggregation ops unreachable from a scoped parse;
   `modes/` folder in neither `_TIER1` nor `KNOWN_MODULES`. F-004 falls
   out of this.
 - F-004 — PO-value ranking misroutes to a comparison op.
-- F-006 — alpha-prefixed `OrderNumber` crashes `get_purchase_order_by_id`.
 - F-008 — expired supplier classifications still match.
 - F-011 — KG says `created_before` answers "stale POs"; sysprompt refuses the class.
 - F-016 — no schema field for a plain-list row cap; `top 5` on a list query is dropped.
@@ -142,16 +115,15 @@ the next one.
 - F-010 — `count_only` on a filtered intent returns the unfiltered source total.
 - F-012 — composite filter hits the over-fetch cap, drops `total_available`.
 - F-014 — `fields` on an aggregate intent applied to the wrapper record.
-- F-015 — truncated-to-zero result narrated as clean "not found".
 - F-017 — `Description` on a PO-lines include classified unresolved.
 - F-019 — account number routed into `by_customer_name`.
 - F-020 — supplier-contacts summary flattens 47 names into one sentence.
+- F-036 — truncation note says "examined for filtering" on an unfiltered fetch.
 - F-039 — "under-invoiced" over-claim where 97% of invoices are excluded.
 
 **Cosmetic / hygiene / cost:**
 - F-002 — `promptkit.py` calls `classify_modules` twice per prompt.
 - F-033 — `ReceivablesInvoiceLine` refusal's Example is the failing prompt itself.
-- F-036 — truncation note says "examined for filtering" on an unfiltered fetch.
 - F-037 — duplicated prompts across files.
 
 **Register #30 (perf, from handoff, not in FIX_PLAN):**
@@ -224,7 +196,7 @@ if needed.
 1. This file.
 2. `docs/AUDIT_AND_FIX.md` — the playbook.
 3. `docs/phase-2/FIX_PLAN.md` — the queue.
-4. The topmost open finding in `docs/audit/findings-log.md` — F-001.
+4. The topmost open finding in `docs/audit/findings-log.md` — F-012.
 
 That is the complete list. The audit's §B.6 map is a lookup when you
 need it, not required reading.
