@@ -360,6 +360,7 @@ bundles:
   - tests/test_f041_ar_child_root.py
   - tests/test_f001_list_all_flag.py
   - tests/test_f006_alpha_order_number.py
+  - tests/test_f007_empty_child_ack.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:

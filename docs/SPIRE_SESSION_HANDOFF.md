@@ -26,9 +26,11 @@ Shipped:
 - F-001 — filter-less PO lists now answer — `verified`, PR #153
 - F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`,
   PR #154
-- F-007 — requested-and-empty AR-invoice children now acknowledged — `fixed`
-  (2026-09-22), branch `phase-2-fix-F007-empty-child-ack`, commits
-  `779cd12` + `09ab128`, PR #155
+- F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`,
+  PR #155
+- F-015 — an empty result from a capped fetch now says so — `fixed`
+  (2026-09-22), branch `phase-2-fix-F015-empty-bucket-truncation`, commits
+  `a7276b3` + `f697b96`, PR #156
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 PR #153 merged):
@@ -62,31 +64,41 @@ PR #153 merged):
    - how to reproduce / classify / fix / verify / track,
    - the recovery path if context is lost.
 
-3. **Open F-015.** It is the next task — F-007 shipped 2026-09-22 (see
-   the Shipped list above). Cluster 1 (synthesizer narration); per
-   `docs/phase-2/FIX_PLAN.md` §4 order, F-015 goes next: a truncated-
-   to-zero result narrated as a clean "not found".
+3. **Open F-016.** It is the next task — F-015 shipped 2026-09-22 (see
+   the Shipped list above). Cluster 3 (parser schema gaps); per
+   `docs/phase-2/FIX_PLAN.md` §4 order, F-016 goes next: a "top 5" on a
+   plain-list query is silently dropped and the tool returns its
+   default 25.
 
    Reproducer:
-   `python scripts/promptkit.py --run --prompt "Show receipts for ABC Corporation Americas at Santa Clara" --show-stages`
+   `python scripts/promptkit.py --run --prompt "List recent credit memos, top 5" --show-stages`
 
    The finding lives in `docs/audit/findings-log.md`. Read it and its
    `docs/phase-2/FIX_PLAN.md` §5 row, then follow Phase 2 §8.3:
-   - Severity: wrong-narration (a sampled/incomplete result presented
-     as complete).
+   - Severity: missing-capability (a cap the user named is silently
+     ignored; the tool returns its default instead).
    - Deterministic: single-run test suffices.
-   - Branch: `phase-2-fix-F015-empty-bucket-truncation`.
-   - Regression test: the prompt returns truncation_notes non-empty
-     and a summary that names the cap, not a clean "no receipts"; a
-     genuinely empty entity query still returns the clean "no
-     receipts" summary with no truncation note.
+   - Branch: `phase-2-fix-F016-list-row-cap`.
+   - Regression test: the prompt produces an intent carrying the cap
+     and a plan whose `tool_args` includes `limit=5`, and the answer
+     shows 5 rows; `List recent credit memos` (no cap) still returns
+     25.
    - Byte-diff: the prompt is not one of the three goldens; no golden
      update expected.
-   - Mechanism (already in the finding): the synthesizer's
-     `_all_buckets_empty` shortcut fires before truncation is
-     consulted, so an empty bucket that arrived via a truncated fetch
-     is narrated as "nothing found" rather than "examined a capped
-     sample". The fix likely lives in that early return.
+   - Mechanism (already in the finding): `DraftIntent` / planner
+     `Intent` have no field for a plain-list row cap. Every numeric
+     cap is scoped to a shape (`aggregate.top_n`, `invoice_limit`);
+     none carries a list cap. The parser hears "top 5", has no field
+     to write it into, and drops it. Two candidate fix shapes are in
+     the finding — a new schema field (token-ceiling risk) or a
+     post-parse deterministic extractor matching the pattern
+     `_is_explicit_po_list` already uses (no schema change). The
+     finding leans toward the second; the phase picks after reading
+     both.
+   - Note also: the current session's F-015 fix touched
+     `synthesizer/synthesizer.py` only; F-016 touches
+     `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py`.
+     Different files, no conflict with the F-015 branch.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 
