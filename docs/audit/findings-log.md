@@ -3332,7 +3332,7 @@ produced the intent.
 ## F-001 — `list_all` is declared, read, and never written; every filter-less PO query refuses
 
 **Date:** 2026-09-17
-**Status:** root-caused, not fixed
+**Status:** fixed (2026-09-22, `phase-2-fix-F001-list-all-flag`; PR pending)
 **Cross-refs:** B-13, D-07
 
 **Evidence.**
@@ -3405,6 +3405,38 @@ phrasing that would have produced a filter-less PurchaseOrder intent.
 codebase that the code does not honour.** The comment in `planner.py:188`
 is the strongest example in the audit so far. Reading it, you would
 believe the fix is live.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F001-list-all-flag`.**
+
+`parse()` now calls `_is_explicit_po_list(prompt)` on a
+PurchaseOrder-rooted intent and assigns the result to `intent.list_all`,
+placed immediately before the BUG-1 include-correction block. Same
+post-parse, pure-Python, zero-prompt-text shape as the four helpers
+already in the function. `planner/models.py` and `draft.py` needed no
+change: the field was already declared, and the flag is deliberately not
+an LLM concern (it is computed from the raw prompt, after the LLM).
+
+Verification:
+
+- Reproducer `list purchase orders` now answers — 25 of 17,524 POs, no
+  refusal. Pre-fix output was
+  `missing_identifier — PurchaseOrder root has no identifier and no
+  explicit list request`.
+- Boundary probes: `list all purchase orders` and `show all POs` list;
+  `purchase orders` (bare noun, no verb) still refuses; `list the lines
+  on PO 2144` correctly routes to `by_id` and returns 2 line records
+  (the PO-number clause in the predicate holds).
+- New file `tests/test_f001_list_all_flag.py` — 6 tests.
+  `test_list_purchase_orders_sets_list_all_true` fails without the fix
+  (`assert False is True`; reversion confirmed by `git stash push` of
+  `parser.py`, running the file, and `git stash pop`).
+- Full suite: 1034 passed, 22 deselected (baseline 1028 + 6 new).
+
+Residual observation, out of scope. The answer's truncation line now
+reads `25 examined for filtering` on an unfiltered fetch — that is
+F-036's defect, pre-existing and outside F-001's scope. The note is
+visible today only because the fetcher is reachable; before the fix no
+answer was produced at all.
 
 ---
 
