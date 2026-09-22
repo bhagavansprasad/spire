@@ -65,48 +65,78 @@ is correct.
 ## Two formats — do not mix them
 
 `00`–`10` and `qa_testcases` are plain prompts, one per line, for
-`run_prompt_set.py`.
+`promptkit.py --run --prompt-file`.
 
 `scorer/parser_stress.txt` uses `EXPECT ||| prompt` and needs the scorer.
-Feeding it to `run_prompt_set.py` sends the `filter:status |||` prefix to
-the parser as part of the prompt. It lives in a subfolder for that reason.
+Feeding it to `promptkit.py` sends the `filter:status |||` prefix to the
+parser as part of the prompt. It lives in a subfolder for that reason.
 
 ## Running
 
-Quick verification (about 3 minutes):
+All runs go through `promptkit.py --run`. It takes one or more prompt
+files via `--prompt-file`, a manifest of set names via `--manifest`, or a
+one-off `--prompt "..."`. `--prompt`, `--prompt-file`, and `--manifest`
+are mutually exclusive; within each, list multiple values space-separated.
+
+Quick verification — the dipstick set, about 3 minutes:
 
 ```
-python scripts/run_prompt_set.py --prompt-file scripts/prompts/00_dipstick.txt
+python scripts/promptkit.py --run --prompt-file scripts/prompts/00_dipstick.txt
 ```
 
-Multiple files, in the order given. Globs work — but note
-`scripts/prompts/0*.txt` picks up `00`–`08` and **misses** `10` and
-`qa_testcases`:
+Several files, in the order given. `--prompt-file` takes one or more
+paths; files run left to right, each file's prompts in line order:
 
 ```
-python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+python scripts/promptkit.py --run --prompt-file \
+    scripts/prompts/00_dipstick.txt \
+    scripts/prompts/01_supplier.txt \
+    scripts/prompts/02_purchase_order.txt
 ```
 
-`--all` is unrelated to this directory: it runs legacy `prompt_set_*.txt`
-files in `scripts/`, and nothing here matches that pattern.
-
-Full run excluding the slow set:
+Full run excluding the slow set, tee'd to a dated log:
 
 ```
-for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals 07_alacarte 08_lifecycle 10_refusal_examples; do
-  echo "########## $s ##########"
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/$s.txt
-done 2>&1 | tee run_$(date +%Y%m%d).txt
+python scripts/promptkit.py --run --prompt-file \
+    scripts/prompts/00_dipstick.txt \
+    scripts/prompts/01_supplier.txt \
+    scripts/prompts/02_purchase_order.txt \
+    scripts/prompts/03_ar.txt \
+    scripts/prompts/04_columns.txt \
+    scripts/prompts/05_refusals.txt \
+    scripts/prompts/07_alacarte.txt \
+    scripts/prompts/08_lifecycle.txt \
+    scripts/prompts/10_refusal_examples.txt \
+  2>&1 | tee run_$(date +%Y%m%d).txt
 ```
 
-Everything, overnight:
+Everything, overnight, via the manifest:
 
 ```
-nohup bash -c '
-for s in 00_dipstick 01_supplier 02_purchase_order 03_ar 04_columns 05_refusals 07_alacarte 08_lifecycle 10_refusal_examples 06_slow; do
-  echo "########## $s ##########"
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/$s.txt
-done' > overnight_$(date +%Y%m%d).txt 2>&1 &
+python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+```
+
+The manifest (`scripts/promptkit_sets.yaml`) lists the set names in run
+order; each name resolves to `<prompts-dir>/<name>.txt` (default
+`scripts/prompts/`). Comment a line out to skip a set. Each set runs as
+its own subprocess with a per-set timeout (`--timeout`, default 3600s),
+so one hung or crashing set cannot stop the batch. Output goes to
+`promptkit_<YYYYMMDD_HHMMSS>/` in the cwd unless `--outdir` is given:
+
+```
+promptkit_20260922_165958/
+    00_dipstick.txt      per-set stdout, one file per set
+    01_supplier.txt
+    ...
+    _run_log.txt         start/end/exit/duration, one line per set
+    _summary.txt         a compact table
+```
+
+To background it and keep a top-level log:
+
+```
+nohup python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml \
+    > overnight_$(date +%Y%m%d).txt 2>&1 &
 ```
 
 The MCP server must stay up for the duration. If it is running in a
@@ -114,11 +144,12 @@ foreground terminal you plan to close, background it too.
 
 Diagnostics are off by default and go to stderr. Add `--show-planner`,
 `--show-parser`, `--show-all` and so on when you need them; the answer
-stays on stdout either way.
+stays on stdout either way. In `--manifest` mode the diagnostic flags are
+forwarded to each child run, so they land on every set.
 
 ## Reading the results
 
-**The summary line proves nothing.** `run_prompt_set.py` has previously
+**The summary line proves nothing.** A tally of exit codes has previously
 reported "38/38 ran cleanly" while several prompts were being wrongly
 REFUSED, and `05_refusals` once reported 9/9 while three of the nine
 messages were wrong. Read the ANSWERS.
@@ -208,4 +239,60 @@ before trusting any `FAIL-KG` label.
   promise, as a runnable set. Baseline 18/18.
 - `qa_testcases.txt` gained the `REFUSE-BAD-MSG` label, and nine AR
   prompts from an external SME report.
-- `run_prompt_set.py` takes the same diagnostic flags as `run_graph.py`.
+- `promptkit.py` takes the same diagnostic flags as `run_graph.py`.
+
+## Quick reference
+
+Two file types feed `promptkit.py`:
+
+- **Prompt file** (`*.txt`) — one prompt per line. `#` and blank lines
+  skipped. Run with `--prompt-file`.
+- **Manifest file** (`*.yaml`) — a `sets:` list of set names. Each name
+  resolves to `<prompts-dir>/<name>.txt` (default `scripts/prompts/`).
+  Run with `--manifest`.
+
+Five ways to run — just the commands.
+
+**1. One prompt file**
+
+```
+python scripts/promptkit.py --run --prompt-file scripts/prompts/00_dipstick.txt
+```
+
+**2. Multiple prompts (space-separated)**
+
+```
+python scripts/promptkit.py --run --prompt \
+    "Suppliers with their addresses" \
+    "active suppliers in US" \
+    "show me contract renewals"
+```
+
+**3. Multiple prompt files**
+
+```
+python scripts/promptkit.py --run --prompt-file \
+    scripts/prompts/00_dipstick.txt \
+    scripts/prompts/01_supplier.txt
+```
+
+**4. One manifest file**
+
+```
+python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+```
+
+Writes to `promptkit_<YYYYMMDD_HHMMSS>/` in the cwd unless `--outdir` is
+given. One output file per set, plus `_run_log.txt` and `_summary.txt`.
+
+**5. Multiple manifest files**
+
+```
+python scripts/promptkit.py --run --manifest \
+    scripts/promptkit_sets.yaml \
+    scripts/promptkit_sets_smoke.yaml \
+    --outdir results/tonight
+```
+
+Each manifest gets its own `<stem>/` subfolder under `--outdir`, so set
+names can't collide between manifests.

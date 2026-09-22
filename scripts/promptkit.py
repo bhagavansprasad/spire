@@ -1,37 +1,47 @@
 #!/usr/bin/env python3
 """
-promptkit.py — one tool for Spire prompt sets. JSON is the single format.
+promptkit.py — run Spire prompts end to end against Fusion.
 
-Pick ONE action:
+Pick ONE source under --run:
 
-    --generate <file.txt> ...    Run each plain prompt file through the router
-                                 and write a .json next to it (each entry:
-                                 prompt, module, tool, note). The labels are the
-                                 router's ACTUAL choices — review, then trust.
+    --run --prompt "a" "b" ...       Run one or more ad-hoc prompts. Replaces
+                                     run_graph.py for single prompts.
 
-    --validate <file.json> ...   Check each JSON: does every prompt still route
-                                 to its recorded module + tool? A mismatch is a
-                                 regression. NO execution — fast.
+    --run --prompt-file <f1> <f2> ... Run every prompt in one or more text
+                                     files, one per line ('#'/blank skipped).
+                                     Files run in order; within a file, prompts
+                                     run in line order.
 
-    --run <file.json> ...        Execute each prompt end to end against Fusion
-                                 AND re-check routing against the corpus,
-                                 reporting WHICH STAGE fails (module / intent /
-                                 tool / plan / execute). Needs the MCP server up.
+    --run --manifest <m1> <m2> ...   Batch mode: read one or more YAML 'sets:'
+                                     lists and run every set as its own
+                                     subprocess with a per-set --timeout, so
+                                     one hung or crashed set cannot stop the
+                                     batch. Writes per-set output plus
+                                     _run_log.txt / _summary.txt under --outdir.
 
-    --run --prompt "..."         Run ONE ad-hoc prompt end to end (no corpus).
-                                 Replaces run_graph.py for single prompts.
+    When --outdir is not given, batch output goes to
+    promptkit_<YYYYMMDD_HHMMSS>/ in the current directory. A single manifest
+    writes straight into the output dir; multiple manifests each get a
+    <stem>/ subfolder so set names can't collide.
 
-Diagnostics (with --run) reuse the same system as run_graph.py: the committed
-defaults in pyproject.toml ([tool.spire.diagnostics]) apply, and --show-parser
-/ --show-planner / --show-raw-output / --show-synthesizer / --show-tokens /
---show-timings / --show-all override per run. So end-to-end output matches
-run_graph.py exactly.
+The old --generate and --validate actions are no longer exposed on the CLI.
+Their helpers remain in this file (unreachable) for reference.
+
+Diagnostics reuse the same system as run_graph.py: the committed defaults in
+pyproject.toml ([tool.spire.diagnostics]) apply, and --show-parser /
+--show-planner / --show-raw-output / --show-synthesizer / --show-tokens /
+--show-timings / --show-all override per run. In --manifest mode the parent's
+diagnostic flags are forwarded to each child, so they land on the real runs.
 
 Examples:
-    python scripts/promptkit.py --generate scripts/prompts/01_supplier.txt
-    python scripts/promptkit.py --validate scripts/prompts/*.json
-    python scripts/promptkit.py --run scripts/prompts/01_supplier.json
     python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
+    python scripts/promptkit.py --run --prompt "List suppliers in India" \
+                                            "Show open POs for supplier 2144"
+    python scripts/promptkit.py --run --prompt-file scripts/prompts/01_supplier.txt
+    python scripts/promptkit.py --run --prompt-file a.txt b.txt
+    python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+    python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
+        --outdir results/tonight --timeout 3600 --show-planner
 """
 
 from __future__ import annotations
@@ -39,7 +49,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 from spire.nl_parser.router import (
@@ -59,7 +72,11 @@ from spire.config import mcp_server_url, reset_usage, usage_report
 
 def load_cases(path: Path):
     """Load a JSON corpus: list of {prompt, module: [...], tool, note}.
-    Returns (module_str, tool, prompt) triples (module_str is comma-joined)."""
+    Returns (module_str, tool, prompt) triples (module_str is comma-joined).
+
+    Kept for backward compatibility with the old corpus mode; no longer
+    reachable from the CLI.
+    """
     data = json.loads(path.read_text(encoding="utf-8"))
     cases = []
     for e in data:
@@ -82,6 +99,7 @@ def load_plain_prompts(path: Path) -> list[str]:
 
 # ==========================================================================
 # Shared stage checks (module -> intent -> tool/plan), NO execution.
+# Retained for the old --generate / --validate actions; unreachable now.
 # ==========================================================================
 
 def _selected_tool(plan) -> str | None:
@@ -91,8 +109,8 @@ def _selected_tool(plan) -> str | None:
 
 
 def validate_one(prompt: str, exp_module: str, exp_tool: str, menu):
-    """--validate's per-prompt check: classify -> route_and_parse ->
-    generate_plan, comparing module and tool to the corpus. No execution."""
+    """Per-prompt check: classify -> route_and_parse -> generate_plan,
+    comparing module and tool to the corpus. No execution."""
     result = {"module_got": None, "module_ok": False,
               "tool_got": None, "tool_ok": False}
     expected_modules = {m.strip() for m in exp_module.split(",") if m.strip()}
@@ -145,7 +163,8 @@ def validate_one(prompt: str, exp_module: str, exp_tool: str, menu):
 
 
 # ==========================================================================
-# --generate : plain prompts -> JSON of the router's choices
+# Old --generate action: plain prompts -> JSON of the router's choices.
+# Retained; unreachable from the CLI.
 # ==========================================================================
 
 def _note_marker(module_got, tool_got) -> str:
@@ -206,7 +225,8 @@ def do_generate(files: list[Path]) -> int:
 
 
 # ==========================================================================
-# --validate : check each JSON's routing (no execution)
+# Old --validate action: check each JSON's routing (no execution).
+# Retained; unreachable from the CLI.
 # ==========================================================================
 
 def _classify_mark(m_ok: bool, t_ok: bool) -> tuple[str, bool, bool]:
@@ -216,10 +236,6 @@ def _classify_mark(m_ok: bool, t_ok: bool) -> tuple[str, bool, bool]:
     a WARNING, not a failure: the module set only scopes the parser's grounding
     and is discarded after the parse, so the selected tool is what determines
     the answer. A wrong tool is the only real failure.
-
-    Returns (mark, is_pass, is_warn):
-      - is_pass : counts toward the tools-OK tally and does NOT fail the run
-      - is_warn : the module set diverged although the tool was correct
     """
     if t_ok:
         if m_ok:
@@ -230,14 +246,7 @@ def _classify_mark(m_ok: bool, t_ok: bool) -> tuple[str, bool, bool]:
 
 def validate_file(path: Path, menu) -> tuple[int, int, int]:
     """Check each case's routing. Pass/fail is decided by the TOOL: a module
-    mismatch on a tool-correct prompt is a WARNING, not a failure. The module
-    set only scopes the parser's grounding and is discarded after the parse;
-    the selected tool is what determines the answer. So only a wrong tool
-    fails the prompt and the run. Module warnings are always printed (and
-    counted) so a divergence is visible, but they do not affect pass/fail.
-
-    Returns (tool_ok_count, total_cases, module_warning_count).
-    """
+    mismatch on a tool-correct prompt is a WARNING, not a failure."""
     cases = load_cases(path)
     print(f"\n### validate {path.name} — {len(cases)} prompts")
     tool_ok_count = 0
@@ -301,12 +310,12 @@ def do_validate(files: list[Path]) -> int:
 
 
 # ==========================================================================
-# --run : end to end against Fusion + staged corpus check.
+# --run : end to end against Fusion.
 # ==========================================================================
 
 def _stage_report(prompt, exp_module, exp_tool, state: dict) -> dict:
-    """Read the graph STATE back and check each stage vs the corpus. Reports
-    which stage FAILED (module/intent/tool/plan/execute) and any DIVERGENCE."""
+    """Read the graph STATE back and check each stage vs the corpus. Retained
+    for the old corpus mode; no longer reachable from the CLI."""
     exp_modules = {m.strip() for m in exp_module.split(",") if m.strip()}
     rpt: dict = {"prompt": prompt, "stages": {}, "failed_at": None,
                  "diverged": [], "result": ("PASS", "")}
@@ -447,15 +456,12 @@ def _emit_run_graph_output(state, menu):
     _block(_tokens_log, usage_report())
 
 
-async def _run_one(prompt, exp_module, exp_tool, menu, client):
-    """Run one prompt through the graph; return (state, stage_report).
+async def _run_one(prompt, menu, client):
+    """Run one prompt through the graph; return the final state.
 
     The classifier's module selection is read from the graph state
-    (`_modules_got`), written there by parse_node from the
-    ParseResult the router produced. It is NOT re-classified here:
-    running the classifier a second time from promptkit was a
-    wasted LLM call and reported a DIFFERENT classification than
-    the one the pipeline actually used (F-002).
+    (`_modules_got`), written there by parse_node from the ParseResult the
+    router produced. It is NOT re-classified here (F-002).
     """
     from spire.graph.pipeline import GRAPH
     try:
@@ -465,12 +471,12 @@ async def _run_one(prompt, exp_module, exp_tool, menu, client):
         })
     except Exception as exc:  # noqa: BLE001
         state = {"error": f"pipeline crash: {type(exc).__name__}: {exc}"}
-    rpt = _stage_report(prompt, exp_module, exp_tool, state)
-    return state, rpt
+    return state
 
 
 def _print_stage_breakdown(rpt):
-    """Print the per-stage OK/FAIL/DIVERGE breakdown for one prompt."""
+    """Print the per-stage OK/FAIL/DIVERGE breakdown for one prompt.
+    Retained for the old corpus mode; no longer reachable from the CLI."""
     for stage in ("module", "intent", "tool", "plan", "execute"):
         if stage in rpt["stages"]:
             status, detail = rpt["stages"][stage]
@@ -480,86 +486,158 @@ def _print_stage_breakdown(rpt):
     print(f"    -> {verdict}")
 
 
-async def _run_async(files, single_prompt, show_stages) -> int:
+async def _run_async(prompts: list[str]) -> int:
     from fastmcp import Client
 
     menu = load_kg_menu()
-
-    if single_prompt is not None:
-        work = [("", "", single_prompt, None)]
-    else:
-        work = []
-        for f in files:
-            if not f.is_file():
-                print(f"  [skip] not found: {f}")
-                continue
-            for mod, tool, prompt in load_cases(f):
-                work.append((mod, tool, prompt, f.name))
-
-    passed = failed = 0
-    failures = []
+    show_header = len(prompts) > 1
+    failed = 0
 
     async with Client(mcp_server_url()) as client:
-        current_file = object()
-        for exp_module, exp_tool, prompt, fname in work:
+        for prompt in prompts:
             # Reset the token accumulator per prompt so each prompt's
-            # usage_report() (printed inside _emit_run_graph_output)
-            # reflects only that prompt. Previously reset_usage() ran once
-            # before the loop, so _USAGE_LOG accumulated across every
-            # prompt and each block printed the running total — the last
-            # prompt appeared to cost the whole run. The single-prompt path
-            # runs this loop once, so it still gets exactly one reset before
-            # its one prompt.
+            # usage_report() (printed inside _emit_run_graph_output) reflects
+            # only that prompt.
             reset_usage()
-            if fname != current_file:
-                current_file = fname
-                if fname:
-                    print(f"\n### run {fname} (end to end)\n")
-
-            state, rpt = await _run_one(prompt, exp_module, exp_tool,
-                                        menu, client)
-
-            if single_prompt is not None:
-                _emit_run_graph_output(state, menu)
-                return 0 if not rpt["failed_at"] else 1
-
-            # Per-prompt, interleaved, exactly like run_graph: a header, the
-            # full output (intent/plan/answer, gated by the diagnostics flags),
-            # then the staged corpus verdict. No accumulation.
-            div = (f"  DIVERGED: {','.join(rpt['diverged'])}"
-                   if rpt["diverged"] else "")
-            status, tail = rpt["result"]
-            print(f"\n{'-'*72}")
-            print(f"PROMPT: {prompt}")
-            print('-'*72)
-
+            if show_header:
+                print(f"\n{'='*72}")
+                print(f"PROMPT: {prompt}")
+                print('='*72)
+            state = await _run_one(prompt, menu, client)
             _emit_run_graph_output(state, menu)
-
-            # The staged corpus check (what a plain run_graph does NOT do).
-            if rpt["failed_at"]:
+            # A refusal (parser or planner) is a valid outcome — only a real
+            # pipeline error or execution failure counts against the run.
+            if state.get("error") and not state.get("plan_refusal"):
                 failed += 1
-                failures.append(rpt)
-            else:
-                passed += 1
-            print()
-            _print_stage_breakdown(rpt)
-            verdict = ("FAIL" if rpt["failed_at"] else "PASS")
-            print(f"  => {verdict}: {tail}{div}")
 
-    print(f"\n{'='*72}")
-    print(f"RUN: {passed} passed, {failed} failed")
-    print('='*72)
-    if failures:
-        print("\nFAILURES — where each broke:\n")
-        for rpt in failures:
-            print(f"  {rpt['prompt']}")
-            _print_stage_breakdown(rpt)
-            print()
     return 0 if failed == 0 else 1
 
 
-def do_run(files, single_prompt, show_stages) -> int:
-    return asyncio.run(_run_async(files, single_prompt, show_stages))
+def do_run(prompts: list[str]) -> int:
+    return asyncio.run(_run_async(prompts))
+
+
+# ==========================================================================
+# Batch mode (--run --manifest): run every set in a YAML 'sets:' list, each
+# as its own promptkit subprocess with a per-set timeout.
+# ==========================================================================
+
+def _timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _load_set_names(manifest: Path) -> list[str]:
+    """Read the ordered 'sets:' list of set names from the YAML manifest."""
+    try:
+        import yaml
+    except ImportError:
+        print("ERROR: PyYAML is not installed (pip install pyyaml).",
+              file=sys.stderr)
+        raise SystemExit(2)
+    data = yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}
+    names = data.get("sets")
+    if not names or not isinstance(names, list):
+        print(f"ERROR: {manifest} has no 'sets:' list.", file=sys.stderr)
+        raise SystemExit(2)
+    return [str(n).strip() for n in names if str(n).strip()]
+
+
+def _forward_diagnostics(args) -> list[str]:
+    """Rebuild the parent's diagnostic flags as CLI args for a child
+    promptkit subprocess. Tri-state: True -> --show-X, False -> --no-show-X,
+    None -> not forwarded. Same flag names the diagnostics layer registers,
+    so nothing here is hard-coded to a specific diagnostic."""
+    out: list[str] = []
+    for key, val in vars(args).items():
+        if not key.startswith("show_") or val is None:
+            continue
+        if key == "show_all":
+            if val:
+                out.append("--show-all")
+            continue
+        flag = "--" + key.replace("_", "-")
+        out.append(flag if val else "--no-" + key.replace("_", "-"))
+    return out
+
+
+def _run_one_set(txt: Path, out_file: Path,
+                 timeout: int, diag_args: list[str]) -> tuple[int, float]:
+    """Run one prompt set as a subprocess of promptkit.py itself.
+    Returns (exit_code, seconds); exit 124 on timeout."""
+    cmd = [sys.executable, str(Path(__file__).resolve()),
+           "--run", "--prompt-file", str(txt), *diag_args]
+    start = time.monotonic()
+    with out_file.open("w", encoding="utf-8") as fh:
+        fh.write(f"# promptkit batch — {_timestamp()}\n")
+        fh.write(f"# $ {' '.join(cmd)}\n\n")
+        fh.flush()
+        try:
+            proc = subprocess.run(
+                cmd, stdout=fh, stderr=subprocess.STDOUT, timeout=timeout,
+            )
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            fh.write(f"\n=== KILLED: exceeded {timeout}s at {_timestamp()} ===\n")
+            code = 124
+        except Exception as exc:  # pragma: no cover - defensive
+            fh.write(f"\n=== RUNNER ERROR: {type(exc).__name__}: {exc} ===\n")
+            code = -1
+    return code, time.monotonic() - start
+
+
+def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
+             timeout: int, diag_args: list[str]) -> int:
+    names = _load_set_names(manifest)
+    outdir.mkdir(parents=True, exist_ok=True)
+    log_path = outdir / "_run_log.txt"
+    summary_path = outdir / "_summary.txt"
+
+    def log(line: str) -> None:
+        print(line, flush=True)
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+
+    log(f"PROMPTKIT BATCH STARTED at {_timestamp()}")
+    log(f"Manifest: {manifest}   Output: {outdir}   Timeout/set: {timeout}s")
+    log(f"Sets: {len(names)}")
+
+    # (name, exit_code, seconds)
+    results: list[tuple[str, int, float]] = []
+
+    for name in names:
+        txt = prompts_dir / f"{name}.txt"
+        if not txt.is_file():
+            log(f"WARNING: {txt} missing — SKIPPING set {name}")
+            continue
+        log(f"=== START {name} at {_timestamp()} ===")
+        code, secs = _run_one_set(txt, outdir / f"{name}.txt",
+                                  timeout, diag_args)
+        note = ("  <-- TIMED OUT" if code == 124
+                else f"  <-- exit {code}" if code != 0 else "")
+        log(f"    run       exit {code}  ({secs:.0f}s){note}")
+        log(f"=== DONE  {name} at {_timestamp()} ===")
+        results.append((name, code, secs))
+
+    log(f"ALL SETS COMPLETE at {_timestamp()}")
+
+    # ---- summary ----
+    lines = ["PROMPTKIT BATCH SUMMARY", f"Finished: {_timestamp()}", ""]
+    name_w = max((len(n) for n, _, _ in results), default=8)
+    lines.append(f"{'set'.ljust(name_w)}   {'exit':>4}  {'secs':>6}   status")
+    lines.append("-" * (name_w + 28))
+    for name, code, secs in results:
+        if code == 0:
+            status = "ok (read the answers, not the tally)"
+        elif code == 124:
+            status = "TIMED OUT (partial)"
+        else:
+            status = f"ERROR (exit {code})"
+        lines.append(f"{name.ljust(name_w)}   {code:>4}  {secs:>6.0f}   {status}")
+    summary = "\n".join(lines)
+    summary_path.write_text(summary + "\n", encoding="utf-8")
+    print("\n" + summary, flush=True)
+
+    return 1 if any(code != 0 for _, code, _ in results) else 0
 
 
 # ==========================================================================
@@ -568,45 +646,100 @@ def do_run(files, single_prompt, show_stages) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="promptkit — generate / validate / run Spire prompt sets.",
+        description="promptkit — run Spire prompts end to end against Fusion.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    action = ap.add_mutually_exclusive_group(required=True)
-    action.add_argument("--generate", action="store_true",
-                        help="plain prompt .txt -> .json (router's choices)")
-    action.add_argument("--validate", action="store_true",
-                        help="check each .json's routing (no execution)")
-    action.add_argument("--run", action="store_true",
-                        help="end to end against Fusion + staged corpus check")
+    ap.add_argument("--run", action="store_true", required=True,
+                    help="run prompt(s) end to end against Fusion. "
+                         "Pick one source: --prompt, --prompt-file, "
+                         "or --manifest.")
 
-    ap.add_argument("files", nargs="*", type=Path,
-                    help="input files (.txt for --generate, .json otherwise)")
-    ap.add_argument("--prompt", default=None,
-                    help="with --run: one ad-hoc prompt instead of a file "
-                         "(full run_graph-style output).")
-    ap.add_argument("--show-stages", action="store_true",
-                    help="with --run on a corpus: print the per-stage "
-                         "breakdown (module/intent/tool/plan/execute) per "
-                         "prompt, not just the one-line verdict.")
+    # Sources. nargs='+' => space-separated lists; no repeated-flag form.
+    src = ap.add_mutually_exclusive_group(required=False)
+    src.add_argument("--prompt", default=None, nargs="+", metavar="STR",
+                     help="with --run: one or more prompt strings, "
+                          "space-separated. Each is run in turn.")
+    src.add_argument("--prompt-file", default=None, nargs="+", type=Path,
+                     metavar="FILE",
+                     help="with --run: one or more text files of prompts, "
+                          "space-separated. Files run in order; within each "
+                          "file, prompts run in line order.")
+    src.add_argument("--manifest", default=None, nargs="+", type=Path,
+                     metavar="YAML",
+                     help="with --run: one or more YAML 'sets:' manifests, "
+                          "space-separated. A single manifest writes into "
+                          "--outdir; multiple manifests each get a <stem>/ "
+                          "subfolder so set names can't collide.")
+
+    # batch-mode knobs (only meaningful with --manifest)
+    ap.add_argument("--outdir", type=Path, default=None,
+                    help="with --manifest: results dir. Default "
+                         "promptkit_<YYYYMMDD_HHMMSS>/ in the cwd.")
+    ap.add_argument("--prompts-dir", type=Path,
+                    default=Path("scripts/prompts"),
+                    help="with --manifest: dir holding <name>.txt "
+                         "(default scripts/prompts)")
+    ap.add_argument("--timeout", type=int, default=3600,
+                    help="with --manifest: per-set timeout seconds "
+                         "(default 3600)")
 
     from spire.diagnostics import add_diagnostic_arguments
     add_diagnostic_arguments(ap)
 
     args = ap.parse_args()
 
-    if args.generate:
-        return do_generate(args.files)
-    if args.validate:
-        return do_validate(args.files)
-    if args.run:
-        from spire.diagnostics import flags_from_args, setup_diagnostics
-        setup_diagnostics(flags_from_args(args))
-        if args.prompt is None and not args.files:
-            print("--run needs .json file(s) or --prompt \"...\"",
-                  file=sys.stderr)
+    # ---- batch mode: --run --manifest <yaml> [<yaml> ...] ----
+    if args.manifest is not None:
+        if args.prompt is not None or args.prompt_file is not None:
+            print("--manifest cannot be combined with --prompt / "
+                  "--prompt-file.", file=sys.stderr)
             return 2
-        return do_run(args.files, args.prompt, args.show_stages)
-    return 2
+        for m in args.manifest:
+            if not m.is_file():
+                print(f"manifest not found: {m}", file=sys.stderr)
+                return 2
+        base = (args.outdir
+                or Path(f"promptkit_{datetime.now():%Y%m%d_%H%M%S}"))
+        diag = _forward_diagnostics(args)
+
+        if len(args.manifest) == 1:
+            return do_batch(args.manifest[0], base, args.prompts_dir,
+                            args.timeout, diag)
+
+        # Multiple manifests: one subfolder per manifest stem.
+        rc = 0
+        for m in args.manifest:
+            sub = base / m.stem
+            print(f"\n### manifest {m}  ->  {sub}")
+            rc |= do_batch(m, sub, args.prompts_dir, args.timeout, diag)
+        return rc
+
+    # ---- single/file mode: --run --prompt | --prompt-file ----
+    from spire.diagnostics import flags_from_args, setup_diagnostics
+    setup_diagnostics(flags_from_args(args))
+
+    if args.prompt is None and args.prompt_file is None:
+        print("--run needs one of: --prompt \"...\" [...], "
+              "--prompt-file <file> [...], or --manifest <yaml> [...].",
+              file=sys.stderr)
+        return 2
+
+    if args.prompt is not None:
+        return do_run(args.prompt)
+
+    # --prompt-file: concatenate every file's prompts, in order.
+    prompts: list[str] = []
+    for f in args.prompt_file:
+        if not f.is_file():
+            print(f"--prompt-file not found: {f}", file=sys.stderr)
+            return 2
+        got = load_plain_prompts(f)
+        if not got:
+            print(f"--prompt-file {f} contained no prompts.", file=sys.stderr)
+            return 2
+        prompts.extend(got)
+
+    return do_run(prompts)
 
 
 if __name__ == "__main__":
