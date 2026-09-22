@@ -24,7 +24,7 @@ Shipped:
 - F-043 — Site and Classification includes refuse — `verified`, PR #152
 - F-009 — its fix landed as F-042's branch — `verified`, PR #152
 - F-001 — filter-less PO lists now answer — `fixed` (2026-09-22), branch
-  `phase-2-fix-F001-list-all-flag`, commits `acc0c86` + `5163837`, PR pending
+  `phase-2-fix-F001-list-all-flag`, commits `acc0c86` + `5163837`, PR #153
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 see step 3 below):
