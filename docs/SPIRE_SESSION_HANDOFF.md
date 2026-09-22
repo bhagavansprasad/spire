@@ -27,7 +27,7 @@ Shipped:
   `phase-2-fix-F001-list-all-flag`, commits `acc0c86` + `5163837`, PR #153
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
-see step 3 below):
+PR #153 merged):
 - **F-001** (fixed) — `list_all` is declared (`models.py:141`), read by the
   planner's guard (`planner.py:199`), and never written. `parser.py:120`
   defines `_is_explicit_po_list(prompt: str) -> bool`; the only other
@@ -58,18 +58,19 @@ see step 3 below):
    - how to reproduce / classify / fix / verify / track,
    - the recovery path if context is lost.
 
-3. **Open F-001.** It is the next task. Reproduced, classified,
-   mechanism named. The next window **plans the fix**.
+3. **Open F-006.** It is the next task. Reproducer:
+   `python scripts/promptkit.py --run --prompt "What is purchase order US164932 about? Show its lines." --show-stages`
 
    The finding lives in `docs/audit/findings-log.md`. Its
    `**Fix location (for Phase 2).**` block names the two sites. Read
    them, then follow Phase 2 §8.3:
-   - Severity: missing-capability (S1).
+   - Severity: crash (highest after wrong-data).
    - Deterministic: single-run test suffices.
-   - Branch: `phase-2-fix-F001-list-all-flag`.
-   - Regression test: `list purchase orders` returns records and does
-     not refuse with `missing_identifier`.
-   - Byte-diff: F-001's prompt is not one of the three goldens; no
+   - Branch: `phase-2-fix-F006-alpha-order-number`.
+   - Regression test: `get_purchase_order_by_id("US164932")` succeeds
+     and returns POHeaderId 560869; `get_purchase_order_by_id(560869)`
+     still works.
+   - Byte-diff: F-006's prompt is not one of the three goldens; no
      golden update expected.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.

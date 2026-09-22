@@ -3332,7 +3332,7 @@ produced the intent.
 ## F-001 — `list_all` is declared, read, and never written; every filter-less PO query refuses
 
 **Date:** 2026-09-17
-**Status:** fixed (2026-09-22, `phase-2-fix-F001-list-all-flag`, PR #153)
+**Status:** verified (PR #153, 2026-09-22)
 **Cross-refs:** B-13, D-07
 
 **Evidence.**
