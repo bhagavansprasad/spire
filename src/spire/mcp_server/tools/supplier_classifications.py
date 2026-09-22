@@ -16,10 +16,21 @@ and returns that supplier's matching classifications. A non-empty result
 tells the executor to keep the parent supplier.
 
 Status note: the pod rejects composite q= (Classification AND Status in
-one clause silently returns empty), so this tool filters on Classification
-ONLY and does not constrain Status. A supplier with a lapsed classification
-still matches. "Current only" would require a client-side Status pass; not
-done here (no prompt requires it yet).
+one clause silently returns empty), so the server-side filter is on
+Classification ONLY. The currency filter runs client-side after the
+response, over the rows the pod already narrowed.
+
+F-008: on the FILTER path (a classification value was given), rows
+whose Status is not "CURRENT" are dropped. "Suppliers with classification
+X" is naturally read as "currently certified X", and on this pod a
+supplier can carry an EXPIRED classification of the same name — returning
+it as a match asserts a currency the data does not support.
+
+On the INCLUDE path (no classification value — F-043's "show
+classifications for supplier X"), the filter is NOT applied: the user
+asked to see the supplier's classifications, and the row's own Status
+field ("CURRENT" / "EXPIRED") is information they asked for. Filtering
+the display would hide it.
 
 The whole-pod scan is NOT here — the executor does the iteration across
 suppliers. This tool only answers the per-supplier question.
@@ -42,6 +53,28 @@ _PROJECTED_FIELDS = [
     "Status",
     "CertifyingAgency",
 ]
+
+
+# The pod's currency value on a businessClassifications row. Observed
+# statuses on this pod: "CURRENT" and "EXPIRED". Any other value is
+# treated as not-current.
+_CURRENT_STATUS = "CURRENT"
+
+
+def _filter_to_current(items: list[dict]) -> list[dict]:
+    """Keep only classification rows whose Status is CURRENT.
+
+    Pure: no I/O. The pod's single-clause q= rule forbids ANDing
+    Classification AND Status in one query, so the currency filter is
+    applied here, over the rows the server already filtered by
+    Classification.
+
+    A row whose Status is missing is DROPPED, not treated as current.
+    The pod always returns Status on this child; a missing Status is
+    a malformed row, and treating it as CURRENT would re-introduce
+    the exact defect this function exists to close.
+    """
+    return [i for i in items if i.get("Status") == _CURRENT_STATUS]
 
 
 async def search_suppliers_by_classification(
@@ -86,6 +119,22 @@ async def search_suppliers_by_classification(
         params["q"] = f"Classification='{classification}'"
     response = await client.get(path, params=params)
     items = response.get("items", [])
+
+    # F-008: on the FILTER path, drop rows that are not CURRENT. The
+    # pod's single-clause rule forbids ANDing Classification AND Status
+    # in one q=, so the currency test runs here, client-side. A supplier
+    # whose matching classification has lapsed is not a match for
+    # "has classification X" — that phrase is read as "currently
+    # certified X". Rows keep their own Status field, so a caller that
+    # wants to surface "the match is EXPIRED" can still see it.
+    #
+    # NOT applied on the INCLUDE path (no classification value): the
+    # user asked to SEE the supplier's classifications, and the Status
+    # of each row is information they asked for. Hiding expired rows
+    # would hide data.
+    if classification:
+        items = _filter_to_current(items)
+
     # F-043: stamp the parent SupplierId onto each classification row —
     # the child body does not carry it; the synthesizer groups by it.
     projected = [

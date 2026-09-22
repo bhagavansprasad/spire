@@ -799,6 +799,42 @@ The first fix alone resolves the audit row (the EXPIRED match disappears). The s
 
 **Not checked.** `src/spire/executor/executor.py` — the actual implementation of `filter_source_when_nonempty`. Whether it discards the child rows entirely, or attaches them under a key the plan output above does not show. This is the load-bearing unread file for mechanism (2); the mechanism is inferred from the `Step` docstring plus the observed output shape. Whether supplier 1272's classification is still `EXPIRED` this session — the audit's curl is cited, not re-run. Whether `has_site_in_bu` has the analogous problem (an inactive site satisfying "has a site in BU") — same shape, unverified. Whether any prompt in the corpus wants lapsed classifications deliberately — grep not run.
 
+**Update 2026-09-22 — fixed on `phase-2-fix-F008-expired-classification`.**
+
+`supplier_classifications.py` gains `_filter_to_current()` and applies
+it on the FILTER path (a classification value was given). Rows whose
+`Status` is not exactly `CURRENT` are dropped. The INCLUDE path is
+unchanged — the user asked to see classifications and the row's own
+`Status` field is information they asked for.
+
+Verification:
+
+- Reproducer `suppliers with classification Minority Owned` now
+  answers `0 suppliers match the filter (examined 25 of 307)`.
+  Pre-fix, the sole match was supplier 1272 (Consolidated Supplies),
+  whose `Minority Owned` classification carries `Status="EXPIRED"`
+  on the pod — confirmed live by curl this session.
+- Sibling unchanged: `show classifications for supplier EIP Inc`
+  still shows all 3 classifications including the EXPIRED
+  `Workers' Compensation Insurance`. The include path is untouched.
+- New file `tests/test_f008_classification_status.py` — 13 tests.
+  All fail without the fix (ImportError on `_filter_to_current` at
+  collection). Reversion verified by `git stash push
+  src/spire/mcp_server/tools/supplier_classifications.py`.
+- Full suite: 1088 passed, 22 deselected (baseline 1075 + 13 new).
+
+**Deviations from the entry.** The entry named two fix sites and
+said both should land. Fix #1 (filter-side) landed. Fix #2
+(projection-side — attach the child's Status to the surviving
+supplier row) is NOT part of this branch: the FILTER path returns
+source rows by the executor's contract, and enriching them is a
+new capability, not a fix to F-008's harm. Recorded as a follow-up.
+
+**Not checked.** Same shape on `supplier_sites.py` (sites carry
+`Status` too); other `filter_source_when_nonempty` edge filters;
+any third classification `Status` value on the pod beyond the two
+seen (`CURRENT`, `EXPIRED`).
+
 ---
 
 ## F-009 — addresses rule lives in `payables/` but parses for `Address` (a `supplier` entity); the rule is unreachable from the scoped parse
