@@ -88,7 +88,8 @@ Confirmed (S0–S8 walked) — none outstanding.
      `promptkit_overnight.py`. The 78-prompt sweep in this session
      (see `docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt`)
      ran on the new CLI. `scripts/prompts/README.md` is the current
-     inventory; FIX_PLAN §7's `--set` reference is stale.
+     inventory. (FIX_PLAN §7's L2 command was corrected to use
+     `--prompt-file` in the same commit as this note.)
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 
