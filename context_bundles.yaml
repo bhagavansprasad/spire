@@ -54,6 +54,9 @@ bundles:
   - docs/phase-2/fixes/F-002.md
   - docs/phase-2/fixes/F-033.md
   - docs/phase-2/fixes/F-041.md
+  - docs/phase-2/fixes/F-012.md
+  - docs/phase-2/fixes/F-036.md
+  - docs/phase-2/fixes/F-044.md
   - docs/audit/golden/count_suppliers.txt
   - docs/audit/golden/po_2144_and_lines.txt
   - docs/audit/golden/suppliers_with_open_pos.txt
@@ -72,6 +75,7 @@ bundles:
   - scripts/prompts/11_column_vocabulary.txt
   - scripts/prompts/12_po_supplier_include.txt
   - scripts/prompts/13_child_as_root.txt
+  - scripts/prompts/14_truncation_narration.txt
   - scripts/prompts/README.md
   - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
@@ -117,7 +121,6 @@ bundles:
   - scripts/build_parser_context.py
   # promptkit — the current test tooling (supersedes run_overnight/overnight_sets)
   - scripts/promptkit.py
-  - scripts/promptkit_overnight.py
   - scripts/promptkit_sets.yaml
   # generates the classifier menu from the KG
   - scripts/build_classifier_context.py
@@ -362,6 +365,9 @@ bundles:
   - tests/test_f006_alpha_order_number.py
   - tests/test_f007_empty_child_ack.py
   - tests/test_f015_empty_bucket_truncation.py
+  - tests/test_f012_truncation_sample.py
+  - tests/test_f036_truncation_wording.py
+  - tests/test_f044_double_encoded_value.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
