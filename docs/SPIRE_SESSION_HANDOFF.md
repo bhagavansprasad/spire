@@ -18,14 +18,14 @@ source-of-truth documents.
 
 Shipped:
 
-- F-041 — AR invoice children named first — `verified`, PR #151
+- F-041 — AR invoice children named first — `closed`, PR #151
 - F-042 — supplier-address phrasings refuse — `closed-as-duplicate (F-009)`, PR #152
-- F-043 — Site and Classification includes refuse — `verified`, PR #152
-- F-009 — its fix landed as F-042's branch — `verified`, PR #152
-- F-001 — filter-less PO lists now answer — `verified`, PR #153
-- F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `verified`, PR #154
-- F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`, PR #155
-- F-015 — an empty result from a capped fetch now says so — `verified`, PR #156
+- F-043 — Site and Classification includes refuse — `closed`, PR #152
+- F-009 — its fix landed as F-042's branch — `closed`, PR #152
+- F-001 — filter-less PO lists now answer — `closed`, PR #153
+- F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `closed`, PR #154
+- F-007 — requested-and-empty AR-invoice children now acknowledged — `closed`, PR #155
+- F-015 — an empty result from a capped fetch now says so — `closed`, PR #156
 - F-012 — a capped fetch with no source total now narrates the sample — `closed`, PR #157
 - F-036 — the truncation note no longer claims "for filtering" on an unfiltered fetch — `closed`, PR #157
 - F-044 — double-encoded `value_json` no longer crashes the tool at schema validation — `closed`, PR #158

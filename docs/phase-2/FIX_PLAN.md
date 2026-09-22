@@ -207,7 +207,7 @@ the fix is over- or under-scoped — fix before merging.
 **Commands (exact invocation to confirm at first use).**
 
     python scripts/promptkit.py --run --prompt "<text>" --show-stages    # L1
-    python scripts/promptkit.py --run --set scripts/prompts/<NN>_*.txt   # L2 (flag TBC)
+    python scripts/promptkit.py --run --prompt-file scripts/prompts/<NN>_*.txt   # L2
     python scripts/promptkit.py --validate                                # L3 (flag TBC)
     pytest -q                                                             # L4
 
