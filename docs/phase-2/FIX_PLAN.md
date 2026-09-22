@@ -102,7 +102,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-033 | wrong-narration | 7 | `nl_parser/capability.py` | verified | #150 | 2026-09-19 |
 | F-006 | crash | 6 | `mcp_server/server.py` (annotation, not `plan_builders`) | verified | #154 | 2026-09-22 |
 | F-007 | wrong-narration | 1 | `synthesizer/synthesizer.py` | verified | #155 | 2026-09-22 |
-| F-015 | wrong-narration | 1 | `synthesizer/synthesizer.py` | fixed | (this PR) | 2026-09-22 |
+| F-015 | wrong-narration | 1 | `synthesizer/synthesizer.py` | fixed | #156 | 2026-09-22 |
 | F-012 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `local_summary.py` | not-started | — | — |
 | F-036 | wrong-narration | 1 | `synthesizer/synthesizer.py` | not-started | — | — |
 | F-010 | wrong-data | 1 | `synthesizer/aggregation.py` | not-started | — | — |

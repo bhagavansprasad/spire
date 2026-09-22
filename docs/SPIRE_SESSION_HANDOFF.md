@@ -29,8 +29,8 @@ Shipped:
 - F-007 — requested-and-empty AR-invoice children now acknowledged — `verified`,
   PR #155
 - F-015 — an empty result from a capped fetch now says so — `fixed`
-  (2026-09-22), branch `phase-2-fix-F015-empty-bucket-truncation`, commit
-  `a7276b3`, PR pending
+  (2026-09-22), branch `phase-2-fix-F015-empty-bucket-truncation`, commits
+  `a7276b3` + `f697b96`, PR #156
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 PR #153 merged):
