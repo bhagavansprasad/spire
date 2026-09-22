@@ -278,6 +278,46 @@ def _empty_ar_invoice_child_notes(
     ]
 
 
+# F-015: buckets whose fetch was capped, for the empty-result path.
+#
+# The empty-bucket shortcut fires before truncation is consulted, so a
+# bucket that came back empty because the fetch hit a cap narrated as
+# "nothing exists" — indistinguishable from a genuinely empty source.
+# The reader is told "no receipts found" when the truth is "no receipts
+# found in the examined sample". This collects the capped steps so the
+# shortcut can say which one it is.
+def _truncated_steps(
+    truncation_by_step: dict[str, dict] | None,
+    metadata_by_step: dict[str, dict] | None,
+) -> list[tuple[str, dict]]:
+    """(output_name, entry) pairs for every step whose fetch was capped.
+
+    Reads both sources the executor produces: `truncation_by_step` for
+    the iterating and capped steps, `metadata_by_step` for the
+    non-iterating ones. A bucket present in both is taken once, from the
+    first source that carries `truncated=True` — the two agree in
+    practice, and disagreeing is a defect this function should not
+    invent a preference for.
+
+    Returns [] when nothing was capped, which is the honest answer for a
+    genuinely empty source and the branch the caller falls back to the
+    plain "No {label} found" wording on.
+    """
+    out: list[tuple[str, dict]] = []
+    seen: set[str] = set()
+    for source in (truncation_by_step, metadata_by_step):
+        for name, entry in (source or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("truncated") is not True:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            out.append((name, entry))
+    return out
+
+
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
 # its result, not by target_entity (an aggregation Intent carries an
 # aggregate block instead of a target entity). The executor puts that
@@ -474,6 +514,52 @@ def synthesize_response(
     if _all_buckets_empty(outputs) and target_entity in SYNTHESIS_SCHEMAS:
         empty_schema = SYNTHESIS_SCHEMAS[target_entity]
         label = _ENTITY_LABEL.get(target_entity, "records")
+
+        # F-015: the empty-bucket shortcut used to fire before truncation
+        # was consulted. A bucket that came back empty because the fetch
+        # was capped narrated as "nothing exists" — indistinguishable to
+        # the reader from a genuinely empty source. The distinction
+        # matters: "no receipts found" is wrong when the truth is "no
+        # receipts found in the examined sample, and the sample was
+        # capped before examining all matching records".
+        #
+        # Local, no LLM. The signal already exists on the executor's
+        # truncation / metadata maps; this reads it and says so.
+        truncated = _truncated_steps(truncation_by_step, metadata_by_step)
+        if truncated:
+            notes: list[str] = []
+            for name, entry in truncated:
+                total = entry.get("total_available")
+                total_text = (
+                    f"{total:,}" if isinstance(total, int)
+                    else "an unknown number of"
+                )
+                notes.append(
+                    f"{name}: {total_text} total in source; the fetch was "
+                    f"capped before examining all of them, so the result "
+                    f"is a sample, not the whole."
+                )
+            # Name the source total in the summary only when the tool
+            # reported one. The standard_receipts tool returns
+            # total_available=None when its client-side site filter
+            # exceeded the overfetch cap, so the common case is unknown;
+            # say that plainly rather than inventing a figure.
+            first_total = truncated[0][1].get("total_available")
+            if isinstance(first_total, int):
+                summary = (
+                    f"No {label} found in the examined sample. The source "
+                    f"holds {first_total:,} record(s); the search was "
+                    f"capped before examining all of them, so more may "
+                    f"match the filter."
+                )
+            else:
+                summary = (
+                    f"No {label} found in the examined sample. The search "
+                    f"was capped before examining all matching records, so "
+                    f"more may exist beyond the examined window."
+                )
+            return empty_schema(summary=summary, truncation_notes=notes)
+
         return empty_schema(
             summary=f"No {label} found matching the criteria.",
             truncation_notes=[],
