@@ -473,21 +473,34 @@ async def get_buyer(buyer_id: int) -> dict | None:
 
 
 @mcp.tool()
-async def get_purchase_order_by_id(po_header_id: int) -> dict | None:
-    """Fetch one purchase order by its POHeaderId.
+async def get_purchase_order_by_id(po_header_id: str | int) -> dict | None:
+    """Fetch one purchase order by its order number OR its POHeaderId.
 
     Use this to answer questions about a specific purchase order, e.g.
-    "what is PO 2144 about" or "show PO 2144". POHeaderId is the numeric
-    id of the PO. To also see the PO's line items, call
-    get_purchase_order_lines with the same id.
+    "what is PO 2144 about", "show PO 162034", or "what is purchase
+    order US164932 about". The number a user gives can be either an
+    OrderNumber (a string like "US164932" or "162034" — what is printed
+    on the PO) or a POHeaderId (a numeric internal id like 2144); the
+    underlying tool (tools/purchase_order_by_id.py) tries both and
+    resolves either. To also see the PO's line items, call
+    get_purchase_order_lines with the resolved POHeaderId.
+
+    F-006: the annotation was `int`, so an alpha-prefixed OrderNumber
+    failed Pydantic's int_parsing at the MCP schema boundary BEFORE the
+    tool body — which already resolves both identifier shapes — could
+    run. `str | int` makes the schema admit what the body already
+    handles. The resolver is unchanged; the fix is here, at the MCP
+    contract.
 
     Args:
-        po_header_id: The numeric POHeaderId of the purchase order.
+        po_header_id: The number the user gave — an OrderNumber string
+            (e.g. "US164932", "162034") or a POHeaderId int (e.g. 2144).
+            The arg name is historical; either identifier works.
 
     Returns:
         A dict of the PO header fields (OrderNumber, Supplier, Status,
         Buyer, Ordered, Total, TotalTax, PaymentTerms, ship-to/bill-to,
-        OrderDate, and more), or null if no PO with that id exists.
+        OrderDate, and more), or null if neither lookup finds a PO.
     """
     async with FusionClient(_persona) as client:
         return await _get_purchase_order_by_id(
