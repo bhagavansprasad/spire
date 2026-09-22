@@ -477,7 +477,7 @@ by the two tests above but still uncovered in the corpus.
 ## F-007 — empty requested tax lines produce no acknowledgement; the user can't tell "none exist" from "fetch failed"
 
 **Date:** 2026-09-18
-**Status:** root-caused, not fixed
+**Status:** fixed (2026-09-22, `phase-2-fix-F007-empty-child-ack`, PR pending)
 **Cross-refs:** B-02, B-23 (adjacent), F-001 (same class)
 
 **Evidence.**
@@ -552,6 +552,49 @@ The first is the more honest fix, because the answer's *summary* is where the us
 **Regression test (either fix).** Assert that running `Get tax lines for invoice 300000248096352` produces an answer that contains the word "tax"; and that running `Show the AR invoice with CustomerTransactionId 1002 and its tax lines` still produces the four per-line tax sub-tables. Both must pass.
 
 **Not checked.** `src/spire/rendering/formatters.py` — the actual site where the tax sub-table is skipped on an empty list; not in the synthesizer bundle. Whether the same silence occurs for other empty requested children (AR DFF — `build_invoice_dff` returns `None` on empty rows; PO lines/schedules/distributions on an empty bucket; AR lines on an empty bucket). Whether the intent's `include` reaches the synthesizer through any other channel (graph state, `filtered_fields`, etc.). Whether the display formatter already has an empty-state helper used elsewhere that this path simply misses.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F007-empty-child-ack`.**
+
+The defect was local. The ReceivablesInvoice branch in
+`synthesize_response` has been LLM-free since before this fix — it
+uses `local_list_summary` for the prose and
+`build_receivables_invoice_records` for the records — so the missing
+acknowledgement was not a model failure. It was that
+`local_list_summary` sees only the parent rows and has no notion of
+requested children. The two cases the finding named — "user asked and
+there were none" and "user never asked" — were indistinguishable in
+the summary.
+
+The signal was already in `children`: the executor emits a bucket for
+every step the plan ran, and the plan runs a step for every child the
+parser put in the include list. Empty-but-present bucket means asked;
+absent bucket means not asked. The fix reads that distinction.
+
+Scope: all three AR-invoice children in the ReceivablesInvoice branch
+(`receivables_invoice_lines`, `receivablestaxline`,
+`receivablesinvoicetransactiondff`), not just tax. Same branch, same
+defect shape, same fix.
+
+Verification:
+
+- Reproducer `Get tax lines for invoice 300000248096352` now answers
+  with `This invoice has no tax lines.` above the invoice table.
+- Siblings unchanged: invoice 1002 (8 tax rows) still renders four
+  tax sub-tables and no acknowledgement.
+- Negative unchanged: a plain AR query with no tax include still
+  produces a single-step plan and no tax mention.
+- New file `tests/test_f007_empty_child_ack.py` — 5 tests. Three fail
+  without the fix (one behavioural assertion, two ImportError on the
+  helper the fix introduces); two are over-reach guards that pass on
+  both states by design.
+- Full suite: 1041 passed, 22 deselected (baseline 1036 + 5).
+
+Deviation from the finding's suggested fix: none in outcome. The
+entry recommended the synthesizer-side fix over the display-side; the
+fix lands there. The mechanism the entry proposed (thread
+`intent.include` through the synthesizer) is not what was needed —
+the local branch already carries the signal in `children`. No
+signature change, no LLM.
 
 ---
 
