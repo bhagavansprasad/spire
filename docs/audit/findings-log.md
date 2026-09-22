@@ -55,6 +55,95 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-044 — `above 50000` on a supplier+amount invoice query stringifies the amount filter; the tool's float parser rejects it at execute
+
+**Date:** 2026-09-22
+**Status:** open (mechanism to be established)
+**Cross-refs:** F-006 (same class — a value shape the tool's schema rejects), F-012 (the L2 run that surfaced it)
+
+**Evidence.**
+
+Discovered during the L2 prompt-set run for F-012 + F-036
+(`scripts/prompts/14_truncation_narration.txt`, prompt 3 of 14). The
+same intent that succeeds for `over 10000` and `above 10000` crashes
+when the threshold is `50000`. Operator is NOT the variable — prompt 2
+uses `above` and works.
+
+Working sibling (prompt 1):
+
+    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000" --show-stages
+    Intent:
+      target_entity: Invoice
+      filters:
+        - {'type': 'supplier', 'value': '1252'}
+        - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+    Plan:
+      Step 1: search_invoices
+        tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+
+Failing prompt (prompt 3):
+
+    $ python scripts/promptkit.py --run --prompt "invoices for supplier 1252 above 50000" --show-stages
+    ERROR: execute: 1 validation error for call[search_invoices]
+    amount_min
+      Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='{"min": 50000}', input_type=str]
+        For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+
+The Intent block is not visible in the failing run's capture; the
+mechanism below is inferred from the error text and the working
+sibling's shape.
+
+**Root cause.**
+
+Not established. Candidate mechanism: the parser emitted
+`invoice_amount` with a `value` that is a JSON **string**
+(`'{"min": 50000}'`) rather than a dict (`{'min': 50000}`), so
+`_build_entity_fetcher_args` passed the entire string to the tool's
+`amount_min` kwarg, which is typed as a float. The failure is at
+Pydantic input validation, before the tool body runs. This is the same
+class as F-006 (an int annotation rejecting a string form the pipeline
+legitimately produces) but the fault is upstream: F-006's was a wrapper
+annotation, this is the parser's value encoding or the builder's
+handling of the value shape.
+
+Alternative not yet ruled out: the parser DID produce a dict, and
+`_build_entity_fetcher_args` stringified it. Same bug class, different
+file. The distinguishing evidence is the Intent block on a failing run,
+which the capture does not show; a `--show-parser` re-run of prompt 3
+would settle it.
+
+**Fix location (for Phase 2).**
+
+TBD. Candidates:
+
+1. `src/spire/nl_parser/parser.py` — the draft's `value_json` decode
+   path, if the value arrives as a double-encoded JSON string.
+2. `src/spire/planner/plan_builders.py::_build_entity_fetcher_args` —
+   the handling of the `invoice_amount` value shape.
+3. `src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt` —
+   if the sysprompt's guidance produces the wrong shape and the builder
+   faithfully forwards it.
+
+**Not checked.** Why prompt 2 (`above 10000`) and prompt 3
+(`above 50000`) route differently — same operator, same entity, same
+filter type; the only difference is the numeric value. This looks like
+parser variance rather than a value-specific bug, but the mechanism is
+not yet established and a re-run of prompt 3 would say whether it
+reproduces. Whether the same double-encoding affects other numeric
+filters (`has_invoice_over_amount`, `invoice_limit`, `top_n`). Whether
+the composite-filter path through `search_invoices` has any other
+value-shape traps not exercised by prompts 1, 2, 4, 5, 6.
+
+**Class note.** Same class as F-006 (a value shape the tool's input
+schema rejects). F-006's was a wrapper type annotation; this is the
+value's own encoding. Both would be caught by a two-layer regression:
+the parser unit test plus the tool's Pydantic schema. Recording here
+because the fix's L2 pass surfaced it and the ledger would otherwise
+lose the observation.
+
+---
+
 ## F-043 — Site and Classification includes refuse; both tools were reverse-only and a hardcoded Site gate blocked the include path
 
 **Date:** 2026-09-19
