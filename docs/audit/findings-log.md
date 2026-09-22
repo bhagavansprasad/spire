@@ -1153,7 +1153,7 @@ Both is the honest fix: prevention at the parser, defense at the pipeline. The p
 ## F-015 — a truncated-to-zero result is narrated as a clean "not found"; the empty-bucket shortcut discards the truncation flag
 
 **Date:** 2026-09-18
-**Status:** root-caused, not fixed
+**Status:** fixed (2026-09-22, `phase-2-fix-F015-empty-bucket-truncation`, PR pending)
 **Cross-refs:** B-19, F-012 (same family — sampling not disclosed)
 
 **Evidence.**
@@ -1250,6 +1250,58 @@ If only one is fixed, the synthesizer-side is the one that changes the answer th
 **Not checked.** Whether the current slice of account 26370's receipts would include any `CustomerSite='Santa Clara'` rows if the fetch went past 500 — the audit's curl says yes; this session's probe on the newest 500 says no; both could be true of different slices. Whether the same empty-bucket-discards-truncation shape affects any other tool's zero-row path — the branch is generic over `SYNTHESIS_SCHEMAS`, so `Supplier`, `Invoice`, `PurchaseOrder`, `ReceivablesInvoice`, `CustomerAccount`, `CreditMemo`, `StandardReceipt`, `Address` all inherit it; the truncation flag has to be set by the upstream tool to matter, and only some tools set it. Whether the display formatter, given non-empty `truncation_notes`, renders them prominently enough that a skimming reader sees them — the display file is not in this bundle.
 
 **Class note.** Same family as F-012 — a sampled or incomplete result presented as if it were the whole — with the opposite fault: F-012's answer read as if 20 were the count; this answer reads as if 0 were the total. Both come from the synthesizer treating an absent number as "say nothing."
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F015-empty-bucket-truncation`.**
+
+The defect was in `synthesize_response`'s empty-bucket shortcut. It
+fired before truncation was consulted and built the response with
+`truncation_notes=[]` unconditionally. Both `truncation_by_step` and
+`metadata_by_step` were parameters of the function and reachable from
+the shortcut's scope; the flag existed, nothing read it. So a bucket
+that came back empty because a fetch was capped narrated identically to
+a genuinely empty source.
+
+The shortcut is generic over `SYNTHESIS_SCHEMAS`, so this was never
+StandardReceipt-specific — every zero-row entity target inherited the
+same silence. The finding's title names receipts; the fix covers the
+class.
+
+Fix: a local helper `_truncated_steps(truncation_by_step,
+metadata_by_step)` collects entries where `truncated is True` (exactly
+`is True`, not truthiness — an entry explicitly saying False is not a
+cap), reading both sources and deduping. When any step was capped, the
+shortcut's summary names the sample and populates `truncation_notes`
+from the same entries. No LLM: this path returns before any LLM setup
+and the fix keeps it that way.
+
+Verification:
+
+- Reproducer `Show receipts for ABC Corporation Americas at Santa Clara`
+  now answers with "No receipts found in the examined sample. The
+  search was capped before examining all matching records, so more may
+  exist beyond the examined window." and a non-empty Truncation block.
+- Negative unchanged: `Get standardReceipts` still refuses at plan time
+  with `missing_identifier — StandardReceipt root has no customer or
+  site scope`.
+- Sibling unchanged: `List recent credit memos` still answers with 25
+  records and its own truncation note; the fix touches only the empty
+  path.
+- New file `tests/test_f015_empty_bucket_truncation.py` — 7 tests. Five
+  fail without the fix (two behavioural assertions, three ImportError
+  on the helper); two are over-reach guards (genuinely-empty unchanged,
+  truncated=False ignored) that pass on both states by design.
+- Full suite: 1048 passed, 22 deselected (baseline 1041 + 7).
+
+Deviation from the entry: none in outcome. The entry named the
+synthesizer-side option as primary; the fix lands there. Scope widened
+from the entry's specific reproducer (StandardReceipt) to the generic
+shortcut — same class, same fix site.
+
+Observation, out of scope: the display's empty-table placeholder
+("No receipts found.") sits one line below the fix's summary,
+restating it. This duplication predates F-015 (the finding's own
+Evidence block shows the same two-line shape) and belongs with the
+display formatter, not this branch. §8.3.5, no scope creep.
 
 ---
 
