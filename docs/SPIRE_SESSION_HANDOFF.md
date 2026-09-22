@@ -81,11 +81,14 @@ Confirmed (S0–S8 walked) — none outstanding.
      comes first — but a crash, so the phase's severity rule
      (wrong-data > crash > missing-capability > cosmetic) may reorder
      it once its mechanism is settled.
-   - **`promptkit.py` `.txt` support.** Not filed. `--run` currently
-     requires a `.json` corpus; `14_truncation_narration.txt` was run
-     this session via a shell loop over `--run --prompt` instead. A
-     future session may wish to add `.txt` handling to `--run`; that
-     is tooling, its own branch, not a fix.
+   - **`promptkit.py` `.txt` support — shipped, not deferred.** The
+     rewrite landed mid-session as commit `2f9daf7`, which added
+     `--prompt-file` (`.txt` prompts, no `.json` companion needed)
+     and `--manifest` (multi-set runs), and deleted
+     `promptkit_overnight.py`. The 78-prompt sweep in this session
+     (see `docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt`)
+     ran on the new CLI. `scripts/prompts/README.md` is the current
+     inventory; FIX_PLAN §7's `--set` reference is stale.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 
