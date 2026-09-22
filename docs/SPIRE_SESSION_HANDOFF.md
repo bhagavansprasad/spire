@@ -23,8 +23,10 @@ Shipped:
 - F-042 — supplier-address phrasings refuse — `closed-as-duplicate (F-009)`, PR #152
 - F-043 — Site and Classification includes refuse — `verified`, PR #152
 - F-009 — its fix landed as F-042's branch — `verified`, PR #152
-- F-001 — filter-less PO lists now answer — `fixed` (2026-09-22), branch
-  `phase-2-fix-F001-list-all-flag`, commits `acc0c86` + `5163837`, PR #153
+- F-001 — filter-less PO lists now answer — `verified`, PR #153
+- F-006 — alpha-prefixed OrderNumber accepted at the MCP boundary — `fixed`
+  (2026-09-22), branch `phase-2-fix-F006-alpha-order-number`, commit
+  `8bacc34`, PR pending
 
 Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
 PR #153 merged):
@@ -58,20 +60,25 @@ PR #153 merged):
    - how to reproduce / classify / fix / verify / track,
    - the recovery path if context is lost.
 
-3. **Open F-006.** It is the next task. Reproducer:
-   `python scripts/promptkit.py --run --prompt "What is purchase order US164932 about? Show its lines." --show-stages`
+3. **Open F-007.** It is the next task — F-006 shipped 2026-09-22 (see
+   the Shipped list above). Cluster 1 (synthesizer narration); per
+   `docs/phase-2/FIX_PLAN.md` §4 order, F-007 goes first because its
+   signature change unblocks F-015.
 
-   The finding lives in `docs/audit/findings-log.md`. Its
-   `**Fix location (for Phase 2).**` block names the two sites. Read
-   them, then follow Phase 2 §8.3:
-   - Severity: crash (highest after wrong-data).
+   Reproducer:
+   `python scripts/promptkit.py --run --prompt "Get tax lines for invoice 300000248096352" --show-stages`
+
+   The finding lives in `docs/audit/findings-log.md`. Read it and its
+   `docs/phase-2/FIX_PLAN.md` §5 row, then follow Phase 2 §8.3:
+   - Severity: wrong-narration (data is right; the missing
+     acknowledgement is a narration failure).
    - Deterministic: single-run test suffices.
-   - Branch: `phase-2-fix-F006-alpha-order-number`.
-   - Regression test: `get_purchase_order_by_id("US164932")` succeeds
-     and returns POHeaderId 560869; `get_purchase_order_by_id(560869)`
-     still works.
-   - Byte-diff: F-006's prompt is not one of the three goldens; no
-     golden update expected.
+   - Branch: `phase-2-fix-F007-empty-child-ack`.
+   - Regression test: the answer for the tax-lines prompt contains the
+     word "tax"; the counter-example (AR invoice 1002 with tax lines)
+     still produces the per-line tax sub-tables.
+   - Byte-diff: neither prompt is one of the three goldens; no golden
+     update expected.
 
 4. **Do not touch `config.py` (CF-2).** Parked by user decision.
 

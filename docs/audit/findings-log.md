@@ -383,7 +383,7 @@ data. The F-025 exclusions (Site, Classification) must still refuse.
 ## F-006 — alpha-prefixed PO OrderNumber crashes `get_purchase_order_by_id` before the tool can resolve it
 
 **Date:** 2026-09-17
-**Status:** root-caused, not fixed
+**Status:** fixed (2026-09-22, `phase-2-fix-F006-alpha-order-number`, PR pending)
 **Cross-refs:** B-01, A-13
 
 **Evidence.**
@@ -429,6 +429,48 @@ Identity note. §B.1's B-01 row records the same prompt and the same crash signa
 **Regression test.** Assert `get_purchase_order_by_id("US164932")` succeeds and returns POHeaderId 560869, and that `get_purchase_order_by_id(560869)` still works — or, for the planner-side fix, that an Intent with `filters=[{"type":"by_id","value":"US164932"}]` on `PurchaseOrder` does not produce a plan whose first step carries an alpha string in an `int`-typed arg.
 
 **Not checked.** `src/spire/mcp_server/tools/purchase_order_by_id.py` — its input model and whether the body would dispatch on shape if the schema allowed. The executor between plan and tool call, for any coercion layer not visible in the paste. Whether other `by_id` filters (ReceivablesInvoice CustomerTransactionId) have the same latent shape problem — AR ids are all-digit so they may pass through as `int` without failing, but 18-digit integers can overflow int64 or lose precision in Pydantic; unverified. Whether `kg_entity_filter` has any type column for `tool_arg_name` — `_load_filter_defs`'s SELECT list does not carry one.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F006-alpha-order-number`.**
+
+The defect was one level up from the two options the finding named.
+Neither the planner (`_VALUE_SHAPE_ROUTED_ARGS` extension) nor the
+tool-side type relaxation applied as written: the planner never sees
+the string in a type position — it forwards the by_id value unchanged
+as a `tool_arg` — and the internal resolver in
+`tools/purchase_order_by_id.py` was already correct. It tries
+`q=OrderNumber='X'` first, then `/purchaseOrders/X`, per its own
+docstring ("Resolves ONE purchase order from whatever number the user
+gave"). The crash was at the MCP wrapper in `src/spire/mcp_server/`,
+where the annotation `po_header_id: int` produced a FastMCP schema
+that rejected the string before dispatch.
+
+Fix: one word on the wrapper annotation, `int` -> `str | int`. Same
+one-word contract, both identifier shapes now admitted.
+
+Verification:
+
+- Reproducer `What is purchase order US164932 about? Show its lines.`
+  now answers — POHeaderId 560869, OrderNumber `US164932`, EIP Inc,
+  2 lines. Pre-fix output was the exact `int_parsing` error in the
+  finding's Evidence block.
+- Paraphrase `What is purchase order US164932 about?` also answers.
+- Three numeric-identifier siblings
+  (`Show PO 2144 and its lines`, `What is purchase order 2144 about?`,
+  `Show PO 2144 and its buyer`) behave identically — no regression on
+  the pre-existing path.
+- New file `tests/test_f006_alpha_order_number.py` — 2 tests. Both
+  fail without the fix: test 1 (annotation) with `assert str in ()`,
+  test 2 (MCP call) with the Pydantic `int_parsing` error. Reversion
+  verified by `git stash push src/spire/mcp_server/server.py`.
+- Full suite: 1036 passed, 22 deselected (baseline 1034 + 2).
+
+Corpus gap, recorded for the record: no prompt set exercises an
+alpha-prefixed OrderNumber. Every PO prompt across
+`02_purchase_order.txt`, `08_lifecycle.txt`, `10_refusal_examples.txt`,
+`12_po_supplier_include.txt`, and `13_child_as_root.txt` uses `2144` or
+`162034`, both numeric. F-006 was found by a hand-written reproducer
+in the findings log, not by any prompt set. The shape is now covered
+by the two tests above but still uncovered in the corpus.
 
 ---
 
