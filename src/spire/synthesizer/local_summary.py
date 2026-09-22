@@ -136,6 +136,7 @@ def local_list_summary(
     displayed_fields: list[str] | None = None,
     filtered_fields: list[str] | None = None,
     total_available: int | None = None,
+    truncated: bool = False,
     labels: dict[str, str] | None = None,
 ) -> list[str]:
     """Build summary statements from the rows, without an LLM.
@@ -171,6 +172,12 @@ def local_list_summary(
             only so a caller that has not been updated still works.
         total_available: The authoritative total from the truncation
             block, when known.
+        truncated: True when the fetch was capped. Only consulted when
+            total_available is None: with a known total the "Showing N
+            of M" line already tells the sample story, and with neither
+            nothing is claimed. When True and total_available is None,
+            the summary says the result is a sample without inventing
+            a denominator (F-012).
         labels: Optional field-name -> display-label map. The summary
             names a field in the reader's terms, not the pod's.
 
@@ -203,6 +210,20 @@ def local_list_summary(
         # Zero rows is an answer, not an error, and gets said plainly
         # rather than printing nothing. (OUT-01.)
         return [f"No {entity_label} matched."]
+    elif truncated and total_available is None:
+        # F-012: the fetch was capped (truncated=True) but the source
+        # total is unknown (total_available is None). "Showing N of M"
+        # cannot be said — there is no M. But N rows must not read as
+        # the complete answer either. Say the sample; name no
+        # denominator, because there is none to name.
+        #
+        # This branch only fires when BOTH conditions hold. A known
+        # total takes the branch above; an untruncated fetch falls
+        # through to the observations below unchanged.
+        out.append(
+            f"Showing {shown} {entity_label} from an examined sample; "
+            f"the true matching count is not known."
+        )
     # Otherwise: say nothing about the count.
     #
     # "3 suppliers." above a three-row table, "1 supplier." above a

@@ -318,6 +318,25 @@ def _truncated_steps(
     return out
 
 
+def _bucket_truncated(
+    bucket: str,
+    truncation_by_step: dict[str, dict] | None,
+    metadata_by_step: dict[str, dict] | None,
+) -> bool:
+    """True when THIS bucket's fetch was capped. F-012.
+
+    A single-bucket view of _truncated_steps: same sources, same
+    definition of capped (truncated is True), scoped to one output_name.
+    The plain-list branches pass the result to local_list_summary so a
+    capped fetch with no known total is narrated as a sample rather than
+    presented as the complete answer.
+    """
+    return any(
+        name == bucket
+        for name, _ in _truncated_steps(truncation_by_step, metadata_by_step)
+    )
+
+
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
 # its result, not by target_entity (an aggregation Intent carries an
 # aggregate block instead of a target entity). The executor puts that
@@ -414,8 +433,10 @@ def _local_truncation(
     produce, so existing readers and the 05/07/08 prompt-set baselines
     see the same shape. "total in source" is inherited and is loose on a
     filtered query — it reads as unfiltered when the fetch was scoped.
-    Left alone deliberately: changing it is a user-visible format change
-    and belongs with the counts-line work, not smuggled in here.
+    F-036 revised one word of that wording: "examined for filtering"
+    claimed a filter had run on a fetch that applied none, which is false
+    rather than merely loose. The verb is now "returned", true on both.
+    The remaining "total in source" looseness is still left alone.
 
     Returns:
         (total_available or None, notes list)
@@ -438,7 +459,7 @@ def _local_truncation(
         )
         notes.append(
             f"{bucket}: {total_text} total in source; "
-            f"{examined} examined for filtering."
+            f"{examined} returned."
         )
 
     return (
@@ -743,6 +764,9 @@ def synthesize_response(
                     displayed_fields=["Supplier", "SupplierNumber"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        supplier_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             suppliers=build_supplier_records(rows),
@@ -959,6 +983,9 @@ def synthesize_response(
                     displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        po_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             purchase_orders=build_purchase_order_records(rows),
@@ -1000,6 +1027,9 @@ def synthesize_response(
                     ],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        invoice_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             invoices=build_invoice_records(rows),
@@ -1042,6 +1072,10 @@ def synthesize_response(
                     displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        po_child_buckets["po"], truncation_by_step,
+                        metadata_by_step,
+                    ),
                 )
             ),
             purchase_orders=build_po_with_children(outputs, po_child_buckets),
@@ -1098,6 +1132,9 @@ def synthesize_response(
                     ],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        memo_bucket, truncation_by_step, metadata_by_step
+                    ),
                     # The table headers, so the summary names a column
                     # the way the column names itself one line below.
                     labels={
@@ -1158,6 +1195,9 @@ def synthesize_response(
                             ],
                             filtered_fields=filtered_fields,
                             total_available=total_available,
+                            truncated=_bucket_truncated(
+                                parent, truncation_by_step, metadata_by_step
+                            ),
                             labels={
                                 "TransactionNumber": "Transaction",
                                 "EnteredAmount": "Amount",
@@ -1250,6 +1290,9 @@ def synthesize_response(
                             ],
                             filtered_fields=filtered_fields,
                             total_available=total_available,
+                            truncated=_bucket_truncated(
+                                parent, truncation_by_step, metadata_by_step
+                            ),
                             labels={
                                 "CustomerName": "Customer",
                                 "AccountNumber": "AccountNumber",
@@ -1295,6 +1338,9 @@ def synthesize_response(
                         ],
                         filtered_fields=filtered_fields,
                         total_available=total_available,
+                        truncated=_bucket_truncated(
+                            name, truncation_by_step, metadata_by_step
+                        ),
                         labels={
                             "ReceiptNumber": "Receipt",
                             "ReceiptDate": "Date",

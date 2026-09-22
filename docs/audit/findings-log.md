@@ -975,6 +975,56 @@ total: 0 items: 0
 
 The pod accepts the clause syntax and silently returns nothing for it — the "composite clauses combine to empty result" behaviour the tool's docstring asserts is confirmed. Fix option 3 (compute an honest total via a composite `q=` call) is therefore unavailable; options 1 and 2 are the routes. `total_available=None` in the tool is honest, not a code gap.
 
+**Update 2026-09-22 — fixed on `phase-2-fix-F012-F036-truncation-wording`.**
+
+Fixed alongside F-036 (shared branch; same f-string in
+`synthesizer/synthesizer.py::_local_truncation`).
+
+The mechanism ended up narrower than the entry's two named options. The
+signal needed — "the fetch was capped" — was already on
+`truncation_by_step` / `metadata_by_step`, populated by the executor for
+every step. It needed a reader, not a new field.
+
+Fix, two files:
+
+- `src/spire/synthesizer/local_summary.py` — `local_list_summary` gains
+  a `truncated: bool = False` parameter. When `truncated` is True AND
+  `total_available` is None, it emits
+  `"Showing N <entity> from an examined sample; the true matching count
+  is not known."` before the uniformity observations. With a known
+  total the existing `"Showing N of M"` line fires instead; with
+  neither, nothing is claimed. The branch only fires on BOTH
+  conditions.
+- `src/spire/synthesizer/synthesizer.py` — new `_bucket_truncated()`
+  helper (a single-bucket view of `_truncated_steps`, F-015's helper),
+  threaded as `truncated=` into the eight `local_list_summary` calls
+  across the plain-list branches: Supplier, PurchaseOrder (plain),
+  Invoice, PO-with-children, CreditMemo, ReceivablesInvoice,
+  CustomerAccount, StandardReceipt.
+
+Verification:
+
+- Reproducer `invoices for supplier 1252 over 10000` now answers with
+  `Showing 19 invoices from an examined sample; the true matching count
+  is not known.` Pre-fix: no count line — 19 rows read as the count.
+- Sibling unchanged: `invoices for supplier 1252` (non-composite,
+  `total_available=1329`) still shows `Showing 25 of 1,329 invoices.`;
+  the sample sentence does not fire.
+- Negative unchanged: `invoices` still refuses with `missing_identifier`.
+- New file `tests/test_f012_truncation_sample.py` — 4 tests. Two fail
+  without the fix (reproducer + metadata-by-step variant); two are
+  over-reach guards that pass on both trees by design.
+- Full suite: 1054 passed, 22 deselected (baseline 1048 + 6 new tests
+  across both findings).
+
+Deviation from the entry: none in mechanism-shape (synthesizer-side, per
+the entry's preference for option 1). The signal source is different —
+the entry suggested threading the intent's `include`; the fix reads the
+truncation metadata the executor already produces.
+
+Falsifier-run note above remains accurate: the composite `q=` route for
+a real total is unavailable; the sample sentence is the honest ceiling.
+
 ---
 
 ## F-013 — B-11 / D-07 no longer reproduce; PO `by_id` vs `lifecycle_status` routing and the 2144 lookup are both fixed in the code
@@ -2887,6 +2937,45 @@ The note is produced in one place (`_local_truncation`), so whichever option is 
 **Regression test.** Assert that `Suppliers with their addresses` produces a truncation note that does not contain the phrase "for filtering". Assert that a filtered prompt (e.g. `active suppliers in US`) also produces a note whose wording is consistent with the fix — either no "for filtering" (option 1/3) or the correct filtered phrasing (option 2). Both must pass.
 
 **Not checked.** Whether the "for filtering" phrase appears in the same note across the other 05/07/08 baselines the docstring names — one prompt run this session; the class-level check is a small sweep, not run. Whether the code's own "total in source" looseness is worth fixing in the same pass — separate concern, deliberately deferred per the docstring. Whether the note is worth replacing entirely with a structured field (`examined`, `total_available`) that the display formats — a formatting-layer change, not read this session. Whether the note appears in golden files (`docs/audit/golden/`) that would need regenerating with the new wording — the three goldens seen this session carry the note in the two with a truncation; regenerating them is part of the fix, not this finding.
+
+**Update 2026-09-22 — fixed on `phase-2-fix-F012-F036-truncation-wording`.**
+
+Fixed alongside F-012 (shared branch; same f-string in
+`synthesizer/synthesizer.py::_local_truncation`).
+
+One-word change: `"{examined} examined for filtering."` ->
+`"{examined} returned."` The count and source total stay; only the
+false claim is removed. The entry's three options were (1) drop the
+phrase, (2) parameterise on a `filtered: bool`, (3) canonical wording
+that fits both cases. The landed wording is closer in spirit to (1),
+but with a verb that reads as prose rather than as a truncated
+sentence, and without the `"N of M"` duplication option (3) would have
+introduced against the `total in source` count already in the same
+line.
+
+Verification:
+
+- Reproducer `Suppliers with their addresses` now answers with
+  `25 returned.` in the Truncation block. Pre-fix: `25 examined for
+  filtering.`
+- Paraphrase `List suppliers with their address` — same wording.
+- Filtered sibling `active suppliers in US` — same wording (the fix
+  does not distinguish filtered from unfiltered; the filter is visible
+  in the Intent block above the answer, so no claim about it is needed
+  in the note).
+- Negative unchanged: `show me contract renewals` still refuses with
+  `unknown_entity`.
+- Golden `docs/audit/golden/suppliers_with_open_pos.txt` line 87
+  updated in the same commit: `431 total in source; 25 examined for
+  filtering.` -> `431 total in source; 25 returned.` (the `431` stays —
+  pod-growth drift is not folded into the fix's diff; see §G of the
+  audit).
+- New file `tests/test_f036_truncation_wording.py` — 2 tests. Both fail
+  without the fix.
+- Full suite: 1054 passed, 22 deselected.
+
+Deviation from the entry: minor (specific verb). See
+`docs/phase-2/fixes/F-036.md` for the full reasoning.
 
 **Class note.** Same note-producing function as F-012 (composite-filter over-fetch cap), different defect: F-012's note under-reports because `examined` was read from the output bucket rather than the fetch size; this finding's note over-claims because "for filtering" presupposes a filter. Both are the same f-string, and a single fix pass could address both — the phase's call whether to do so or treat them separately.
 
