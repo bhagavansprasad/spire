@@ -23,9 +23,12 @@ Shipped:
 - F-042 — supplier-address phrasings refuse — `closed-as-duplicate (F-009)`, PR #152
 - F-043 — Site and Classification includes refuse — `verified`, PR #152
 - F-009 — its fix landed as F-042's branch — `verified`, PR #152
+- F-001 — filter-less PO lists now answer — `fixed` (2026-09-22), branch
+  `phase-2-fix-F001-list-all-flag`, commits `acc0c86` + `5163837`, PR #153
 
-Confirmed (S0–S8 walked), fix not yet planned:
-- **F-001** — `list_all` is declared (`models.py:141`), read by the
+Confirmed (S0–S8 walked) — none outstanding (F-001 shipped 2026-09-22,
+see step 3 below):
+- **F-001** (fixed) — `list_all` is declared (`models.py:141`), read by the
   planner's guard (`planner.py:199`), and never written. `parser.py:120`
   defines `_is_explicit_po_list(prompt: str) -> bool`; the only other
   reference is a comment at `router.py:216` naming it as a "deterministic

@@ -431,6 +431,30 @@ def parse(
             detail=f"could not convert draft to intent: {exc}",
         )
 
+    # --- Explicit PO list signal (#32 fault b) ---
+    #
+    # #32 fault (b) needs the parser to tell two intents apart that are
+    # byte-identical from the LLM's point of view — an explicit "list
+    # purchase orders" (a valid bounded sample-and-disclose, #23) and a
+    # PO query whose identifier the model dropped ("Is PO N complete?"
+    # losing the number). Both arrive as a filter-less PurchaseOrder
+    # intent, and the planner's guard refuses both unless intent.list_all
+    # is True. Only an explicit list should list; the dropped-identifier
+    # case must refuse, not dump 25 of ~17k unrelated POs.
+    #
+    # The signal is computed HERE, deterministically from the RAW PROMPT,
+    # AFTER the LLM and BEFORE KG validation — the same shape as the
+    # other post-parse corrections in this function
+    # (strip_po_supplier_include below, plus the three helpers imported
+    # from vocabulary). `_is_explicit_po_list` (defined above) is
+    # pure-Python and adds NO prompt/schema text, so it does not risk
+    # the parser prompt's token ceiling. Setting the flag on a non-PO
+    # intent is a no-op (the planner guard is scoped to PurchaseOrder);
+    # setting it on a PO intent that carries filters is also a no-op
+    # (the guard short-circuits on `intent.filters` first).
+    if intent.target_entity == "PurchaseOrder":
+        intent.list_all = _is_explicit_po_list(prompt)
+
     # --- Include correction (BUG-1) ---
     from spire.nl_parser.vocabulary import strip_po_supplier_include
 

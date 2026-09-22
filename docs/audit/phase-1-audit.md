@@ -228,7 +228,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-10 | F-022 | closed-as-not-a-bug |
 | B-11 | F-013 | closed-as-not-a-bug |
 | B-12 | F-026 | closed-as-not-a-bug (mechanism latent) |
-| B-13 | F-001 (cross-ref) | confirmed |
+| B-13 | F-001 (cross-ref) | fixed 2026-09-22 |
 | B-14 | F-027 | confirmed |
 | B-15 | F-025 | closed-as-not-a-bug |
 | B-16 | F-028 | closed-as-not-a-bug |
