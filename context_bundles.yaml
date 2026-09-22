@@ -350,16 +350,6 @@ bundles:
   - tests/test_bug3_planner_include.py
   - tests/test_bug4_reason_line.py
   - tests/test_bug1_step3_supplier_details.py
-  # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
-  api_ui:
-  - src/spire/api/server.py
-  - src/spire/api/models.py
-  - src/spire/api/translate.py
-  - src/spire/ui/app.py
-  - src/spire/ui/__main__.py
-  - tests/test_api_endpoints.py
-  - tests/test_api_translate.py
-
   # parser prompt-cache tests
   - tests/test_prompt_cache.py
   # CF-3 corpus-consistency guard
@@ -368,7 +358,16 @@ bundles:
   - tests/test_f002_classify_surfaced.py
   - tests/test_f033_refusal_example.py
   - tests/test_f041_ar_child_root.py
-  # Phase 4d API tests
+  - tests/test_f001_list_all_flag.py
+  - tests/test_f006_alpha_order_number.py
+
+  # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
+  api_ui:
+  - src/spire/api/server.py
+  - src/spire/api/models.py
+  - src/spire/api/translate.py
+  - src/spire/ui/app.py
+  - src/spire/ui/__main__.py
   - tests/test_api_endpoints.py
   - tests/test_api_translate.py
 
