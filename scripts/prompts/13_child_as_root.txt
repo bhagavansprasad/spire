@@ -16,12 +16,10 @@
 #   2. Does the Intent carry the correct include for the child?
 #   3. Does the answer contain the child rows?
 #
-# EXPECTED-OUTCOME TAGS (in each section header):
-#   ANSWER   child IS includable on this parent; must return rows
-#   REFUSE   child is genuinely NOT includable — the tool is reverse-
-#            only (search_suppliers_by_site_bu / by_classification),
-#            so there is no forward fetch. Refusal is correct here.
-#            See _NON_INCLUDABLE_ENTITIES in intent_validation.py.
+# EXPECTED-OUTCOME TAG (in each section header):
+#   ANSWER   child IS includable on this parent; must return rows.
+#            (Historically a REFUSE tag existed here; F-043 retired
+#            it — every child on this list is now forward-fetchable.)
 #
 # Anchors:
 #   AR invoice CustomerTransactionId 300000248096352 (TransactionNumber 61765) — 1 line, no tax
@@ -91,8 +89,10 @@ list distributions for PO 2144
 
 
 # ====================================================================
-# 3. SUPPLIER — children: contacts, addresses — ANSWER
-#             children: sites, classifications — REFUSE (reverse-only)
+# 3. SUPPLIER — children: contacts, addresses, sites, classifications
+#             — all ANSWER (F-043 made sites and classifications
+#               forward-fetchable; the reverse-only tag this file
+#               used to carry is retired)
 # ====================================================================
 
 # -- contacts (ANSWER) --
@@ -108,12 +108,12 @@ supplier 1252's addresses
 list addresses for supplier 1252
 what addresses does supplier 1252 have
 
-# -- sites (REFUSE — reverse-only tool; see _NON_INCLUDABLE_ENTITIES) --
+# -- sites (ANSWER — dual-purpose tool, F-043) --
 show sites for supplier EIP Inc
 supplier EIP Inc's sites
 list sites for supplier EIP Inc
 
-# -- classifications (REFUSE — reverse-only tool) --
+# -- classifications (ANSWER — dual-purpose tool, F-043) --
 show classifications for supplier EIP Inc
 supplier EIP Inc's classifications
 list classifications for supplier EIP Inc
