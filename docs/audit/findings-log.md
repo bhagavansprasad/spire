@@ -943,6 +943,57 @@ Either way, both the answer and the truncation summary should reflect the filter
 
 **Class note.** Same class as F-001 (a codebase assumption the code does not honour — here, the docstring's "one fetch → one output bucket"). Distinct from F-008 (which is about a child's field not reaching the answer); this is about which BUCKET the answer is read from.
 
+**Update 2026-09-22 — fixed on `phase-2-fix-F-010-filtered-count`.**
+
+`synthesizer/aggregation.py` gains `_filtered_bucket_pair()`, a generic
+source + `{source}_{suffix}` detector. `_build_count_response` consults
+it at the top; when the shape is present, the count is the MATCHED
+bucket's size and the source bucket's `total_available` becomes a
+sample caveat, not the answer.
+
+Verification:
+
+- Reproducer `count of suppliers with classification Minority Owned`
+  now answers `2 suppliers match the filter (examined 25 of 306).`
+  Pre-fix: `There are 593 suppliers.` over a filter that kept 2.
+- Sibling unchanged: `count of suppliers` still returns
+  `There are 306 suppliers.` — same shape, same exactness.
+- New file `tests/test_f010_filtered_count.py` — 13 tests. All fail
+  without the fix (ImportError on `_filtered_bucket_pair` at
+  collection). Reversion verified by `git stash push
+  src/spire/synthesizer/aggregation.py`, running the file, and
+  `git stash pop`.
+- Full suite: 1075 passed, 22 deselected (baseline 1062 + 13 new).
+
+Two deviations from the entry, neither substantive:
+
+1. The entry named two fix options (extend the manual shape check, or
+   extract a helper both paths call). The landed fix is the second:
+   a new generic helper `_filtered_bucket_pair()` in `aggregation.py`,
+   entity-agnostic. The existing `p2p._filtered_supplier_list` is left
+   in place — it does a stricter job (both buckets must be supplier
+   rows), which the count path cannot require for other entities.
+
+2. The entry's Evidence block invokes `promptkit.py --show-stages`.
+   That flag does not exist on the current CLI. The current diagnostic
+   flag for the same output is `--show-planner`. Recorded here so
+   future sessions searching the log for `--show-stages` find the
+   correction. The entry itself is preserved unchanged (append-only
+   discipline).
+
+**Not checked.** The matched bucket is treated as untruncated; if a
+future shape surfaces where the executor flags it as capped, the
+summary's "(examined N of M)" would understate. Other edge-traversal
+filters (`has_open_PO`, `has_site_in_bu`, `has_invoice_over_amount`,
+`has_no_recent_invoices`) and other entity types (Invoice, PO,
+StandardReceipt) run the same code path but were not separately
+probed this session.
+
+**Pod drift note.** The pod's supplier count has moved 593 to 620 to
+306 across three sessions. That is a very large change and not this
+fix's concern; noted because the reproducer's numbers differ from
+the audit's.
+
 ---
 
 ## F-011 — KG says `created_before` exists for "stale POs / older than N months"; sysprompt refuses that class of question
