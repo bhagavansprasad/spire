@@ -112,6 +112,40 @@ For the procedural checklist that accompanies this file, see
     and reports back; the finding is not considered landed until the
     verification output has been seen.
 
+15.1. **Full-output capture for any run you may inspect more than once.**
+    When a command produces output you will want to look at again — a
+    multi-prompt sweep, a diagnostic run, a pytest with markers —
+    redirect the COMPLETE stdout AND stderr to a file first, then grep
+    from the file. Never pipe the run itself through a filter (`grep`,
+    `awk`, `head`, `tail`).
+
+    The reason is cost, not purity. A filtered run bakes one question
+    into the output and throws away everything that question did not
+    anticipate. When a later question needs a line the filter did not
+    match, the run has to be repeated — with a new filter, which may
+    itself miss something. One unfiltered file answers every subsequent
+    question by grep, at no extra cost.
+
+    The shape:
+
+        for p in ...; do
+            python scripts/promptkit.py --run --prompt "$p" --show-planner
+        done > t_<finding>.txt 2>&1
+
+    Inspection (any number of times, no re-run):
+
+        grep -nE 'pattern' t_<finding>.txt
+        sed -n '/start/,/end/p' t_<finding>.txt
+
+    Never:
+
+        ... | grep 'pattern'    # the question is baked in; a second
+                                # question means a second run
+        ... | head -80          # truncated permanently
+
+    The single exception: a one-shot command whose complete output will
+    be pasted into a message anyway. If in doubt, unfiltered.
+
 ## Evidence standard for findings (S0–S8)
 
 Before anything is written into a findings log as a bug, the claim
