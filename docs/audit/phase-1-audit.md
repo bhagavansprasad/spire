@@ -247,7 +247,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate) |
 | B-24 | F-018 | verified 2026-09-23 (#163) |
 | B-25 | F-019 | verified 2026-09-23 (#163) |
-| B-26 | F-016 | confirmed |
+| B-26 | F-016 | verified 2026-09-24 (#166) |
 | B-27 | F-020 | verified 2026-09-23 (#161) |
 | B-28 | F-045 | confirmed |
 | B-29 | F-046 | verified 2026-09-23 |

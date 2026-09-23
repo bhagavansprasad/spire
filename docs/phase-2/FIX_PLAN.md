@@ -118,7 +118,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-014 | missing-projection | 2 | `graph/pipeline.py`, `nl_parser/parser.py` (post-parse) | verified | #165 | 2026-09-23 |
 | F-021 | missing-projection | 2 | reclassified to F-051 — no separate fix on this branch | closed-as-reclassified | #165 | 2026-09-23 |
 | F-001 | missing-capability | 3 | `nl_parser/parser.py` | verified | #153 | 2026-09-22 |
-| F-016 | missing-capability | 3 | `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py` | not-started | — | — |
+| F-016 | missing-capability | 3 | `planner/models.py`, `planner/registries.py`, `nl_parser/parser.py`, `plan_builders.py`, `planner.py` | verified | #166 | 2026-09-24 |
 | F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
 | F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `plan_builders.py` | verified | #163 | 2026-09-23 |
 | F-019 | wrong-data | 4 | `mcp_server/tools/customer_account_by_name.py`, parser sysprompt, KG, `parser.py` | verified | #163 | 2026-09-23 |
