@@ -1583,6 +1583,34 @@ Both is the honest fix: prevention at the parser, defense at the pipeline. The p
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `8b0d4de`. Two sites, both tested.
+
+1. `nl_parser/parser.py` — post-parse correction: clear `intent.fields`
+   when `intent.aggregate` or `intent.compare` is set. The model emits
+   `fields` alongside `aggregate` on the reproducer regardless of any
+   sysprompt or schema-description change (same behaviour F-018
+   records); the correction runs after the LLM and cannot be a
+   prompt-text change.
+
+2. `graph/pipeline.py::_project_outputs` — skip any bucket whose first
+   record carries a `shape` key (aggregation, comparison, lifecycle
+   wrapper). Defence: a wrapper must survive a projection attempt even
+   if `fields` arrives populated by some future path.
+
+Verification: V1 reproduced (`fields: ['Supplier', 'Total']` alongside
+`aggregate`; `— | —` table under the correct leader summary). V5
+goldens unchanged. V6 full suite 1181 passed (1173 + 8 new). V7 red on
+the two parser-correction tests (2 failed, 6 passed); the pipeline-
+defence test passes pre-fix by accident of the existing fallback and is
+recorded in the fix file as an over-reach guard, not a bug-revealer.
+V8 n/a (no LLM decision in the path). V9 deferred to end of branch.
+
+Fix file: `docs/phase-2/fixes/F-014.md`.
+
+---
+
 ## F-015 — a truncated-to-zero result is narrated as a clean "not found"; the empty-bucket shortcut discards the truncation flag
 
 **Date:** 2026-09-18
@@ -1909,6 +1937,40 @@ Option 2 is the honest fix because it retires a manual map rather than growing i
 **Not checked.** Whether all 7 audit prompts in `11_column_vocabulary.txt` share the same shape — one reproducer run this session, the audit's "7 prompts" is the class claim. Whether the `_FIELDS_SATISFIED_BY_INCLUDE` map was intended to grow or was deliberately scoped to Address — no git archaeology. Whether the AR side has an analogous failure (`ReceivablesInvoiceLine.LineNumber` requested on a `ReceivablesInvoice` target, etc.) — same shape, unrun. Whether `menu.entity_columns` carries every includeable child's columns — the loader reads `kg_entity_field` generically, so likely yes; not exhaustively checked.
 
 **Class note.** Adjacent to F-014 — both about a requested `fields` entry not reaching the answer. Different mechanisms: F-014's projection was applied to the wrong bucket (the aggregate wrapper); this one's classification was made against the wrong entity's catalog (the target instead of the include). Both produce an empty or unavailable column where the data was present.
+
+---
+
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `44a08f5`. One site.
+
+`nl_parser/intent_validation.py::validate_intent`, Step 4 field-split
+— per column, check the TARGET's own catalog first (so a doubly-present
+column like `OrderNumber` stays in `fields`), then the curated
+`_FIELDS_SATISFIED_BY_INCLUDE` map, then the KG field catalog of every
+entity in `intent.include`. A column matching any include now resolves
+as satisfied-by-include rather than landing in `unresolved_fields`.
+
+Two deviations from the entry's fix-location section, both recorded in
+the fix file:
+
+1. The curated map is NOT retired. The Address entry carries four
+   reader-facing synonyms (`city`, `state`, `address`, `addresses`) that
+   are not columns on the Address KG catalog, so a general catalogue
+   lookup cannot recover them. The map stays, supplemented.
+
+2. Target-catalog check runs FIRST, not as a union. `OrderNumber` lives
+   on both `PurchaseOrder` and `PurchaseOrderLine`; if the include check
+   short-circuited, the column would be dropped from `fields` and the
+   pipeline projection would stop emitting it.
+
+Verification: V1 reproducer now answers (`Description` on
+PurchaseOrderLine no longer misreported as unavailable). V5 goldens
+unchanged. V6 full suite 1164 passed (baseline 1156 + 8 new). V7 red on
+3 of 8 (stash revert): the three that assert the include-catalogue
+path. V8 n/a. V9 deferred to end of branch.
+
+Fix file: `docs/phase-2/fixes/F-017.md`.
 
 ---
 
@@ -3167,6 +3229,50 @@ production path never produces.
 The entry's own fix-location section (§1 sysprompt, §2
 `_FIELDS_SATISFIED_BY_INCLUDE` redesign, §3 display) is preserved
 unchanged. This block refines it, does not replace it.
+
+---
+
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `94ad1f5`. Two sites, no sysprompt edit — that half is
+deferred to F-050.
+
+1. `nl_parser/parser.py` — new post-parse correction,
+   `_has_country_column_phrasing`. Distinguishes a country COLUMN
+   request ("supplier number and country") from a country FILTER value
+   ("active suppliers in US"); the discriminator is the absence of an
+   existing `country` filter on the intent. On a match, adds `Address`
+   to `include` and `country` to `fields`, regardless of what the
+   parser emitted. Runs after `validate_intent` so the field is not
+   swallowed by F-017's include-catalogue branch.
+
+2. `rendering/formatters.py::_format_projected_table` — recognises
+   `country` / `countrycode` / `city` / `state` as requested components
+   and populates them from the first nested address. The
+   auto-appended `Address` blob is suppressed when a component was
+   named. `CountryCode` falls back to full `Country` when the code is
+   absent.
+
+The sysprompt half is DEFERRED. The rule that would teach the shape
+lives in `columns/b_column_fields.sysprompt`, which the router never
+loads (F-050). Landing the edit today lands it in a dead file; the
+F-050 branch will land it when `columns/` returns to `_TIER1`.
+
+Verification: V1 reproducer now renders `SupplierNumber, country` with
+values. V3a sibling (blob shape) unchanged. V3b sibling (country
+filter) unchanged — the correction correctly does not fire. V5 goldens
+unchanged. V6 full suite 1173 passed (1164 + 9 new). V7 red in two
+shapes (full revert → collection error on the new helper;
+formatters-only revert → 2 failed on the discriminator assertion). V8
+N=20: 20/20 fields, 20/20 columns, 0 unresolved.
+
+One pre-existing test rewritten, not deleted:
+`test_location_field_without_the_include_still_unresolves` — its
+invariant holds at the validator layer, but can no longer be observed
+through `parse()` because the correction always adds the include on
+that prompt. Rewritten to test at `validate_intent`.
+
+Fix file: `docs/phase-2/fixes/F-027.md`.
 
 ---
 
