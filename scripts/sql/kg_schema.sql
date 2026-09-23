@@ -1200,7 +1200,12 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'search_standard_receipts',
   'Default fetcher for StandardReceipt. Accepts customer_name (resolved to an account number inside the tool) and customer_site (client-side). REFUSES to run unscoped - the planner guards for this before dispatch.'
 );
-PROMPT Seeded kg_entity_tool (10 rows).
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'CustomerAccount', 'by_account_number', 'get_customer_account_by_name',
+  'Account-number resolver for CustomerAccount. Same tool as the by-name resolver; the filter type selects the query clause (AccountNumber vs CustomerName). Returns the account(s) whose AccountNumber matches exactly. Registered as its own (entity, filter_type) row because the planner looks up the fetcher by the filter type it picked.'
+);
+
+PROMPT Seeded kg_entity_tool (11 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -1492,6 +1497,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'POs created within the last N months (relative window). Value is a JSON object {\"months\": N}. The planner computes the ISO cutoff (today - N months) via _compute_date_n_months_ago and forwards it as the created_before tool arg; the LLM never computes the date. Mirrors has_no_recent_invoices but with a range-agnostic wrapper filter type, so the phrase ''older than 6 months'' routes to this row rather than being refused as unsupported.'
 );
 
-PROMPT Seeded kg_entity_filter (28 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'CustomerAccount', 'by_account_number', 'entity_level', 'account_number', NULL, NULL, NULL, NULL, NULL, 'server_q', 'AccountNumber', 'equals',
+  'Resolve a customer account by exact AccountNumber via q=AccountNumber=''...''. Confirmed queryable on this endpoint (2026-09-23: q=AccountNumber=''25750'' returns AccountId 300000047368542, CustomerName ABC Corporation Worldwide). The numeric sibling of by_customer_name: a bare account number is an identifier, not a name, and must resolve here.'
+);
+
+PROMPT Seeded kg_entity_filter (29 rows).
 
 -- ============================================================

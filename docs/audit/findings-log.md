@@ -1950,6 +1950,32 @@ The audit's D-13 sibling does the honest thing already — `search_standard_rece
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 3/3).**
+
+Four coupled changes on the CustomerAccount resolve path:
+`get_customer_account_by_name` gains an optional `account_number`
+argument (clause selection by which identifier arrives); new
+`(CustomerAccount, by_account_number)` rows in `kg_entity_filter`
+and `kg_entity_tool`; `b_receipt_applications.sysprompt` teaches
+the phrasing; `parser.parse()` gains a deterministic post-parse
+correction that rewrites `by_customer_name(digits)` into
+`by_account_number` (same class as F-018).
+
+Verification: V1 (`Trace receipt applications for account 25750`)
+answers with intent `by_account_number: '25750'`, plan
+`account_number: '25750'`, correct rows for account 25750.
+V3 customer-name sibling unchanged. V5 goldens empty. V6 new
+tests pass. V7 fails without the fix. V9 deferred to end of
+branch (three sysprompt edits share one --validate run).
+
+Not checked: four sibling AR sysprompts key on by_customer_name
+too (b_customer_invoices, b_customer_credit_memos,
+b_account_receipts, b_account_balance); the parser-side correction
+covers their prompts, but they do not yet teach the
+by_account_number phrasing. Follow-up finding.
+
+---
+
 ## F-020 — supplier-contacts summary flattens 47 administrative names into one sentence, unattributed and unverifiable against the tables below
 
 **Date:** 2026-09-18

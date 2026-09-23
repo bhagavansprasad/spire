@@ -746,7 +746,9 @@ async def list_receivables_credit_memos(limit: int = 25) -> dict:
 
 @mcp.tool()
 async def get_customer_account_by_name(
-    customer_name: str, limit: int = 25
+    customer_name: str | None = None,
+    account_number: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
     """Resolve a customer name to their receivables account(s).
 
@@ -765,7 +767,10 @@ async def get_customer_account_by_name(
     """
     async with FusionClient(_persona) as client:
         return await _get_customer_account_by_name(
-            client, customer_name=customer_name, limit=limit
+            client,
+            customer_name=customer_name,
+            account_number=account_number,
+            limit=limit,
         )
 
 

@@ -160,6 +160,25 @@ def _is_explicit_po_list(prompt: str) -> bool:
     return True
 
 
+def _is_all_digit_customer_value(value: Any) -> bool:
+    """True when a by_customer_name value is actually an account number.
+
+    F-019. The parser sometimes routes a bare account number into
+    by_customer_name; the resulting query (`q=CustomerName='25750'`)
+    returns zero rows, and the synthesizer narrates the empty bucket as
+    "no customer accounts found" — a silent false negative. A
+    digit-only string is an account number, not a customer name; the
+    post-parse correction below rewrites the filter type. Same class as
+    the F-018 invoice-number override: deterministic, post-LLM, no
+    prompt-text change.
+    """
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and value.strip().isdigit()
+    )
+
+
 _INVOICE_NUMBER_QUERY_RE = re.compile(
     r"\binvoice\b(?:\s+(?:number|numbered|no\.?|#))?\s+"
     r"([A-Za-z0-9][A-Za-z0-9_./-]{3,})",
@@ -555,6 +574,30 @@ def parse(
                 intent.filters.append(
                     {"type": "invoice_number", "value": inv_number}
                 )
+
+    # --- F-019: numeric CustomerAccount identifier ---
+    #
+    # A bare number after "account" is the account NUMBER, not a name.
+    # The parser sometimes routes it into by_customer_name anyway,
+    # producing a q=CustomerName='<digits>' query that returns zero rows;
+    # the empty-bucket shortcut then narrates "no customer accounts
+    # found." Rewrite the filter type so the tool takes the
+    # AccountNumber path. Fires ONLY when target_entity is CustomerAccount
+    # AND the value is a digit-only string, so genuine name queries are
+    # untouched.
+    if intent.target_entity == "CustomerAccount":
+        rewritten = []
+        for f in intent.filters:
+            if (
+                f.get("type") == "by_customer_name"
+                and _is_all_digit_customer_value(f.get("value"))
+            ):
+                rewritten.append(
+                    {"type": "by_account_number", "value": f["value"]}
+                )
+            else:
+                rewritten.append(f)
+        intent.filters = rewritten
 
     # --- KG validation ---
     #
