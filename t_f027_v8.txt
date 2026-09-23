@@ -1,0 +1,1581 @@
+========== run 1 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=733 total=4619
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    733  total=   4619
+  TOTAL        in=   4468  out=    841  total=   5309
+
+
+========== run 2 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=609 total=4495
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    609  total=   4495
+  TOTAL        in=   4468  out=    750  total=   5218
+
+
+========== run 3 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=295 total=4181
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    295  total=   4181
+  TOTAL        in=   4468  out=    436  total=   4904
+
+
+========== run 4 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=574 total=4460
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    574  total=   4460
+  TOTAL        in=   4468  out=    682  total=   5150
+
+
+========== run 5 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=698 total=4584
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    698  total=   4584
+  TOTAL        in=   4468  out=    839  total=   5307
+
+
+========== run 6 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=649 total=4535
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    649  total=   4535
+  TOTAL        in=   4468  out=    790  total=   5258
+
+
+========== run 7 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=665 total=4551
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    665  total=   4551
+  TOTAL        in=   4468  out=    806  total=   5274
+
+
+========== run 8 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=739 total=4625
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    739  total=   4625
+  TOTAL        in=   4468  out=    847  total=   5315
+
+
+========== run 9 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=517 total=4403
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    517  total=   4403
+  TOTAL        in=   4468  out=    625  total=   5093
+
+
+========== run 10 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=736 total=4622
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    736  total=   4622
+  TOTAL        in=   4468  out=    877  total=   5345
+
+
+========== run 11 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=952 total=4838
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    952  total=   4838
+  TOTAL        in=   4468  out=   1093  total=   5561
+
+
+========== run 12 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=802 total=4688
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[parse] empty draft (no target_entity, not unanswerable); retrying once
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    802  total=   4688
+  TOTAL        in=   4468  out=    943  total=   5411
+
+
+========== run 13 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=621 total=4507
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    621  total=   4507
+  TOTAL        in=   4468  out=    729  total=   5197
+
+
+========== run 14 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=877 total=4763
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    877  total=   4763
+  TOTAL        in=   4468  out=   1018  total=   5486
+
+
+========== run 15 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=612 total=4498
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    612  total=   4498
+  TOTAL        in=   4468  out=    720  total=   5188
+
+
+========== run 16 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=609 total=4495
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    609  total=   4495
+  TOTAL        in=   4468  out=    750  total=   5218
+
+
+========== run 17 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=747 total=4633
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    747  total=   4633
+  TOTAL        in=   4468  out=    855  total=   5323
+
+
+========== run 18 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=559 total=4445
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    559  total=   4445
+  TOTAL        in=   4468  out=    700  total=   5168
+
+
+========== run 19 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=141 total=723
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=818 total=4704
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    141  total=    723
+  parse        in=   3886  out=    818  total=   4704
+  TOTAL        in=   4468  out=    959  total=   5427
+
+
+========== run 20 ==========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=108 total=690
+Router: modules=['supplier']
+[llm] stage=parse in=3886 out=709 total=4595
+[cache] HIT   cached=3878  fresh=8  total_in=3886
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  include: ['Address']
+  fields: ['SupplierNumber', 'country']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierNumber': '1252'}
+    [2] {'SupplierNumber': '1254'}
+    [3] {'SupplierNumber': '1256'}
+    [4] {'SupplierNumber': '1265'}
+    [5] {'SupplierNumber': '1266'}
+    ... (20 more)
+
+Answer:
+Showing 25 of 328 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 328 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: SupplierNumber, country
+
+  SupplierNumber | country       
+  ---------------+---------------
+  1252           | United States 
+  1254           | United States 
+  1256           | United States 
+  1265           | Canada        
+  1266           | Canada        
+  1272           | United Kingdom
+  1274           | United Kingdom
+  1277           | France        
+  1278           | France        
+  1281           | Canada        
+  1289           | China         
+  1301           | Japan         
+  1306           | Italy         
+  1307           | Italy         
+  1308           | Italy         
+  1322           | Canada        
+  1324           | Netherlands   
+  1325           | United States 
+  1327           | United States 
+  1336           | Spain         
+  1339           | France        
+  1342           | United States 
+  1253           | United States 
+  1255           | United States 
+  1257           | Canada        
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    108  total=    690
+  parse        in=   3886  out=    709  total=   4595
+  TOTAL        in=   4468  out=    817  total=   5285
+
+

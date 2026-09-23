@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from spire.nl_parser.draft import DraftAggregate, DraftFilter, DraftIntent
+from spire.nl_parser.intent_validation import validate_intent
 from spire.nl_parser.parser import parse
 from spire.nl_parser.result import RefusalFlavor
 from spire.nl_parser.vocabulary import KGMenu, add_child_include_from_prompt
@@ -822,18 +823,24 @@ def test_field_satisfied_by_active_address_include_is_not_unresolved(menu):
 
 
 def test_location_field_without_the_include_still_unresolves(menu):
-    """The guard is scoped to an ACTIVE covering include. 'country' with NO
-    Address include stays unresolved — nothing renders it, so the honest
-    'not available' note must still fire."""
-    draft = DraftIntent(
+    """The field-split guard is scoped to an ACTIVE covering include.
+    'country' with NO Address include stays unresolved — nothing renders
+    it, so the honest 'not available' note must still fire.
+
+    Tested at validate_intent, not through parse(). F-027's post-parse
+    correction now adds the Address include deterministically for any
+    Supplier prompt naming 'country' as a column, so parse() never sees
+    a country field without an include on this shape. The invariant
+    still holds one layer down — that is the layer this test pins. The
+    F-027 correction has its own tests in test_f027_country_column.py.
+    """
+    intent = Intent(
         target_entity="Supplier",
         filters=[],
         include=[],
         fields=["Supplier", "country"],
     )
-    result = parse(
-        "suppliers with name and country", llm=MockLLM(draft), menu=menu,
-    )
-    assert not result.is_refusal
-    assert result.intent.fields == ["Supplier"]
-    assert result.intent.unresolved_fields == ["country"]
+    result = validate_intent(intent, menu)
+    assert result is None
+    assert intent.fields == ["Supplier"]
+    assert intent.unresolved_fields == ["country"]

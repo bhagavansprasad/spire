@@ -225,6 +225,41 @@ def _extract_invoice_number(prompt: str) -> str | None:
     return token
 
 
+# F-027. A country COLUMN request ("supplier number and country") versus
+# a country FILTER value ("suppliers in US", "US suppliers"). The parser
+# emits two different wrong shapes on the column request — 16/20 with
+# include=['Address'] and country dropped from fields; 4/20 with no
+# include and country landing in unresolved_fields. The sysprompt rule
+# that teaches the shape lives under columns/, which the router never
+# loads (F-050). This correction makes the intent deterministic
+# regardless of which shape arrived: pure Python, runs after the LLM.
+# Same pattern as _extract_invoice_number (F-018) and
+# _is_all_digit_customer_value (F-019).
+_COUNTRY_COLUMN_RE = re.compile(r"\bcountr(?:y|ies)\b", re.IGNORECASE)
+
+
+def _has_country_column_phrasing(prompt: str, intent: Any) -> bool:
+    """True when the prompt requests a country COLUMN on a Supplier query.
+
+    Distinguishes a column request ("Supplier number and country",
+    "name, number, and country") from a filter value ("active suppliers
+    in US", "suppliers in the UK"): a filter carries a specific country
+    the parser routes to a `country` filter; a column request has the
+    word "country" with no value. The presence of a `country` filter on
+    the intent is the discriminator.
+
+    Scoped to Supplier targets — country on Supplier is a projection of
+    the child Address resource, and the correction only applies to that
+    shape. Other entities with a country projection (TaxpayerCountryCode)
+    are handled separately if at all.
+    """
+    if intent.target_entity != "Supplier":
+        return False
+    if any(f.get("type") == "country" for f in intent.filters):
+        return False
+    return bool(_COUNTRY_COLUMN_RE.search(prompt))
+
+
 def _is_empty_draft(parsed: Any) -> bool:
     """A shape-valid draft with nothing to plan against.
 
@@ -615,6 +650,31 @@ def parse(
                 offending_entity=refusal.offending_entity,
                 offending_filters=refusal.offending_filters,
             )
+
+    # --- F-027: Supplier "country" column request ---
+    #
+    # Runs AFTER validate_intent on purpose. The field-split inside
+    # validate_intent drops a field satisfied by an active include (see
+    # F-017's include-catalogue branch), so `country` added before that
+    # check would be dropped from both fields and unresolved_fields and
+    # never reach the display. Adding it here — after KG validation, in
+    # the same class of post-parse correction as _extract_invoice_number
+    # and the all-digit CustomerAccount rewrite — means the field survives
+    # and the display renders it.
+    #
+    # Scoped to Supplier roots: "country" as a projectable column is an
+    # Address-include feature. The discriminator (no existing country
+    # filter + the bare word "country" in the prompt) keeps a genuine
+    # country FILTER request — "active suppliers in US" — untouched; the
+    # filter path is preserved verbatim.
+    if _has_country_column_phrasing(prompt, intent):
+        if "Address" not in intent.include:
+            intent.include.append("Address")
+        if not any(
+            str(f).lower() in ("country", "countrycode")
+            for f in intent.fields
+        ):
+            intent.fields.append("country")
 
     # --- Address-satisfied column cleanup ---
     #
