@@ -69,7 +69,7 @@ there. Same as window 1.
 
 ## Outstanding — V9 is the last item before the PR
 
-V9 was in progress at handoff and had not completed this window. The
+V9 completed this window — PASS. Evidence at `docs/phase-2/fixes/F-046-F047-F048-v9-sweep.txt`; analysis at `docs/phase-2/fixes/F-046-F047-F048-v9-analysis.md`. The
 equivalent of V9 for this branch is a **targeted four-file run**, not the
 12-set manifest. The three sysprompt files edited on this branch are:
 
@@ -111,7 +111,7 @@ the exact prompt.
 1. `git log --oneline -5` — expect `0bdf26c` or later at HEAD.
 2. `git status` — expect clean.
 3. `pytest -q` — expect 1156 passed, 22 deselected.
-4. Check for `t_v9.txt` — if present and complete, read it (Cell below).
+4. V9 done. Two findings from the sweep: F-049 filed (open); F-045 unaffected.
    If absent, run the V9 command above.
 
 ---

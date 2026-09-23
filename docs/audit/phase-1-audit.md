@@ -250,9 +250,9 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-26 | F-016 | confirmed |
 | B-27 | F-020 | fixed 2026-09-23 |
 | B-28 | F-045 | confirmed |
-| B-29 | F-046 | fixed 2026-09-23 |
-| B-30 | F-047 | fixed 2026-09-23 |
-| B-31 | F-048 | fixed 2026-09-23 |
+| B-29 | F-046 | verified 2026-09-23 |
+| B-30 | F-047 | verified 2026-09-23 |
+| B-31 | F-048 | verified 2026-09-23 |
 | B-c1 | F-030 | closed-as-not-a-bug |
 | B-c2 | F-024 | closed-as-not-a-bug |
 | B-c3 | F-031 | closed-as-not-a-bug (observation) |

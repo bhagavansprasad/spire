@@ -55,6 +55,73 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-049 — absolute-date Invoice phrasings starting with `created` refuse
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-046 (sibling — relative-date Invoice now works; this is the absolute-date gap left untouched), B-29
+
+**Evidence.** V9 sweep on `phase-2-fix-F046-F047-F048-date-filters`:
+
+    PROMPT: invoices created before 2024-01-01
+    Reason:   I can look up supplier invoices, but this doesn't say which one.
+    Solution: Name the supplier, or give me the invoice number.
+    Example:  invoices for Lee Supplies
+
+    PROMPT: invoices created since January 2024
+    Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Both refuse with `missing_identifier`. Meanwhile the sibling
+phrasings in the SAME `16_date_filter_cluster.txt` section all
+answer: `invoices in 2024`, `invoices in 2023`, `invoices between
+Jan and Mar 2024`.
+
+**Root cause (partial).** The parser does not recognise "created
+before X" / "created since X" as an InvoiceDate phrasing — the
+`b_invoice_date.sysprompt` bullet lists "invoices in 2023 / invoices
+after 2023-01-01 / invoices between Jan and Mar 2023", none
+starting with "created". The parser therefore emits a filter-less
+Invoice intent, and the planner's Invoice guard (correctly) refuses
+with `missing_identifier`.
+
+**Not a regression.** Pre-branch and post-branch outcomes for these
+two phrasings are identical — the parser never emitted `invoice_date`
+for "created" phrasings, and the guard refusal fires regardless of
+the F-046 guard-widening. F-046 widened the guard to *accept* the
+`invoice_date` filter as a root ref; it did not add parser coverage
+for "created" phrasings.
+
+**Fix location (for Phase 2).** `b_invoice_date.sysprompt` — extend
+the absolute-date bullet to cover:
+
+    'invoices created before X'   / 'invoices created since X'
+    'invoices created after X'    / 'invoices raised before/since X'
+
+Routes to `invoice_date` filter with `from` / `to` as appropriate.
+Mirror in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+Sysprompt-only, no code change, no KG row. V9 mandatory.
+
+**Regression test (post-fix).** Both phrasings answer with real rows.
+Sibling `invoices in 2024` unchanged. Negative `invoices` still
+refuses with the same shape.
+
+**Not checked.** Whether sibling entities (`PurchaseOrder`,
+`StandardReceipt`) have the same "created before/since" coverage
+gap. Whether other absolute-date phrasings (`raised on`, `dated`,
+`issued`) share it. Whether the F-011b `b_po_created_date.sysprompt`
+bullet has the same shape of coverage (it teaches "POs created
+before 2015" — so the phrase "created before X" is covered for
+PO, just not for Invoice).
+
+**Class note.** Same class as F-046 (a date-filter phrasing the
+sysprompt hasn't been taught). Where F-046 was the relative-date
+gap, this is the absolute-date gap in the same family. The
+asymmetry with PO (`b_po_created_date.sysprompt` teaches "created
+before" verbatim) suggests the Invoice block was authored less
+completely.
+
+---
+
 ## F-044 — double-encoded `value_json` crashes the tool at schema validation (intermittent)
 
 **Date:** 2026-09-22
@@ -2015,7 +2082,7 @@ The parser has no rule for a vague relative adjective with no explicit N. The mo
 
 ---
 
-**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
 
 Sysprompt-only fix. Two files: `b_po_created_date.sysprompt` and
 the byte-equality literal in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
@@ -2102,7 +2169,7 @@ Both refuse *correctly* — the tool filters on CreationDate, the user asked abo
 
 ---
 
-**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
 
 Seven sites, eight files. All landed in one branch alongside F-046 and F-048.
 
@@ -2244,7 +2311,7 @@ The prompt is in-scope: the user named the entity (Invoice) and a date window. T
 
 ---
 
-**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
 
 Four-site fix (the entry named three). Sites 2b and 3 were surfaced by
 the parse probes recorded in `docs/phase-2/fixes/F-046.md`.
