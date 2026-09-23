@@ -66,6 +66,9 @@ bundles:
   - docs/phase-2/fixes/F-039.md
   - docs/phase-2/fixes/F-041.md
   - docs/phase-2/fixes/F-044.md
+  - docs/phase-2/fixes/F-046.md
+  - docs/phase-2/fixes/F-047.md
+  - docs/phase-2/fixes/F-048.md
   - docs/audit/golden/count_suppliers.txt
   - docs/audit/golden/po_2144_and_lines.txt
   - docs/audit/golden/suppliers_with_open_pos.txt
@@ -86,6 +89,7 @@ bundles:
   - scripts/prompts/13_child_as_root.txt
   - scripts/prompts/14_truncation_narration.txt
   - scripts/prompts/15_po_relative_date_filters.txt
+  - scripts/prompts/16_date_filter_cluster.txt
   - scripts/prompts/README.md
   - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
@@ -385,6 +389,9 @@ bundles:
   - tests/test_f039_aggregate_difference_phrase.py
   - tests/test_f041_ar_child_root.py
   - tests/test_f044_double_encoded_value.py
+  - tests/test_f046_invoice_relative_date.py
+  - tests/test_f047_po_last_updated.py
+  - tests/test_f048_vague_relative.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
