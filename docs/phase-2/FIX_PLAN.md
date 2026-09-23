@@ -82,6 +82,7 @@ order is a queue, not a batch.
 | 8 | Cluster 5 (2) | Fix F-003; F-004 may fall out. If it does, close F-004 as a side-effect and note it in its fix file. |
 | 9 | Reg #30 | Perf. Independent; can slip to Phase 6 if the fix turns out to be architectural. |
 | 10 | F-044 | Crash, mechanism settled (double-encoded `value_json`, `draft.py::to_intent`). Closed as PR #158, ahead of F-010 — the deliberate §8.3.1 reorder is recorded in the fix file. |
+| 11 | F-046, F-047, F-048 | Follow-ons from the F-011b sweep (findings-log 2026-09-23). F-046 first (cleanest mirror of F-011's split, no new tool arg). F-047 second (adds a LastUpdateDate column to `search_purchase_orders`). F-048 last (highest blast radius — parser default for vague adjectives; V9 mandatory). |
 
 ---
 
@@ -127,6 +128,9 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
+| F-046 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
+| F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
+| F-048 | missing-capability | 4 | parser sysprompt | not-started | — | — |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the

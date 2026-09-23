@@ -424,14 +424,33 @@ class DraftIntent(BaseModel):
             # skipped, and on strings that start with `{` but are not
             # valid JSON the second decode raises and the original string
             # is kept — same leniency as the outer try/except.
-            if isinstance(value, str) and value[:1] == "{":
+            # F-044 / F-011c: loop the decode. The model has been
+            # observed to (a) double-encode (F-044), and (b) emit a
+            # backslash-escaped object text like `{\"months\":6}`
+            # instead of a valid object or a valid JSON string
+            # (F-011c, caught on the 15_po_relative_date_filters
+            # sweep). The loop peels layers until the value is not a
+            # string, or no further progress is made. Each pass
+            # tries the string as-is, then with `\"` un-escaped to
+            # `"` on the fallback path. Genuine strings ("US",
+            # "50000", prose) fail the first-character test and are
+            # left alone.
+            for _ in range(5):
+                if not (isinstance(value, str) and value[:1] == "{"):
+                    break
+                parsed = None
                 try:
-                    inner = json.loads(value)
+                    parsed = json.loads(value)
                 except (json.JSONDecodeError, TypeError):
                     pass
-                else:
-                    if isinstance(inner, dict):
-                        value = inner
+                if not isinstance(parsed, dict):
+                    try:
+                        parsed = json.loads(value.replace('\\"', '"'))
+                    except (json.JSONDecodeError, TypeError):
+                        break
+                if not isinstance(parsed, dict):
+                    break
+                value = parsed
             decoded_filters.append({"type": f.type, "value": value})
 
         return Intent(

@@ -280,12 +280,12 @@ def _build_entity_fetcher_args(
 ) -> dict[str, Any]:
     """Build tool_args for the entity fetcher.
 
-    reference_date is threaded in for the one entity-level filter
-    whose value is a RELATIVE window (created_in_last_n_months):
-    the planner computes the ISO cutoff via the same
-    _compute_date_n_months_ago helper has_no_recent_invoices uses,
-    so tests can pin "today" without monkeypatching datetime. Every
-    other filter is unaffected.
+    reference_date is threaded in for the two entity-level filters
+    whose value is a RELATIVE window (older_than_n_months,
+    created_in_last_n_months): the planner computes the ISO cutoff
+    via the same _compute_date_n_months_ago helper
+    has_no_recent_invoices uses, so tests can pin "today" without
+    monkeypatching datetime. Every other filter is unaffected.
     """
     if reference_date is None:
         reference_date = date.today()
@@ -307,7 +307,7 @@ def _build_entity_fetcher_args(
         # forward it under the tool arg the KG row names
         # (created_before). Runs BEFORE the generic dict handler,
         # which would otherwise read the wrong keys.
-        if ftype == "created_in_last_n_months":
+        if ftype in ("older_than_n_months", "created_in_last_n_months"):
             months = (
                 raw_value.get("months")
                 if isinstance(raw_value, dict) else raw_value
@@ -318,7 +318,7 @@ def _build_entity_fetcher_args(
                 or months <= 0
             ):
                 raise ValueError(
-                    "created_in_last_n_months requires value="
+                    f"{ftype} requires value="
                     "{'months': <positive int>}; got "
                     f"{raw_value!r}."
                 )

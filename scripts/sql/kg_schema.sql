@@ -1493,8 +1493,12 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
-  'PurchaseOrder', 'created_in_last_n_months', 'entity_level', 'created_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '<',
-  'POs created within the last N months (relative window). Value is a JSON object {\"months\": N}. The planner computes the ISO cutoff (today - N months) via _compute_date_n_months_ago and forwards it as the created_before tool arg; the LLM never computes the date. Mirrors has_no_recent_invoices but with a range-agnostic wrapper filter type, so the phrase ''older than 6 months'' routes to this row rather than being refused as unsupported.'
+  'PurchaseOrder', 'older_than_n_months', 'entity_level', 'created_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '<',
+  'POs created MORE than N months ago (older-than relative window). Value is a JSON object {\"months\": N}. The planner computes the ISO cutoff (today - N months) via _compute_date_n_months_ago and forwards it as the created_before tool arg; the LLM never computes the date. Routes phrasings like ''older than 6 months'' / ''stale'' / ''more than N months old''. Renamed from created_in_last_n_months on 2026-09-23 because the old name asserted the wrong direction (the filter computes an upper bound, not a lower bound).'
+);
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'created_in_last_n_months', 'entity_level', 'created_since', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '>',
+  'POs created WITHIN the last N months (recent-window relative window). Value is a JSON object {\"months\": N}. The planner computes the ISO cutoff (today - N months) via _compute_date_n_months_ago and forwards it as the created_since tool arg; the LLM never computes the date. Routes phrasings like ''in the last 6 months'' / ''in the last year'' / ''from the last 12 months''. Split out on 2026-09-23 from older_than_n_months to fix the inversion: the pre-split rule routed both directions to created_before, so a ''last N months'' question answered with an OLDER-than-N-months set.'
 );
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
@@ -1502,6 +1506,6 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Resolve a customer account by exact AccountNumber via q=AccountNumber=''...''. Confirmed queryable on this endpoint (2026-09-23: q=AccountNumber=''25750'' returns AccountId 300000047368542, CustomerName ABC Corporation Worldwide). The numeric sibling of by_customer_name: a bare account number is an identifier, not a name, and must resolve here.'
 );
 
-PROMPT Seeded kg_entity_filter (29 rows).
+PROMPT Seeded kg_entity_filter (30 rows).
 
 -- ============================================================
