@@ -54,10 +54,15 @@ For the procedural checklist that accompanies this file, see
    branch. Push the branch, open a PR, merge the PR.
 
 10. **Integration branch is `hardening-master`.** All phase branches
-    spawn off it and merge back via PR. `master` stays frozen at the
-    fork point until the entire v3.2 plan completes. The runtime clone
-    pulls from `hardening-master`.
+    spawn off it and merge back via PR. The runtime clone pulls from
+    `hardening-master`.
 
+    **Nothing merges to `master` without explicit instruction from
+    the user.** Not a PR, not a fast-forward, not a one-off doc fix.
+    The only merge target is `hardening-master`; the only merges are
+    PR branches into it. `master` stays where it was at the fork
+    point until the user says otherwise — and the user's word on
+    this is the only trigger.
 11. **Branch naming: `Phase{N}-{Descriptive}`.** Examples:
     `Phase1-Audit-and-Baseline`, `Phase2-Correctness-Fixes`. Not
     `phase-1`.
@@ -272,6 +277,14 @@ was skipped.
 
 25. **No re-litigating resolved points.** If the answer was given in a
     prior turn, use it.
+
+26. **After every bug fix, report the queue.** State how many rows
+    remain pending in `docs/phase-2/FIX_PLAN.md` and name the next
+    one being picked up. This runs after every closure — a fix, a
+    `closed-as-not-a-bug`, a merge with its tracking flip — and it
+    appears in the same reply that delivers the closure news, before
+    the next task's commands. The user should never have to ask
+    "what's next?"; that question is answered proactively.
 
 ---
 
