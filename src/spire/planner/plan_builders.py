@@ -35,6 +35,7 @@ from spire.planner.registries import (
     _COMPARISON_TOOLS,
     _FILTER_SOURCE_NAME_SUFFIX,
     _FILTER_SOURCE_NONEMPTY_SUFFIX,
+    _LIMIT_CAPABLE_TOOLS,
     _OUTPUT_NAME_BY_ENTITY,
     _TOOL_PRIMARY_ARG,
 )
@@ -345,6 +346,35 @@ def _build_entity_fetcher_args(
         else:
             args[arg_name] = raw_value
     return args
+
+
+def _apply_list_limit(
+    tool_name: str,
+    tool_args: dict[str, Any],
+    list_limit: int | None,
+) -> None:
+    """F-016: inject `limit=N` into a list fetcher's tool_args in place.
+
+    No-op unless the tool accepts a limit AND the intent carries a cap.
+    The set of limit-capable tools lives in registries._LIMIT_CAPABLE_TOOLS
+    (the same file that holds _TOOL_PRIMARY_ARG) so a new list tool is
+    one row in each map and the two stay consistent.
+
+    A `limit` sent to a fetcher whose signature does not declare one
+    raises at the MCP boundary — FastMCP/Pydantic rejects the unknown
+    kwarg — so the set is the guard against a shape the parser does not
+    yet distinguish from the list case.
+
+    Mutates `tool_args` in place rather than returning a new dict. Called
+    once, from generate_plan's Block 1, immediately after the args are
+    built — before the address-expand flag and before the Step is
+    constructed — so the mutating contract is local and visible.
+    """
+    if list_limit is None:
+        return
+    if tool_name not in _LIMIT_CAPABLE_TOOLS:
+        return
+    tool_args["limit"] = list_limit
 
 
 def _filters_needing_edge_traversal(
