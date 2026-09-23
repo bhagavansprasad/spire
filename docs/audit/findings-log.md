@@ -2057,6 +2057,46 @@ Both refuse *correctly* — the tool filters on CreationDate, the user asked abo
 
 ---
 
+## F-045 — composite `created_since AND created_before` on /purchaseOrders returns 0 with a misleading 'capped' note
+
+**Date:** 2026-09-23
+**Status:** confirmed, not fixed
+**Cross-refs:** B-28, F-011 (surfaced by the F-011b sweep), F-012 (parallel composite-`q=` silent fail on /invoices)
+
+**Evidence.** From the F-011b sweep; reproduced standalone.
+
+```
+$ python scripts/promptkit.py --run --prompt "purchase orders created in 2023"
+Intent:
+  filters:
+    - {'type': 'created_since', 'value': '2023-01-01'}
+    - {'type': 'created_before', 'value': '2024-01-01'}
+Plan:
+  Step 1: search_purchase_orders
+    tool_args: {'created_since': '2023-01-01', 'created_before': '2024-01-01'}
+Outputs:
+  open_pos: 0 record(s)
+Truncation:
+  - open_pos: an unknown number of total in source; the fetch was capped before examining all of them...
+```
+
+The pod holds ~13,500 POs in the 2015-2024 window (878 before 2015, 14,387 before 2024). 0 records for 2023 is implausible. Two harms in one shape:
+
+1. Wrong count - the composite clause returns 0, same shape as F-012's falsifier for /invoices.
+2. Misleading narration - the synthesizer says "the fetch was capped" when the true state is "the composite clause returned no totalResults". The wording implies a partial result exists beyond the sample, but the sample is empty.
+
+**Root cause (partial).** Not fully established. `search_purchase_orders` passes both bounds as tool args; whether the pod returns 0 for the composite clause or the tool short-circuits is not isolated this session. Parallels the F-012 falsifier run on /invoices, where composite `q=` silently returned 0.
+
+**Fix location (for Phase 2).** Not established. Candidates: (a) tool-side - issue two queries and intersect client-side, or fail loudly on the composite shape; (b) narration-side - suppress the "capped" note when the fetch returned 0 with no `total_available`.
+
+**Regression test (either fix).** Assert `purchase orders created in 2023` returns nonzero or an honest refusal, not a 0 with a "capped" note. Assert `purchase orders between Jan and Mar 2025` (same composite shape, currently returns 25 with 'unknown total') still answers.
+
+**Not checked.** Whether the pod accepts composite `CreationDate` ranges on /purchaseOrders. Whether `between Jan and Mar 2025`'s "unknown total" is the same pod behaviour. Whether other composite date prompts behave the same.
+
+**Class note.** Adjacent to F-012 (composite-`q=` silent fail) and F-015 (empty-bucket truncation flag discarded). First composite-`q=` sighting on /purchaseOrders; F-012's falsifier was on /invoices.
+
+---
+
 ## F-046 — Invoice has no relative-date filter; "invoices older than 6 months" refuses on missing supplier
 
 **Date:** 2026-09-23

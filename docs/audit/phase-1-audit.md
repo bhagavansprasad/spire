@@ -149,6 +149,7 @@ recorded in §B.4 as positive examples.
 
 | ID | Kind | Prompt | Note |
 |---|---|---|---|
+| B-28 | wrong-answer (composite) — **new** | `purchase orders created in 2023` | POs in 2023 | 0 records + "capped" note; pod has ~13,500 in the 2015-2024 window | F-045 |
 | B-31 | missing-capability (vague-relative default) — **new** | `recent purchase orders`, `new purchase orders` | POs in a default recent window | Refuses `unsupported_filter`. Parser has no rule for a vague adjective with no N. | F-048 |
 | B-30 | missing-capability (last-updated-date on PO) — **new** | `purchase orders not touched in the last year`, `purchase orders with no recent activity` | POs filtered by last-modified | Refuses `unsupported_filter`. Tool filters on CreationDate only. | F-047 |
 | B-29 | missing-capability (relative-date on Invoice) — **new** | `invoices older than 6 months`, `invoices in the last 30 days` | Invoice list filtered by date | Refuses `missing_identifier`. `search_invoices` already accepts `invoice_date_after`/`invoice_date_before`. | F-046 |
@@ -248,6 +249,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-25 | F-019 | fixed 2026-09-23 |
 | B-26 | F-016 | confirmed |
 | B-27 | F-020 | fixed 2026-09-23 |
+| B-28 | F-045 | confirmed |
 | B-29 | F-046 | confirmed |
 | B-30 | F-047 | confirmed |
 | B-31 | F-048 | confirmed |
@@ -256,7 +258,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-c3 | F-031 | closed-as-not-a-bug (observation) |
 | B-c4 | F-024 (class note) | folded |
 
-**Tally.** 26 §B.1 rows with own F-NNN; 3 cross-referenced (B-09, B-13, B-20); all 4 §B.2 candidates have entries (B-c4 folded into F-024's class note). No unwritten rows.
+**Tally.** 27 §B.1 rows with own F-NNN; 3 cross-referenced (B-09, B-13, B-20); all 4 §B.2 candidates have entries (B-c4 folded into F-024's class note). No unwritten rows.
 
 **§B is complete.** Every §B.1 row and every §B.2 candidate carries a findings-log entry or a cross-reference; no unwritten rows remain. §B.6 stays as the audit-row-to-finding map for future sessions.
 
