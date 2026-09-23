@@ -53,14 +53,20 @@ bundles:
   - docs/audit/findings-log.md
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
+  # Fix files. Cluster 2's three (F-014 / F-017 / F-027) added 2026-09-23
+  # after they were found missing — the earlier list stopped at F-012 and
+  # F-044, with a gap that omitted the three most recently landed.
   - docs/phase-2/fixes/F-002.md
   - docs/phase-2/fixes/F-008.md
   - docs/phase-2/fixes/F-010.md
   - docs/phase-2/fixes/F-011.md
   - docs/phase-2/fixes/F-012.md
+  - docs/phase-2/fixes/F-014.md
+  - docs/phase-2/fixes/F-017.md
   - docs/phase-2/fixes/F-018.md
   - docs/phase-2/fixes/F-019.md
   - docs/phase-2/fixes/F-020.md
+  - docs/phase-2/fixes/F-027.md
   - docs/phase-2/fixes/F-033.md
   - docs/phase-2/fixes/F-036.md
   - docs/phase-2/fixes/F-039.md
@@ -381,11 +387,14 @@ bundles:
   - tests/test_f008_classification_status.py
   - tests/test_f010_filtered_count.py
   - tests/test_f011_po_relative_date.py
+  - tests/test_f012_truncation_sample.py
+  - tests/test_f014_aggregate_projection.py
+  - tests/test_f015_empty_bucket_truncation.py
+  - tests/test_f017_child_field_resolution.py
   - tests/test_f018_invoice_number.py
   - tests/test_f019_account_number.py
-  - tests/test_f012_truncation_sample.py
-  - tests/test_f015_empty_bucket_truncation.py
   - tests/test_f020_supplier_contacts_summary.py
+  - tests/test_f027_country_column.py
   - tests/test_f033_refusal_example.py
   - tests/test_f036_truncation_wording.py
   - tests/test_f039_aggregate_difference_phrase.py
