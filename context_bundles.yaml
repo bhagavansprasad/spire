@@ -56,7 +56,10 @@ bundles:
   - docs/phase-2/fixes/F-002.md
   - docs/phase-2/fixes/F-008.md
   - docs/phase-2/fixes/F-010.md
+  - docs/phase-2/fixes/F-011.md
   - docs/phase-2/fixes/F-012.md
+  - docs/phase-2/fixes/F-018.md
+  - docs/phase-2/fixes/F-019.md
   - docs/phase-2/fixes/F-020.md
   - docs/phase-2/fixes/F-033.md
   - docs/phase-2/fixes/F-036.md
@@ -82,6 +85,7 @@ bundles:
   - scripts/prompts/12_po_supplier_include.txt
   - scripts/prompts/13_child_as_root.txt
   - scripts/prompts/14_truncation_narration.txt
+  - scripts/prompts/15_po_relative_date_filters.txt
   - scripts/prompts/README.md
   - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
@@ -370,6 +374,9 @@ bundles:
   - tests/test_f007_empty_child_ack.py
   - tests/test_f008_classification_status.py
   - tests/test_f010_filtered_count.py
+  - tests/test_f011_po_relative_date.py
+  - tests/test_f018_invoice_number.py
+  - tests/test_f019_account_number.py
   - tests/test_f012_truncation_sample.py
   - tests/test_f015_empty_bucket_truncation.py
   - tests/test_f020_supplier_contacts_summary.py
