@@ -69,6 +69,8 @@ bundles:
   - docs/phase-2/fixes/F-046.md
   - docs/phase-2/fixes/F-047.md
   - docs/phase-2/fixes/F-048.md
+  - docs/phase-2/fixes/F-046-F047-F048-v9-analysis.md
+  - docs/phase-2/fixes/F-046-F047-F048-v9-sweep.txt
   - docs/audit/golden/count_suppliers.txt
   - docs/audit/golden/po_2144_and_lines.txt
   - docs/audit/golden/suppliers_with_open_pos.txt
