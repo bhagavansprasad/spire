@@ -1989,6 +1989,40 @@ Option 2 is the smaller change and matches an established in-repo pattern; optio
 
 **Class note.** Parallel to F-001 in shape — both concern a signal that the parser needs to produce but currently cannot. F-001's is a flag declared and never written (`_is_explicit_po_list` has no caller); this is a signal with no field at all. Both leave the planner with a gap it cannot close from the intent alone, and both route to a deterministic post-parse helper as the smallest fix (the pattern `parser.py` already uses for `_is_explicit_po_list`, `expand_field_synonyms`, `correct_include_from_prompt`, `strip_po_supplier_include`).
 
+**Update 2026-09-24 — fixed on `phase-2-fix-F016-list-cap` (PR #166).**
+
+Option 2 landed — the post-parse deterministic extraction. Three source
+files, not one: the entry's fix location named `parser.py` and
+`plan_builders.py`; the fix also needed a new field on `Intent` and a
+guarded injection in `planner.py`'s Block 1.
+
+- `planner/models.py` — `Intent.list_limit: int | None = None`.
+- `nl_parser/parser.py` — `_extract_list_cap(prompt)`, two anchored
+  regex shapes (`top|first|last N`; `N biggest|largest|most recent`)
+  plus a time-unit guard so `in the last 5 months` is not mistaken for
+  a cap. Applied in `parse()` only when `aggregate is None and compare
+  is None and not count_only and not balance_only`.
+- `planner/registries.py` — `_LIMIT_CAPABLE_TOOLS` (frozenset of six
+  entity-level list fetchers whose MCP signatures accept `limit`).
+- `planner/plan_builders.py` — `_apply_list_limit` helper.
+- `planner/planner.py` — Block 1 call site.
+
+The entry's Evidence block invokes `promptkit.py --show-stages`. That
+flag does not exist on the current CLI; the current diagnostic flag is
+`--show-planner`. Recorded here so a future reader searching for the
+flag finds the correction. The entry itself is preserved unchanged
+(append-only discipline).
+
+Verification: V1 reproducer answers `tool_args: {'limit': 5}` and 5
+records; V3 sibling unchanged at `tool_args: {}` / 25 records; V4
+aggregate negative carries `top_n` with no `limit` injected; V5 goldens
+empty; V6 1210 passed / 22 deselected (baseline 1181 + 29 new); V7
+collection `ImportError` pre-fix. Full V-standard in
+`docs/phase-2/fixes/F-016.md`.
+
+Fix file: `docs/phase-2/fixes/F-016.md`. Audit row B-26 → verified.
+
+
 ---
 
 ## F-017 — `Description` on a PO-lines include is classified unresolved because the field-split checks only the target entity's column catalog

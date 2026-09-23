@@ -1,176 +1,123 @@
 # SPIRE — Session Handover
 
-**Written:** 2026-09-17
-**Phase:** Phase 1 — Audit & Baseline (still open)
-**Branch:** `Phase1-Audit-and-Baseline`
-**Mode:** Investigative. We are FINDING and ISOLATING bugs, not fixing them.
-Fixes happen in Phase 2, later, as a separate pass.
+**Written:** 2026-09-24
+**Phase:** Phase 2 — Correctness (open)
+**Branch:** `hardening-master`
+**Mode:** Fixing. One bug at a time, per FIX_PLAN §4. The audit is
+frozen; new findings get a new F-NNN and their own ledger row.
 
 ---
 
 ## Read these first, in this order
 
-1. `docs/spire-robustness/WORKING_STYLE.md` — especially the section
-   "Evidence standard for findings (S0–S8)". Every new finding must walk
-   S0–S8 in order. If a step fails, the claim stops at that step.
-2. `docs/audit/findings-log.md` — F-001 through F-005. This is the
-   lab notebook. Newest entry at the top.
-3. `docs/audit/phase-1-audit.md` — the work queue. §B has 25+ bugs.
-   Several have no F-NNN yet; those are what we investigate next.
+1. `docs/phase-2/FIX_PLAN.md` §5 (the ledger) and §4 (the sequence).
+   This is the live source of truth. Every open row, its state, and
+   its PR lives here.
+2. The next F-NNN entry in `docs/audit/findings-log.md`.
+3. `docs/audit/phase-1-audit.md` §B.6 — the audit-row-to-finding map.
+4. `docs/spire-robustness/WORKING_STYLE.md` — S0–S8 (evidence
+   standard), rules 15.1 / 15.2 (full-output capture; name the cost of
+   a slow command), rule 16 (open every window with a ledger
+   reconciliation).
+5. `docs/AUDIT_AND_FIX.md` — the playbook.
 
 ---
 
 ## Current state
 
 **Repo**
-- Branch `Phase1-Audit-and-Baseline`, up to date with origin, working tree
-  clean, 2 commits ahead of `origin/Phase1-Audit-and-Baseline` (unpushed).
-- Integration branch is `hardening-master`. `master` frozen.
-- Runtime tree at `~/pocs/spire-runtime` — has the OLD launcher scripts
-  (pre-`spire.sh`). Do NOT touch it without a deliberate plan.
-  
-**Ports (new, working)**
-- Dev:     MCP 4001 / API 4002 / UI 4003
-- Runtime: MCP 3001 / API 3002 / UI 3003
-- Single source of truth: `SPIRE-PORTS.env` at repo root.
-- `spire.sh --dev | --runtime` — mode is required, no default.
-  `--status` and `--stop` are scoped to the current mode.
-- `spire.sh` reads `SPIRE_MCP_PORT`; fails loudly if unset.
-- Shell functions `spire()` / `spirer()` in `~/.bashrc` export
-  `SPIRE_MODE`, `SPIRE_MCP_URL`, `SPIRE_API_URL` and echo the port set.
-- `.spire-dev.env` is retired. The script warns if it is still present.
+- Branch `hardening-master`, HEAD `f3db9cc`. Clean.
+- Integration branch: `hardening-master`. `master` frozen at `14dce82`.
+- Phase branches spawn off `hardening-master` and merge back via PR.
+  Nothing merges to `master` without explicit instruction.
+- Test count: **1210 passed / 22 deselected** (measured 2026-09-24).
 
-**Test count:** 1008 passed / 22 deselected (before this session's changes;
-not re-run since — re-run before trusting).
+**Runtime**
+- Dev tree:  `~/pocs/spire`, MCP 4444 / API 9000 / UI 9999.
+- Runtime:   `~/pocs/spire-runtime`, MCP 3333 / API 8000 / UI 8888,
+  ngrok-exposed. Do not disturb without a deliberate plan.
+- Ports come from `SPIRE-PORTS.env`; `.spire-dev.env` (gitignored, in
+  the dev tree only) overrides them for dev.
 
 ---
 
-## What was done this session
+## Ledger state
 
-1. Read three big code bundles (`parser_planner`, `parser_context`,
-   `mcp_server_tools`) plus `graph_kg` and `scripts`. Closed six pending
-   §A rows (A-12, A-13, A-14, A-15, A-16, A-17, A-20).
+**Closed:** 28 rows (F-001…F-044, F-046…F-048, F-041, F-043, plus
+reclassified F-021 and F-042).
 
-2. Rewrote the port scheme. Committed.
+**Open — 7 rows, none in progress:**
 
-3. Wrote the S0–S8 evidence standard into `WORKING_STYLE.md`. Committed
-   (pending; see below).
+| Cluster | Row | One line |
+|---|---|---|
+| 4b | F-049 | "invoices created before/since X" refuses — sysprompt only |
+| 5 | F-003 | `modes/` folder unreachable from a router-scoped parse |
+| 5 | F-004 | PO-value ranking misroutes to a comparison — may fall out of F-003 |
+| 8 | Reg #30 | Compare-path perf, carried from Phase 1 |
+| — | F-045 | Composite PO date clause returns 0 with a "capped" note |
+| — | F-050 | `columns/` folder unreachable — blocks F-027's deferred sysprompt half |
+| — | F-051 | fields+include caller-side gate, three sites |
 
-4. Found and root-caused F-001 through F-005. Written into the findings
-   log.
-
----
-
-## The findings, one line each
-
-- **F-001** — `_is_explicit_po_list` is defined in `parser.py` but never
-  called, so `Intent.list_all` is always False, so every filter-less PO
-  query refuses. Bug B-13.
-- **F-002** — `promptkit.py --run` calls `classify_modules` twice per
-  prompt. Confirmed live: two distinct completions from the same input.
-  Bug B-09. Cost regression plus a diagnostic-fidelity problem (the
-  diagnostic checks a different classifier call than the pipeline used).
-- **F-003** — three PO aggregation ops (`po_value_by_supplier`,
-  `po_count_by_status`, `open_po_summary`) live only in
-  `modes/m_aggregation.sysprompt`, which never reaches a scoped parse.
-  Every prompt that needs one fails. Bug B-20.
-- **F-004** — same root as F-003, from the other side: when a near-match
-  op exists in `draft.py`'s schema, the model picks it and answers a
-  superset of the question. The dangerous class. Silent wrong answer.
-- **F-005** — `orderBy=Ordered:desc` silently ignored on
-  `/purchaseOrders`. Informational, no fix needed, doc-only.
+Full detail in `FIX_PLAN.md` §5.
 
 ---
 
-## What is NOT yet committed
+## Next action
 
-Two files:
-- `docs/audit/findings-log.md`
-- `docs/spire-robustness/WORKING_STYLE.md`
+**F-003** — `modes/` folder unreachable from a router-scoped parse.
+Fix site: `_TIER1` in `src/spire/nl_parser/context_assembly.py`. The
+tuple `("core", "refusals")` does not include `modes`, and
+`KNOWN_MODULES` does not either, so `assemble_subset` never loads a
+`modes/` block. F-004 may fall out of the same change; FIX_PLAN §4
+records the dependency.
 
-Commit them together, one commit:
-```
-git add docs/audit/findings-log.md docs/spire-robustness/WORKING_STYLE.md
-git commit -m "phase1: evidence standard (S0-S8); findings log F-001..F-005"
-```
-
-Then push:
-```
-git push
-```
+Reproducer is a `promptkit --run` on
+`how many purchase orders are there and what are they worth` — expects
+`unsupported_filter` (F-003) where a count + total should be. Cost
+~10–15s per run; not a long-fetch concern, but worth naming before
+handing it over.
 
 ---
 
-## What is pending, at three levels
+## The one rule
 
-**Within Phase 1, near-term (investigative):**
-- §B bugs without an F-NNN: B-04, B-11, B-15, B-02, B-03, B-05, B-06,
-  B-07, B-10, B-12, B-14, B-16, B-17, B-18, B-19, B-21, B-22, B-23,
-  B-24, B-25, B-26, B-27. Several have curl-verified evidence already;
-  those are the fastest to convert into F-NNN entries.
-- §A.2 still has A-12/A-13/A-14/A-15/A-16/A-17/A-20 rows marked
-  "pending" — those were closed by this session's bundle reads but the
-  audit file itself was not updated. Either update it or leave a note.
-
-**Within Phase 1, larger:**
-- §C (dead code inventory) — not started.
-- §E (in-flight work inventory) — not started.
-- §F (baseline metrics) — not started.
-- §H N≥20 runs on the nondeterministic cases — not started.
-- B-23 targeted run on invoice 1002 — not started.
-
-**Phase 2 (fixing) — explicitly out of scope for the next session:**
-- Fix F-001 through F-005, one at a time, with regression tests.
-- §8.3.7 of Doc A — partial execution + gap reporting in `execute_plan`.
+**Reproduce before you plan.** A finding whose reproducer no longer
+fires is `closed-as-not-a-bug`; a finding whose reproducer still fires
+is the next fix. Guessing which costs more than running the command.
 
 ---
 
-## Next session should
+## Known doc-drift, recorded not fixed
 
-**Investigative mode. Not fixing. One bug at a time. S0–S8 applied.**
-
-Pick ONE bug from §B that does not yet have an F-NNN entry. Three
-candidates, easiest first:
-
-1. **B-11** — `How much of PO 2144 was received?` returns "No purchase
-   order found for '2144'". Narrow, single prompt, likely one mechanism.
-   Fastest to close.
-2. **B-15** — "include never fires" on 12 prompts (`12_po_supplier_include.txt`).
-   Mechanism suspected: parser stops at the anchor entity. Falsifiable
-   in a couple of probes.
-3. **B-04** — supplier-child filters scan only the first 25 of ~455.
-   The biggest class (~35 prompts). Deserves its own investigation plan.
-   Save for last.
-
-For whichever is chosen:
-- Name the harm (S1).
-- Paste evidence, tier 2 or better (S2).
-- Name the mechanism, cited by `file:line` (S3).
-- Disprove an alternative (S4).
-- Name the falsifier (S5).
-- Only then write the F-NNN entry.
-
-Do not fix. Do not batch. If the investigation uncovers a second bug on
-the way, write it up separately.
+- `docs/spire-robustness/SESSION_HANDOVER.md` — this file. Rewritten
+  2026-09-24; prior version dated 2026-09-17 and framed for Phase 1.
+- The session-start instruction named a path that does not exist
+  (`docs/SPIRE_SESSION_HANDOFF.md`). The file is at
+  `docs/spire-robustness/SESSION_HANDOVER.md`. `AUDIT_AND_FIX.md` was
+  corrected in the same commit.
+- Doc B's `02_Phase_02_Correctness.md` has an entry for `S003` only.
+  Sessions S-nothing between S002 and S003 have their forensic record
+  in FIX_PLAN §5 and the per-fix files, not in Doc B. Deliberate; the
+  backfill would produce prose nobody wrote.
 
 ---
 
-## Working style reminders that have bitten us this session
+## Working-style reminders that have bitten us
 
 - **One command at a time.** Wait for output. Then next.
-- **Complete files, never fragments.** The findings log gets rewritten
-  whole each time — no splicing.
-- **Do not call a hunch a bug.** F-006 was written up as a bug before S1
-  (harm) was checked. It was never a bug. Every claim now walks S0–S8.
-- **The audit is the report; the findings log is the notebook.** Update
-  the notebook freely. Update the report in batches.
-- **`--stop` requires a mode.** `./spire.sh --dev --stop` or
-  `./spire.sh --runtime --stop`. Running `./spire.sh --stop` with no
-  mode errors out on purpose. Stopping one mode never touches the other.
-- **Curl against Fusion uses `IKS_*` env vars** (already exported).
-  `SPIRE_MCP_URL` is for promptkit only, not curl.
-- **`SPIRE_MODE` is set by `spire()` / `spirer()`.** If it is empty in a
-  shell, run one of those functions before any `spire.sh` command.
+- **Complete files, never fragments.** Whole file, one block.
+- **`~~~` for any outer fence whose content contains ` ``` `.** Rule 4.
+- **Full-output capture (rule 15.1).** Redirect long runs to a file,
+  then grep from the file. Never pipe the run itself through a filter.
+- **Name a slow command's cost (rule 15.2)** before handing it over.
+- **Ledger reconciliation on open (rule 16).**
+      gh pr list --state merged --limit 20 --json number,title,mergedAt \
+        --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
+      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/phase-2/FIX_PLAN.md
+- **The audit is the report; the findings log is the notebook.**
+  Audit rows close in place. Findings-log corrections are new dated
+  update blocks appended inside the entry — never edits to the
+  original text.
 
 ---
 
