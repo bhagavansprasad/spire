@@ -108,7 +108,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-036 | wrong-narration | 1 | `synthesizer/synthesizer.py` | closed | #157 | 2026-09-22 |
 | F-010 | wrong-data | 1 | `synthesizer/aggregation.py` | verified | #159 | 2026-09-22 |
 | F-008 | wrong-data | 1 | `mcp_server/tools/supplier_classifications.py` | verified | #160 | 2026-09-22 |
-| F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | fixed | — | 2026-09-23 |
+| F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | verified | #161 | 2026-09-23 |
 | F-039 | wrong-narration | 1 | `synthesizer/aggregation.py` | not-started | — | — |
 | F-017 | missing-projection | 2 | `nl_parser/intent_validation.py` | not-started | — | — |
 | F-027 | missing-projection | 2 | `nl_parser/intent_validation.py`, parser sysprompt | not-started | — | — |
