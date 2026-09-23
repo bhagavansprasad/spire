@@ -480,17 +480,35 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
         # one-to-many relationship belongs below the table, not squeezed
         # into a cell. A table row is one record; contacts are their own
         # records.
+        # F-020: whether to render an Admin column is a per-response
+        # decision, computed once so every contact table in the answer
+        # has the same column count. ContactInfo.is_administrative was
+        # always on the record (build_suppliers_with_contacts reads it
+        # from the pod's AdministrativeContactFlag); the display simply
+        # never showed it, and the summary asserted it in prose for a
+        # comma-joined list the reader could not check.
+        has_any_admin = any(
+            c.is_administrative
+            for s in response.suppliers
+            for c in s.contacts
+        )
         for s in response.suppliers:
             if s.contacts:
+                contact_rows = []
+                for c in s.contacts:
+                    contact_row = {"Contact": c.contact_name, "Email": c.email}
+                    if has_any_admin:
+                        contact_row["Admin"] = "Y" if c.is_administrative else "—"
+                    contact_rows.append(contact_row)
+                contact_cols = ["Contact", "Email"]
+                if has_any_admin:
+                    contact_cols.append("Admin")
                 lines.extend(
                     _indent(
                         _render_records(
                             f"{s.supplier_name} — contacts",
-                            [
-                                {"Contact": c.contact_name, "Email": c.email}
-                                for c in s.contacts
-                            ],
-                            ["Contact", "Email"],
+                            contact_rows,
+                            contact_cols,
                             "",
                         )
                     )
