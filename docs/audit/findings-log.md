@@ -55,6 +55,87 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-050 — `columns/` parser-context blocks unreachable from router-scoped parses
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-003 (same class — a folder in `order.manifest` that is in
+neither `_TIER1` nor `KNOWN_MODULES`), C-06 (`modes/` reachability),
+F-027 (whose parser-side fix depends on the `b_column_fields` rule being
+loaded)
+
+**Evidence.**
+
+`order.manifest` lists two blocks under `columns/`:
+
+    columns/b_who_columns.sysprompt
+    columns/b_column_fields.sysprompt
+
+`context_assembly.py`:
+
+    _TIER1 = ("core", "refusals")
+    KNOWN_MODULES = ("payables", "procurement", "receivables", "supplier")
+
+`assemble_subset(modules, menu)` computes
+`wanted = set(_TIER1) | set(modules)` and loads only manifest entries whose
+first path component is in `wanted`. The router only ever passes names from
+`KNOWN_MODULES`. `columns` is in neither set, so neither file is loaded for
+any routed prompt — which is every prompt the pipeline runs. Only a direct
+`parse()` call (which builds the full preamble via `_build_system_prompt`)
+reaches them.
+
+Confirmed during the F-027 N=20 sweep. The rule that would teach the
+"country as a column" shape lives in `b_column_fields.sysprompt`:
+
+    - 'get the supplier name and number' / 'with invoice number and
+      amount' / 'show only the city and country' -> put the EXACT column
+      names in 'fields' (from the COLUMNS list below).
+
+Not loaded under the router, so it never fires. The N=20 distribution for
+`Supplier number and country for active suppliers` (16/20 blob-rendered,
+4/20 false-unresolved, 0/20 correct) is consistent with the rule not being
+present — the "show only the city and country" worked example is exactly
+the shape that should have applied.
+
+**Root cause.** Same as F-003 / C-06: a folder listed in `order.manifest`
+that the scoped assembler can never reach, because `_TIER1` names only
+`core` and `refusals`, and `KNOWN_MODULES` is the router's emit list —
+the folder's name would have to be in one or the other to be loaded.
+`columns/` is not a Fusion module and is not core, so it falls between
+the two.
+
+The two `columns/` blocks are cross-cutting teaching that applies to
+every entity (`b_who_columns` resolves the "who columns" ambiguity
+between a column request and a Contact include; `b_column_fields` teaches
+the column-request shape generally). That is exactly what Tier 1 is for.
+The right fix is to add `columns` to `_TIER1`.
+
+**Fix location (for Phase 2).** `src/spire/nl_parser/context_assembly.py`:
+add `"columns"` to the `_TIER1` tuple. Two-line change; check whether
+`tests/test_parser_context_assembly.py`'s byte-equality oracle is
+affected (the oracle reads the full preamble, which is built from the
+manifest directly and not from `_TIER1`, so likely no test change).
+Same branch as F-003: the two fixes are the same class and touch the
+same line of the same file.
+
+**Not checked.**
+
+- Whether adding `columns` to `_TIER1` meaningfully grows the scoped
+  preamble's token count. The two files are small, so the effect should
+  be negligible, but the parser prompt is at its ceiling per the F-041
+  caveat and any preamble change warrants measuring.
+- Whether any other folder is in `order.manifest` but in neither
+  `_TIER1` nor `KNOWN_MODULES`. `columns/` was found because F-027
+  required it; the same class may exist elsewhere.
+- Whether any test currently asserts the *absence* of `columns/` from the
+  scoped preamble. A grep for `"columns"` in
+  `tests/test_parser_context_assembly.py` would settle it.
+- Whether F-050 lands before or after F-027. F-027's deterministic
+  correction makes F-027 independent of F-050, so the order is a
+  sequencing choice, not a dependency.
+
+---
+
 ## F-049 — absolute-date Invoice phrasings starting with `created` refuse
 
 **Date:** 2026-09-23
@@ -3036,6 +3117,56 @@ The audit's own note in `_FIELDS_SATISFIED_BY_INCLUDE`'s docstring (*"the includ
 **Not checked.** `src/spire/rendering/formatters.py` — not in any bundle read this session; the exact render path is unresolved. Whether `b_country.sysprompt` has any instruction for "country as a column" that the parser ignored — the grep is the falsifier. Whether the same shape affects other child-field column requests (`city`, `state`, `AddressLine1`, `line items`, `schedules`) — same mechanism, unrun. Whether the parser emitted `fields: ['SupplierNumber', 'country']` and `_FIELDS_SATISFIED_BY_INCLUDE` dropped "country", or the parser never put "country" in `fields` at all — the direct parse (per F-017's method) would distinguish the two, but the outcome is the same either way.
 
 **Class note.** Adjacent to F-017 (same map, different defect — F-017 was the target-only catalog check dropping a child field as unresolved; here the map's "satisfied by include" branch drops the field and the display renders the wrong shape). Both revolve around `_FIELDS_SATISFIED_BY_INCLUDE` not doing what its docstring claims.
+
+---
+
+**Update 2026-09-23 — N=20 sweep; two failure shapes; fix is not sysprompt-only.**
+
+Reproducer run 20x via `promptkit --run --prompt "Supplier number and
+country for active suppliers" --show-planner`, output to `t_f027.txt`.
+Two shapes, no third:
+
+    Shape A (16/20) — include=['Address'], fields=['SupplierNumber'],
+                     display renders the full Address blob
+    Shape B  (4/20) — no include, fields=['SupplierNumber'],
+                     Country lands in unresolved_fields, display prints
+                     "column isn't available on Supplier"
+
+Neither is correct. Shape A is what the entry originally recorded; Shape B
+is new. Under §8.3.2 the entry's sysprompt-only fix cannot converge both:
+Shape B has no include, so the `_FIELDS_SATISFIED_BY_INCLUDE` map and the
+display-side extraction have nothing to correct.
+
+Two consequences for the fix.
+
+1. A post-parse deterministic correction is required — the same pattern
+   F-018 (`_extract_invoice_number`) and F-019 (all-digit CustomerAccount
+   value) use. It scans the raw prompt for a "country as a column" shape
+   and injects the include + the field regardless of what the parser
+   emitted. Under Shape A it adds the country field to an intent that
+   already has the include; under Shape B it adds both.
+
+2. F-050 was filed during this sweep: the `columns/b_column_fields`
+   sysprompt rule — which teaches the "show only the city and country"
+   shape — is unreachable under the router (`columns/` is in neither
+   `_TIER1` nor `KNOWN_MODULES`). The entry's sysprompt edit, if landed,
+   would land in a file the production path never loads. Two options:
+   land the sysprompt edit AND F-050 together, or defer the sysprompt
+   edit and ship F-027 on the deterministic correction + display
+   extraction alone. Both are honest; the second is the smaller change
+   and does not need F-050 to close first.
+
+Methodology note for the next session. The direct `parse()` and
+`route_and_parse()` calls produce different intents for the same prompt
+because they load different preambles — `parse()` builds the full one,
+`route_and_parse()` the scoped one. A pipeline bug must be reproduced
+through the pipeline: prefer `promptkit --run --show-planner` over
+`parse()` for diagnosing shape, because the latter can show a shape the
+production path never produces.
+
+The entry's own fix-location section (§1 sysprompt, §2
+`_FIELDS_SATISFIED_BY_INCLUDE` redesign, §3 display) is preserved
+unchanged. This block refines it, does not replace it.
 
 ---
 

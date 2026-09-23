@@ -76,7 +76,7 @@ order is a queue, not a batch.
 | 2 | F-033 | Warm-up. One-line fix in a dict; exercises the branch → PR → verify loop end-to-end on something trivial. |
 | 3 | F-006 | Crash. Highest severity single item. Independent of all clusters. |
 | 4 | Cluster 1 (8) | Largest cluster. Within it: F-007 first (its signature change unblocks F-015), then F-015, then F-012 + F-036 (share the f-string), then F-010, F-008, F-020, F-039. |
-| 5 | Cluster 2 (4) | Within it: F-017 first (retires the map F-027 assumes), then F-027, F-014, F-021. |
+| 5 | Cluster 2 (4) | Within it: F-017 first (child-field resolution; landed 2026-09-23), then F-027, F-014, F-021. |
 | 6 | Cluster 3 (2) | F-001 first (more urgent), F-016 second. Both use the post-parse-helper pattern. |
 | 7 | Cluster 4 (4) | One `--validate` re-run covers all four sysprompt edits. Do them in sequence, run validate once after the last. |
 | 8 | Cluster 5 (2) | Fix F-003; F-004 may fall out. If it does, close F-004 as a side-effect and note it in its fix file. |
@@ -114,7 +114,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-039 | wrong-narration | 1 | `synthesizer/aggregation.py` | verified | #162 | 2026-09-23 |
 | F-017 | missing-projection | 2 | `nl_parser/intent_validation.py` | not-started | — | — |
 | F-018 | wrong-refusal | 4 | `mcp_server/tools/invoices.py`, parser sysprompt, KG, `planner.py` | fixed | — | 2026-09-23 |
-| F-027 | missing-projection | 2 | `nl_parser/intent_validation.py`, parser sysprompt | not-started | — | — |
+| F-027 | missing-projection | 2 | `nl_parser/intent_validation.py`, `nl_parser/parser.py` (post-parse), parser sysprompt, `rendering/formatters.py` | not-started | — | — |
 | F-014 | missing-projection | 2 | `graph/pipeline.py` | not-started | — | — |
 | F-021 | missing-projection | 2 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | not-started | — | — |
 | F-001 | missing-capability | 3 | `nl_parser/parser.py` | verified | #153 | 2026-09-22 |
@@ -133,6 +133,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `mcp_server/server.py`, `plan_builders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-049 | wrong-refusal | 4 | parser sysprompt, `context_assembly.py` | not-started | — | 2026-09-23 |
+| F-050 | missing-capability | 5 | `nl_parser/context_assembly.py` (`_TIER1`) | not-started | — | 2026-09-23 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the
