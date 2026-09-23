@@ -55,6 +55,152 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-051 — `fields` + `include` intent: the caller's summary_only gate drops child content
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-021 (the finding whose symptom this subsumes — audit
+row B-23), F-020 (the fix that introduced the summary_only gate for
+fields-only intents; its scope was correct for that case), F-014
+(sibling finding where a `fields` interaction was mis-attributed at
+Phase 1 and re-scoped after reproduction)
+
+**Evidence.**
+
+Reproduced 2026-09-23 with the F-021 prompt:
+
+    $ python scripts/promptkit.py --run \
+        --prompt "Show the AR invoice with CustomerTransactionId 1002 \
+                  with transaction number and flexfield" \
+        --show-planner --show-synthesizer
+    ...
+    Intent:
+      target_entity: ReceivablesInvoice
+      filters: [{'type': 'by_id', 'value': '1002'}]
+      include: ['ReceivablesInvoiceTransactionDFF']
+      fields: ['TransactionNumber']
+    ...
+    Outputs:
+      receivables_invoices: 1 record(s)
+        [1] {'TransactionNumber': '5'}
+      receivablesinvoicetransactiondff: 1 record(s)
+        [1] {'CustomerTrxId': 1002, '__FLEX_Context': 'DOO',
+             '__FLEX_Context_DisplayValue': None}
+    ...
+    Answer:
+    <blank>
+    Answer:
+    receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+      TransactionNumber
+      -----------------
+      5
+
+The DFF was fetched (`__FLEX_Context: 'DOO'`) and the synthesizer
+produced a `ReceivablesInvoiceResponse` carrying it via
+`build_invoice_dff`. The answer never shows it.
+
+**Root cause — the caller branch at `scripts/promptkit.py:437`.**
+
+    if _fields or _unresolved:
+        _entity = state["intent"].target_entity
+        _available = menu.available_columns(_entity)
+        if not _fields:
+            pass
+        elif _synth_failed:
+            answer("Answer summary: (skipped — too large to summarize)")
+            answer("")
+        else:
+            answer(_format_synthesized(state.get("response"), summary_only=True))
+            answer("")
+        answer(_format_projected_table(_outputs, _fields, _unresolved,
+                                       _available, _entity))
+    else:
+        answer(_format_synthesized(state.get("response")))
+
+The gate is `_fields or _unresolved` — **fields**, never include. A
+fields intent with an include takes the `summary_only=True` path:
+
+1. `_format_synthesized(response, summary_only=True)` prints only
+   `Answer:` + summary + truncation. For a single-row result the
+   summary is empty (`local_list_summary` returns `[]` when
+   `shown == 1`, documented in its own module), so the block is blank.
+2. `_format_projected_table(...)` renders only the parent bucket. The
+   include's bucket is not passed and not rendered.
+
+When the intent has **no** fields, the else-branch runs the full
+`_format_synthesized` and the DFF renders. So the symptom is specific
+to fields-plus-include intents.
+
+**Why the gate exists.** F-020's fix (PR #161) introduced
+`summary_only=True` for fields intents so that a projected-table answer
+did not also print the full synthesized parent table — 25 suppliers
+with 25 addresses each, then the same 25 suppliers in the projected
+table below. That duplication was real and the gate fixed it. The gate
+was correct for fields-only intents. It is wrong the moment an include
+is present, because the child content the user asked for is not a
+parent row and is only in the synthesized response.
+
+**Same mechanism at three sites.** The identical branch appears at:
+
+- `scripts/promptkit.py:437`
+- `scripts/run_prompt_set.py:227`
+- `scripts/run_graph.py:194`
+
+Any fix must land at all three.
+
+**Fix location (for Phase 2).** One of two, and the second is the
+honest one:
+
+1. **Extend the gate condition.** Change `if _fields or _unresolved:`
+   to `if (_fields or _unresolved) and not state["intent"].include:`,
+   so a fields-plus-include intent runs the full
+   `_format_synthesized` and prints the child content, then the
+   projected parent table below. Three sites. Smallest change.
+
+2. **Factor the branch into a shared helper.** All three callers carry
+   a byte-identical copy of the branch. A `format_answer(state, ...)`
+   helper in `rendering/formatters.py` (or a sibling module) called
+   from all three sites collapses the three copies to one. Larger
+   change but prevents a fourth copy — the branch is already at three
+   sites and has drifted once (the `--show-stages` removal, F-010's
+   note).
+
+Option 2 is preferable for the same reason `formatters.py`'s
+`_with_truncation` was factored (see its own docstring: "sixteen copies
+is sixteen chances to miss one when the format changes"). F-051 is the
+fourth time the codebase has hit a duplication in a display branch;
+option 2 pays the cost now.
+
+Regardless of which lands, the fix lands on its own branch, not on
+Cluster 2. Cluster 2's subject was `_project_outputs` and
+`_FIELDS_SATISFIED_BY_INCLUDE`; this is a caller-side gate. Mixing
+concerns would make the PR body incoherent.
+
+**Not checked.**
+
+- **How many corpus prompts carry both `fields` and `include`.** Only
+  the F-021 reproducer was exercised. Whether the same blank-Answer
+  shape appears in `11_column_vocabulary.txt` or the AR prompt files
+  was not swept.
+- **Whether the display formatter would render the child if called.**
+  Read, not run — the ReceivablesInvoice branch's DFF render was
+  verified by code inspection only. The first end-to-end run of the
+  fix will confirm.
+- **Whether `_format_projected_table` should itself render child
+  content.** Option 1 leaves the projected-table call unchanged; the
+  child content rides the synthesized response above it. Whether that
+  two-block shape (synthesized answer, then projected parent table) is
+  what the user wants, or whether the child should fold into the
+  projected table, is a display-design question F-051 does not settle.
+- **Whether other fields-plus-include prompts currently *look* correct
+  by accident.** A multi-row result has a non-empty summary, so the
+  first Answer block prints something — but the include's own content
+  is still absent. Whether that has ever been noticed for a non-AR
+  prompt was not swept.
+
+---
+
 ## F-050 — `columns/` parser-context blocks unreachable from router-scoped parses
 
 **Date:** 2026-09-23
@@ -2699,6 +2845,92 @@ Whichever resolves the observed symptom, both are warranted: the synthesizer pat
 **Not checked.** The `rendering` bundle — not read this session; the display-side mechanism is unresolved as stated. Whether `synthesize_response` took the local-build path or the LLM path for this intent — the paste is ambiguous; a trace with `--show-tracer` or an instrumented run would say. Whether `state["outputs"]` (read by `synthesize_node`) is trimmed or untrimmed — `execute_node` returns both `outputs` and `projected_outputs`, and the Outputs block shows the trimmed one, but I do not know which the printout surfaces. Whether the same defect affects a `fields` + include combination for PO lines, schedules, AR lines, AR tax lines — same shape, unrun. Whether the blank first Answer block has a separate mechanism — `local_list_summary` returns `[]` for a single-row set (its own documented behaviour: "One row generalises about nothing"), so the joined summary is empty; that is a characteristic of the single-row case, not the DFF omission, but it is what makes the summary block blank here.
 
 **Class note.** Adjacent to F-014 (both are `fields` interacting with a target bucket that carries richer data than the projection preserves) and F-017 (both are `fields` interacting with a child include). F-014's was an aggregate wrapper; F-017's was a wrong-catalog classification; this is a fetched child that never reaches the answer. Three variations on the same theme: when `fields` and the response shape disagree about what the answer should contain, the shape loses.
+
+---
+
+**Update 2026-09-23 — reclassified: neither recorded fix site is the cause; the symptom is F-051.**
+
+Reproduced 2026-09-23 via `promptkit --run --show-planner
+--show-synthesizer` on the entry's exact prompt. The full output is
+`t_f021_v1.txt` (transcribed here; not committed).
+
+    Intent:
+      target_entity: ReceivablesInvoice
+      filters: [{'type': 'by_id', 'value': '1002'}]
+      include: ['ReceivablesInvoiceTransactionDFF']
+      fields: ['TransactionNumber']
+    ...
+    Outputs:
+      receivables_invoices: 1 record(s)
+        [1] {'TransactionNumber': '5'}
+      receivablesinvoicetransactiondff: 1 record(s)
+        [1] {'CustomerTrxId': 1002, '__FLEX_Context': 'DOO',
+             '__FLEX_Context_DisplayValue': None}
+    ...
+    Answer:
+    <blank>
+    Answer:
+    receivables_invoices (1 record(s)) — columns: TransactionNumber
+      TransactionNumber
+      -----------------
+      5
+
+Three things the entry's root-cause section left open, now resolved:
+
+1. The parser emitted the DFF include.
+2. The executor fetched the DFF (`__FLEX_Context: 'DOO'` in the bucket).
+3. `synthesize_response` ran and produced a `ReceivablesInvoiceResponse`
+   with the DFF populated via `build_invoice_dff` — the Summary block
+   shows `Synthesized answer: 1 record(s)`.
+
+**Neither recorded fix site is the cause.**
+
+- `synthesizer/synthesizer.py` — the `ReceivablesInvoice` branch builds
+  the record with the DFF. Verified by the fact that a response was
+  produced and the DFF bucket fed it.
+- `rendering/formatters.py` — the ReceivablesInvoice branch of
+  `_format_synthesized` iterates the invoice and its children, and
+  renders `DFF` when populated. Verified by reading the branch; it
+  works if called.
+
+The defect is one layer up, in the **caller**. `scripts/promptkit.py`
+line 437 (identical shape at `run_prompt_set.py:227` and
+`run_graph.py:194`):
+
+    if _fields or _unresolved:
+        ...
+        answer(_format_synthesized(state.get("response"), summary_only=True))
+        answer("")
+        answer(_format_projected_table(_outputs, _fields, _unresolved,
+                                       _available, _entity))
+
+The gate is `_fields or _unresolved` — fields, never include. A
+fields intent with an include takes the `summary_only=True` path,
+which prints only `Answer:` + the summary. For a single-row AR invoice
+the summary is empty (`local_list_summary` returns `[]` when
+`shown == 1`), so the block is blank. The follow-up projected-table
+path then renders only the parent bucket; the DFF bucket is not passed
+and not rendered.
+
+The headline symptom — "DFF child fetched but never rendered" — is
+real, and the DFF fetch and the DFF formatter both work. What fails is
+the caller's choice to suppress the synthesized response whenever any
+`fields` are present. That choice is correct for a fields-only intent
+(it prevents the duplicate parent table F-020's fix was about); it is
+wrong the moment an include is present, because the child content
+lives only in the synthesized response.
+
+**Reclassified, not fixed.** The defect is filed as F-051 with the
+correct mechanism and the correct fix sites (the three callers). This
+entry is closed as reclassified: the audit row B-23 records a real
+symptom whose mechanism was mis-attributed at Phase 1. Per the
+append-only discipline the original fix-location section stands
+unchanged.
+
+The F-021 fix file was not opened — the entry closed before any code
+was written against it. The branch
+`phase-2-fix-F017-F027-F014-F021-projection-cluster` closes with F-017 /
+F-027 / F-014 shipped and F-021 reclassified to F-051.
 
 ---
 

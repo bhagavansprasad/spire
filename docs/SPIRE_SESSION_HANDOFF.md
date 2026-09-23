@@ -2,8 +2,8 @@
 
 **This file supersedes the previous 2026-09-23 handoff.** Same date,
 fourth window. Window 3 closed PR #164 (F-046 / F-047 / F-048), opened
-Cluster 2, and shipped three of its four fixes. F-021 is the last item
-before the branch merges.
+Cluster 2, and shipped F-017 / F-027 / F-014. F-021 was reclassified to
+F-051 during window 4; the branch is now complete and ready for PR.
 
 **Read this first.** Then `docs/AUDIT_AND_FIX.md` (the playbook), which
 points to everything else.
@@ -69,25 +69,37 @@ pushed to origin, 6 commits ahead of the base.
 
 ---
 
-## Outstanding — F-021, then merge
+## Outstanding — branch ready for PR
 
-The only remaining item on this branch is F-021. It is the last of the
-four Cluster 2 fixes and its scope is documented in
-`docs/audit/findings-log.md`:
+F-021 was **reclassified**, not fixed. Reproduced with the finding's
+own prompt 2026-09-23; both of its recorded fix sites work. The DFF
+child was fetched, the synthesizer built a `ReceivablesInvoiceResponse`
+carrying it, and the display would have rendered it — if it were
+called. The defect is one layer up, in the caller: the branch at
+`scripts/promptkit.py:437` (and two identical copies at
+`run_prompt_set.py:227` and `run_graph.py:194`) chooses
+`_format_synthesized(response, summary_only=True)` whenever the intent
+carries `fields`, and a fields-plus-include intent then prints a blank
+`Answer:` block plus the projected parent table, never the child.
 
-- **Site 1:** `synthesizer/synthesizer.py` — the `ReceivablesInvoice`
-  branch, `single_parent_shape` parent markers.
-- **Site 2:** `rendering/formatters.py` — DFF render.
+The F-021 headline symptom is a single instance of a broader defect:
+**the caller's summary_only gate drops child content whenever `fields`
+is present**, even though the child lives only in the synthesized
+response. Filed as **F-051** (open, `not-started`).
 
-Its root cause was recorded as **partial** — whether the record builder
-runs and drops the DFF at display, or the pipeline falls through to
-the LLM path, was never established. Resolve that first, with a
-`--show-synthesizer` run, before drafting the fix.
+Cluster 2 therefore closes with **three fixes and one
+reclassification**. The branch is complete: F-017, F-027, F-014
+shipped as commits `44a08f5`, `94ad1f5`, `8b0d4de`; F-021 reclassified
+to F-051 with no code change.
 
-After F-021 lands as commit 7, the branch is complete and ready for PR
-into `hardening-master`. One V9 covers all four fixes if any sysprompt
-edits ride the branch; F-027's deferred half does not, so a V9 may not
-be required — decide when the branch is otherwise done.
+**Next action: open the PR.** No further commits pending on this
+branch. V9 decision: no `.sysprompt` file was touched (F-027's
+deferred sysprompt half did not land), so a full 12-set `--validate`
+is not required by the V-standard. The three prompts in
+`docs/audit/golden/` are unchanged (verified per-fix as V5). PR body
+should summarise: three projection-cluster fixes; two process rules
+added (WORKING_STYLE 15.1, 15.2); two findings filed (F-050, F-051);
+one reclassification (F-021).
 
 ---
 

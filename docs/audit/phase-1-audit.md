@@ -244,7 +244,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-20 | F-003 / F-004 (cross-ref) | confirmed |
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | fixed 2026-09-23 |
-| B-23 | F-021 | confirmed (root-cause partial — display mechanism unresolved) |
+| B-23 | F-021 → F-051 | reclassified 2026-09-23 (F-021's recorded fix sites not the cause; caller-side gate) |
 | B-24 | F-018 | fixed 2026-09-23 |
 | B-25 | F-019 | fixed 2026-09-23 |
 | B-26 | F-016 | confirmed |
