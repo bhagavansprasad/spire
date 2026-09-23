@@ -260,6 +260,88 @@ def _has_country_column_phrasing(prompt: str, intent: Any) -> bool:
     return bool(_COUNTRY_COLUMN_RE.search(prompt))
 
 
+# F-016: a plain-list row cap — "top 5 credit memos", "first 10
+# suppliers", "the 5 biggest invoices". The parser has no field to
+# record a cap (DraftIntent has no list_limit), and the LLM has a strong
+# prior against treating a bare integer as a cap on an otherwise ordinary
+# list question — measured 2026-09-23, the model emits a filter-less
+# intent and the "5" is lost. This is a deterministic, post-LLM extractor
+# of the same class as _is_explicit_po_list and _extract_invoice_number:
+# pure Python, runs after the model, corrects the shape the model drops.
+#
+# Two shapes, both anchored on a cap word so a bare integer is never a
+# cap (amounts, dates, and IDs are all bare integers in prompts — see
+# the two negative tests).
+#
+#   Leading:  "top 5 ..." / "first 10 ..." / "last 3 ..."
+#   Trailing: "... 5 biggest" / "... 10 largest" / "... 3 most recent"
+#
+# The upper bound is 200 because nothing we serve needs a larger plain-
+# list cap, and a larger number in a prompt is more likely to be a date,
+# an amount, or an ID than a row cap. Out-of-range values return None
+# rather than a bound integer.
+_LIST_CAP_LEADING_RE = re.compile(
+    r"\b(?:top|first|last)\s+(\d{1,4})\b",
+    re.IGNORECASE,
+)
+_LIST_CAP_TRAILING_RE = re.compile(
+    r"\b(\d{1,4})\s+"
+    r"(?:biggest|largest|smallest|oldest|newest|"
+    r"most\s+recent|least\s+recent)\b",
+    re.IGNORECASE,
+)
+
+# A time window uses the same words as a cap: "in the last 5 months",
+# "from the last 12 months". The LEADING regex would match "last 5" in
+# that phrasing and record 5 as a row cap on a prompt that never asked
+# for one. Suppressing the match when a unit word follows the integer
+# keeps the two shapes apart without a second regex pass.
+_TIME_UNIT_AFTER_INTEGER_RE = re.compile(
+    r"^\s*(?:months?|years?|weeks?|days?|hours?|minutes?)\b",
+    re.IGNORECASE,
+)
+
+_LIST_CAP_MAX = 200
+
+
+def _extract_list_cap(prompt: str) -> int | None:
+    """Return the plain-list row cap named in the prompt, or None.
+
+    F-016. Fires on "top N" / "first N" / "last N" (leading) and on
+    "N biggest" / "N largest" / "N most recent" (trailing). Returns None
+    when no cap is named, when N is outside 1..200, or when the leading
+    match is followed by a time unit ("last 5 months" is a window, not a
+    row cap).
+
+    Scoped by the caller to plain-list intents — a prompt carrying an
+    aggregate block, a compare block, or count_only is not routed here,
+    because those shapes have their own cap mechanism (aggregate.top_n)
+    or produce a single number (count_only).
+    """
+    text = prompt.strip()
+
+    # Leading shape first; suppressed when a time unit follows the N.
+    for m in _LIST_CAP_LEADING_RE.finditer(text):
+        n = int(m.group(1))
+        if not (1 <= n <= _LIST_CAP_MAX):
+            continue
+        tail = text[m.end():]
+        if _TIME_UNIT_AFTER_INTEGER_RE.match(tail):
+            continue
+        return n
+
+    # Trailing shape. No time-unit suppression: no phrasing pairs a
+    # size adjective with a time unit ("5 biggest months" is not
+    # something a prompt says), so the shape is unambiguous.
+    m = _LIST_CAP_TRAILING_RE.search(text)
+    if m is not None:
+        n = int(m.group(1))
+        if 1 <= n <= _LIST_CAP_MAX:
+            return n
+
+    return None
+
+
 def _is_empty_draft(parsed: Any) -> bool:
     """A shape-valid draft with nothing to plan against.
 
@@ -574,6 +656,34 @@ def parse(
     # columns onto it is equally meaningless.
     if intent.aggregate is not None or intent.compare is not None:
         intent.fields = []
+
+    # --- F-016: plain-list row cap from the raw prompt ---
+    #
+    # The LLM has no slot for a "top N" cap on an ordinary list question
+    # (DraftIntent carries no list_limit), and its prior is against
+    # treating a bare integer as a cap — measured 2026-09-23, the model
+    # produces a filter-less intent and the "5" is lost. Extract it
+    # deterministically from the prompt, same class as
+    # _is_explicit_po_list / _extract_invoice_number / the all-digit
+    # CustomerAccount rewrite.
+    #
+    # Fires only on a PLAIN LIST intent: aggregate and compare carry their
+    # own cap (aggregate.top_n), count_only produces a single number, and
+    # a balance_only intent returns the account's own figures with no
+    # child fetch to cap. Setting list_limit on an intent the planner
+    # routes elsewhere is harmless — the injection only fires when the
+    # fetcher is one of _LIMIT_CAPABLE_TOOLS — but suppressing the
+    # extraction here keeps the diagnostic output clean and the
+    # post-parse intent minimal.
+    if (
+        intent.aggregate is None
+        and intent.compare is None
+        and not intent.count_only
+        and not intent.balance_only
+    ):
+        cap = _extract_list_cap(prompt)
+        if cap is not None:
+            intent.list_limit = cap
 
     # --- Explicit PO list signal (#32 fault b) ---
     #

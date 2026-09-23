@@ -53,6 +53,7 @@ from spire.planner.lookup import (  # noqa: F401
     resolve_vocab,
 )
 from spire.planner.plan_builders import (  # noqa: F401
+    _apply_list_limit,
     _arg_name_for_tool,
     _build_aggregation_plan,
     _build_comparison_plan,
@@ -342,6 +343,15 @@ def generate_plan(
     fetcher_args = _build_entity_fetcher_args(
         intent.filters, intent.target_entity, ref_date
     )
+
+    # F-016: plain-list row cap ("top 5 credit memos"). Injected only for
+    # the fetchers whose signatures accept a `limit` arg (see
+    # registries._LIMIT_CAPABLE_TOOLS); a non-capable fetcher is a no-op
+    # rather than an error at the MCP boundary. Runs before the
+    # Address-expand flag below so a "top 5 suppliers with addresses"
+    # intent keeps both — the cap on the fetch and the addresses child
+    # expansion.
+    _apply_list_limit(fetcher_tool, fetcher_args, intent.list_limit)
 
     # Address include on a supplier-rooted query is satisfied by expanding
     # the addresses child on the supplier fetch itself (Path B), NOT by a

@@ -140,6 +140,19 @@ class Intent:
     # not an explicit list) is the default. Consumed only in generate_plan.
     list_all: bool = False
 
+    # F-016: a plain-list row cap extracted from the raw prompt ("top 5
+    # recent credit memos", "first 10 suppliers"). Distinct from
+    # `invoice_limit` (open-invoices only) and `aggregate['top_n']`
+    # (aggregation only). The parser computes it deterministically
+    # post-LLM (see parser.py::_extract_list_cap) and the planner injects
+    # `limit=N` into the entity fetcher's tool_args — but ONLY for the
+    # fetchers whose signatures accept a `limit` argument (the set lives
+    # in registries._LIMIT_CAPABLE_TOOLS). Tools that take no limit are
+    # unaffected, so an intent carrying a cap for a non-list fetch is a
+    # no-op at plan time rather than a crash. Default None (no cap) so
+    # every existing intent behaves unchanged.
+    list_limit: int | None = None
+
 
 @dataclass
 class Step:
