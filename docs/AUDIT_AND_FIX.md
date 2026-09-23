@@ -106,7 +106,7 @@ Four places must move in lockstep. Broken lockstep = drift.
 
 | Place | Change |
 |---|---|
-| `FIX_PLAN.md` row | status → `verified` (or `fixed` if only the code landed) |
+| `FIX_PLAN.md` row | status → `fixed` when the regression test is proven real; status → `verified` when the PR merges. The two flips are separate moments, not one decision. |
 | `findings-log.md` | append a new dated `**Update YYYY-MM-DD**` block inside the entry, recording the verification. Never edit the original. |
 | `phase-1-audit.md` | if the fix closes a §B/§D/§H row, close it in place with the F-NNN citation |
 | `SPIRE_SESSION_HANDOFF.md` | add the fix to "first steps in the new window" for the next session |

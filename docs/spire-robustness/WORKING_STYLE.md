@@ -288,48 +288,64 @@ The lesson is not "F-006 was hard." It is that a label ("drift") was
 treated as a finding before a harm had been shown. S1 is the step that
 was skipped.
 
+16. **Every window opens with a ledger reconciliation.** Before
+    picking the next FIX_PLAN row, list recently-merged PRs and
+    grep FIX_PLAN §5 for rows still at `fixed`:
+
+        gh pr list --state merged --limit 20 --json number,title,mergedAt \
+          --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
+        grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/phase-2/FIX_PLAN.md
+
+    Every merged PR whose F-NNN row still shows `fixed | —` is
+    drift. Flip to `verified | #NNN` (and phase-1-audit §B.6
+    accordingly) before any new work.
+
+    The `fixed → verified` flip happens at PR-merge time, often a
+    different window from the one that landed the code. Without
+    this step, the flip is a fact no checklist owns.
+
 ## Deferred items
 
-16. **`personas.yaml` untrack (task 1.1) — deferred.** Handled at the
+17. **`personas.yaml` untrack (task 1.1) — deferred.** Handled at the
     end of the plan. Not recorded as a deviation anywhere.
 
-17. **Integration tests (the 22 marked `integration`) — deferred.** Not
+18. **Integration tests (the 22 marked `integration`) — deferred.** Not
     run, not investigated, not fixed during Phase 1.
 
 ## Dev / runtime separation
 
-18. **Runtime clone at `~/pocs/spire-runtime` is never disturbed.**
+19. **Runtime clone at `~/pocs/spire-runtime` is never disturbed.**
     Ports 3001/3002/3003. Testers reach it via ngrok.
 
-19. **Dev tree at `~/pocs/spire` uses 4001/4002/4003.** Set by the
+20. **Dev tree at `~/pocs/spire` uses 4001/4002/4003.** Set by the
     `spire()` shell function from `SPIRE-PORTS.env`. The two sets are
     `X00Y`, X=3 for runtime and 4 for dev.
 
-20. **The `spire.sh --dev | --runtime` flag is required.** There is
+21. **The `spire.sh --dev | --runtime` flag is required.** There is
     no default mode. `SPIRE_MODE` is set by `spire()` / `spirer()` in
     `~/.bashrc`. `--status` and `--stop` are scoped to the current
     mode and never touch the other tree's ports.
 
-21. **No promotion script.** Runtime updates are manual, deliberate,
+22. **No promotion script.** Runtime updates are manual, deliberate,
     rare — `git fetch && git reset --hard` in the runtime tree.
 
 ## Auth
 
-22. **No auth at the tunnel or app layer.** When auth lands, SPIRE owns
+23. **No auth at the tunnel or app layer.** When auth lands, SPIRE owns
     it. Do not add an extra module in front.
 
 ## Reply discipline
 
-23. **Short, plain, no preamble.** Skip "Great question!" and similar.
+24. **Short, plain, no preamble.** Skip "Great question!" and similar.
     Answer, then stop.
 
-24. **Ask before assuming.** If something is ambiguous and the answer
+25. **Ask before assuming.** If something is ambiguous and the answer
     changes what you produce, ask — but ask once, concisely.
 
-25. **No re-litigating resolved points.** If the answer was given in a
+26. **No re-litigating resolved points.** If the answer was given in a
     prior turn, use it.
 
-26. **After every bug fix, report the queue.** State how many rows
+27. **After every bug fix, report the queue.** State how many rows
     remain pending in `docs/phase-2/FIX_PLAN.md` and name the next
     one being picked up. This runs after every closure — a fix, a
     `closed-as-not-a-bug`, a merge with its tracking flip — and it

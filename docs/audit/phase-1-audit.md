@@ -223,12 +223,12 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 
 | Audit row | Finding | Finding state |
 |---|---|---|
-| B-01 | F-006 | fixed 2026-09-22 |
-| B-02 | F-007 | fixed 2026-09-22 |
-| B-03 | F-008 | fixed 2026-09-22 |
-| B-04 | F-010 | fixed 2026-09-22 |
-| B-05 | F-009 | fixed 2026-09-19 |
-| B-06 | F-011 | fixed 2026-09-23 |
+| B-01 | F-006 | verified 2026-09-22 (#154) |
+| B-02 | F-007 | verified 2026-09-22 (#155) |
+| B-03 | F-008 | verified 2026-09-22 (#160) |
+| B-04 | F-010 | verified 2026-09-22 (#159) |
+| B-05 | F-009 | verified 2026-09-19 (#152) |
+| B-06 | F-011 | verified 2026-09-23 (#163) |
 | B-07 | F-012 | closed 2026-09-22 (PR #157) |
 | B-09 | F-002 (cross-ref) | confirmed |
 | B-10 | F-022 | closed-as-not-a-bug |
@@ -240,15 +240,15 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-16 | F-028 | closed-as-not-a-bug |
 | B-17 | F-014 | verified 2026-09-23 (#165) |
 | B-18 | F-029 | closed-as-not-a-bug (capability on parked branch; see E-12) |
-| B-19 | F-015 | fixed 2026-09-22 |
+| B-19 | F-015 | verified 2026-09-22 (#156) |
 | B-20 | F-003 / F-004 (cross-ref) | confirmed |
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | verified 2026-09-23 (#165) |
 | B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate) |
-| B-24 | F-018 | fixed 2026-09-23 |
-| B-25 | F-019 | fixed 2026-09-23 |
+| B-24 | F-018 | verified 2026-09-23 (#163) |
+| B-25 | F-019 | verified 2026-09-23 (#163) |
 | B-26 | F-016 | confirmed |
-| B-27 | F-020 | fixed 2026-09-23 |
+| B-27 | F-020 | verified 2026-09-23 (#161) |
 | B-28 | F-045 | confirmed |
 | B-29 | F-046 | verified 2026-09-23 |
 | B-30 | F-047 | verified 2026-09-23 |
