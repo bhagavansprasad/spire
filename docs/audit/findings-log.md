@@ -1990,6 +1990,38 @@ Whichever ships, the two harms are addressed differently: length needs a cap; at
 
 **Class note.** Adjacent to F-015 (both are synthesis-layer narration that doesn't reflect what the reader can see: F-015 narrated an incomplete result as complete; this narrates a property the reader cannot check) and F-010 (both concern the summary contradicting the underlying structured data — F-010's summary named an unfiltered count; this one asserts a property not present in the tables).
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F020-contacts-run-on`.**
+
+`synthesizer.py`'s supplier-contacts branch drops the `admin_names`
+flattening and the comma-joined sentence. `formatters.py` renders
+an `Admin` column (`Y` / `—`) on every contact sub-table when at
+least one contact in the response is flagged — per-response, so
+every table in the answer has the same column count. The property
+was always on the record (`is_administrative`, read from the pod's
+`AdministrativeContactFlag`); it was asserted only in the summary,
+as a run-on the reader could not check against the tables below.
+
+Verification:
+
+- Reproducer `Get Supplier contacts` now answers with the counts
+  line and stops — no comma-joined name list. Each contact row
+  carries its own Admin marker.
+- Sibling unchanged: `contacts for Lee Supplies` produces the same
+  shape (one contact table, with the Admin column).
+- New file `tests/test_f020_supplier_contacts_summary.py` — 6 tests.
+  All fail without the fix (formatters.py stashed).
+- Full suite: 1094 passed, 22 deselected (baseline 1088 + 6 new).
+
+**Deviations from the entry.** None in substance — the entry
+recommended option 3 (move the property to the record, mark it
+per-row). Landed as option 3. Small judgement call the entry left
+open: the Admin-column gate is per-RESPONSE, not per-supplier, so
+all tables in one answer have the same column count.
+
+**Not checked.** Other synthesizer branches that flatten nested
+lists into comma-joined sentences (the `open_pos` buyers list was
+the finding's own candidate). Same class, unrun.
+
 ---
 
 ## F-021 — DFF child is fetched but never rendered; `fields` on the parent bucket trims the header, the child bucket does not reach the answer

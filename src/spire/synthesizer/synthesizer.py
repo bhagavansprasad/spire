@@ -843,12 +843,6 @@ def synthesize_response(
         )
         examined = len(supplier_rows)
         total_contacts = sum(len(r.contacts) for r in records)
-        admin_names = [
-            c.contact_name
-            for r in records
-            for c in r.contacts
-            if c.is_administrative and c.contact_name
-        ]
         total_text = (
             f"{total_available:,}" if total_available is not None
             else "an unknown number of"
@@ -862,9 +856,19 @@ def synthesize_response(
                 f"These {examined} suppliers have {total_contacts} {contact_word} "
                 "between them."
             )
-        if admin_names:
-            label = "administrative contact" if len(admin_names) == 1 else "administrative contacts"
-            summary += f" {', '.join(admin_names)} — {label}."
+        # F-020: the administrative-contact list used to be comma-joined
+        # onto this summary — a 27-name run-on today (47 when the finding
+        # was recorded) that asserted `is_administrative=True` for each
+        # named contact, with no way for the reader to check the claim
+        # against the tables below. The flag itself is honest —
+        # build_suppliers_with_contacts reads it from the pod's
+        # AdministrativeContactFlag — but it was only ever shown HERE.
+        #
+        # It now rides on each contact row instead: formatters.py renders
+        # an "Admin" column when at least one contact in the response is
+        # flagged, so the property is visible where the reader can verify
+        # it. The summary states only what the counts line already
+        # states, and stops.
         return SupplierResponse(
             summary=summary,
             suppliers=records,
