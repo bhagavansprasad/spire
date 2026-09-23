@@ -15,13 +15,17 @@ bundles:
   - src/spire/diagnostics.py
   - docs/spire-robustness/00_Doc_B_Index.md
   - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/02_Phase_02_Correctness.md
   - docs/spire-robustness/04_Phase_04_Structure.md
   - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
   - docs/spire-robustness/WORKING_STYLE.md
   - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
   - docs/spire-robustness/SESSION_HANDOVER.md
-  - docs/SPIRE_SESSION_HANDOFF.md
+  # The path docs/SPIRE_SESSION_HANDOFF.md was listed here until 2026-09-24
+  # and did not exist — the file is docs/spire-robustness/SESSION_HANDOVER.md
+  # (listed above). AUDIT_AND_FIX.md carried the same stale path; corrected
+  # in the same commit. Do not add SPIRE_SESSION_HANDOFF.md back.
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
   - docs/developer/context_bundles.md
@@ -43,9 +47,16 @@ bundles:
   plan:
   - docs/spire-robustness/00_Doc_B_Index.md
   - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
+  - docs/spire-robustness/02_Phase_02_Correctness.md
   - docs/spire-robustness/04_Phase_04_Structure.md
   - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
+  # The resume-context files the session-start instruction names. Added
+  # 2026-09-24 so the plan bundle is self-contained — a window that
+  # received only `plan` previously had to ask for these separately.
+  - docs/spire-robustness/WORKING_STYLE.md
+  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
+  - docs/spire-robustness/SESSION_HANDOVER.md
   # the audit + findings log — the two documents the handoff says to read
   # first. Were unbundled until 2026-09-18; a new session asking for the
   # plan bundle now gets the full working state.
@@ -56,12 +67,14 @@ bundles:
   # Fix files. Cluster 2's three (F-014 / F-017 / F-027) added 2026-09-23
   # after they were found missing — the earlier list stopped at F-012 and
   # F-044, with a gap that omitted the three most recently landed.
+  # F-016 added 2026-09-24 (was landed and merged but not bundled).
   - docs/phase-2/fixes/F-002.md
   - docs/phase-2/fixes/F-008.md
   - docs/phase-2/fixes/F-010.md
   - docs/phase-2/fixes/F-011.md
   - docs/phase-2/fixes/F-012.md
   - docs/phase-2/fixes/F-014.md
+  - docs/phase-2/fixes/F-016.md
   - docs/phase-2/fixes/F-017.md
   - docs/phase-2/fixes/F-018.md
   - docs/phase-2/fixes/F-019.md
@@ -75,6 +88,13 @@ bundles:
   - docs/phase-2/fixes/F-046.md
   - docs/phase-2/fixes/F-047.md
   - docs/phase-2/fixes/F-048.md
+  # Evidence files the fix files reference by name. Not themselves fix
+  # files; included so a reader of a fix file's V7/V8 section has the
+  # raw output in the same bundle rather than a dangling filename.
+  - docs/phase-2/fixes/F-012-F036-L2-run.txt
+  - docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt
+  - docs/phase-2/fixes/F-044-diag.txt
+  - docs/phase-2/fixes/F-044-v1v4v8.txt
   - docs/phase-2/fixes/F-046-F047-F048-v9-analysis.md
   - docs/phase-2/fixes/F-046-F047-F048-v9-sweep.txt
   - docs/audit/golden/count_suppliers.txt
@@ -390,6 +410,8 @@ bundles:
   - tests/test_f012_truncation_sample.py
   - tests/test_f014_aggregate_projection.py
   - tests/test_f015_empty_bucket_truncation.py
+  # F-016 added 2026-09-24; was landed with PR #166 but not bundled.
+  - tests/test_f016_list_cap.py
   - tests/test_f017_child_field_resolution.py
   - tests/test_f018_invoice_number.py
   - tests/test_f019_account_number.py
