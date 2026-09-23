@@ -554,6 +554,27 @@ def parse(
             detail=f"could not convert draft to intent: {exc}",
         )
 
+    # --- F-014: aggregate / compare intents carry no projected fields ---
+    #
+    # An aggregate or compare block names its own fixed projection — the
+    # aggregation tool has already produced the columns the response
+    # schema consumes (SupplierSpendRow.supplier_name, etc.), and the
+    # pipeline's `_project_outputs` would otherwise apply entity fields
+    # to the WRAPPER record. The wrapper's keys are `shape`,
+    # `date_from`, ... and `rows[]`; none of them is an entity column,
+    # so the requested fields render as em dashes beside an empty
+    # projection. Clearing `fields` here is the deterministic
+    # correction: the model emits fields alongside aggregate on the
+    # reproducer regardless of the sysprompt rule (same behaviour F-018
+    # records), so this must run after the LLM and cannot be a
+    # prompt-text change.
+    #
+    # Also covers the compare block, which exhibits the same shape: its
+    # wrapper carries `shape` and `suppliers[]`; projecting entity
+    # columns onto it is equally meaningless.
+    if intent.aggregate is not None or intent.compare is not None:
+        intent.fields = []
+
     # --- Explicit PO list signal (#32 fault b) ---
     #
     # #32 fault (b) needs the parser to tell two intents apart that are
