@@ -332,7 +332,9 @@ def generate_plan(
         )
     except KeyError:
         fetcher_tool = find_entity_tool(intent.target_entity, "none")
-    fetcher_args = _build_entity_fetcher_args(intent.filters, intent.target_entity)
+    fetcher_args = _build_entity_fetcher_args(
+        intent.filters, intent.target_entity, ref_date
+    )
 
     # Address include on a supplier-rooted query is satisfied by expanding
     # the addresses child on the supplier fetch itself (Path B), NOT by a

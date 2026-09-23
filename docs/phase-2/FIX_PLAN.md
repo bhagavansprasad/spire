@@ -119,7 +119,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-001 | missing-capability | 3 | `nl_parser/parser.py` | verified | #153 | 2026-09-22 |
 | F-016 | missing-capability | 3 | `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py` | not-started | — | — |
 | F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
-| F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
+| F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `plan_builders.py` | fixed | — | 2026-09-23 |
 | F-019 | wrong-data | 4 | parser sysprompt, tool args, KG | not-started | — | — |
 | F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | not-started | — | — |
 | F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |

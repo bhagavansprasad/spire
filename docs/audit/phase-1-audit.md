@@ -224,7 +224,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-03 | F-008 | fixed 2026-09-22 |
 | B-04 | F-010 | fixed 2026-09-22 |
 | B-05 | F-009 | fixed 2026-09-19 |
-| B-06 | F-011 | confirmed |
+| B-06 | F-011 | fixed 2026-09-23 |
 | B-07 | F-012 | closed 2026-09-22 (PR #157) |
 | B-09 | F-002 (cross-ref) | confirmed |
 | B-10 | F-022 | closed-as-not-a-bug |

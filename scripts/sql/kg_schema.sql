@@ -1487,6 +1487,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Invoice-by-number. Value is the human-readable InvoiceNumber exactly as written (e.g. ''LEE-01-1006-111''). Single-clause q=InvoiceNumber=''...'' is reliable server-side (confirmed 2026-09-23: totalResults=1 for LEE-01-1006-111). A direct identifier lookup that stands alone — the planner''s Invoice guard accepts it as a root reference without a supplier.'
 );
 
-PROMPT Seeded kg_entity_filter (27 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'created_in_last_n_months', 'entity_level', 'created_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CreationDate', '<',
+  'POs created within the last N months (relative window). Value is a JSON object {\"months\": N}. The planner computes the ISO cutoff (today - N months) via _compute_date_n_months_ago and forwards it as the created_before tool arg; the LLM never computes the date. Mirrors has_no_recent_invoices but with a range-agnostic wrapper filter type, so the phrase ''older than 6 months'' routes to this row rather than being refused as unsupported.'
+);
+
+PROMPT Seeded kg_entity_filter (28 rows).
 
 -- ============================================================

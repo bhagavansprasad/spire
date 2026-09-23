@@ -1094,6 +1094,27 @@ The first is the honest minimum; the second is what the KG note was suggesting. 
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 2/3).**
+
+New PurchaseOrder entity-level filter `created_in_last_n_months`.
+The KG row names `created_before` as the tool arg;
+`plan_builders._build_entity_fetcher_args` gains a reference_date
+parameter and a branch that computes the ISO cutoff via the same
+`_compute_date_n_months_ago` helper has_no_recent_invoices uses.
+`b_po_created_date.sysprompt` teaches the relative phrasing.
+
+Verification: V1 (`Purchase orders older than 6 months`) now answers
+— intent `created_in_last_n_months: {months: 6}`, plan
+`created_before: 2026-03-23`. V2 paraphrase (`in the last 12 months`)
+same shape, cutoff 2025-09-23. V3 sibling absolute-date
+(`created before 2024-01-01`) unchanged — routes to `created_before`
+with the ISO value verbatim. V4 absolute (`before 2015`) unchanged.
+V5 goldens empty. V6 7 new tests pass; suite 1125. V7 all 7 fail
+without the plan_builders branch. V9 deferred to the end of the
+branch (three sysprompt edits share one --validate run).
+
+---
+
 ## F-012 — composite invoice filter hits the over-fetch cap, drops `total_available`; the answer reads as if 20 were the count
 
 **Date:** 2026-09-18
