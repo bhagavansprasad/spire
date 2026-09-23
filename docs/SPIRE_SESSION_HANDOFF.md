@@ -1,275 +1,213 @@
-# SPIRE — Session Handoff, 2026-09-23
+# SPIRE — Session Handoff, 2026-09-23 (window 3)
 
-**This file supersedes the 2026-09-22 handoff.** Phase 2 is well underway;
-19 findings shipped (plus one closed as duplicate). This window closed F-018, F-011 (plus F-011b/c), and
-F-019 on one branch, and filed four new findings (F-045 through F-048).
+**This file supersedes the previous 2026-09-23 handoff.** Same date,
+third window. Windows 1 and 2 both closed work today: Window 1 closed
+PR #163 (F-011 / F-018 / F-019 cluster). Window 2 shipped F-046, F-047,
+F-048 on branch `phase-2-fix-F046-F047-F048-date-filters` and raised
+PR #164. This window's job is to merge #164, then start Cluster 2.
 
-**Read this first.** Then `docs/AUDIT_AND_FIX.md` — the playbook — which
-points to everything else. The audit (`docs/audit/phase-1-audit.md`) and
-the findings log (`docs/audit/findings-log.md`) are the two
-source-of-truth documents.
+**Read this first.** Then `docs/AUDIT_AND_FIX.md` (the playbook), which
+points to everything else.
 
 ---
 
 ## Where we are
 
-**Branch:** `hardening-master`.
+**Branch:** `phase-2-fix-F046-F047-F048-date-filters` — PR #164 open,
+ready to merge to `hardening-master`.
 
-**Phase 2 — Correctness — in progress.**
+**Base:** `hardening-master`.
 
-Shipped (all merged to `hardening-master`):
+**Commits on branch (6):**
 
-- F-002 — `promptkit.py` double-classify — PR #149
-- F-033 — `ReceivablesInvoiceLine` refusal's Example — PR #150
-- F-041 — AR invoice children named first — PR #151
-- F-042 — supplier-address phrasings refuse — closed-as-duplicate (F-009), PR #152
-- F-043 — Site and Classification includes refuse — PR #152
-- F-009 — addresses rule lives in `payables/` — PR #152
-- F-001 — filter-less PO lists now answer — PR #153
-- F-006 — alpha-prefixed OrderNumber accepted — PR #154
-- F-007 — requested-and-empty AR-invoice children acknowledged — PR #155
-- F-015 — empty result from a capped fetch says so — PR #156
-- F-012 — capped fetch with no source total narrates the sample — PR #157
-- F-036 — truncation note no longer claims "for filtering" — PR #157
-- F-044 — double-encoded `value_json` no longer crashes — PR #158
-- F-010 — filtered count returns the filtered bucket — PR #159
-- F-008 — expired supplier classifications no longer match — PR #160
-- F-020 — supplier-contacts run-on removed; Admin column added — PR #161
-- F-039 — aggregate comparison phrase honest when excluded > 75% — PR #162
-- F-018 — invoice number is a first-class Invoice filter — PR #163 (`7e1c127`)
-- F-011 — PO relative-date filter — PR #163 (`773a885`)
-- F-019 — account number resolves as an identifier, not a name — PR #163 (`0c9fe34`)
-- F-011b/c — direction split + backslash-escape decode + last-modified guard — PR #163 (`d3b6232`)
+    e7e0de7  context_bundles.yaml: add V9 sweep + analysis
+    bf08f2d  V9: F-046/47/48 verified; F-049 filed (absolute-date "created" gap)
+    8c9f5a5  Updating bundles
+    774ee35  Session handoff 2026-09-23 (window 2)
+    0bdf26c  Adding new test prompts
+    b434539  F-048: vague-adjective recency defaults to a 3-month window
+    78aaeb4  F-047: PO last-updated-date filters + guard-widening
+    52e840f  F-046: Invoice relative-date filters + guard widening
 
-Current test baseline: **1135 passed, 22 deselected**.
+**Test suite:** 1156 passed, 22 deselected.
 
-Filed this session, not fixed (four findings; F-045 filed mid-sweep as a
-side observation):
+**Pod:** `dabpqy`. `personas.yaml` and `IKS_FUSION_BASE_URL` both point
+there.
 
-- F-045 / B-28 — composite `created_since AND created_before` on `/purchaseOrders`
-  returns 0 with a misleading "capped" note. Suspected pod-side composite-clause
-  issue (parallels F-012's `/invoices` falsifier).
-- F-046 / B-29 — Invoice has no relative-date filter; `invoices older than 6 months`
-  refuses on missing supplier. Mirror of F-011. `search_invoices` already accepts
-  `invoice_date_before` / `invoice_date_after`.
-- F-047 / B-30 — PO last-updated-date filter missing; `not touched in the last year`
-  has no honest answer. F-011c's sysprompt guard produces a correct refusal, but
-  the right fix is to add a `LastUpdateDate` filter to `search_purchase_orders`.
-- F-048 / B-31 — vague relative adjectives (`recent`, `new`) refuse instead of
-  defaulting to a window. Policy finding; V9 mandatory when it lands.
+**Ledger state:** F-046, F-047, F-048 rows in FIX_PLAN §5 are
+`verified | #164 | 2026-09-23`. F-049 is `not-started | — | 2026-09-23`.
+
+---
+
+## What shipped this window
+
+- **F-046** — Invoice relative-date filters. Two new KG rows
+  (`older_than_n_months` → `invoice_date_before`; `created_in_last_n_months`
+  → `invoice_date_after`). Sysprompt edits to `b_invoice_date` (new rules)
+  and `b_invoices_for_supplier` (the "MUST include supplier" clause was
+  scoped to the supplier-shaped query — pre-fix it blocked date-only
+  Invoice queries). Byte-equality literal in `context_assembly.py` mirrors
+  both. Invoice guard in `planner.py` widened to accept date filters as
+  valid root refs, which also closes a pre-existing wrong-refusal on
+  absolute-date Invoice queries ("invoices in 2024" refused before this
+  branch). `kg_entity_filter` 30 → 32.
+
+- **F-047** — PO LastUpdateDate filters. Two new KG rows on the
+  LastUpdateDate column (`updated_older_than_n_months` → `last_updated_before`;
+  `updated_in_last_n_months` → `last_updated_after`), mirroring F-011b's
+  CreationDate split. `b_po_created_date.sysprompt`'s F-011c "set
+  unanswerable" carve-out was replaced with two routing rules. Byte-equality
+  literal mirrors. `_build_entity_fetcher_args` tuple widened.
+  `search_purchase_orders` gains `last_updated_before` /
+  `last_updated_after` args; sends `q=LastUpdateDate < '...'` or
+  `q=LastUpdateDate >= '...'` server-side; matches client-side as a
+  defence; projects `LastUpdateDate`. `server.py` wrapper forwards.
+  `kg_entity_filter` 32 → 34.
+
+- **F-048** — Vague-adjective recency defaults to a 3-month window.
+  Sysprompt-only. `recent` / `new` / `latest` / `fresh` / `the most recent`
+  / `recently created` — where the adjective names recency but gives no
+  explicit N — emits `created_in_last_n_months: {"months": 3}` rather than
+  refusing. Byte-equality literal mirrors.
+
+- **F-049 filed** — "invoices created before/since X" refuses with
+  `missing_identifier`. Not fixed on this branch. Cluster 4, sysprompt-only.
+  See `docs/audit/findings-log.md` F-049.
+
+- **V9 evidence** — four-file targeted sweep. Zero `unsupported_filter`,
+  zero `ERROR`, every F-046/047/048 prompt answered or refused correctly.
+  Raw: `docs/phase-2/fixes/F-046-F047-F048-v9-sweep.txt`. Analysis:
+  `docs/phase-2/fixes/F-046-F047-F048-v9-analysis.md`.
+
+---
+
+## Outstanding — merge PR #164
+
+Everything on the branch is verified and tracked. The only remaining
+step for this window's work is to merge PR #164 to `hardening-master`.
+
+No further code, tests, or doc edits are pending on this branch. The
+lockstep updates are all in place:
+
+- FIX_PLAN §5: F-046/47/48 `verified | #164 | 2026-09-23`.
+- findings-log: F-046/47/48 carry `**Update 2026-09-23 — verified on ...**`
+  blocks; F-049 has its own entry.
+- phase-1-audit §B.6: B-29/B-30/B-31 map to F-046/47/48, `verified 2026-09-23`.
+
+After merge, the FIX_PLAN rows stay `verified` — the playbook only flips
+to `closed` if the row's terminology distinguishes `verified` (V-standard
+passed, PR merged) from `closed` (audit row updated, ledger frozen).
+The FIX_PLAN §5 heading says: "verified — V-standard (§6) passed, PR
+merged." So `verified` is terminal for this row; no further flip needed.
 
 ---
 
 ## First steps in the new window
 
-1. **Confirm ground truth.**
-   - `git log --oneline -5`
-   - `git status`
-   - `pytest -q` (expect `1135 passed, 22 deselected` with the pod up.
-     If the pod is down, the pod-dependent tests fail rather than skip —
-     see the audit's §F.3 note. Compare against the last green count,
-     not a stale figure.)
-
-2. **Read the playbook.** `docs/AUDIT_AND_FIX.md`. It has: where everything
-   lives, what to work on (open `docs/phase-2/FIX_PLAN.md`, take the top
-   `not-started` row in §4 order), how to reproduce / classify / fix /
-   verify / track, and the recovery path if context is lost.
-
-3. **Pick the next task.** The two candidates the last window left on
-   the table:
-
-   **Option A — F-046 / F-047 / F-048 cluster (recommended).**
-   These are the direct follow-ons from the F-011b sweep. One branch,
-   three commits, one per finding. The three touch overlapping files
-   (`kg_schema.sql`, `b_po_created_date.sysprompt`, `context_assembly.py`,
-   `test_kg_metadata.py`, `print_kg.py`), so a single branch avoids merge
-   collisions at the shared files.
-
-   Branch name: `phase-2-fix-F046-F047-F048-date-filters`.
-   Order within the branch: F-046 first (mirror of F-011, no new tool arg),
-   F-047 second (adds a `LastUpdateDate` column to `search_purchase_orders`),
-   F-048 last (V9 mandatory — highest blast radius, changes parser defaults).
-
-   **Option B — projection cluster.** F-017, F-027, F-014, F-021. All
-   share `_FIELDS_SATISFIED_BY_INCLUDE` / `_project_outputs`. One branch,
-   four commits. Branch name: `phase-2-fix-projection-cluster`.
-
-   **Option C — single small fix.** F-016 (list-row cap schema gap) or
-   F-037 (test-set hygiene). Small warm-up.
-
-4. **Do not touch `config.py` (CF-2).** Parked by user decision.
-
-5. **V9 is deferred but outstanding.** Three sysprompt edits landed on
-   `hardening-master` via PR #163 (`b_invoices_for_supplier`,
-   `b_po_created_date` — two revisions). A full `--validate` corpus run
-   has not been executed on the current code. Two paths:
-   - Run V9 now (single manifest run — `python scripts/promptkit.py --run
-     --manifest scripts/promptkit_sets.yaml`; slow sets 06_slow and
-     08_lifecycle can be skipped for a fast pass).
-   - Or batch V9 with the next sysprompt edits (F-046/47/48 touch
-     `b_po_created_date` and add Invoice phrasings, so V9 after F-048
-     would cover both sessions' edits in one pass).
-
-   **Recommendation:** batch with F-046/47/48. One V9 at the end of the
-   next branch covers all five sysprompt edits from the two sessions.
+1. `git log --oneline -5` — expect `e7e0de7` at HEAD while PR #164 is
+   unmerged; after merge, expect the merge commit at HEAD on
+   `hardening-master`.
+2. `git status` — expect clean.
+3. If PR #164 is not yet merged:
+   - `gh pr view 164 --json state,mergeable,statusCheckRollup`
+   - If `state=MERGEABLE` and checks green: `gh pr merge 164 --merge`.
+   - If checks red: read the failure, address, re-push.
+4. After merge: `git checkout hardening-master && git pull`.
+5. `pytest -q` — expect 1156 passed, 22 deselected (or the baseline
+   after any concurrent merges).
+6. Open FIX_PLAN §5. Next unstarted row in §4 order is **F-017**
+   (Cluster 2, projection cluster).
 
 ---
 
-## Lockstep invariant — where it drifts
+## What to watch — two operational notes
 
-The four-place lockstep (`AUDIT_AND_FIX.md` §How to track) is per fix.
-One invariant drifts most: "every F-NNN status line matches its FIX_PLAN
-row." A merge landing between a lockstep commit and window close leaves
-the handoff one bump behind. This window ended clean — the PR body,
-findings-log, audit §B.6, and FIX_PLAN rows were all updated before
-the merge.
+- **MCP server restart after tool signature changes.** F-047 added two
+  args to `search_purchase_orders` and its wrapper. Any running MCP
+  server must be re-started (`spire`) after such edits — otherwise the
+  old in-memory signatures reject the new kwargs at call time. This cost
+  a session mid-window; it is a known caveat and matches the handoff's own
+  "Restart the MCP server after any change under
+  `src/spire/mcp_server/`" rule.
 
-If you find an invariant violation in the next window, fix it as part of
-the first commit of that session.
+- **Terminal shell exits in WSL.** The terminal occasionally exits with
+  code 120 after long-running commands, showing `Failed to mount F:\`
+  from dmesg. It is environmental (WSL mount), not the repo or the
+  scripts. Workaround that held all window: redirect long runs to a file
+  (`python ... > t.txt 2>&1`) so the output survives the exit.
 
----
-
-## Session-shape observation — 2026-09-23 window
-
-This window was the inverse of the 2026-09-22 window's shape. Where that
-one closed three findings one at a time, this one shipped four on a single
-branch (PR #163): F-018 + F-011 + F-019 + F-011b/c. The decision to batch
-was deliberate — three of the four were Cluster 4 (parser sysprompt +
-KG + planner guard), sharing files, so separate branches would have
-collided at merge.
-
-Cost: a long window. The F-011b sweep (23 prompts) and its direction-split
-fix ran after F-011 was already committed, because the first F-011 commit
-had an inversion defect that only became visible under a broader prompt
-set. F-011c then added a decode-loop hardening and a sysprompt guard for
-last-modified phrasings — two residual defects from F-011b's own first
-pass.
-
-Benefit: all four fixes shipped together, tests are green (1135), and
-the four follow-on findings (F-045 through F-048) are filed and tracked
-in FIX_PLAN. The window closed one full cluster's worth of relative-date
-work with the remaining three findings queued and primed.
-
-Recommendation for the next window: keep the batch-of-three pattern for
-F-046/47/48. But — bias toward running the sweep BEFORE the commit for
-new sysprompt rules, not after. The F-011b/c inversion cost real time
-because it was caught by post-commit sweep instead of pre-commit.
+- **The V9 sweep stdout/stderr trap.** The V9 command in the previous
+  handoff placed `> t_all.txt 2>&1` before `--show-planner`, so
+  `--show-planner` diagnostics went to the terminal, not the file. The
+  file carries answers and refusals only. `MAX_TOKENS` markers were on
+  stderr and were not captured — the analysis reasoned from the fact that
+  every answer is a complete, coherent summary (incompatible with
+  degenerate generation). Correct invocation for future runs: put all
+  flags before the redirect: `python scripts/promptkit.py --run
+  --prompt-file FILE --show-planner > t.txt 2>&1`.
 
 ---
 
-## Open work
+## Next window — Cluster 2 (projection cluster)
 
-Ordered by §8.3.1 severity.
+Per FIX_PLAN §4 step 5, the next work is Cluster 2. One branch, four
+commits, in this order:
 
-**Missing-capability:**
-- F-003 — three PO aggregation ops unreachable from a scoped parse;
-  `modes/` folder in neither `_TIER1` nor `KNOWN_MODULES`. F-004 falls
-  out of this.
-- F-004 — PO-value ranking misroutes to a comparison op.
-- F-016 — no schema field for a plain-list row cap; `top 5` on a list
-  query is dropped.
-- F-021 — DFF child fetched but never rendered.
-- F-027 — "country" column request routed to Address include; display
-  renders full blob.
-- F-046 — Invoice has no relative-date filter (mirror of F-011).
-- F-047 — PO has no last-updated-date filter.
-- F-048 — vague relative adjectives should default to a window.
+    F-017 → F-027 → F-014 → F-021
 
-**Wrong-data / wrong-narration:**
-- F-014 — `fields` on an aggregate intent applied to the wrapper record.
-- F-017 — `Description` on a PO-lines include classified unresolved.
-- F-045 — composite date clause on `/purchaseOrders` returns 0 with a
-  misleading "capped" note.
+- **F-017** — `_FIELDS_SATISFIED_BY_INCLUDE` checks only the target
+  entity's catalog; child-entity fields dropped as unresolved. Site:
+  `nl_parser/intent_validation.py`. Do first — retires the manual map
+  F-027 assumes.
 
-**Cosmetic / hygiene / cost:**
-- F-037 — duplicated prompts across files.
+- **F-027** — "country" column request routed to Address include; display
+  renders full blob. Site: `intent_validation.py` + parser sysprompt.
+  Shares site with F-017.
 
-**Register #30 (perf, from handoff, not in FIX_PLAN):**
-- `Compare ordered vs invoiced for our top 3 suppliers` pages all
-  17,447 POs before narrowing. Fix shape: rank top-N first (cheap),
-  then fetch only their POs.
+- **F-014** — `fields` on an aggregate intent applied to the wrapper
+  record; em-dash columns. Site: `graph/pipeline.py`.
 
-**Closed-as-not-a-bug (do not re-open without cause):** F-005, F-013,
-F-022, F-023, F-024, F-025, F-026, F-028 through F-032, F-034, F-035,
-F-038, F-040, F-042.
+- **F-021** — DFF child fetched but never rendered. Site:
+  `synthesizer/synthesizer.py` + `rendering/formatters.py`.
+  Display-side mechanism unresolved until this branch reads the
+  rendering file.
+
+One `--validate` (V9) run at the end of the branch covers the whole
+cluster if any sysprompt edits land.
+
+Branch name: `phase-2-fix-F017-F027-F014-F021-projection-cluster`.
 
 ---
 
-## Pod-state observations carried forward
+## Open work, in FIX_PLAN order
 
-- Pod growth is real and ongoing. Supplier count has moved 431 → 620 →
-  656 → current. Golden files and pod-dependent counts will keep
-  drifting; regenerate when the diff is only pod data, note when it is
-  not.
-- Module-set ordering varies run-to-run. Diagnostic, not correctness.
-- Model-prose variance in `Reason:` lines is real. Same flavor, same
-  Solution, different prose.
-- The parser prompt is at its token ceiling. Any sysprompt edit needs
-  a full `--validate` re-run (V9). This is why F-048's rule edit is the
-  highest-risk of the three new findings.
-- The pod is eqjz. `personas.yaml` holds credentials and is tracked
-  (task 1.1 deferred per plan). Do not commit `personas.yaml`. Named
-  `git add`, never `-A`. Restart the MCP server after any change under
-  `src/spire/mcp_server/`.
-- The F-011b/c sweep artefacts live at repo root: `15_po_relative_date_*`
-  `.txt` files and `scripts/prompts/15_po_relative_date_filters.txt`.
-  These are evidence, not scratch — they document the direction-inversion
-  fix and are the re-runnable check if the sysprompt rule drifts later.
+Shipped this window: F-046, F-047, F-048 (PR #164).
 
----
+Next in §4 order:
 
-## Working process
-
-`docs/spire-robustness/WORKING_STYLE.md` is the standard.
-`docs/AUDIT_AND_FIX.md` is the activity playbook.
-`docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md` is the open/close
-procedure.
-
-**One command at a time.** Anchor-block-verify for every paste. Complete
-files, never fragments. Nested fences use `~~~`.
-
-**Batch edits** use the atomic python-heredoc pattern: read file, apply
-list of (label, old, new) replacements, assert each anchor's count is
-exactly 1, write only on success. Aborts on the first mismatch. This
-window's F-011b and F-019 patches are examples of the pattern.
-
-**Doc disciplines:**
-- Plan (`SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md`) — frozen.
-- Forensic record (`..._Status.md`) — append-only.
-- Audit (`phase-1-audit.md`) — working; rows close in place.
-- Findings log (`findings-log.md`) — append-only; newest at top.
-- FIX_PLAN (`FIX_PLAN.md`) — working; status column mirrors findings log.
+- **Cluster 2 (projection).** F-017, F-027, F-014, F-021 — all four share
+  fix sites in `_FIELDS_SATISFIED_BY_INCLUDE` and `_project_outputs`.
+  One branch, four commits. **Recommended next window.**
+- **F-016** — no schema field for a plain-list row cap; "top 5" on a
+  list query is dropped.
+- **F-003 / F-004** — three PO aggregation ops unreachable from a scoped
+  parse (`modes/` folder in neither `_TIER1` nor `KNOWN_MODULES`).
+- **F-045** — composite `created_since AND created_before` on
+  `/purchaseOrders` returns 0 with a misleading capped note.
+- **Reg #30** — `Compare ordered vs invoiced for our top 3 suppliers`
+  pages all POs before narrowing (perf).
+- **F-049** — wrong-refusal on "invoices created before/since X"
+  (new this window; cluster 4; sysprompt-only).
 
 ---
 
-## Context bundles — how to request code
+## Commit hashes for reference
 
-Code shared as bundles, not individual files. `context_bundles.yaml`
-defines them; `build_context.py --all` writes to `context_out/`.
-
-Phase 2 bundles that matter: `parser_planner`, `parser_context`,
-`mcp_server_tools`, `synthesizer`, `graph_kg`.
-
-**Not in any bundle:** `personas.yaml`, `docs/archive/*`. Paste directly
-if needed.
-
-**Individual-file requests are fine for narrow reads** — this window
-requested single-function greps (`grep -n -A15 "def …"`) multiple times
-and that worked well. Bundles are for wide context, not for one anchor.
-
----
-
-## What to read first, in order
-
-1. This file.
-2. `docs/AUDIT_AND_FIX.md` — the playbook.
-3. `docs/phase-2/FIX_PLAN.md` — the queue, §5 ledger and §4 sequence.
-4. The F-046 entry in `docs/audit/findings-log.md` — the recommended
-   next task, if Option A is chosen.
-
-That is the complete list. The audit's §B.6 map is a lookup when you
-need it, not required reading.
-
----
-
-*End of handoff.*
+    52e840f  F-046
+    78aaeb4  F-047
+    b434539  F-048
+    0bdf26c  Adding new test prompts (16_date_filter_cluster.txt)
+    774ee35  Session handoff 2026-09-23 (window 2)
+    8c9f5a5  Updating bundles
+    bf08f2d  V9: F-046/47/48 verified; F-049 filed
+    e7e0de7  context_bundles.yaml: add V9 sweep + analysis (HEAD)

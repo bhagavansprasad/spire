@@ -65,6 +65,7 @@ _PROJECTED_FIELDS = [
     "CurrencyCode",
     "Description",
     "CreationDate",
+    "LastUpdateDate",
 ]
 
 
@@ -88,6 +89,8 @@ async def search_purchase_orders(
     status: str | None = None,
     created_before: str | None = None,
     created_since: str | None = None,
+    last_updated_before: str | None = None,
+    last_updated_after: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion purchase orders.
@@ -126,6 +129,10 @@ async def search_purchase_orders(
         server_clause = f"SupplierId={supplier_id}"
     elif status:
         server_clause = f"StatusCode='{status}'"
+    elif last_updated_before:
+        server_clause = f"LastUpdateDate < '{last_updated_before}'"
+    elif last_updated_after:
+        server_clause = f"LastUpdateDate >= '{last_updated_after}'"
     elif created_before:
         server_clause = f"CreationDate < '{created_before}'"
     elif created_since:
@@ -141,6 +148,8 @@ async def search_purchase_orders(
             status,
             created_before,
             created_since,
+            last_updated_before,
+            last_updated_after,
         )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
@@ -174,6 +183,13 @@ async def search_purchase_orders(
         if created_before and created >= created_before:
             return False
         if created_since and created < created_since:
+            return False
+        # LastUpdateDate is an ISO timestamp like CreationDate; the
+        # same date-only string-prefix comparison applies.
+        updated = item.get("LastUpdateDate") or ""
+        if last_updated_before and updated >= last_updated_before:
+            return False
+        if last_updated_after and updated < last_updated_after:
             return False
         return True
 

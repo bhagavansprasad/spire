@@ -307,7 +307,12 @@ def _build_entity_fetcher_args(
         # forward it under the tool arg the KG row names
         # (created_before). Runs BEFORE the generic dict handler,
         # which would otherwise read the wrong keys.
-        if ftype in ("older_than_n_months", "created_in_last_n_months"):
+        if ftype in (
+            "older_than_n_months",
+            "created_in_last_n_months",
+            "updated_older_than_n_months",
+            "updated_in_last_n_months",
+        ):
             months = (
                 raw_value.get("months")
                 if isinstance(raw_value, dict) else raw_value

@@ -129,9 +129,10 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
 | F-045 | wrong-data | 1 | `mcp_server/tools/purchase_orders.py` (composite bound), `synthesizer/synthesizer.py` (capped-note wording) | not-started | — | — |
-| F-046 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
-| F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
-| F-048 | missing-capability | 4 | parser sysprompt | not-started | — | — |
+| F-046 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `planner.py`, `context_assembly.py` | verified | #164 | 2026-09-23 |
+| F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `mcp_server/server.py`, `plan_builders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
+| F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
+| F-049 | wrong-refusal | 4 | parser sysprompt, `context_assembly.py` | not-started | — | 2026-09-23 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the

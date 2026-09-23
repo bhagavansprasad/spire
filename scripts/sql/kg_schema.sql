@@ -1367,6 +1367,16 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Invoice-date range. Lower bound via q=InvoiceDate >= ''x'' server-side; upper bound client-side.'
 );
 
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'older_than_n_months', 'entity_level', 'invoice_date_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'InvoiceDate', '<',
+  'Invoices raised MORE than N months ago (older-than relative window). Value is a JSON object {"months": N}. The planner computes the ISO cutoff via _compute_date_n_months_ago and forwards it as the invoice_date_before tool arg; the LLM never computes the date. Mirrors F-011b''s PO-side split; the direction naming matches: older_than_n_months routes to the ''before'' bound.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'created_in_last_n_months', 'entity_level', 'invoice_date_after', NULL, NULL, NULL, NULL, NULL, 'server_q', 'InvoiceDate', '>=',
+  'Invoices raised WITHIN the last N months (recent-window relative window). Value is a JSON object {"months": N}. The planner computes the ISO cutoff via _compute_date_n_months_ago and forwards it as the invoice_date_after tool arg. Mirrors F-011b''s PO-side split.'
+);
+
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, tool_arg_name_hi, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'Invoice', 'invoice_amount', 'entity_level', 'amount_min', 'amount_max', NULL, NULL, NULL, NULL, NULL, 'client_side', 'InvoiceAmount', 'range',
   'Invoice-amount range. Both bounds filtered client-side against InvoiceAmount.'
@@ -1439,6 +1449,16 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'POs created ON OR AFTER a date. Filters server-side. Both bounds work standalone on this pod but cannot be composited (single-clause rule), so one goes to the server and the other is filtered client-side.'
 );
 
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'updated_older_than_n_months', 'entity_level', 'last_updated_before', NULL, NULL, NULL, NULL, NULL, 'server_q', 'LastUpdateDate', '<',
+  'POs whose LastUpdateDate is MORE than N months ago (older-than relative window, last-updated column). Value is a JSON object {"months": N}. The planner computes the ISO cutoff via _compute_date_n_months_ago and forwards it as the last_updated_before tool arg; the LLM never computes the date. Routes phrasings like ''not touched in the last N months'' / ''last modified N months ago'' / ''stale with no updates''. Mirrors F-011b''s CreationDate split, but on the LastUpdateDate column. Distinct from older_than_n_months (that is CreationDate); the two columns move independently — a PO created in 2014 and never touched since sits in both, but a PO created in 2014 and edited last week sits in the older-than-creation-date set but NOT in the not-touched set.'
+);
+
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'PurchaseOrder', 'updated_in_last_n_months', 'entity_level', 'last_updated_after', NULL, NULL, NULL, NULL, NULL, 'server_q', 'LastUpdateDate', '>=',
+  'POs whose LastUpdateDate is WITHIN the last N months (recent-window relative window, last-updated column). Value is a JSON object {"months": N}. The planner computes the ISO cutoff via _compute_date_n_months_ago and forwards it as the last_updated_after tool arg. Routes phrasings like ''recently updated POs'' (with explicit N) / ''POs updated in the last N months'' / ''POs with activity in the last year''. Mirror of updated_older_than_n_months.'
+);
+
 
 INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
   'ReceivablesInvoice', 'by_id', 'entity_level', 'customer_transaction_id', NULL, NULL, NULL, NULL, NULL, 'server_q', 'CustomerTransactionId', 'equals',
@@ -1506,6 +1526,6 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Resolve a customer account by exact AccountNumber via q=AccountNumber=''...''. Confirmed queryable on this endpoint (2026-09-23: q=AccountNumber=''25750'' returns AccountId 300000047368542, CustomerName ABC Corporation Worldwide). The numeric sibling of by_customer_name: a bare account number is an identifier, not a name, and must resolve here.'
 );
 
-PROMPT Seeded kg_entity_filter (30 rows).
+PROMPT Seeded kg_entity_filter (34 rows).
 
 -- ============================================================

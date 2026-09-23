@@ -279,6 +279,8 @@ async def search_purchase_orders(
     status: str | None = None,
     created_before: str | None = None,
     created_since: str | None = None,
+    last_updated_before: str | None = None,
+    last_updated_after: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion purchase orders.
@@ -315,6 +317,8 @@ async def search_purchase_orders(
             status=status,
             created_before=created_before,
             created_since=created_since,
+            last_updated_before=last_updated_before,
+            last_updated_after=last_updated_after,
             limit=limit,
         )
         return result.to_dict()

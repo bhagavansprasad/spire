@@ -55,6 +55,73 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-049 — absolute-date Invoice phrasings starting with `created` refuse
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-046 (sibling — relative-date Invoice now works; this is the absolute-date gap left untouched), B-29
+
+**Evidence.** V9 sweep on `phase-2-fix-F046-F047-F048-date-filters`:
+
+    PROMPT: invoices created before 2024-01-01
+    Reason:   I can look up supplier invoices, but this doesn't say which one.
+    Solution: Name the supplier, or give me the invoice number.
+    Example:  invoices for Lee Supplies
+
+    PROMPT: invoices created since January 2024
+    Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Both refuse with `missing_identifier`. Meanwhile the sibling
+phrasings in the SAME `16_date_filter_cluster.txt` section all
+answer: `invoices in 2024`, `invoices in 2023`, `invoices between
+Jan and Mar 2024`.
+
+**Root cause (partial).** The parser does not recognise "created
+before X" / "created since X" as an InvoiceDate phrasing — the
+`b_invoice_date.sysprompt` bullet lists "invoices in 2023 / invoices
+after 2023-01-01 / invoices between Jan and Mar 2023", none
+starting with "created". The parser therefore emits a filter-less
+Invoice intent, and the planner's Invoice guard (correctly) refuses
+with `missing_identifier`.
+
+**Not a regression.** Pre-branch and post-branch outcomes for these
+two phrasings are identical — the parser never emitted `invoice_date`
+for "created" phrasings, and the guard refusal fires regardless of
+the F-046 guard-widening. F-046 widened the guard to *accept* the
+`invoice_date` filter as a root ref; it did not add parser coverage
+for "created" phrasings.
+
+**Fix location (for Phase 2).** `b_invoice_date.sysprompt` — extend
+the absolute-date bullet to cover:
+
+    'invoices created before X'   / 'invoices created since X'
+    'invoices created after X'    / 'invoices raised before/since X'
+
+Routes to `invoice_date` filter with `from` / `to` as appropriate.
+Mirror in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+Sysprompt-only, no code change, no KG row. V9 mandatory.
+
+**Regression test (post-fix).** Both phrasings answer with real rows.
+Sibling `invoices in 2024` unchanged. Negative `invoices` still
+refuses with the same shape.
+
+**Not checked.** Whether sibling entities (`PurchaseOrder`,
+`StandardReceipt`) have the same "created before/since" coverage
+gap. Whether other absolute-date phrasings (`raised on`, `dated`,
+`issued`) share it. Whether the F-011b `b_po_created_date.sysprompt`
+bullet has the same shape of coverage (it teaches "POs created
+before 2015" — so the phrase "created before X" is covered for
+PO, just not for Invoice).
+
+**Class note.** Same class as F-046 (a date-filter phrasing the
+sysprompt hasn't been taught). Where F-046 was the relative-date
+gap, this is the absolute-date gap in the same family. The
+asymmetry with PO (`b_po_created_date.sysprompt` teaches "created
+before" verbatim) suggests the Invoice block was authored less
+completely.
+
+---
+
 ## F-044 — double-encoded `value_json` crashes the tool at schema validation (intermittent)
 
 **Date:** 2026-09-22
@@ -2015,6 +2082,51 @@ The parser has no rule for a vague relative adjective with no explicit N. The mo
 
 ---
 
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
+
+Sysprompt-only fix. Two files: `b_po_created_date.sysprompt` and
+the byte-equality literal in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+No KG rows, no plan_builders change, no tool change.
+
+**Pod-drift note.** The finding's evidence recorded both
+reproducers as `unsupported_filter`. On `dabpqy` they have
+drifted apart: `new purchase orders` still self-declares
+`unsupported_filter`, but `recent purchase orders` self-declares
+`missing_identifier` — the parser does not recognise `recent` as
+a date phrase at all, so it treats the prompt as a rootless PO
+list and the F-001 guard refuses it. The fix's VAGUE RECENT rule
+teaches both recognition and mapping, so it closes both shapes.
+
+The rule: `recent` / `new` / `latest` / `fresh` / `the most
+recent` / `recently created` — where the adjective names recency
+but gives no explicit N — emits
+`created_in_last_n_months: {"months": 3}`. The default fires
+only when NO explicit N is present; `in the last 6 months` still
+uses months=6.
+
+Verification: V1 (`recent purchase orders`) answers — intent
+`created_in_last_n_months: {months: 3}`, plan
+`created_since: 2026-06-23`, 25 of 259. V2 (`new purchase
+orders`) same shape. V3a (`in the last 6 months`) unchanged,
+months=6. V3b (`older than 6 months`) unchanged, F-011b intact.
+V4 (bare `purchase orders`) still refuses missing_identifier.
+V5 goldens untouched. V6 new `tests/test_f048_vague_relative.py`
+— 3 tests, all fail pre-fix.
+Suite: 1156 passed, 22 deselected (baseline 1153 + 3 new).
+
+**V9 outstanding.** Three sysprompt files were edited across this
+branch (F-046, F-047, F-048). Per FIX_PLAN §4 row 11, one full
+`--validate` run covers all three and is the last step of the
+branch before the PR.
+
+**Not checked.** Other adjectives (`current`, `modern`,
+`up-to-date`); whether the fixed 3-month default should be
+configurable; narration of the assumption as a synthesized
+lead-in; the same defaulting pattern on other list entities
+(Invoice, CreditMemo).
+
+---
+
 ## F-047 — PO last-updated-date filter missing; "not touched in the last year" has no honest answer
 
 **Date:** 2026-09-23
@@ -2054,6 +2166,66 @@ Both refuse *correctly* — the tool filters on CreationDate, the user asked abo
 **Not checked.** Whether the pod accepts `q=LastUpdateDate<...` on `/purchaseOrders`. Whether the same column exists on Invoice / StandardReceipt. Whether `po_lifecycle.py` uses an analogous last-update filter that could be reused.
 
 **Class note.** Same family as F-046. F-011c's guard was the correct *defensive* move; the right *substantive* move is to expose the column the user asked about.
+
+---
+
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
+
+Seven sites, eight files. All landed in one branch alongside F-046 and F-048.
+
+1. **KG.** Two new `(PurchaseOrder, ...)` rows in `scripts/sql/kg_schema.sql`:
+   `updated_older_than_n_months` → `last_updated_before` and
+   `updated_in_last_n_months` → `last_updated_after`, both on the
+   `LastUpdateDate` column (distinct from F-011b's `CreationDate`
+   pair). `kg_entity_filter` 32 → 34.
+
+2. **Sysprompt.** `b_po_created_date.sysprompt`'s last-modified
+   carve-out ("Set unanswerable=true with a reason naming the
+   update-date filter as unsupported") was replaced with two
+   routing rules — LAST-UPDATED OLDER and LAST-UPDATED RECENT.
+   Mirrored in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+
+3. **Planner.** `_build_entity_fetcher_args`'s relative-date branch
+   tuple widened to include `updated_older_than_n_months` and
+   `updated_in_last_n_months`.
+
+4. **Tool.** `search_purchase_orders` gains `last_updated_before` /
+   `last_updated_after` args; sends the single-clause
+   `q=LastUpdateDate < '...'` or `q=LastUpdateDate >= '...'`
+   server-side (priority order after `status`); matches client-side
+   as a defence; `LastUpdateDate` added to the projected fields.
+
+5. **Wrapper.** `mcp_server/server.py::search_purchase_orders`
+   forwards the two new args.
+
+6. **Row counts.** `test_kg_metadata.py` and `print_kg.py`
+   bumped to 34.
+
+Pod probes (2026-09-23, `dabpqy`) confirmed both bounds of
+`LastUpdateDate` filter server-side: `< '2024-01-01'` → 14287;
+`>= '2024-01-01'` → 3257. Control `CreationDate < '2024-01-01'`
+→ 14387. The 100-row gap between the two `<` counts is exactly
+the "created before 2024 but touched after" set this fix
+targets.
+
+Verification: V1 (`not touched in the last year`) answers — intent
+`updated_older_than_n_months: {months: 12}`, plan
+`last_updated_before: 2025-09-23`, 25 of 16,119. V2 (`updated in
+the last 3 months`) — `updated_in_last_n_months: {months: 3}`,
+plan `last_updated_after: 2026-06-23`, 25 of 278. V3a/V3b (F-011b
+siblings) unchanged. V4 (bare `purchase orders`) still refuses
+with the same shape. V5 goldens untouched. V6 new
+`tests/test_f047_po_last_updated.py` — 9 tests, 9 fail pre-fix.
+V9 deferred to end of branch. Suite: 1153 passed, 22 deselected
+(baseline 1144 + 9 new).
+
+**Not checked.** Day-vs-month lossiness (same caveat as F-046);
+N-less phrasings ("recently updated") route to F-048's
+vague-adjective default, not here; other entities exposing
+LastUpdateDate (Invoice, StandardReceipt) run the same shape but
+are not part of this fix. F-045 (composite-date silent-zero on
+`/purchaseOrders`) is untouched — this fix uses single-clause q=
+only.
 
 ---
 
@@ -2136,6 +2308,56 @@ The prompt is in-scope: the user named the entity (Invoice) and a date window. T
 **Not checked.** Whether the pod accepts `q=InvoiceDate<...` on `/invoices` — the tool already sends `invoice_date_before` / `invoice_date_after` today (F-012 evidence); a single curl would confirm. Whether sibling date prompts (`invoices since January`, `invoices from 2023`) currently route correctly. Whether the same gap exists on `StandardReceipt` (`receipt_date_*` args) and `AccountReceipt` — same shape, not run.
 
 **Class note.** Mirror of F-011. The interface premise is English input, so a named entity plus a date window is in-scope. A missing filter is a capability gap, not a refusal to be defended.
+
+---
+
+**Update 2026-09-23 — verified on `phase-2-fix-F046-F047-F048-date-filters` (V9 clean).**
+
+Four-site fix (the entry named three). Sites 2b and 3 were surfaced by
+the parse probes recorded in `docs/phase-2/fixes/F-046.md`.
+
+1. **KG.** Two new `(Invoice, ...)` rows in `scripts/sql/kg_schema.sql`:
+   `older_than_n_months` → `invoice_date_before` and
+   `created_in_last_n_months` → `invoice_date_after`, mirroring F-011b's
+   PO split exactly. `kg_entity_filter` 30 → 32.
+
+2. **Sysprompt.** `b_invoice_date.sysprompt` gains the two relative
+   rules. `b_invoices_for_supplier.sysprompt`'s "MUST include this
+   supplier filter" clause was rewritten to scope the requirement to
+   the supplier-shaped query — pre-fix it blocked date-only Invoice
+   queries (parse probe: `invoices in the last 30 days` self-declared
+   `missing_identifier` sourced from that clause). Both edits are
+   mirrored in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`, the
+   byte-equality oracle `tests/test_parser_context_assembly.py` checks
+   the disk-assembled preamble against.
+
+3. **Guard.** `planner.py::generate_plan`'s Invoice guard widened from
+   `("supplier", "purchase_order", "invoice_number")` to also accept
+   `"invoice_date"`, `"older_than_n_months"`, `"created_in_last_n_months"`.
+   Pre-fix `invoices in 2024` parsed to a correct `invoice_date` intent
+   and refused at the guard — a pre-existing wrong-refusal this fix
+   also closes. Not in the entry's fix location.
+
+4. **No plan_builders change.** The entry's "no code change" claim was
+   correct: the F-011b branch matches on ftype name and is
+   entity-agnostic; Invoice rows reusing the same ftype names pick up
+   the branch automatically. An earlier fix-file draft claimed a
+   change here; retracted before commit.
+
+Verification: V1 (`invoices older than 6 months`) answers — intent
+`older_than_n_months: {months: 6}`, plan `invoice_date_before:
+2026-03-23`. V2 (`invoices in the last 30 days`) same shape,
+`invoice_date_after: 2026-08-23`. V3a (`invoices in 2024`) now
+answers, previously refused. V3b (`invoices for Lee Supplies`)
+unchanged. V4 (bare `invoices`) still refuses with the same shape.
+V5 goldens untouched. V6 new `tests/test_f046_invoice_relative_date.py`
+— 9 tests, 8 fail pre-fix. V9 deferred to end of branch.
+Suite: 1144 passed, 22 deselected (baseline 1135 + 9 new).
+
+**Not checked.** Day-vs-month lossiness (`in the last 30 days` parses
+to `months: 1`); the duplicated invoice-number rule in
+`b_invoices_for_supplier.sysprompt` (cosmetic); class-level
+consistency of the other guards' root-ref accept lists.
 
 ---
 
