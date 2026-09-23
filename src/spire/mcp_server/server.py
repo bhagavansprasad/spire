@@ -183,6 +183,7 @@ async def search_suppliers(
 
 @mcp.tool()
 async def search_invoices(
+    invoice_number: str | None = None,
     purchase_order: str | None = None,
     supplier_number: str | None = None,
     supplier_name: str | None = None,
@@ -206,6 +207,9 @@ async def search_invoices(
     invoice_date_after="2022-01-01" and invoice_date_before="2022-02-01".
 
     Args:
+        invoice_number: Exact InvoiceNumber, e.g. "LEE-01-1006-111" or
+            "INV-2024-001". A direct identifier lookup; accepts an
+            invoice number on its own without a supplier reference.
         purchase_order: Exact PurchaseOrderNumber, e.g. "162034". Returns
             the invoices raised against that PO. This is the PO NUMBER
             (OrderNumber), not POHeaderId.
@@ -224,6 +228,7 @@ async def search_invoices(
     async with FusionClient(_persona) as client:
         result = await _search_invoices(
             client,
+            invoice_number=invoice_number,
             purchase_order=purchase_order,
             supplier_number=supplier_number,
             supplier_name=supplier_name,

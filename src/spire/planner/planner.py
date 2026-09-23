@@ -127,10 +127,11 @@ def generate_plan(
     # Invoice queries require a supplier reference. Without it the fetch
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
-        has_supplier = any(
-            f.get("type") in ("supplier", "purchase_order") for f in intent.filters
+        has_root_ref = any(
+            f.get("type") in ("supplier", "purchase_order", "invoice_number")
+            for f in intent.filters
         )
-        if not has_supplier:
+        if not has_root_ref:
             # MISSING_IDENTIFIER: the record type is named but not scoped.
             # Structured raise -> plan_node -> state["refusal"] -> the same
             # readable shape a parser decline gets. Words come from

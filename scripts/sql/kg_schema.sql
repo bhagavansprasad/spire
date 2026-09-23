@@ -1482,6 +1482,11 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'PO-by-status (OPEN/CLOSED/etc). Value resolved via po_status vocab to the Fusion StatusCode. Applied client-side by search_purchase_orders after over-fetch: SupplierId (if present) takes the server q= clause, so status is matched in Python -- never composited into q= (the pod silently returns 0 for AND-combined clauses).'
 );
 
-PROMPT Seeded kg_entity_filter (26 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'invoice_number', 'entity_level', 'invoice_number', NULL, NULL, NULL, NULL, NULL, 'server_q', 'InvoiceNumber', 'equals',
+  'Invoice-by-number. Value is the human-readable InvoiceNumber exactly as written (e.g. ''LEE-01-1006-111''). Single-clause q=InvoiceNumber=''...'' is reliable server-side (confirmed 2026-09-23: totalResults=1 for LEE-01-1006-111). A direct identifier lookup that stands alone — the planner''s Invoice guard accepts it as a root reference without a supplier.'
+);
+
+PROMPT Seeded kg_entity_filter (27 rows).
 
 -- ============================================================

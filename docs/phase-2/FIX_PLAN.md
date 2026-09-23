@@ -1,5 +1,6 @@
 # SPIRE — Phase 2 Fix Plan
 
+
 **Phase:** 2 — Correctness
 **Created:** 2026-09-19
 **Status:** Open — no fixes started
@@ -111,6 +112,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | verified | #161 | 2026-09-23 |
 | F-039 | wrong-narration | 1 | `synthesizer/aggregation.py` | verified | #162 | 2026-09-23 |
 | F-017 | missing-projection | 2 | `nl_parser/intent_validation.py` | not-started | — | — |
+| F-018 | wrong-refusal | 4 | `mcp_server/tools/invoices.py`, parser sysprompt, KG, `planner.py` | fixed | — | 2026-09-23 |
 | F-027 | missing-projection | 2 | `nl_parser/intent_validation.py`, parser sysprompt | not-started | — | — |
 | F-014 | missing-projection | 2 | `graph/pipeline.py` | not-started | — | — |
 | F-021 | missing-projection | 2 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | not-started | — | — |
@@ -118,7 +120,6 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-016 | missing-capability | 3 | `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py` | not-started | — | — |
 | F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
 | F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt | not-started | — | — |
-| F-018 | wrong-refusal | 4 | `nl_parser/capability.py`, parser sysprompt, tool args, KG | not-started | — | — |
 | F-019 | wrong-data | 4 | parser sysprompt, tool args, KG | not-started | — | — |
 | F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | not-started | — | — |
 | F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |

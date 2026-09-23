@@ -241,7 +241,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | confirmed |
 | B-23 | F-021 | confirmed (root-cause partial — display mechanism unresolved) |
-| B-24 | F-018 | confirmed |
+| B-24 | F-018 | fixed 2026-09-23 |
 | B-25 | F-019 | confirmed |
 | B-26 | F-016 | confirmed |
 | B-27 | F-020 | fixed 2026-09-23 |

@@ -1832,6 +1832,31 @@ Honest sequencing: (2) first (small, correct the false claim), then (1) or (3) (
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 1/3).**
+
+`search_invoices` gains an `invoice_number` argument; the tool sends
+`InvoiceNumber='...'` as the server q= clause (highest priority) and
+re-checks the value client-side. A new `(Invoice, invoice_number)` row
+in `kg_entity_filter` registers the filter. `b_invoices_for_supplier`
+sysprompt teaches the phrasing. `parser.parse()` gains
+`_extract_invoice_number` + a deterministic post-parse override that
+fires when the model returns a filter-less Invoice intent for a prompt
+naming a number. `planner.py`'s Invoice guard accepts `invoice_number`
+as a root reference.
+
+Two-site override because the sysprompt rule alone was insufficient
+(measured 2026-09-23): the model reads the rule and still produces an
+empty intent, and the planner refuses with the old guard. Parser-side
+injection + planner-side acceptance both required.
+
+Pod probe: `q=InvoiceNumber='LEE-01-1006-111'` returns `totalResults=1`.
+Reproducer now answers InvoiceId 489503 / Lee Supplies / 11,138.34.
+Sibling `invoices for Lee Supplies` unchanged. Negative `invoices`
+still refuses with the same shape. Suite 1118 passed. V9 deferred to
+the end of this branch (three sysprompt edits share one run).
+
+---
+
 ## F-019 — account number routed into `by_customer_name`; the empty-bucket shortcut narrates "no customer accounts found"
 
 **Date:** 2026-09-18

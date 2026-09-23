@@ -160,6 +160,52 @@ def _is_explicit_po_list(prompt: str) -> bool:
     return True
 
 
+_INVOICE_NUMBER_QUERY_RE = re.compile(
+    r"\binvoice\b(?:\s+(?:number|numbered|no\.?|#))?\s+"
+    r"([A-Za-z0-9][A-Za-z0-9_./-]{3,})",
+    re.IGNORECASE,
+)
+
+
+def _extract_invoice_number(prompt: str) -> str | None:
+    """Return the invoice number if the prompt names one directly, else None.
+
+    F-018. The sysprompt teaches the shape (b_invoices_for_supplier.sysprompt)
+    but the LLM has a strong prior against treating an alphanumeric token as
+    an identifier — measured 2026-09-23, the model refuses even when the rule
+    quotes the prompt verbatim. This is a deterministic, post-LLM helper of
+    the same class as _is_explicit_po_list: pure Python, runs after the
+    model, corrects the shape the model gets wrong.
+
+    Returns the token exactly as it appeared (trailing sentence punctuation
+    stripped). Returns None when the prompt names no direct invoice number.
+
+    The two guards keep the extraction from being too loose:
+
+      - The token must contain at least one digit. Excludes the "invoice
+        created before 2015" case (token would be "created").
+
+      - A pure-digit token is accepted only when the literal word "number"
+        (or "numbered" / "no." / "#") is present. Otherwise "invoice 162034"
+        is treated as ambiguous — the pod's PO and invoice id spaces overlap
+        in shape, and the model's own prior is the safer read on the bare
+        form.
+    """
+    m = _INVOICE_NUMBER_QUERY_RE.search(prompt)
+    if not m:
+        return None
+    token = m.group(1).rstrip(".,;:!?")
+    if len(token) < 4 or not any(c.isdigit() for c in token):
+        return None
+    has_number_word = bool(re.search(
+        r"\binvoice\s+(?:number|numbered|no\.?|#)", prompt, re.IGNORECASE
+    ))
+    has_non_digit = any(not c.isdigit() for c in token)
+    if not has_number_word and not has_non_digit:
+        return None
+    return token
+
+
 def _is_empty_draft(parsed: Any) -> bool:
     """A shape-valid draft with nothing to plan against.
 
@@ -361,6 +407,29 @@ def parse(
 
     # --- Explicit unanswerable takes precedence over everything else ---
     if getattr(parsed, "unanswerable", False):
+        # F-018: an Invoice-shape refusal on a prompt that names an
+        # invoice number directly. The sysprompt teaches the shape; the
+        # LLM still refuses (measured 2026-09-23, the rule is quoted in
+        # the prompt and the model ignores it). Deterministic override,
+        # same class as _is_explicit_po_list. Fires ONLY when the refusal
+        # is about the Invoice entity AND the raw prompt contains a
+        # code-shaped token after "invoice".
+        if (
+            (getattr(parsed, "unanswerable_entity", None) or "")
+            .strip()
+            .lower() == "invoice"
+        ):
+            inv_number = _extract_invoice_number(prompt)
+            if inv_number is not None:
+                return ParseResult.ok(
+                    Intent(
+                        target_entity="Invoice",
+                        filters=[
+                            {"type": "invoice_number", "value": inv_number}
+                        ],
+                    )
+                )
+
         from spire.nl_parser.capability import derive_flavor
 
         kind = getattr(parsed, "unanswerable_kind", None)
@@ -462,6 +531,30 @@ def parse(
         intent.include = strip_po_supplier_include(
             intent.target_entity, intent.include, menu
         )
+
+    # --- F-018: Invoice identifier from the raw prompt ---
+    #
+    # The model reliably produces a filter-less Invoice intent for a
+    # prompt that names an invoice number directly ("show details for
+    # invoice number LEE-01-1006-111"), because it treats the alphanumeric
+    # token as an unknown entity reference rather than an identifier.
+    # Measured 2026-09-23 — the sysprompt rule is in the prompt and the
+    # model ignores it. Deterministic correction, same class as
+    # _is_explicit_po_list: pure Python, runs after the LLM, injects the
+    # filter the model dropped. Fires ONLY when target_entity is Invoice
+    # AND no identifier of any kind is present AND the prompt contains a
+    # code-shaped token after "invoice".
+    if intent.target_entity == "Invoice":
+        has_identifier = any(
+            f.get("type") in ("supplier", "purchase_order", "invoice_number")
+            for f in intent.filters
+        )
+        if not has_identifier:
+            inv_number = _extract_invoice_number(prompt)
+            if inv_number is not None:
+                intent.filters.append(
+                    {"type": "invoice_number", "value": inv_number}
+                )
 
     # --- KG validation ---
     #
