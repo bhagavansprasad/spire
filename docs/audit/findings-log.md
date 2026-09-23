@@ -2057,6 +2057,66 @@ Both refuse *correctly* — the tool filters on CreationDate, the user asked abo
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+
+Seven sites, eight files. All landed in one branch alongside F-046 and F-048.
+
+1. **KG.** Two new `(PurchaseOrder, ...)` rows in `scripts/sql/kg_schema.sql`:
+   `updated_older_than_n_months` → `last_updated_before` and
+   `updated_in_last_n_months` → `last_updated_after`, both on the
+   `LastUpdateDate` column (distinct from F-011b's `CreationDate`
+   pair). `kg_entity_filter` 32 → 34.
+
+2. **Sysprompt.** `b_po_created_date.sysprompt`'s last-modified
+   carve-out ("Set unanswerable=true with a reason naming the
+   update-date filter as unsupported") was replaced with two
+   routing rules — LAST-UPDATED OLDER and LAST-UPDATED RECENT.
+   Mirrored in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+
+3. **Planner.** `_build_entity_fetcher_args`'s relative-date branch
+   tuple widened to include `updated_older_than_n_months` and
+   `updated_in_last_n_months`.
+
+4. **Tool.** `search_purchase_orders` gains `last_updated_before` /
+   `last_updated_after` args; sends the single-clause
+   `q=LastUpdateDate < '...'` or `q=LastUpdateDate >= '...'`
+   server-side (priority order after `status`); matches client-side
+   as a defence; `LastUpdateDate` added to the projected fields.
+
+5. **Wrapper.** `mcp_server/server.py::search_purchase_orders`
+   forwards the two new args.
+
+6. **Row counts.** `test_kg_metadata.py` and `print_kg.py`
+   bumped to 34.
+
+Pod probes (2026-09-23, `dabpqy`) confirmed both bounds of
+`LastUpdateDate` filter server-side: `< '2024-01-01'` → 14287;
+`>= '2024-01-01'` → 3257. Control `CreationDate < '2024-01-01'`
+→ 14387. The 100-row gap between the two `<` counts is exactly
+the "created before 2024 but touched after" set this fix
+targets.
+
+Verification: V1 (`not touched in the last year`) answers — intent
+`updated_older_than_n_months: {months: 12}`, plan
+`last_updated_before: 2025-09-23`, 25 of 16,119. V2 (`updated in
+the last 3 months`) — `updated_in_last_n_months: {months: 3}`,
+plan `last_updated_after: 2026-06-23`, 25 of 278. V3a/V3b (F-011b
+siblings) unchanged. V4 (bare `purchase orders`) still refuses
+with the same shape. V5 goldens untouched. V6 new
+`tests/test_f047_po_last_updated.py` — 9 tests, 9 fail pre-fix.
+V9 deferred to end of branch. Suite: 1153 passed, 22 deselected
+(baseline 1144 + 9 new).
+
+**Not checked.** Day-vs-month lossiness (same caveat as F-046);
+N-less phrasings ("recently updated") route to F-048's
+vague-adjective default, not here; other entities exposing
+LastUpdateDate (Invoice, StandardReceipt) run the same shape but
+are not part of this fix. F-045 (composite-date silent-zero on
+`/purchaseOrders`) is untouched — this fix uses single-clause q=
+only.
+
+---
+
 ## F-045 — composite `created_since AND created_before` on /purchaseOrders returns 0 with a misleading 'capped' note
 
 **Date:** 2026-09-23
