@@ -146,6 +146,23 @@ For the procedural checklist that accompanies this file, see
     The single exception: a one-shot command whose complete output will
     be pasted into a message anyway. If in doubt, unfiltered.
 
+15.2. **Name a slow command's cost before the user runs it.**
+    Before handing over any command whose wall-clock may exceed about
+    thirty seconds, say so in the same reply, with a rough figure and,
+    when known, why it is slow. "This walks ~13k invoices across 26
+    pages, expect 2-4 minutes" is enough. Without it the user has no
+    way to decide whether to run it now, later, or ask for a cheaper
+    path.
+
+    Where a cheaper reproducer exists, offer it. Where none does — an
+    aggregate whose fetch is inherently the whole collection — say that
+    too, so the user knows the cost is not avoidable rather than the
+    tool being slow.
+
+    This is not a rule about laziness; it is a rule about consent. A
+    long fetch the user did not agree to spend time on is a longer
+    conversation than one they did.
+
 ## Evidence standard for findings (S0–S8)
 
 Before anything is written into a findings log as a bug, the claim
