@@ -3,6 +3,7 @@ bundles:
   root:
   - README.md
   - how-to-run.md
+  - docs/tester-intro.md
   - prompt_coverage.md
   - build_context.py
   - context_bundles.yaml
@@ -18,7 +19,8 @@ bundles:
   - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
   - docs/spire-robustness/WORKING_STYLE.md
-  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md  
+  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
+  - docs/spire-robustness/SESSION_HANDOVER.md
   - docs/SPIRE_SESSION_HANDOFF.md
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
@@ -52,15 +54,19 @@ bundles:
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
   - docs/phase-2/fixes/F-002.md
-  - docs/phase-2/fixes/F-033.md
-  - docs/phase-2/fixes/F-041.md
+  - docs/phase-2/fixes/F-008.md
+  - docs/phase-2/fixes/F-010.md
   - docs/phase-2/fixes/F-012.md
+  - docs/phase-2/fixes/F-020.md
+  - docs/phase-2/fixes/F-033.md
   - docs/phase-2/fixes/F-036.md
+  - docs/phase-2/fixes/F-039.md
+  - docs/phase-2/fixes/F-041.md
   - docs/phase-2/fixes/F-044.md
   - docs/audit/golden/count_suppliers.txt
   - docs/audit/golden/po_2144_and_lines.txt
   - docs/audit/golden/suppliers_with_open_pos.txt
-  
+
   prompts:
   - scripts/prompts/00_dipstick.txt
   - scripts/prompts/01_supplier.txt
@@ -83,7 +89,7 @@ bundles:
   - scripts/prompts/scorer/tool_selection.txt
   - scripts/run_prompt_set.py
   - src/spire/rendering/formatters.py
-  
+
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora:
   - scripts/prompts/00_dipstick.json
@@ -358,15 +364,19 @@ bundles:
   # CF-3 corpus-consistency guard
   - tests/test_corpus_consistency.py
   # Phase 2 finding-specific regressions
-  - tests/test_f002_classify_surfaced.py
-  - tests/test_f033_refusal_example.py
-  - tests/test_f041_ar_child_root.py
   - tests/test_f001_list_all_flag.py
+  - tests/test_f002_classify_surfaced.py
   - tests/test_f006_alpha_order_number.py
   - tests/test_f007_empty_child_ack.py
-  - tests/test_f015_empty_bucket_truncation.py
+  - tests/test_f008_classification_status.py
+  - tests/test_f010_filtered_count.py
   - tests/test_f012_truncation_sample.py
+  - tests/test_f015_empty_bucket_truncation.py
+  - tests/test_f020_supplier_contacts_summary.py
+  - tests/test_f033_refusal_example.py
   - tests/test_f036_truncation_wording.py
+  - tests/test_f039_aggregate_difference_phrase.py
+  - tests/test_f041_ar_child_root.py
   - tests/test_f044_double_encoded_value.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
