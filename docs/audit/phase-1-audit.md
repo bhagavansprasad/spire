@@ -351,7 +351,7 @@ Resolved this session:
 | D-07 | `Show PO 2144 and its lines` vs `How much of PO 2144 was received?` | `"PO 2144"` routed to `by_id` vs `lifecycle_status`. | Cross-reference B-11. |
 | D-09 | `12_po_supplier_include.txt` prompts 7–15 | Seven prompts produce byte-identical answers. | Cross-reference B-15. |
 | D-10 | `07_alacarte.txt` and `11_column_vocabulary.txt` | Duplicated prompts within and between files. | Test-set hygiene. |
-| D-11 | `Compare ordered vs invoiced for our top 3 suppliers` | "under-invoiced by 864,399,645.92" is accurate but invites misreading. | ~1% of invoices are PO-linked on these pods. |
+| D-11 | `Compare ordered vs invoiced for our top 3 suppliers` | "under-invoiced by 864,399,645.92" is accurate but invites misreading. | Fixed in F-039 (PR pending). ~1% of invoices are PO-linked on these pods. |
 | D-12 | `Show invoice lines for invoice 300000248096352` | Two different refusal messages in two files: `unknown_entity` vs `unparseable`. | Same input, different message. |
 | D-13 | `Trace receipt applications for account 25750` vs `Get the most recent standard receipts for account 25750` — **new** | First returns silent-0 ("No customer accounts found"); second returns honest refusal ("Filtering receipts by account number is not supported"). | Same account reference, two different behaviours. The silent-0 is B-25. |
 | D-14 | Supplier count across the audit — **new** | `452` (`qa_testcases` P9), `453` (`01_supplier`), `450` (`01_supplier` active), `455` (`qa_testcases` P10), `451` (`11_column_vocabulary`). | See §H.1. |
