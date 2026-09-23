@@ -469,6 +469,62 @@ def _direction_phrase(difference: float) -> str:
     return "fully invoiced (invoiced equals ordered)"
 
 
+# When at least this fraction of a supplier's invoices are NOT
+# PO-linked, an aggregate "ordered vs invoiced" difference describes a
+# document-matching gap rather than a billing gap. Measured 2026-09-23
+# on the pod's top three suppliers by PO value:
+#
+#     EIP Inc            3,207 of 3,284 unmatched (97.7%)
+#     Staffing Services  2,422 of 2,436 unmatched (99.4%)
+#     JGA                2,267 of 2,322 unmatched (97.6%)
+#
+# All three sit well above the threshold. Below it, the excluded set is
+# a minority of what was compared, and _direction_phrase's "under-
+# invoiced" wording is fair.
+MOST_UNMATCHED_RATIO = 0.75
+
+
+def _aggregate_difference_phrase(
+    difference: float, unmatched: int, total: int
+) -> str:
+    """Difference phrasing for the AGGREGATE comparison shapes.
+
+    Distinct from _direction_phrase, which serves the single-PO
+    comparison. There the excluded set is bounded: an invoice not
+    linked to PO 162034 is genuinely outside that one comparison, so
+    "under-invoiced" is a fair reading of the difference.
+
+    For a supplier-scoped or top-N comparison, the excluded set is
+    usually most of the supplier's invoices. In that regime,
+    "under-invoiced by 864M" asserts a billing state the arithmetic
+    does not establish: EIP was not invoiced less than ordered, EIP's
+    invoices simply do not carry a PO number to match against. So when
+    MOST_UNMATCHED_RATIO or more of the supplier's invoices are
+    unlinked, this reports what was compared, not what the supplier
+    did.
+
+    Difference is signed (invoiced minus ordered). With most invoices
+    unmatched, the sign is usually negative; the positive branch is
+    kept for the pathological case and worded consistently.
+
+    total == 0 (no invoices at all) falls through to
+    _direction_phrase, which handles the zero-difference case.
+    """
+    if total > 0 and unmatched / total >= MOST_UNMATCHED_RATIO:
+        if difference < 0:
+            return (
+                f"{abs(difference):,.2f} of ordered value has no "
+                f"PO-matched invoice"
+            )
+        if difference > 0:
+            return (
+                f"PO-matched invoiced exceeds ordered by "
+                f"{difference:,.2f}"
+            )
+        return "PO-matched invoiced equals ordered"
+    return _direction_phrase(difference)
+
+
 def _summarize_po_comparison(data: dict) -> str:
     if not data.get("found"):
         return (
@@ -506,10 +562,15 @@ def _summarize_supplier_comparison(data: dict) -> str:
     diff = data.get("total_difference", 0.0)
     po_count = data.get("po_count", 0)
     unmatched = data.get("unmatched_invoice_count", 0)
+    inv_count = data.get("invoice_count", 0)
+    # F-039: aggregate shapes use the ratio-aware phrase. Measured
+    # 2026-09-23 across the pod's top three suppliers: 97.7% / 99.4% /
+    # 97.6% of each supplier's invoices are non-PO. "Under-invoiced"
+    # over-claims a billing state in that regime.
     parts = [
         f"{data.get('supplier')}: across {po_count} purchase order(s), "
         f"ordered {ordered:,.2f} and PO-matched invoiced {invoiced:,.2f} — "
-        f"{_direction_phrase(diff)}."
+        f"{_aggregate_difference_phrase(diff, unmatched, inv_count)}."
     ]
     if unmatched:
         parts.append(
@@ -532,9 +593,13 @@ def _summarize_top_suppliers_comparison(data: dict) -> str:
         invoiced = s.get("total_invoiced", 0.0)
         diff = s.get("total_difference", 0.0)
         unmatched = s.get("unmatched_invoice_count", 0)
+        inv_count = s.get("invoice_count", 0)
+        # F-039: same ratio-aware phrase as the supplier-scoped shape;
+        # see _aggregate_difference_phrase for the measured thresholds.
         line = (
             f"- {s.get('supplier')}: ordered {ordered:,.2f}, PO-matched "
-            f"invoiced {invoiced:,.2f} — {_direction_phrase(diff)}"
+            f"invoiced {invoiced:,.2f} — "
+            f"{_aggregate_difference_phrase(diff, unmatched, inv_count)}"
         )
         if unmatched:
             line += f" ({unmatched:,} non-PO invoices excluded)"

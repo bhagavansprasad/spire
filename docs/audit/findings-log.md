@@ -3445,6 +3445,43 @@ Option 1 is the honest fix. Option 2 trades accuracy for uniformity. The referen
 
 **Class note.** Fourth narrative-mischaracterisation finding this session, alongside F-014 (a `fields` request rendered as `—`), F-020 (a run-on that asserts an unverifiable property), F-026 (a zero-PO comparison narrated as "fully invoiced"). The pattern: the pipeline produces a number or shape correctly and then a word is chosen that asserts more than the number supports. All four fix sites are in the synthesis layer.
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F039-aggregate-difference-phrase`.**
+
+`aggregation.py` gains `MOST_UNMATCHED_RATIO = 0.75` and
+`_aggregate_difference_phrase`. The two aggregate summarizers use
+it; the single-PO summarizer keeps `_direction_phrase`. When the
+unmatched fraction is at or above the threshold, the phrase reports
+the state of the data (“X of ordered value has no PO-matched
+invoice”) rather than a supplier behaviour (“under-invoiced by X”).
+
+Verification:
+
+- Reproducer `Compare ordered vs invoiced for our top 3 suppliers`
+  now answers each line as e.g. `864,576,395.58 of ordered value
+  has no PO-matched invoice (3,207 non-PO invoices excluded)`.
+  Pre-fix each line read `under-invoiced by 864,576,395.58 (3,207
+  non-PO invoices excluded)`. The three suppliers' unmatched
+  fractions are 97.7% / 99.4% / 97.6%, all well above threshold.
+- Sibling unchanged: `How does invoiced compare to ordered for PO
+  162034?` still uses `over-invoiced by 72.01` — the single-PO
+  shape is untouched.
+- New file `tests/test_f039_aggregate_difference_phrase.py` — 13
+  tests. All fail without the fix (ImportError on
+  `MOST_UNMATCHED_RATIO` at collection). Reversion verified by
+  `git stash push src/spire/synthesizer/aggregation.py`.
+- Full suite: 1107 passed, 22 deselected (baseline 1094 + 13 new).
+
+**Deviations from the entry.** None in shape — the entry
+recommended the aggregate-only fix (option 1), which is what
+landed. The threshold value (0.75) is a choice the entry left
+open; the three affected suppliers all sit at 97%+, so the exact
+cut is not load-bearing for the current data.
+
+**Not checked.** The single-supplier shape was exercised only by
+the unit test, not end-to-end. Whether any aggregate comparison
+falls between 0.5 and 0.75 on this pod (the region where the
+threshold choice is consequential).
+
 ---
 
 ## F-040 — `Purchase orders created before 2015` truncation block is deterministic at N=20; D-05 / §H.1 do not reproduce
