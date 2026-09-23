@@ -149,6 +149,9 @@ recorded in §B.4 as positive examples.
 
 | ID | Kind | Prompt | Note |
 |---|---|---|---|
+| B-31 | missing-capability (vague-relative default) — **new** | `recent purchase orders`, `new purchase orders` | POs in a default recent window | Refuses `unsupported_filter`. Parser has no rule for a vague adjective with no N. | F-048 |
+| B-30 | missing-capability (last-updated-date on PO) — **new** | `purchase orders not touched in the last year`, `purchase orders with no recent activity` | POs filtered by last-modified | Refuses `unsupported_filter`. Tool filters on CreationDate only. | F-047 |
+| B-29 | missing-capability (relative-date on Invoice) — **new** | `invoices older than 6 months`, `invoices in the last 30 days` | Invoice list filtered by date | Refuses `missing_identifier`. `search_invoices` already accepts `invoice_date_after`/`invoice_date_before`. | F-046 |
 | B-c1 | wrong-answer (suspected) | `What is the risk rating on PO 701337 and why?` | Needs a curl against the lifecycle source fields. |
 | B-c2 | wrong-answer (suspected) | Supplier count across runs | 452 / 453 / 450 / 455 observed across the audit. Plausibly correct; belongs in §H until N-run evidence. |
 | B-c3 | wrong-answer (semantics) | `suppliers that are not inactive` | Parses to `status=ACTIVE`. Correct on this pod but semantically different. |
@@ -224,7 +227,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-03 | F-008 | fixed 2026-09-22 |
 | B-04 | F-010 | fixed 2026-09-22 |
 | B-05 | F-009 | fixed 2026-09-19 |
-| B-06 | F-011 | confirmed |
+| B-06 | F-011 | fixed 2026-09-23 |
 | B-07 | F-012 | closed 2026-09-22 (PR #157) |
 | B-09 | F-002 (cross-ref) | confirmed |
 | B-10 | F-022 | closed-as-not-a-bug |
@@ -241,16 +244,19 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | confirmed |
 | B-23 | F-021 | confirmed (root-cause partial — display mechanism unresolved) |
-| B-24 | F-018 | confirmed |
-| B-25 | F-019 | confirmed |
+| B-24 | F-018 | fixed 2026-09-23 |
+| B-25 | F-019 | fixed 2026-09-23 |
 | B-26 | F-016 | confirmed |
 | B-27 | F-020 | fixed 2026-09-23 |
+| B-29 | F-046 | confirmed |
+| B-30 | F-047 | confirmed |
+| B-31 | F-048 | confirmed |
 | B-c1 | F-030 | closed-as-not-a-bug |
 | B-c2 | F-024 | closed-as-not-a-bug |
 | B-c3 | F-031 | closed-as-not-a-bug (observation) |
 | B-c4 | F-024 (class note) | folded |
 
-**Tally.** 23 §B.1 rows with own F-NNN; 3 cross-referenced (B-09, B-13, B-20); all 4 §B.2 candidates have entries (B-c4 folded into F-024's class note). No unwritten rows.
+**Tally.** 26 §B.1 rows with own F-NNN; 3 cross-referenced (B-09, B-13, B-20); all 4 §B.2 candidates have entries (B-c4 folded into F-024's class note). No unwritten rows.
 
 **§B is complete.** Every §B.1 row and every §B.2 candidate carries a findings-log entry or a cross-reference; no unwritten rows remain. §B.6 stays as the audit-row-to-finding map for future sessions.
 

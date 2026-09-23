@@ -11,6 +11,7 @@ the most selective single clause via q=, filter remaining clauses in
 Python. Over-fetch is capped at OVERFETCH_LIMIT.
 
 Filters supported:
+- invoice_number: exact match on InvoiceNumber (e.g. "LEE-01-1006-111"). Most selective filter, so it wins the single server q= clause when present.
 - purchase_order: exact match on PurchaseOrderNumber (the PO NUMBER, e.g.
   "162034" — not POHeaderId). Invoices carry the PO number on the header
   and it filters server-side. Most selective filter, so it wins the single
@@ -70,6 +71,7 @@ _PROJECTED_FIELDS = [
 
 async def search_invoices(
     client: FusionClient,
+    invoice_number: str | None = None,
     purchase_order: str | None = None,
     supplier_number: str | None = None,
     supplier_name: str | None = None,
@@ -109,7 +111,9 @@ async def search_invoices(
     # invoice_date_before is intentionally never the server clause; it
     # stays a pure client-side filter to keep the truncation logic intact.
     server_clause: str | None = None
-    if purchase_order:
+    if invoice_number:
+        server_clause = f"InvoiceNumber='{invoice_number}'"
+    elif purchase_order:
         server_clause = f"PurchaseOrderNumber='{purchase_order}'"
     elif supplier_number:
         server_clause = f"SupplierNumber='{supplier_number}'"
@@ -122,6 +126,7 @@ async def search_invoices(
     needs_client_filter = sum(
         bool(x)
         for x in (
+            invoice_number,
             purchase_order,
             supplier_number,
             supplier_name,
@@ -142,6 +147,8 @@ async def search_invoices(
 
     # Apply remaining filters in Python.
     def matches(item: dict) -> bool:
+        if invoice_number and item.get("InvoiceNumber") != invoice_number:
+            return False
         if purchase_order and item.get("PurchaseOrderNumber") != purchase_order:
             return False
         if supplier_number and item.get("SupplierNumber") != supplier_number:

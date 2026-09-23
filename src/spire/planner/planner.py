@@ -127,10 +127,11 @@ def generate_plan(
     # Invoice queries require a supplier reference. Without it the fetch
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
-        has_supplier = any(
-            f.get("type") in ("supplier", "purchase_order") for f in intent.filters
+        has_root_ref = any(
+            f.get("type") in ("supplier", "purchase_order", "invoice_number")
+            for f in intent.filters
         )
-        if not has_supplier:
+        if not has_root_ref:
             # MISSING_IDENTIFIER: the record type is named but not scoped.
             # Structured raise -> plan_node -> state["refusal"] -> the same
             # readable shape a parser decline gets. Words come from
@@ -331,7 +332,9 @@ def generate_plan(
         )
     except KeyError:
         fetcher_tool = find_entity_tool(intent.target_entity, "none")
-    fetcher_args = _build_entity_fetcher_args(intent.filters, intent.target_entity)
+    fetcher_args = _build_entity_fetcher_args(
+        intent.filters, intent.target_entity, ref_date
+    )
 
     # Address include on a supplier-rooted query is satisfied by expanding
     # the addresses child on the supplier fetch itself (Path B), NOT by a

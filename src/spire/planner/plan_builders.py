@@ -273,8 +273,22 @@ def _resolve_arg_name(arg_name: str, raw_value: Any) -> str:
     return numeric_arg if str(raw_value).strip().isdigit() else name_arg
 
 
-def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> dict[str, Any]:
-    """Build tool_args for the entity fetcher."""
+def _build_entity_fetcher_args(
+    filters: list[dict[str, Any]],
+    entity: str,
+    reference_date: date | None = None,
+) -> dict[str, Any]:
+    """Build tool_args for the entity fetcher.
+
+    reference_date is threaded in for the two entity-level filters
+    whose value is a RELATIVE window (older_than_n_months,
+    created_in_last_n_months): the planner computes the ISO cutoff
+    via the same _compute_date_n_months_ago helper
+    has_no_recent_invoices uses, so tests can pin "today" without
+    monkeypatching datetime. Every other filter is unaffected.
+    """
+    if reference_date is None:
+        reference_date = date.today()
     args = {}
     for f in filters:
         ftype = f.get("type")
@@ -287,6 +301,31 @@ def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> di
         raw_value = f.get("value")
         arg_name = _resolve_arg_name(defn["tool_arg_name"], raw_value)
         arg_name_hi = defn.get("tool_arg_name_hi")
+
+        # F-011: relative PO-date window. Value is {"months": N};
+        # compute the ISO cutoff locally (never the LLM's job) and
+        # forward it under the tool arg the KG row names
+        # (created_before). Runs BEFORE the generic dict handler,
+        # which would otherwise read the wrong keys.
+        if ftype in ("older_than_n_months", "created_in_last_n_months"):
+            months = (
+                raw_value.get("months")
+                if isinstance(raw_value, dict) else raw_value
+            )
+            if (
+                not isinstance(months, int)
+                or isinstance(months, bool)
+                or months <= 0
+            ):
+                raise ValueError(
+                    f"{ftype} requires value="
+                    "{'months': <positive int>}; got "
+                    f"{raw_value!r}."
+                )
+            cutoff = _compute_date_n_months_ago(months, reference_date)
+            args[arg_name] = cutoff.isoformat()
+            continue
+
         if isinstance(raw_value, dict):
             low = raw_value.get("from", raw_value.get("min"))
             high = raw_value.get("to", raw_value.get("max"))

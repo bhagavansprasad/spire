@@ -1,0 +1,48 @@
+# F-011 relative-date sweep — 23 prompts
+#
+# Purpose: evidence for the A/B decision on F-011's recent-window inversion.
+# Branch:  phase-2-fix-F011-F018-F019-cluster4
+# Date:    2026-09-23
+#
+# Categories:
+#   OLDER-DIRECTION       expected to work with current code
+#   RECENT-DIRECTION      expected to INVERT with current code (this is the bug)
+#   BARE / IMPLIED        no explicit N; behavior uncertain
+#   ABSOLUTE              pre-existing; should be unchanged
+#   COMPOSITE             with existing supplier filter
+#   CROSS-ENTITY          no such filter on Invoice; should refuse
+
+# --- OLDER-DIRECTION ---
+purchase orders older than 6 months
+purchase orders older than 12 months
+purchase orders older than 1 year
+purchase orders older than 2 years
+stale purchase orders
+aged purchase orders
+purchase orders that are more than 6 months old
+
+# --- RECENT-DIRECTION (predicted invert) ---
+purchase orders in the last 12 months
+purchase orders in the last 6 months
+purchase orders from the last year
+recent purchase orders
+new purchase orders
+purchase orders created in the last 30 days
+
+# --- ABSOLUTE (should be unchanged) ---
+purchase orders created before 2024-01-01
+purchase orders created before 2015
+purchase orders created since March 2024
+purchase orders between Jan and Mar 2025
+purchase orders created in 2023
+
+# --- BARE / IMPLIED ---
+purchase orders not touched in the last year
+purchase orders with no recent activity
+
+# --- COMPOSITE ---
+purchase orders for EIP Inc older than 6 months
+
+# --- CROSS-ENTITY ---
+invoices older than 6 months
+invoices in the last 30 days

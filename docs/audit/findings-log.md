@@ -1094,6 +1094,27 @@ The first is the honest minimum; the second is what the KG note was suggesting. 
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 2/3).**
+
+New PurchaseOrder entity-level filter `created_in_last_n_months`.
+The KG row names `created_before` as the tool arg;
+`plan_builders._build_entity_fetcher_args` gains a reference_date
+parameter and a branch that computes the ISO cutoff via the same
+`_compute_date_n_months_ago` helper has_no_recent_invoices uses.
+`b_po_created_date.sysprompt` teaches the relative phrasing.
+
+Verification: V1 (`Purchase orders older than 6 months`) now answers
+— intent `created_in_last_n_months: {months: 6}`, plan
+`created_before: 2026-03-23`. V2 paraphrase (`in the last 12 months`)
+same shape, cutoff 2025-09-23. V3 sibling absolute-date
+(`created before 2024-01-01`) unchanged — routes to `created_before`
+with the ISO value verbatim. V4 absolute (`before 2015`) unchanged.
+V5 goldens empty. V6 7 new tests pass; suite 1125. V7 all 7 fail
+without the plan_builders branch. V9 deferred to the end of the
+branch (three sysprompt edits share one --validate run).
+
+---
+
 ## F-012 — composite invoice filter hits the over-fetch cap, drops `total_available`; the answer reads as if 20 were the count
 
 **Date:** 2026-09-18
@@ -1832,6 +1853,31 @@ Honest sequencing: (2) first (small, correct the false claim), then (1) or (3) (
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 1/3).**
+
+`search_invoices` gains an `invoice_number` argument; the tool sends
+`InvoiceNumber='...'` as the server q= clause (highest priority) and
+re-checks the value client-side. A new `(Invoice, invoice_number)` row
+in `kg_entity_filter` registers the filter. `b_invoices_for_supplier`
+sysprompt teaches the phrasing. `parser.parse()` gains
+`_extract_invoice_number` + a deterministic post-parse override that
+fires when the model returns a filter-less Invoice intent for a prompt
+naming a number. `planner.py`'s Invoice guard accepts `invoice_number`
+as a root reference.
+
+Two-site override because the sysprompt rule alone was insufficient
+(measured 2026-09-23): the model reads the rule and still produces an
+empty intent, and the planner refuses with the old guard. Parser-side
+injection + planner-side acceptance both required.
+
+Pod probe: `q=InvoiceNumber='LEE-01-1006-111'` returns `totalResults=1`.
+Reproducer now answers InvoiceId 489503 / Lee Supplies / 11,138.34.
+Sibling `invoices for Lee Supplies` unchanged. Negative `invoices`
+still refuses with the same shape. Suite 1118 passed. V9 deferred to
+the end of this branch (three sysprompt edits share one run).
+
+---
+
 ## F-019 — account number routed into `by_customer_name`; the empty-bucket shortcut narrates "no customer accounts found"
 
 **Date:** 2026-09-18
@@ -1901,6 +1947,155 @@ The audit's D-13 sibling does the honest thing already — `search_standard_rece
 **Not checked.** Whether account 25750 exists on this pod — the falsifier, not run; if it does not, the harm reduces to "the message should not have framed the search as a customer-name lookup", which is fix option 3. Whether the D-13 sibling prompt still produces the honest refusal — cited from the audit, not re-run. Whether the fix belongs at the tool, the KG, or a post-parse helper — the phase's call, not this entry's. Whether the same shape affects `b_account_receipts`, `b_customer_credit_memos`, `b_customer_invoices`, and `b_account_balance` — all key on `by_customer_name` with a customer name, all likely to misroute a numeric value identically; not run.
 
 **Class note.** Parallel to F-018 (an identifier the pipeline cannot receive) and F-009 (a rule in the wrong module for the entity it parses). F-018's identifier is an invoice number the pipeline has no argument for; this one is an account number the pipeline has an argument for elsewhere but not here. Both leave the user with a refusal or a false negative that does not reflect what they typed.
+
+---
+
+**Update 2026-09-23 — fixed on `phase-2-fix-F011-F018-F019-cluster4` (commit 3/3).**
+
+Four coupled changes on the CustomerAccount resolve path:
+`get_customer_account_by_name` gains an optional `account_number`
+argument (clause selection by which identifier arrives); new
+`(CustomerAccount, by_account_number)` rows in `kg_entity_filter`
+and `kg_entity_tool`; `b_receipt_applications.sysprompt` teaches
+the phrasing; `parser.parse()` gains a deterministic post-parse
+correction that rewrites `by_customer_name(digits)` into
+`by_account_number` (same class as F-018).
+
+Verification: V1 (`Trace receipt applications for account 25750`)
+answers with intent `by_account_number: '25750'`, plan
+`account_number: '25750'`, correct rows for account 25750.
+V3 customer-name sibling unchanged. V5 goldens empty. V6 new
+tests pass. V7 fails without the fix. V9 deferred to end of
+branch (three sysprompt edits share one --validate run).
+
+Not checked: four sibling AR sysprompts key on by_customer_name
+too (b_customer_invoices, b_customer_credit_memos,
+b_account_receipts, b_account_balance); the parser-side correction
+covers their prompts, but they do not yet teach the
+by_account_number phrasing. Follow-up finding.
+
+---
+
+## F-048 — vague relative adjectives ("recent", "new") refuse instead of defaulting to a window
+
+**Date:** 2026-09-23
+**Status:** confirmed, not fixed
+**Cross-refs:** B-31, F-011 (surrounding relative-date work), F-046/F-047 (sibling capability gaps)
+
+**Evidence.** From the F-011b sweep (`scripts/prompts/15_po_relative_date_filters.txt`, prompts 11–12):
+
+```
+$ python scripts/promptkit.py --run --prompt "recent purchase orders"
+Reason:   The request for 'recent' purchase orders is too vague because it does not
+          specify a specific timeframe...
+  (refusal: unsupported_filter)
+
+$ python scripts/promptkit.py --run --prompt "new purchase orders"
+Reason:   Filtering purchase orders by 'new' without a specific timeframe (such as
+          number of months) is not supported.
+  (refusal: unsupported_filter)
+```
+
+The parser has no rule for a vague relative adjective with no explicit N. The model cannot emit `created_in_last_n_months: {months: N}` without an N, so it refuses.
+
+**The policy question.** A user typing English into a chart interface will type "recent POs" as naturally as "POs in the last 3 months." Refusing on ambiguity converts a natural-language request into a SQL-shaped demand ("tell me the exact number of months"). The interface premise is English input, so vagueness is the expected shape of the input class, not a defect in the question. Assume a default, narrate the assumption, answer.
+
+**Fix location (for Phase 2).**
+
+- Sysprompt: add a rule to `b_po_created_date.sysprompt` for vague-relative adjectives with no N. Candidates: `recent`, `new`, `latest`, `fresh`. Emit `created_in_last_n_months: {months: 3}` (default picked 2026-09-23). Sysprompt edit is the whole fix — no code change, no schema change.
+- Optional narration: "assuming 'recent' means the last 3 months" as a synthesized lead-in. Requires a schema slot to carry the assumption flag; separate polish.
+
+**Blast radius.** Highest-impact change of the three F-046/47/48 items: affects how *every* vague-relative prompt in the corpus routes. Full `--validate` (V9) required, not just targeted tests. Order after F-046 and F-047.
+
+**Regression test.** Both prompts answer with a real count and a 3-month cutoff. Explicit-window siblings (`in the last 6 months`) still use the explicit N — the default fires only when no N is present.
+
+**Not checked.** Which adjectives to include (2 tested; `fresh`, `latest` not). Whether a fixed 3-month default is right or should be configurable. Whether the same defaulting pattern applies to CustomerAccount, CreditMemo, and other list entities — the rule is PO-specific; extending it is a separate decision.
+
+**Class note.** Policy finding, not a capability gap. The parser is correct that N is absent; the decision is to default rather than refuse. Recorded because the interface premise is English input, and English is vague by design.
+
+---
+
+## F-047 — PO last-updated-date filter missing; "not touched in the last year" has no honest answer
+
+**Date:** 2026-09-23
+**Status:** confirmed, not fixed
+**Cross-refs:** B-30, F-011 (PO creation-date sibling)
+
+**Evidence.** From the F-011b sweep (prompts 19–20):
+
+```
+$ python scripts/promptkit.py --run --prompt "purchase orders not touched in the last year"
+Reason:   Relative date filters on last modified or update dates ('not touched') are not
+          supported; relative-date filters are based on CreationDate only.
+  (refusal: unsupported_filter)
+
+$ python scripts/promptkit.py --run --prompt "purchase orders with no recent activity"
+Reason:   filtering purchase orders by recent activity or last-modified date is unsupported;
+          relative-date filters only support creation date
+  (refusal: unsupported_filter)
+```
+
+Both refuse *correctly* — the tool filters on CreationDate, the user asked about LastUpdateDate, and answering the wrong question silently is worse than refusing. F-011c's sysprompt guard produces this refusal on purpose. But the user's question is in-scope for the interface; refusing is the honest minimum, not the right answer.
+
+**Root cause.** Same shape as F-046: the tool accepts creation-date filters; nothing accepts last-updated-date filters. `LastUpdateDate` is a standard WHO column, already projected by `purchase_order_schedules.py` and used by `po_lifecycle.py`; a filter on it is a small extension, not new capability.
+
+**Fix location (for Phase 2).**
+
+- Tool: `search_purchase_orders` — add `last_updated_before` / `last_updated_after` args, sending `q=LastUpdateDate<...` server-side.
+- KG: two rows mirroring F-011b's split, target args `last_updated_before` / `last_updated_after`.
+- Sysprompt: extend `b_po_created_date.sysprompt`; modify F-011c's guard so the phrasings it currently carves to unanswerable route to the new filters instead.
+- `plan_builders`: no change — same generic `tool_arg_name` mechanism.
+- Tests: mirror F-011's direction tests for the last-updated column.
+
+**Optional enhancement (user request).** When the user asks "not touched in the last year" and there are matches, a bucketed narration (month-wise or quarter-wise counts) is more useful than a flat list. Belongs in the synthesizer, not this filter fix.
+
+**Regression test.** Both prompts answer with a real count and a cutoff. Control prompt (`older than 6 months`, creation-date) still routes to the creation-date filter — no cross-contamination between columns.
+
+**Not checked.** Whether the pod accepts `q=LastUpdateDate<...` on `/purchaseOrders`. Whether the same column exists on Invoice / StandardReceipt. Whether `po_lifecycle.py` uses an analogous last-update filter that could be reused.
+
+**Class note.** Same family as F-046. F-011c's guard was the correct *defensive* move; the right *substantive* move is to expose the column the user asked about.
+
+---
+
+## F-046 — Invoice has no relative-date filter; "invoices older than 6 months" refuses on missing supplier
+
+**Date:** 2026-09-23
+**Status:** confirmed, not fixed
+**Cross-refs:** B-29, F-011 (PO sibling — this is the mirrored gap), F-018 (Invoice already gained one new filter this branch)
+
+**Evidence.** From the F-011b sweep (prompts 22–23):
+
+```
+$ python scripts/promptkit.py --run --prompt "invoices older than 6 months"
+Router: modules=['payables']
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+Solution: Name the supplier, or give me the invoice number.
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+
+$ python scripts/promptkit.py --run --prompt "invoices in the last 30 days"
+... same refusal, same shape.
+```
+
+The prompt is in-scope: the user named the entity (Invoice) and a date window. There is no Invoice equivalent of the PO filter F-011b just built, so the parser has nothing to emit, the intent is filter-less, and the Invoice guard fires.
+
+`search_invoices` already accepts `invoice_date_after` and `invoice_date_before` (per F-012's evidence). The capability exists at the tool. No KG row, no sysprompt rule, no plan_builders path connects them.
+
+**Root cause.** Capability gap on the parser→planner→tool chain. Tool takes the args; nothing above the tool emits them for a relative-date phrase.
+
+**Fix location (for Phase 2).**
+
+- KG: two new `(Invoice, ...)` rows mirroring F-011b's PO split:
+  - `(Invoice, older_than_n_months)` → `invoice_date_before`
+  - `(Invoice, created_in_last_n_months)` → `invoice_date_after`
+- Sysprompt: extend `b_invoices_for_supplier.sysprompt` (or add a new block) to teach the relative-date phrasings for Invoice.
+- `plan_builders._build_entity_fetcher_args`: no code change — the F-011b branch matches on ftype name and is entity-agnostic.
+- Tests: mirror `tests/test_f011_po_relative_date.py` for Invoice.
+
+**Regression test.** Both prompts answer with a real count and a cutoff computed from today. Sibling `invoices for Lee Supplies` unchanged. Negative `invoices` still refuses with the same shape.
+
+**Not checked.** Whether the pod accepts `q=InvoiceDate<...` on `/invoices` — the tool already sends `invoice_date_before` / `invoice_date_after` today (F-012 evidence); a single curl would confirm. Whether sibling date prompts (`invoices since January`, `invoices from 2023`) currently route correctly. Whether the same gap exists on `StandardReceipt` (`receipt_date_*` args) and `AccountReceipt` — same shape, not run.
+
+**Class note.** Mirror of F-011. The interface premise is English input, so a named entity plus a date window is in-scope. A missing filter is a capability gap, not a refusal to be defended.
 
 ---
 

@@ -1,0 +1,1543 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=68 total=650
+Router: modules=['procurement']
+[llm] stage=parse in=4199 out=471 total=4670
+[cache] HIT   cached=4191  fresh=8  total_in=4199
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders older than 6 months
+========================================================================
+Answer:
+Showing 25 of 16,937 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16937 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=     68  total=    650
+  parse        in=   4199  out=    471  total=   4670
+  TOTAL        in=   4781  out=    539  total=   5320
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=69 total=652
+Router: modules=['procurement']
+[llm] stage=parse in=4200 out=630 total=4830
+[cache] HIT   cached=4191  fresh=9  total_in=4200
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 12}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2025-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders older than 12 months
+========================================================================
+Answer:
+Showing 25 of 16,254 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16254 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    583  out=     69  total=    652
+  parse        in=   4200  out=    630  total=   4830
+  TOTAL        in=   4783  out=    699  total=   5482
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=68 total=650
+Router: modules=['procurement']
+[llm] stage=parse in=4199 out=370 total=4569
+[cache] HIT   cached=4191  fresh=8  total_in=4199
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 12}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2025-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders older than 1 year
+========================================================================
+Answer:
+Showing 25 of 16,254 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16254 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=     68  total=    650
+  parse        in=   4199  out=    370  total=   4569
+  TOTAL        in=   4781  out=    438  total=   5219
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=68 total=650
+Router: modules=['procurement']
+[llm] stage=parse in=4199 out=616 total=4815
+[cache] HIT   cached=4191  fresh=8  total_in=4199
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 24}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2024-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders older than 2 years
+========================================================================
+Answer:
+Showing 25 of 15,259 purchase orders.
+Status: 24 Closed, 1 Closed for Receiving.
+Buyer: 12 Roth, Calvin, 12 Stanley, Vijay, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                | Buyer                  
+  ---------+-----------------+----------------------+-------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                 | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                 | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                 | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                 | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                 | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services       | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric     | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp           | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp           | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc. | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot            | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.               | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies            | ProcurementManager, Pat
+  SU616712 | 560888          | Closed               | EIP Inc                 | Stanley, Vijay         
+  SU616713 | 560889          | Closed               | EIP Inc                 | Stanley, Vijay         
+  SU616714 | 560890          | Closed               | EIP Inc                 | Stanley, Vijay         
+  SU616715 | 560891          | Closed               | EIP Inc                 | Stanley, Vijay         
+  SU616716 | 560892          | Closed               | EIP Inc                 | Stanley, Vijay         
+  SU616717 | 560893          | Closed               | Staffing Services       | Stanley, Vijay         
+  SU616718 | 560894          | Closed               | RJK Inc                 | Stanley, Vijay         
+  SU616719 | 560895          | Closed               | Advanced Corp           | Stanley, Vijay         
+  SU616720 | 560896          | Closed               | Advanced Corp           | Stanley, Vijay         
+  SU616721 | 560897          | Closed               | Amazon                  | Stanley, Vijay         
+  SU616722 | 560898          | Closed               | CDW                     | Stanley, Vijay         
+  SU616723 | 560899          | Closed               | Dell Inc.               | Stanley, Vijay         
+
+Truncation:
+  - open_pos: 15259 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=     68  total=    650
+  parse        in=   4199  out=    616  total=   4815
+  TOTAL        in=   4781  out=    684  total=   5465
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=85 total=664
+Router: modules=['procurement']
+[llm] stage=parse in=4196 out=748 total=4944
+[cache] HIT   cached=4191  fresh=5  total_in=4196
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: stale purchase orders
+========================================================================
+Answer:
+Showing 25 of 16,937 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16937 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    579  out=     85  total=    664
+  parse        in=   4196  out=    748  total=   4944
+  TOTAL        in=   4775  out=    833  total=   5608
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=54 total=632
+Router: modules=['procurement']
+[llm] stage=parse in=4195 out=1085 total=5280
+[cache] HIT   cached=4191  fresh=4  total_in=4195
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: aged purchase orders
+========================================================================
+Answer:
+Showing 25 of 16,937 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16937 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     54  total=    632
+  parse        in=   4195  out=   1085  total=   5280
+  TOTAL        in=   4773  out=   1139  total=   5912
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=60 total=645
+Router: modules=['procurement']
+[llm] stage=parse in=4202 out=358 total=4560
+[cache] HIT   cached=4191  fresh=11  total_in=4202
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders that are more than 6 months old
+========================================================================
+Answer:
+Showing 25 of 16,937 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16937 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=     60  total=    645
+  parse        in=   4202  out=    358  total=   4560
+  TOTAL        in=   4787  out=    418  total=   5205
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=66 total=650
+Router: modules=['procurement']
+[llm] stage=parse in=4201 out=422 total=4623
+[cache] HIT   cached=4191  fresh=10  total_in=4201
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_in_last_n_months', 'value': {'months': 12}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2025-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000319990726, 'OrderNumber': 'SATASUS520014', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Office Depot', 'SupplierId': 300000047507596}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 655881, 'OrderNumber': 'UK556005', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Dell Inc.', 'SupplierId': 300000047414679}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 655882, 'OrderNumber': 'UK556006', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Windsor Inc', 'SupplierId': 300000049521294}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 655883, 'OrderNumber': 'UK556007', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Windsor Inc', 'SupplierId': 300000049521294}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 655884, 'OrderNumber': 'UK556008', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders in the last 12 months
+========================================================================
+Answer:
+Showing 25 of 1,287 purchase orders.
+Status: 22 Closed for Receiving, 3 Closed.
+
+Purchase Orders:
+  Order         | POHeaderId      | Status               | Supplier                   | Buyer                      
+  --------------+-----------------+----------------------+----------------------------+----------------------------
+  SATASUS520014 | 300000319990726 | Closed               | Office Depot               | Directorprocurement, Hanako
+  UK556005      | 655881          | Closed for Receiving | Dell Inc.                  | Fox, Dan                   
+  UK556006      | 655882          | Closed for Receiving | Windsor Inc                | Rees, Amy                  
+  UK556007      | 655883          | Closed for Receiving | Windsor Inc                | Dodds, Gavin               
+  UK556008      | 655884          | Closed for Receiving | Edison Co                  | Fox, Dan                   
+  UK556009      | 655885          | Closed for Receiving | Edison Co                  | Rees, Amy                  
+  UK556010      | 655886          | Closed for Receiving | Progressive Corp           | Morgan, Liz                
+  UK556011      | 655887          | Closed for Receiving | EDF                        | Dodds, Gavin               
+  PR705686      | 670888          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705687      | 670889          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705688      | 670890          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705689      | 670891          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705690      | 670892          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705691      | 670893          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705692      | 670894          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705693      | 670895          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705694      | 670896          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705695      | 670897          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705696      | 670898          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705697      | 670899          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  SP605817      | 300000322734864 | Closed               | Saher                      | Alghamdi, Rana             
+  SP605824      | 300000324288099 | Closed               | Shara Maintenance Services | Alghamdi, Rana             
+  PR705698      | 670900          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705699      | 670901          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705700      | 670902          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+
+Truncation:
+  - open_pos: 1287 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=     66  total=    650
+  parse        in=   4201  out=    422  total=   4623
+  TOTAL        in=   4785  out=    488  total=   5273
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=57 total=640
+Router: modules=['procurement']
+[llm] stage=parse in=4200 out=546 total=4746
+[cache] HIT   cached=4191  fresh=9  total_in=4200
+
+========================================================================
+PROMPT: purchase orders in the last 6 months
+========================================================================
+REFUSED (planner guard): plan: created_in_last_n_months requires value={'months': <positive int>}; got '{\\"months\\":6}'.
+Token usage:
+  classify     in=    583  out=     57  total=    640
+  parse        in=   4200  out=    546  total=   4746
+  TOTAL        in=   4783  out=    603  total=   5386
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=581 out=77 total=658
+Router: modules=['procurement']
+[llm] stage=parse in=4198 out=452 total=4650
+[cache] HIT   cached=4191  fresh=7  total_in=4198
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_in_last_n_months', 'value': {'months': 12}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2025-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000319990726, 'OrderNumber': 'SATASUS520014', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Office Depot', 'SupplierId': 300000047507596}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 655881, 'OrderNumber': 'UK556005', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Dell Inc.', 'SupplierId': 300000047414679}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 655882, 'OrderNumber': 'UK556006', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Windsor Inc', 'SupplierId': 300000049521294}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 655883, 'OrderNumber': 'UK556007', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Windsor Inc', 'SupplierId': 300000049521294}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 655884, 'OrderNumber': 'UK556008', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders from the last year
+========================================================================
+Answer:
+Showing 25 of 1,287 purchase orders.
+Status: 22 Closed for Receiving, 3 Closed.
+
+Purchase Orders:
+  Order         | POHeaderId      | Status               | Supplier                   | Buyer                      
+  --------------+-----------------+----------------------+----------------------------+----------------------------
+  SATASUS520014 | 300000319990726 | Closed               | Office Depot               | Directorprocurement, Hanako
+  UK556005      | 655881          | Closed for Receiving | Dell Inc.                  | Fox, Dan                   
+  UK556006      | 655882          | Closed for Receiving | Windsor Inc                | Rees, Amy                  
+  UK556007      | 655883          | Closed for Receiving | Windsor Inc                | Dodds, Gavin               
+  UK556008      | 655884          | Closed for Receiving | Edison Co                  | Fox, Dan                   
+  UK556009      | 655885          | Closed for Receiving | Edison Co                  | Rees, Amy                  
+  UK556010      | 655886          | Closed for Receiving | Progressive Corp           | Morgan, Liz                
+  UK556011      | 655887          | Closed for Receiving | EDF                        | Dodds, Gavin               
+  PR705686      | 670888          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705687      | 670889          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705688      | 670890          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705689      | 670891          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705690      | 670892          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705691      | 670893          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705692      | 670894          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705693      | 670895          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705694      | 670896          | Closed for Receiving | JGA                        | Wilson, Harold             
+  PR705695      | 670897          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705696      | 670898          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  PR705697      | 670899          | Closed for Receiving | EIP Inc                    | Wilson, Harold             
+  SP605817      | 300000322734864 | Closed               | Saher                      | Alghamdi, Rana             
+  SP605824      | 300000324288099 | Closed               | Shara Maintenance Services | Alghamdi, Rana             
+  PR705698      | 670900          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705699      | 670901          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+  PR705700      | 670902          | Closed for Receiving | Advanced Corp              | Wilson, Harold             
+
+Truncation:
+  - open_pos: 1287 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    581  out=     77  total=    658
+  parse        in=   4198  out=    452  total=   4650
+  TOTAL        in=   4779  out=    529  total=   5308
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=57 total=635
+Router: modules=['procurement']
+[llm] stage=parse in=4195 out=665 total=4860
+[cache] HIT   cached=4191  fresh=4  total_in=4195
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_in_last_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 670888, 'OrderNumber': 'PR705686', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 670889, 'OrderNumber': 'PR705687', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Advanced Corp', 'SupplierId': 300000047507546}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 670890, 'OrderNumber': 'PR705688', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Advanced Corp', 'SupplierId': 300000047507546}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 670891, 'OrderNumber': 'PR705689', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Advanced Corp', 'SupplierId': 300000047507546}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 670892, 'OrderNumber': 'PR705690', 'Status': 'Closed for Receiving', 'StatusCode': 'CLOSED FOR RECEIVING', 'Supplier': 'Advanced Corp', 'SupplierId': 300000047507546}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: recent purchase orders
+========================================================================
+Answer:
+Showing 25 of 604 purchase orders.
+Status: 21 Closed for Receiving, 2 Incomplete, 2 Open.
+Buyer: 21 Wilson, Harold, 2 Petrova, Laura, 1 Roth, Calvin, 1 Siddharth.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier             | Buyer         
+  ---------+-----------------+----------------------+----------------------+---------------
+  PR705686 | 670888          | Closed for Receiving | EIP Inc              | Wilson, Harold
+  PR705687 | 670889          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705688 | 670890          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705689 | 670891          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705690 | 670892          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705691 | 670893          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705692 | 670894          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705693 | 670895          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705694 | 670896          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705695 | 670897          | Closed for Receiving | EIP Inc              | Wilson, Harold
+  PR705696 | 670898          | Closed for Receiving | EIP Inc              | Wilson, Harold
+  PR705697 | 670899          | Closed for Receiving | EIP Inc              | Wilson, Harold
+  PR705698 | 670900          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705699 | 670901          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705700 | 670902          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705701 | 670903          | Closed for Receiving | Advanced Corp        | Wilson, Harold
+  PR705702 | 670904          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705703 | 670905          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705704 | 670906          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705705 | 670907          | Closed for Receiving | JGA                  | Wilson, Harold
+  PR705706 | 670908          | Closed for Receiving | EIP Inc              | Wilson, Harold
+  SU617129 | 300000334002503 | Incomplete           | JGA                  | Petrova, Laura
+  US165379 | 300000344139973 | Incomplete           | —                    | Roth, Calvin  
+  US165395 | 300000344687592 | Open                 | ABC Consulting       | Siddharth     
+  SU617152 | 300000337589580 | Open                 | F-I-T Motion Company | Petrova, Laura
+
+Truncation:
+  - open_pos: 604 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     57  total=    635
+  parse        in=   4195  out=    665  total=   4860
+  TOTAL        in=   4773  out=    722  total=   5495
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=60 total=638
+Router: modules=['procurement']
+[llm] stage=parse in=4195 out=1050 total=5245
+[cache] HIT   cached=4191  fresh=4  total_in=4195
+
+========================================================================
+PROMPT: new purchase orders
+========================================================================
+Reason:   The modifier 'new' is not a supported filter. Please specify a specific timeframe (e.g., 'created in the last 3 months') or a valid status (e.g., 'OPEN').
+
+Solution: Give me a PO number instead, or a date bound.
+
+Example:  Show PO 2144 and its lines
+  (refusal: unsupported_filter — The modifier 'new' is not a supported filter. Please specify a specific timeframe (e.g., 'created in the last 3 months') or a valid status (e.g., 'OPEN').)
+Token usage:
+  classify     in=    578  out=     60  total=    638
+  parse        in=   4195  out=   1050  total=   5245
+  TOTAL        in=   4773  out=   1110  total=   5883
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=67 total=652
+Router: modules=['procurement']
+[llm] stage=parse in=4202 out=401 total=4603
+[cache] HIT   cached=4191  fresh=11  total_in=4202
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_in_last_n_months', 'value': {'months': 1}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2026-08-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000344139973, 'OrderNumber': 'US165379', 'Status': 'Incomplete', 'StatusCode': 'INCOMPLETE', 'Supplier': None, 'SupplierId': None}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 300000344687592, 'OrderNumber': 'US165395', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'ABC Consulting', 'SupplierId': 300000075039541}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 300000344113000, 'OrderNumber': 'US165381', 'Status': 'Incomplete', 'StatusCode': 'INCOMPLETE', 'Supplier': 'Amazon', 'SupplierId': 300000151433093}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 300000344355665, 'OrderNumber': 'US165383', 'Status': 'Incomplete', 'StatusCode': 'INCOMPLETE', 'Supplier': 'ABC Consulting', 'SupplierId': 300000075039541}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 300000344355724, 'OrderNumber': 'US165386', 'Status': 'Incomplete', 'StatusCode': 'INCOMPLETE', 'Supplier': 'Advanced Corp', 'SupplierId': 300000047507546}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders created in the last 30 days
+========================================================================
+Answer:
+Status: 17 Incomplete, 4 Open, 2 Withdrawn, 2 Canceled.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status     | Supplier                  | Buyer         
+  ---------+-----------------+------------+---------------------------+---------------
+  US165379 | 300000344139973 | Incomplete | —                         | Roth, Calvin  
+  US165395 | 300000344687592 | Open       | ABC Consulting            | Siddharth     
+  US165381 | 300000344113000 | Incomplete | Amazon                    | Roth, Calvin  
+  US165383 | 300000344355665 | Incomplete | ABC Consulting            | Siddharth     
+  US165386 | 300000344355724 | Incomplete | Advanced Corp             | Siddharth     
+  US165396 | 690879          | Open       | Midtown Computer Supplies | Roth, Calvin  
+  US165389 | 300000344355734 | Incomplete | ABC Consulting            | Siddharth     
+  US165378 | 300000343943412 | Withdrawn  | ABC Consulting            | Cooper        
+  US165394 | 300000344608868 | Incomplete | —                         | Roth, Calvin  
+  US165390 | 300000344355741 | Incomplete | ABC Consulting            | Siddharth     
+  US165380 | 300000344179738 | Incomplete | Staffing Services         | Cooper        
+  US165384 | 300000344355687 | Incomplete | ABC Consulting            | Siddharth     
+  US165387 | 688869          | Incomplete | EIP Inc                   | Roth, Calvin  
+  US165385 | 300000344355703 | Incomplete | ABC Consulting            | Siddharth     
+  US165388 | 688870          | Open       | EIP Inc                   | Roth, Calvin  
+  SU617186 | 300000342328107 | Canceled   | F-I-T Motion Company      | Petrova, Laura
+  US165382 | 300000344113025 | Incomplete | Office Depot              | Roth, Calvin  
+  US165377 | 300000343963644 | Withdrawn  | Midtown Computer Supplies | Roth, Calvin  
+  6589     | 691869          | Incomplete | Staples                   | Roth, Calvin  
+  6590     | 691870          | Incomplete | Staples                   | Roth, Calvin  
+  6586     | 691871          | Incomplete | Staples                   | Roth, Calvin  
+  US165393 | 300000344687582 | Incomplete | ABC Consulting            | Siddharth     
+  US165391 | 300000344078511 | Incomplete | Staples                   | Roth, Calvin  
+  SU617185 | 300000340975350 | Canceled   | F-I-T Motion Company      | Petrova, Laura
+  US165392 | 300000344410446 | Open       | Midtown Computer Supplies | Clark, Ava    
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=     67  total=    652
+  parse        in=   4202  out=    401  total=   4603
+  TOTAL        in=   4787  out=    468  total=   5255
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=590 out=73 total=663
+Router: modules=['procurement']
+[llm] stage=parse in=4207 out=447 total=4654
+[cache] HIT   cached=4191  fresh=16  total_in=4207
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_before', 'value': '2024-01-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000079335542, 'OrderNumber': '701331', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 300000081255594, 'OrderNumber': '701337', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'JGA', 'SupplierId': 300000047414635}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 1304, 'OrderNumber': '55216', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 1305, 'OrderNumber': '55217', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 1306, 'OrderNumber': '55218', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Progressive Corp', 'SupplierId': 300000049521222}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders created before 2024-01-01
+========================================================================
+Answer:
+Showing 25 of 14,387 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 14387 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    590  out=     73  total=    663
+  parse        in=   4207  out=    447  total=   4654
+  TOTAL        in=   4797  out=    520  total=   5317
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=64 total=648
+Router: modules=['procurement']
+[llm] stage=parse in=4201 out=479 total=4680
+[cache] HIT   cached=4191  fresh=10  total_in=4201
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_before', 'value': '2015-01-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2015-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000079335542, 'OrderNumber': '701331', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 300000081255594, 'OrderNumber': '701337', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'JGA', 'SupplierId': 300000047414635}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 1304, 'OrderNumber': '55216', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 1305, 'OrderNumber': '55217', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 1306, 'OrderNumber': '55218', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Progressive Corp', 'SupplierId': 300000049521222}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders created before 2015
+========================================================================
+Answer:
+Showing 25 of 878 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 878 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=     64  total=    648
+  parse        in=   4201  out=    479  total=   4680
+  TOTAL        in=   4785  out=    543  total=   5328
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=60 total=645
+Router: modules=['procurement']
+[llm] stage=parse in=4202 out=584 total=4786
+[cache] HIT   cached=4191  fresh=11  total_in=4202
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_since', 'value': '2024-03-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2024-03-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders created since March 2024
+========================================================================
+Answer:
+Showing 25 of 3,040 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 3040 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=     60  total=    645
+  parse        in=   4202  out=    584  total=   4786
+  TOTAL        in=   4787  out=    644  total=   5431
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=69 total=655
+Router: modules=['procurement']
+[llm] stage=parse in=4203 out=1340 total=5543
+[cache] HIT   cached=4191  fresh=12  total_in=4203
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_since', 'value': '2025-01-01'}
+    - {'type': 'created_before', 'value': '2025-03-31'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2025-01-01', 'created_before': '2025-03-31'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000299268497, 'OrderNumber': 'US165072', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'JGA', 'SupplierId': 300000047414635}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 597878, 'OrderNumber': 'US165033', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 597879, 'OrderNumber': 'US165034', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 597880, 'OrderNumber': 'US165035', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 597881, 'OrderNumber': 'US165036', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders between Jan and Mar 2025
+========================================================================
+Answer:
+Showing 25 purchase orders from an examined sample; the true matching count is not known.
+Status: 24 Closed, 1 Open.
+Buyer: 19 Roth, Calvin, 6 Pines, Ron.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status | Supplier                | Buyer       
+  ---------+-----------------+--------+-------------------------+-------------
+  US165072 | 300000299268497 | Open   | JGA                     | Roth, Calvin
+  US165033 | 597878          | Closed | EIP Inc                 | Roth, Calvin
+  US165034 | 597879          | Closed | EIP Inc                 | Roth, Calvin
+  US165035 | 597880          | Closed | EIP Inc                 | Roth, Calvin
+  US165036 | 597881          | Closed | EIP Inc                 | Roth, Calvin
+  US165037 | 597882          | Closed | EIP Inc                 | Roth, Calvin
+  US165038 | 597883          | Closed | Staffing Services       | Roth, Calvin
+  US165039 | 597884          | Closed | US Gas and Electric     | Roth, Calvin
+  US165040 | 597885          | Closed | Advanced Corp           | Roth, Calvin
+  US165041 | 597886          | Closed | Advanced Corp           | Roth, Calvin
+  US165042 | 597887          | Closed | Howell Engineering Inc. | Roth, Calvin
+  US165043 | 597888          | Closed | Office Depot            | Roth, Calvin
+  US165044 | 597889          | Closed | Dell Inc.               | Roth, Calvin
+  US165045 | 597890          | Closed | EIP Inc                 | Roth, Calvin
+  US165046 | 597891          | Closed | JGA                     | Roth, Calvin
+  US165047 | 597892          | Closed | JGA                     | Roth, Calvin
+  US165048 | 597893          | Closed | Staffing Services       | Roth, Calvin
+  US165049 | 597894          | Closed | Staffing Services       | Roth, Calvin
+  US165050 | 597895          | Closed | Office Depot            | Roth, Calvin
+  UN331972 | 597914          | Closed | Advanced Corp           | Pines, Ron  
+  UN331973 | 597915          | Closed | Office Depot            | Pines, Ron  
+  UN331974 | 597916          | Closed | Dell Inc.               | Pines, Ron  
+  UN331975 | 597917          | Closed | Office Depot            | Pines, Ron  
+  UN331976 | 597918          | Closed | Office Depot            | Pines, Ron  
+  UN331977 | 597919          | Closed | Office Depot            | Pines, Ron  
+
+Truncation:
+  - open_pos: unknown total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    586  out=     69  total=    655
+  parse        in=   4203  out=   1340  total=   5543
+  TOTAL        in=   4789  out=   1409  total=   6198
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=61 total=645
+Router: modules=['procurement']
+[llm] stage=parse in=4201 out=952 total=5153
+[cache] HIT   cached=4191  fresh=10  total_in=4201
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_since', 'value': '2023-01-01'}
+    - {'type': 'created_before', 'value': '2024-01-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_since': '2023-01-01', 'created_before': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 0 record(s)
+
+
+========================================================================
+PROMPT: purchase orders created in 2023
+========================================================================
+Answer:
+No purchase orders found in the examined sample. The search was capped before examining all matching records, so more may exist beyond the examined window.
+No purchase orders found.
+
+Truncation:
+  - open_pos: an unknown number of total in source; the fetch was capped before examining all of them, so the result is a sample, not the whole.
+Summary:
+  Steps planned:        1
+  Records returned:     0 (across all steps)
+  Final raw output:     0 record(s) under 'open_pos'
+  Synthesized answer:   0 record(s)
+Token usage:
+  classify     in=    584  out=     61  total=    645
+  parse        in=   4201  out=    952  total=   5153
+  TOTAL        in=   4785  out=   1013  total=   5798
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=69 total=652
+Router: modules=['procurement']
+[llm] stage=parse in=4200 out=954 total=5154
+[cache] HIT   cached=4191  fresh=9  total_in=4200
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 12}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2025-09-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders not touched in the last year
+========================================================================
+Answer:
+Showing 25 of 16,254 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16254 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    583  out=     69  total=    652
+  parse        in=   4200  out=    954  total=   5154
+  TOTAL        in=   4783  out=   1023  total=   5806
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=581 out=63 total=644
+Router: modules=['procurement']
+[llm] stage=parse in=4198 out=1482 total=5680
+[cache] HIT   cached=4191  fresh=7  total_in=4198
+
+========================================================================
+PROMPT: purchase orders with no recent activity
+========================================================================
+Reason:   I can look up purchase orders, but not the way this question narrows them.
+
+Solution: Give me a PO number instead, or a date bound.
+
+Example:  Show PO 2144 and its lines
+  (refusal: unsupported_filter — Filtering purchase orders by 'no recent activity' is not supported; the available relative time filters are based on creation date (e.g. older_than_n_months).)
+Token usage:
+  classify     in=    581  out=     63  total=    644
+  parse        in=   4198  out=   1482  total=   5680
+  TOTAL        in=   4779  out=   1545  total=   6324
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=677 total=1263
+Router: modules=['procurement']
+[llm] stage=parse in=4203 out=534 total=4737
+[cache] HIT   cached=4191  fresh=12  total_in=4203
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'supplier', 'value': 'EIP Inc'}
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'supplier_name': 'EIP Inc', 'created_before': '2026-03-23'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 560869, 'OrderNumber': 'US164932', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [2] {'POHeaderId': 560870, 'OrderNumber': 'US164933', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [3] {'POHeaderId': 560871, 'OrderNumber': 'US164934', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [4] {'POHeaderId': 560872, 'OrderNumber': 'US164935', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    [5] {'POHeaderId': 560873, 'OrderNumber': 'US164936', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders for EIP Inc older than 6 months
+========================================================================
+Answer:
+Showing 25 purchase orders from an examined sample; the true matching count is not known.
+All 25 have Status Closed.
+All 25 have Supplier EIP Inc.
+Buyer: 17 Roth, Calvin, 8 Stanley, Vijay.
+
+Purchase Orders:
+  Order    | POHeaderId | Status | Supplier | Buyer         
+  ---------+------------+--------+----------+---------------
+  US164932 | 560869     | Closed | EIP Inc  | Roth, Calvin  
+  US164933 | 560870     | Closed | EIP Inc  | Roth, Calvin  
+  US164934 | 560871     | Closed | EIP Inc  | Roth, Calvin  
+  US164935 | 560872     | Closed | EIP Inc  | Roth, Calvin  
+  US164936 | 560873     | Closed | EIP Inc  | Roth, Calvin  
+  US165003 | 579881     | Closed | EIP Inc  | Roth, Calvin  
+  US165013 | 587872     | Closed | EIP Inc  | Roth, Calvin  
+  US165015 | 587874     | Closed | EIP Inc  | Roth, Calvin  
+  US165016 | 587875     | Closed | EIP Inc  | Roth, Calvin  
+  US165017 | 587876     | Closed | EIP Inc  | Roth, Calvin  
+  US165018 | 587877     | Closed | EIP Inc  | Roth, Calvin  
+  US165019 | 587878     | Closed | EIP Inc  | Roth, Calvin  
+  US165033 | 597878     | Closed | EIP Inc  | Roth, Calvin  
+  US165034 | 597879     | Closed | EIP Inc  | Roth, Calvin  
+  US165035 | 597880     | Closed | EIP Inc  | Roth, Calvin  
+  US165036 | 597881     | Closed | EIP Inc  | Roth, Calvin  
+  US165037 | 597882     | Closed | EIP Inc  | Roth, Calvin  
+  SU616712 | 560888     | Closed | EIP Inc  | Stanley, Vijay
+  SU616713 | 560889     | Closed | EIP Inc  | Stanley, Vijay
+  SU616714 | 560890     | Closed | EIP Inc  | Stanley, Vijay
+  SU616715 | 560891     | Closed | EIP Inc  | Stanley, Vijay
+  SU616716 | 560892     | Closed | EIP Inc  | Stanley, Vijay
+  SU616892 | 623869     | Closed | EIP Inc  | Stanley, Vijay
+  SU616893 | 623870     | Closed | EIP Inc  | Stanley, Vijay
+  SU616894 | 623871     | Closed | EIP Inc  | Stanley, Vijay
+
+Truncation:
+  - open_pos: unknown total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    586  out=    677  total=   1263
+  parse        in=   4203  out=    534  total=   4737
+  TOTAL        in=   4789  out=   1211  total=   6000
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=256 total=838
+Router: modules=['payables']
+[llm] stage=parse in=3180 out=729 total=3909
+[cache] HIT   cached=3172  fresh=8  total_in=3180
+
+========================================================================
+PROMPT: invoices older than 6 months
+========================================================================
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    582  out=    256  total=    838
+  parse        in=   3180  out=    729  total=   3909
+  TOTAL        in=   3762  out=    985  total=   4747
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=143 total=727
+Router: modules=['payables']
+[cache] invoke raised ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'The service is currently unavailable.', 'status': 'UNAVAILABLE'}}; using LangChain
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=parse in=3174 out=1299 total=4473
+
+========================================================================
+PROMPT: invoices in the last 30 days
+========================================================================
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    584  out=    143  total=    727
+  parse        in=   3174  out=   1299  total=   4473
+  TOTAL        in=   3758  out=   1442  total=   5200
+

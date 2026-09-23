@@ -74,7 +74,10 @@ def _project(source: dict) -> dict:
 
 
 async def get_customer_account_by_name(
-    client: FusionClient, customer_name: str, limit: int = 25
+    client: FusionClient,
+    customer_name: str | None = None,
+    account_number: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
     """Resolve a customer name to their receivables account(s).
 
@@ -89,9 +92,27 @@ async def get_customer_account_by_name(
         rounded to 2dp — see the module docstring for why this is not
         merely cosmetic.
     """
+    # Exactly one identifier is required. F-019: a bare account number
+    # is an identifier, not a name, and querying CustomerName with a
+    # numeric value returns 0 — a silent false negative the
+    # empty-bucket shortcut then narrates as "no customer accounts
+    # found." The two clauses are exclusive by design: whichever the
+    # caller supplies chooses the q= clause. If both are given, the
+    # account number wins (it is the more precise identifier); tests
+    # cover both call shapes.
+    if not customer_name and not account_number:
+        raise ValueError(
+            "get_customer_account_by_name requires customer_name or "
+            "account_number"
+        )
+    if account_number:
+        clause = f"AccountNumber='{account_number}'"
+    else:
+        clause = f"CustomerName='{customer_name}'"
+
     params = {
         "onlyData": "true",
-        "q": f"CustomerName='{customer_name}'",
+        "q": clause,
         "fields": ",".join(_PROJECTED_FIELDS),
         "limit": limit,
     }
