@@ -163,6 +163,23 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
     wanted = list(fields)
     projected: dict = {}
     for name, records in outputs.items():
+        # F-014 defence: a bucket whose first record carries a `shape`
+        # key is a tool-computed wrapper (aggregation, comparison,
+        # lifecycle), not an entity list. Its keys are the wrapper's
+        # (`shape`, `rows`, `date_from`, ...); none is an entity column,
+        # so applying `fields` would trim to `{}` and fall back to the
+        # original — or, worse, leave a wrapper whose requested columns
+        # do not exist on it and render em dashes. The tool has already
+        # projected its `rows[]`; skip.
+        #
+        # The parser-side correction in F-014 clears `intent.fields` on
+        # aggregate and compare intents before this ever runs, so this
+        # is the net: a shape-wrapper bucket must survive a projection
+        # attempt even if `fields` arrives populated.
+        first = records[0] if records else None
+        if isinstance(first, dict) and "shape" in first:
+            projected[name] = list(records)
+            continue
         new_records = []
         for rec in records:
             if not isinstance(rec, dict):

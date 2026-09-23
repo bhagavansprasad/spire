@@ -55,6 +55,233 @@ The two layers are one fix; neither half alone solves the user's problem.
 
 ---
 
+## F-051 — `fields` + `include` intent: the caller's summary_only gate drops child content
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-021 (the finding whose symptom this subsumes — audit
+row B-23), F-020 (the fix that introduced the summary_only gate for
+fields-only intents; its scope was correct for that case), F-014
+(sibling finding where a `fields` interaction was mis-attributed at
+Phase 1 and re-scoped after reproduction)
+
+**Evidence.**
+
+Reproduced 2026-09-23 with the F-021 prompt:
+
+    $ python scripts/promptkit.py --run \
+        --prompt "Show the AR invoice with CustomerTransactionId 1002 \
+                  with transaction number and flexfield" \
+        --show-planner --show-synthesizer
+    ...
+    Intent:
+      target_entity: ReceivablesInvoice
+      filters: [{'type': 'by_id', 'value': '1002'}]
+      include: ['ReceivablesInvoiceTransactionDFF']
+      fields: ['TransactionNumber']
+    ...
+    Outputs:
+      receivables_invoices: 1 record(s)
+        [1] {'TransactionNumber': '5'}
+      receivablesinvoicetransactiondff: 1 record(s)
+        [1] {'CustomerTrxId': 1002, '__FLEX_Context': 'DOO',
+             '__FLEX_Context_DisplayValue': None}
+    ...
+    Answer:
+    <blank>
+    Answer:
+    receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+      TransactionNumber
+      -----------------
+      5
+
+The DFF was fetched (`__FLEX_Context: 'DOO'`) and the synthesizer
+produced a `ReceivablesInvoiceResponse` carrying it via
+`build_invoice_dff`. The answer never shows it.
+
+**Root cause — the caller branch at `scripts/promptkit.py:437`.**
+
+    if _fields or _unresolved:
+        _entity = state["intent"].target_entity
+        _available = menu.available_columns(_entity)
+        if not _fields:
+            pass
+        elif _synth_failed:
+            answer("Answer summary: (skipped — too large to summarize)")
+            answer("")
+        else:
+            answer(_format_synthesized(state.get("response"), summary_only=True))
+            answer("")
+        answer(_format_projected_table(_outputs, _fields, _unresolved,
+                                       _available, _entity))
+    else:
+        answer(_format_synthesized(state.get("response")))
+
+The gate is `_fields or _unresolved` — **fields**, never include. A
+fields intent with an include takes the `summary_only=True` path:
+
+1. `_format_synthesized(response, summary_only=True)` prints only
+   `Answer:` + summary + truncation. For a single-row result the
+   summary is empty (`local_list_summary` returns `[]` when
+   `shown == 1`, documented in its own module), so the block is blank.
+2. `_format_projected_table(...)` renders only the parent bucket. The
+   include's bucket is not passed and not rendered.
+
+When the intent has **no** fields, the else-branch runs the full
+`_format_synthesized` and the DFF renders. So the symptom is specific
+to fields-plus-include intents.
+
+**Why the gate exists.** F-020's fix (PR #161) introduced
+`summary_only=True` for fields intents so that a projected-table answer
+did not also print the full synthesized parent table — 25 suppliers
+with 25 addresses each, then the same 25 suppliers in the projected
+table below. That duplication was real and the gate fixed it. The gate
+was correct for fields-only intents. It is wrong the moment an include
+is present, because the child content the user asked for is not a
+parent row and is only in the synthesized response.
+
+**Same mechanism at three sites.** The identical branch appears at:
+
+- `scripts/promptkit.py:437`
+- `scripts/run_prompt_set.py:227`
+- `scripts/run_graph.py:194`
+
+Any fix must land at all three.
+
+**Fix location (for Phase 2).** One of two, and the second is the
+honest one:
+
+1. **Extend the gate condition.** Change `if _fields or _unresolved:`
+   to `if (_fields or _unresolved) and not state["intent"].include:`,
+   so a fields-plus-include intent runs the full
+   `_format_synthesized` and prints the child content, then the
+   projected parent table below. Three sites. Smallest change.
+
+2. **Factor the branch into a shared helper.** All three callers carry
+   a byte-identical copy of the branch. A `format_answer(state, ...)`
+   helper in `rendering/formatters.py` (or a sibling module) called
+   from all three sites collapses the three copies to one. Larger
+   change but prevents a fourth copy — the branch is already at three
+   sites and has drifted once (the `--show-stages` removal, F-010's
+   note).
+
+Option 2 is preferable for the same reason `formatters.py`'s
+`_with_truncation` was factored (see its own docstring: "sixteen copies
+is sixteen chances to miss one when the format changes"). F-051 is the
+fourth time the codebase has hit a duplication in a display branch;
+option 2 pays the cost now.
+
+Regardless of which lands, the fix lands on its own branch, not on
+Cluster 2. Cluster 2's subject was `_project_outputs` and
+`_FIELDS_SATISFIED_BY_INCLUDE`; this is a caller-side gate. Mixing
+concerns would make the PR body incoherent.
+
+**Not checked.**
+
+- **How many corpus prompts carry both `fields` and `include`.** Only
+  the F-021 reproducer was exercised. Whether the same blank-Answer
+  shape appears in `11_column_vocabulary.txt` or the AR prompt files
+  was not swept.
+- **Whether the display formatter would render the child if called.**
+  Read, not run — the ReceivablesInvoice branch's DFF render was
+  verified by code inspection only. The first end-to-end run of the
+  fix will confirm.
+- **Whether `_format_projected_table` should itself render child
+  content.** Option 1 leaves the projected-table call unchanged; the
+  child content rides the synthesized response above it. Whether that
+  two-block shape (synthesized answer, then projected parent table) is
+  what the user wants, or whether the child should fold into the
+  projected table, is a display-design question F-051 does not settle.
+- **Whether other fields-plus-include prompts currently *look* correct
+  by accident.** A multi-row result has a non-empty summary, so the
+  first Answer block prints something — but the include's own content
+  is still absent. Whether that has ever been noticed for a non-AR
+  prompt was not swept.
+
+---
+
+## F-050 — `columns/` parser-context blocks unreachable from router-scoped parses
+
+**Date:** 2026-09-23
+**Status:** open
+**Cross-refs:** F-003 (same class — a folder in `order.manifest` that is in
+neither `_TIER1` nor `KNOWN_MODULES`), C-06 (`modes/` reachability),
+F-027 (whose parser-side fix depends on the `b_column_fields` rule being
+loaded)
+
+**Evidence.**
+
+`order.manifest` lists two blocks under `columns/`:
+
+    columns/b_who_columns.sysprompt
+    columns/b_column_fields.sysprompt
+
+`context_assembly.py`:
+
+    _TIER1 = ("core", "refusals")
+    KNOWN_MODULES = ("payables", "procurement", "receivables", "supplier")
+
+`assemble_subset(modules, menu)` computes
+`wanted = set(_TIER1) | set(modules)` and loads only manifest entries whose
+first path component is in `wanted`. The router only ever passes names from
+`KNOWN_MODULES`. `columns` is in neither set, so neither file is loaded for
+any routed prompt — which is every prompt the pipeline runs. Only a direct
+`parse()` call (which builds the full preamble via `_build_system_prompt`)
+reaches them.
+
+Confirmed during the F-027 N=20 sweep. The rule that would teach the
+"country as a column" shape lives in `b_column_fields.sysprompt`:
+
+    - 'get the supplier name and number' / 'with invoice number and
+      amount' / 'show only the city and country' -> put the EXACT column
+      names in 'fields' (from the COLUMNS list below).
+
+Not loaded under the router, so it never fires. The N=20 distribution for
+`Supplier number and country for active suppliers` (16/20 blob-rendered,
+4/20 false-unresolved, 0/20 correct) is consistent with the rule not being
+present — the "show only the city and country" worked example is exactly
+the shape that should have applied.
+
+**Root cause.** Same as F-003 / C-06: a folder listed in `order.manifest`
+that the scoped assembler can never reach, because `_TIER1` names only
+`core` and `refusals`, and `KNOWN_MODULES` is the router's emit list —
+the folder's name would have to be in one or the other to be loaded.
+`columns/` is not a Fusion module and is not core, so it falls between
+the two.
+
+The two `columns/` blocks are cross-cutting teaching that applies to
+every entity (`b_who_columns` resolves the "who columns" ambiguity
+between a column request and a Contact include; `b_column_fields` teaches
+the column-request shape generally). That is exactly what Tier 1 is for.
+The right fix is to add `columns` to `_TIER1`.
+
+**Fix location (for Phase 2).** `src/spire/nl_parser/context_assembly.py`:
+add `"columns"` to the `_TIER1` tuple. Two-line change; check whether
+`tests/test_parser_context_assembly.py`'s byte-equality oracle is
+affected (the oracle reads the full preamble, which is built from the
+manifest directly and not from `_TIER1`, so likely no test change).
+Same branch as F-003: the two fixes are the same class and touch the
+same line of the same file.
+
+**Not checked.**
+
+- Whether adding `columns` to `_TIER1` meaningfully grows the scoped
+  preamble's token count. The two files are small, so the effect should
+  be negligible, but the parser prompt is at its ceiling per the F-041
+  caveat and any preamble change warrants measuring.
+- Whether any other folder is in `order.manifest` but in neither
+  `_TIER1` nor `KNOWN_MODULES`. `columns/` was found because F-027
+  required it; the same class may exist elsewhere.
+- Whether any test currently asserts the *absence* of `columns/` from the
+  scoped preamble. A grep for `"columns"` in
+  `tests/test_parser_context_assembly.py` would settle it.
+- Whether F-050 lands before or after F-027. F-027's deterministic
+  correction makes F-027 independent of F-050, so the order is a
+  sequencing choice, not a dependency.
+
+---
+
 ## F-049 — absolute-date Invoice phrasings starting with `created` refuse
 
 **Date:** 2026-09-23
@@ -1502,6 +1729,34 @@ Both is the honest fix: prevention at the parser, defense at the pipeline. The p
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `8b0d4de`. Two sites, both tested.
+
+1. `nl_parser/parser.py` — post-parse correction: clear `intent.fields`
+   when `intent.aggregate` or `intent.compare` is set. The model emits
+   `fields` alongside `aggregate` on the reproducer regardless of any
+   sysprompt or schema-description change (same behaviour F-018
+   records); the correction runs after the LLM and cannot be a
+   prompt-text change.
+
+2. `graph/pipeline.py::_project_outputs` — skip any bucket whose first
+   record carries a `shape` key (aggregation, comparison, lifecycle
+   wrapper). Defence: a wrapper must survive a projection attempt even
+   if `fields` arrives populated by some future path.
+
+Verification: V1 reproduced (`fields: ['Supplier', 'Total']` alongside
+`aggregate`; `— | —` table under the correct leader summary). V5
+goldens unchanged. V6 full suite 1181 passed (1173 + 8 new). V7 red on
+the two parser-correction tests (2 failed, 6 passed); the pipeline-
+defence test passes pre-fix by accident of the existing fallback and is
+recorded in the fix file as an over-reach guard, not a bug-revealer.
+V8 n/a (no LLM decision in the path). V9 deferred to end of branch.
+
+Fix file: `docs/phase-2/fixes/F-014.md`.
+
+---
+
 ## F-015 — a truncated-to-zero result is narrated as a clean "not found"; the empty-bucket shortcut discards the truncation flag
 
 **Date:** 2026-09-18
@@ -1828,6 +2083,40 @@ Option 2 is the honest fix because it retires a manual map rather than growing i
 **Not checked.** Whether all 7 audit prompts in `11_column_vocabulary.txt` share the same shape — one reproducer run this session, the audit's "7 prompts" is the class claim. Whether the `_FIELDS_SATISFIED_BY_INCLUDE` map was intended to grow or was deliberately scoped to Address — no git archaeology. Whether the AR side has an analogous failure (`ReceivablesInvoiceLine.LineNumber` requested on a `ReceivablesInvoice` target, etc.) — same shape, unrun. Whether `menu.entity_columns` carries every includeable child's columns — the loader reads `kg_entity_field` generically, so likely yes; not exhaustively checked.
 
 **Class note.** Adjacent to F-014 — both about a requested `fields` entry not reaching the answer. Different mechanisms: F-014's projection was applied to the wrong bucket (the aggregate wrapper); this one's classification was made against the wrong entity's catalog (the target instead of the include). Both produce an empty or unavailable column where the data was present.
+
+---
+
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `44a08f5`. One site.
+
+`nl_parser/intent_validation.py::validate_intent`, Step 4 field-split
+— per column, check the TARGET's own catalog first (so a doubly-present
+column like `OrderNumber` stays in `fields`), then the curated
+`_FIELDS_SATISFIED_BY_INCLUDE` map, then the KG field catalog of every
+entity in `intent.include`. A column matching any include now resolves
+as satisfied-by-include rather than landing in `unresolved_fields`.
+
+Two deviations from the entry's fix-location section, both recorded in
+the fix file:
+
+1. The curated map is NOT retired. The Address entry carries four
+   reader-facing synonyms (`city`, `state`, `address`, `addresses`) that
+   are not columns on the Address KG catalog, so a general catalogue
+   lookup cannot recover them. The map stays, supplemented.
+
+2. Target-catalog check runs FIRST, not as a union. `OrderNumber` lives
+   on both `PurchaseOrder` and `PurchaseOrderLine`; if the include check
+   short-circuited, the column would be dropped from `fields` and the
+   pipeline projection would stop emitting it.
+
+Verification: V1 reproducer now answers (`Description` on
+PurchaseOrderLine no longer misreported as unavailable). V5 goldens
+unchanged. V6 full suite 1164 passed (baseline 1156 + 8 new). V7 red on
+3 of 8 (stash revert): the three that assert the include-catalogue
+path. V8 n/a. V9 deferred to end of branch.
+
+Fix file: `docs/phase-2/fixes/F-017.md`.
 
 ---
 
@@ -2559,6 +2848,92 @@ Whichever resolves the observed symptom, both are warranted: the synthesizer pat
 
 ---
 
+**Update 2026-09-23 — reclassified: neither recorded fix site is the cause; the symptom is F-051.**
+
+Reproduced 2026-09-23 via `promptkit --run --show-planner
+--show-synthesizer` on the entry's exact prompt. The full output is
+`t_f021_v1.txt` (transcribed here; not committed).
+
+    Intent:
+      target_entity: ReceivablesInvoice
+      filters: [{'type': 'by_id', 'value': '1002'}]
+      include: ['ReceivablesInvoiceTransactionDFF']
+      fields: ['TransactionNumber']
+    ...
+    Outputs:
+      receivables_invoices: 1 record(s)
+        [1] {'TransactionNumber': '5'}
+      receivablesinvoicetransactiondff: 1 record(s)
+        [1] {'CustomerTrxId': 1002, '__FLEX_Context': 'DOO',
+             '__FLEX_Context_DisplayValue': None}
+    ...
+    Answer:
+    <blank>
+    Answer:
+    receivables_invoices (1 record(s)) — columns: TransactionNumber
+      TransactionNumber
+      -----------------
+      5
+
+Three things the entry's root-cause section left open, now resolved:
+
+1. The parser emitted the DFF include.
+2. The executor fetched the DFF (`__FLEX_Context: 'DOO'` in the bucket).
+3. `synthesize_response` ran and produced a `ReceivablesInvoiceResponse`
+   with the DFF populated via `build_invoice_dff` — the Summary block
+   shows `Synthesized answer: 1 record(s)`.
+
+**Neither recorded fix site is the cause.**
+
+- `synthesizer/synthesizer.py` — the `ReceivablesInvoice` branch builds
+  the record with the DFF. Verified by the fact that a response was
+  produced and the DFF bucket fed it.
+- `rendering/formatters.py` — the ReceivablesInvoice branch of
+  `_format_synthesized` iterates the invoice and its children, and
+  renders `DFF` when populated. Verified by reading the branch; it
+  works if called.
+
+The defect is one layer up, in the **caller**. `scripts/promptkit.py`
+line 437 (identical shape at `run_prompt_set.py:227` and
+`run_graph.py:194`):
+
+    if _fields or _unresolved:
+        ...
+        answer(_format_synthesized(state.get("response"), summary_only=True))
+        answer("")
+        answer(_format_projected_table(_outputs, _fields, _unresolved,
+                                       _available, _entity))
+
+The gate is `_fields or _unresolved` — fields, never include. A
+fields intent with an include takes the `summary_only=True` path,
+which prints only `Answer:` + the summary. For a single-row AR invoice
+the summary is empty (`local_list_summary` returns `[]` when
+`shown == 1`), so the block is blank. The follow-up projected-table
+path then renders only the parent bucket; the DFF bucket is not passed
+and not rendered.
+
+The headline symptom — "DFF child fetched but never rendered" — is
+real, and the DFF fetch and the DFF formatter both work. What fails is
+the caller's choice to suppress the synthesized response whenever any
+`fields` are present. That choice is correct for a fields-only intent
+(it prevents the duplicate parent table F-020's fix was about); it is
+wrong the moment an include is present, because the child content
+lives only in the synthesized response.
+
+**Reclassified, not fixed.** The defect is filed as F-051 with the
+correct mechanism and the correct fix sites (the three callers). This
+entry is closed as reclassified: the audit row B-23 records a real
+symptom whose mechanism was mis-attributed at Phase 1. Per the
+append-only discipline the original fix-location section stands
+unchanged.
+
+The F-021 fix file was not opened — the entry closed before any code
+was written against it. The branch
+`phase-2-fix-F017-F027-F014-F021-projection-cluster` closes with F-017 /
+F-027 / F-014 shipped and F-021 reclassified to F-051.
+
+---
+
 ## F-022 — `Show PO 2144 and its distributions` is deterministic at N=20; B-10's ~14% intermittent failure does not reproduce
 
 **Date:** 2026-09-18
@@ -3036,6 +3411,100 @@ The audit's own note in `_FIELDS_SATISFIED_BY_INCLUDE`'s docstring (*"the includ
 **Not checked.** `src/spire/rendering/formatters.py` — not in any bundle read this session; the exact render path is unresolved. Whether `b_country.sysprompt` has any instruction for "country as a column" that the parser ignored — the grep is the falsifier. Whether the same shape affects other child-field column requests (`city`, `state`, `AddressLine1`, `line items`, `schedules`) — same mechanism, unrun. Whether the parser emitted `fields: ['SupplierNumber', 'country']` and `_FIELDS_SATISFIED_BY_INCLUDE` dropped "country", or the parser never put "country" in `fields` at all — the direct parse (per F-017's method) would distinguish the two, but the outcome is the same either way.
 
 **Class note.** Adjacent to F-017 (same map, different defect — F-017 was the target-only catalog check dropping a child field as unresolved; here the map's "satisfied by include" branch drops the field and the display renders the wrong shape). Both revolve around `_FIELDS_SATISFIED_BY_INCLUDE` not doing what its docstring claims.
+
+---
+
+**Update 2026-09-23 — N=20 sweep; two failure shapes; fix is not sysprompt-only.**
+
+Reproducer run 20x via `promptkit --run --prompt "Supplier number and
+country for active suppliers" --show-planner`, output to `t_f027.txt`.
+Two shapes, no third:
+
+    Shape A (16/20) — include=['Address'], fields=['SupplierNumber'],
+                     display renders the full Address blob
+    Shape B  (4/20) — no include, fields=['SupplierNumber'],
+                     Country lands in unresolved_fields, display prints
+                     "column isn't available on Supplier"
+
+Neither is correct. Shape A is what the entry originally recorded; Shape B
+is new. Under §8.3.2 the entry's sysprompt-only fix cannot converge both:
+Shape B has no include, so the `_FIELDS_SATISFIED_BY_INCLUDE` map and the
+display-side extraction have nothing to correct.
+
+Two consequences for the fix.
+
+1. A post-parse deterministic correction is required — the same pattern
+   F-018 (`_extract_invoice_number`) and F-019 (all-digit CustomerAccount
+   value) use. It scans the raw prompt for a "country as a column" shape
+   and injects the include + the field regardless of what the parser
+   emitted. Under Shape A it adds the country field to an intent that
+   already has the include; under Shape B it adds both.
+
+2. F-050 was filed during this sweep: the `columns/b_column_fields`
+   sysprompt rule — which teaches the "show only the city and country"
+   shape — is unreachable under the router (`columns/` is in neither
+   `_TIER1` nor `KNOWN_MODULES`). The entry's sysprompt edit, if landed,
+   would land in a file the production path never loads. Two options:
+   land the sysprompt edit AND F-050 together, or defer the sysprompt
+   edit and ship F-027 on the deterministic correction + display
+   extraction alone. Both are honest; the second is the smaller change
+   and does not need F-050 to close first.
+
+Methodology note for the next session. The direct `parse()` and
+`route_and_parse()` calls produce different intents for the same prompt
+because they load different preambles — `parse()` builds the full one,
+`route_and_parse()` the scoped one. A pipeline bug must be reproduced
+through the pipeline: prefer `promptkit --run --show-planner` over
+`parse()` for diagnosing shape, because the latter can show a shape the
+production path never produces.
+
+The entry's own fix-location section (§1 sysprompt, §2
+`_FIELDS_SATISFIED_BY_INCLUDE` redesign, §3 display) is preserved
+unchanged. This block refines it, does not replace it.
+
+---
+
+**Update 2026-09-23 — fixed on `phase-2-fix-F017-F027-F014-F021-projection-cluster`.**
+
+Landed as `94ad1f5`. Two sites, no sysprompt edit — that half is
+deferred to F-050.
+
+1. `nl_parser/parser.py` — new post-parse correction,
+   `_has_country_column_phrasing`. Distinguishes a country COLUMN
+   request ("supplier number and country") from a country FILTER value
+   ("active suppliers in US"); the discriminator is the absence of an
+   existing `country` filter on the intent. On a match, adds `Address`
+   to `include` and `country` to `fields`, regardless of what the
+   parser emitted. Runs after `validate_intent` so the field is not
+   swallowed by F-017's include-catalogue branch.
+
+2. `rendering/formatters.py::_format_projected_table` — recognises
+   `country` / `countrycode` / `city` / `state` as requested components
+   and populates them from the first nested address. The
+   auto-appended `Address` blob is suppressed when a component was
+   named. `CountryCode` falls back to full `Country` when the code is
+   absent.
+
+The sysprompt half is DEFERRED. The rule that would teach the shape
+lives in `columns/b_column_fields.sysprompt`, which the router never
+loads (F-050). Landing the edit today lands it in a dead file; the
+F-050 branch will land it when `columns/` returns to `_TIER1`.
+
+Verification: V1 reproducer now renders `SupplierNumber, country` with
+values. V3a sibling (blob shape) unchanged. V3b sibling (country
+filter) unchanged — the correction correctly does not fire. V5 goldens
+unchanged. V6 full suite 1173 passed (1164 + 9 new). V7 red in two
+shapes (full revert → collection error on the new helper;
+formatters-only revert → 2 failed on the discriminator assertion). V8
+N=20: 20/20 fields, 20/20 columns, 0 unresolved.
+
+One pre-existing test rewritten, not deleted:
+`test_location_field_without_the_include_still_unresolves` — its
+invariant holds at the validator layer, but can no longer be observed
+through `parse()` because the correction always adds the include on
+that prompt. Rewritten to test at `validate_intent`.
+
+Fix file: `docs/phase-2/fixes/F-027.md`.
 
 ---
 

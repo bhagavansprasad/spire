@@ -112,6 +112,57 @@ For the procedural checklist that accompanies this file, see
     and reports back; the finding is not considered landed until the
     verification output has been seen.
 
+15.1. **Full-output capture for any run you may inspect more than once.**
+    When a command produces output you will want to look at again — a
+    multi-prompt sweep, a diagnostic run, a pytest with markers —
+    redirect the COMPLETE stdout AND stderr to a file first, then grep
+    from the file. Never pipe the run itself through a filter (`grep`,
+    `awk`, `head`, `tail`).
+
+    The reason is cost, not purity. A filtered run bakes one question
+    into the output and throws away everything that question did not
+    anticipate. When a later question needs a line the filter did not
+    match, the run has to be repeated — with a new filter, which may
+    itself miss something. One unfiltered file answers every subsequent
+    question by grep, at no extra cost.
+
+    The shape:
+
+        for p in ...; do
+            python scripts/promptkit.py --run --prompt "$p" --show-planner
+        done > t_<finding>.txt 2>&1
+
+    Inspection (any number of times, no re-run):
+
+        grep -nE 'pattern' t_<finding>.txt
+        sed -n '/start/,/end/p' t_<finding>.txt
+
+    Never:
+
+        ... | grep 'pattern'    # the question is baked in; a second
+                                # question means a second run
+        ... | head -80          # truncated permanently
+
+    The single exception: a one-shot command whose complete output will
+    be pasted into a message anyway. If in doubt, unfiltered.
+
+15.2. **Name a slow command's cost before the user runs it.**
+    Before handing over any command whose wall-clock may exceed about
+    thirty seconds, say so in the same reply, with a rough figure and,
+    when known, why it is slow. "This walks ~13k invoices across 26
+    pages, expect 2-4 minutes" is enough. Without it the user has no
+    way to decide whether to run it now, later, or ask for a cheaper
+    path.
+
+    Where a cheaper reproducer exists, offer it. Where none does — an
+    aggregate whose fetch is inherently the whole collection — say that
+    too, so the user knows the cost is not avoidable rather than the
+    tool being slow.
+
+    This is not a rule about laziness; it is a rule about consent. A
+    long fetch the user did not agree to spend time on is a longer
+    conversation than one they did.
+
 ## Evidence standard for findings (S0–S8)
 
 Before anything is written into a findings log as a bug, the claim

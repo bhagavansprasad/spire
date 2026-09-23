@@ -304,15 +304,40 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
         # fields in the split, so no false "not available" note is emitted
         # for a field the answer actually shows (see
         # _FIELDS_SATISFIED_BY_INCLUDE).
+        # Two sources feed "this field is satisfied by an active
+        # include":
+        #
+        #   (a) the curated _FIELDS_SATISFIED_BY_INCLUDE map, for
+        #       reader-facing synonyms that do NOT correspond to a
+        #       column on the include's KG catalog (Address's "city",
+        #       "state", "addresses" — see the map's docstring).
+        #   (b) the KG field catalog of every entity in intent.include.
+        #       This is what lets a CHILD field (e.g. PurchaseOrderLine's
+        #       "Description") resolve against its own entity instead of
+        #       being classified against the target's catalog and wrongly
+        #       reported unavailable. F-017.
+        #
+        # The TARGET's own catalog is checked FIRST for each column, so
+        # a field present on both the target and an include (OrderNumber
+        # is a column on PurchaseOrder AND on PurchaseOrderLine) stays
+        # in `fields` for the target's projection, rather than being
+        # short-circuited by the include branch.
         satisfied_by_include: set[str] = set()
         for inc in intent.include:
             satisfied_by_include |= _FIELDS_SATISFIED_BY_INCLUDE.get(inc, set())
+            for inc_col in menu.entity_columns.get(inc, []):
+                satisfied_by_include.add(inc_col.lower())
         known: list[str] = []
         unresolved: list[str] = []
         for col in intent.fields:
-            if col.lower() in satisfied_by_include:
+            if menu.is_known_field(entity, col):
+                known.append(col)
+            elif col.lower() in satisfied_by_include:
+                # Satisfied by the include; not an unresolved miss and
+                # not a target-catalog column either.
                 continue
-            (known if menu.is_known_field(entity, col) else unresolved).append(col)
+            else:
+                unresolved.append(col)
         intent.fields = known
         intent.unresolved_fields = unresolved
 

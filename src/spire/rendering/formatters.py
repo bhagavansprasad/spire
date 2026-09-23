@@ -1421,6 +1421,27 @@ def _format_projected_table(
 
     # Self-gating address flatten: only if some row carries an addresses list.
     cols = list(fields)
+
+    # F-027: when the user asked for a specific address component as a
+    # column (country, countrycode, city, state), populate THAT column
+    # from the first address rather than auto-appending the Address blob.
+    # Otherwise "supplier number and country" would render BOTH a country
+    # column (empty, because `country` is not a base-row key — it lives
+    # on the child) AND a redundant Address column carrying the formatted
+    # string. The blob is only added when the user did NOT name a
+    # specific component.
+    _ADDRESS_COMPONENT_KEYS: dict[str, str] = {
+        "country": "Country",
+        "countrycode": "CountryCode",
+        "city": "City",
+        "state": "State",
+    }
+    requested_components: dict[str, str] = {}
+    for c in cols:
+        key = _ADDRESS_COMPONENT_KEYS.get(str(c).lower())
+        if key is not None:
+            requested_components[c] = key
+
     has_addresses = any(
         isinstance(r, dict) and r.get("addresses") for r in rows
     )
@@ -1430,19 +1451,28 @@ def _format_projected_table(
             if not isinstance(r, dict):
                 continue
             addrs = r.get("addresses") or []
-            if addrs:
-                a = addrs[0]
-                r["Address"] = (
-                    a.get("FormattedAddress")
-                    or ", ".join(
-                        str(a[k]) for k in ("City", "State", "Country")
-                        if a.get(k)
+            first = addrs[0] if addrs else None
+            for col, key in requested_components.items():
+                value = first.get(key) if first else None
+                # CountryCode falls back to the full Country name when the
+                # code itself is empty — the pod sometimes returns one but
+                # not the other, and the reader asked for a country.
+                if not value and key == "CountryCode" and first:
+                    value = first.get("Country")
+                r[col] = value if value else None
+            if not requested_components:
+                if first:
+                    r["Address"] = (
+                        first.get("FormattedAddress")
+                        or ", ".join(
+                            str(first[k]) for k in ("City", "State", "Country")
+                            if first.get(k)
+                        )
+                        or None
                     )
-                    or None
-                )
-            else:
-                r["Address"] = None
-        if "Address" not in cols:
+                else:
+                    r["Address"] = None
+        if not requested_components and "Address" not in cols:
             cols.append("Address")
 
     # COL-03 note, above the table. Built from unresolved_fields (columns
