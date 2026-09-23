@@ -235,16 +235,16 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-11 | F-013 | closed-as-not-a-bug |
 | B-12 | F-026 | closed-as-not-a-bug (mechanism latent) |
 | B-13 | F-001 (cross-ref) | fixed 2026-09-22 |
-| B-14 | F-027 | fixed 2026-09-23 |
+| B-14 | F-027 | verified 2026-09-23 (#165) |
 | B-15 | F-025 | closed-as-not-a-bug |
 | B-16 | F-028 | closed-as-not-a-bug |
-| B-17 | F-014 | fixed 2026-09-23 |
+| B-17 | F-014 | verified 2026-09-23 (#165) |
 | B-18 | F-029 | closed-as-not-a-bug (capability on parked branch; see E-12) |
 | B-19 | F-015 | fixed 2026-09-22 |
 | B-20 | F-003 / F-004 (cross-ref) | confirmed |
 | B-21 | F-023 | closed-as-not-a-bug |
-| B-22 | F-017 | fixed 2026-09-23 |
-| B-23 | F-021 → F-051 | reclassified 2026-09-23 (F-021's recorded fix sites not the cause; caller-side gate) |
+| B-22 | F-017 | verified 2026-09-23 (#165) |
+| B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate) |
 | B-24 | F-018 | fixed 2026-09-23 |
 | B-25 | F-019 | fixed 2026-09-23 |
 | B-26 | F-016 | confirmed |

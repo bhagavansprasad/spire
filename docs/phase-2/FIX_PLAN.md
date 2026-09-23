@@ -112,11 +112,11 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-008 | wrong-data | 1 | `mcp_server/tools/supplier_classifications.py` | verified | #160 | 2026-09-22 |
 | F-020 | wrong-narration | 1 | `synthesizer/synthesizer.py`, `rendering/formatters.py` | verified | #161 | 2026-09-23 |
 | F-039 | wrong-narration | 1 | `synthesizer/aggregation.py` | verified | #162 | 2026-09-23 |
-| F-017 | missing-projection | 2 | `nl_parser/intent_validation.py` | fixed | — | 2026-09-23 |
+| F-017 | missing-projection | 2 | `nl_parser/intent_validation.py` | verified | #165 | 2026-09-23 |
 | F-018 | wrong-refusal | 4 | `mcp_server/tools/invoices.py`, parser sysprompt, KG, `planner.py` | fixed | — | 2026-09-23 |
-| F-027 | missing-projection | 2 | `nl_parser/parser.py` (post-parse), `rendering/formatters.py` | fixed | — | 2026-09-23 |
-| F-014 | missing-projection | 2 | `graph/pipeline.py`, `nl_parser/parser.py` (post-parse) | fixed | — | 2026-09-23 |
-| F-021 | missing-projection | 2 | reclassified to F-051 — no separate fix on this branch | closed-as-reclassified | — | 2026-09-23 |
+| F-027 | missing-projection | 2 | `nl_parser/parser.py` (post-parse), `rendering/formatters.py` | verified | #165 | 2026-09-23 |
+| F-014 | missing-projection | 2 | `graph/pipeline.py`, `nl_parser/parser.py` (post-parse) | verified | #165 | 2026-09-23 |
+| F-021 | missing-projection | 2 | reclassified to F-051 — no separate fix on this branch | closed-as-reclassified | #165 | 2026-09-23 |
 | F-001 | missing-capability | 3 | `nl_parser/parser.py` | verified | #153 | 2026-09-22 |
 | F-016 | missing-capability | 3 | `nl_parser/draft.py`, `planner/models.py`, `plan_builders.py` | not-started | — | — |
 | F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
