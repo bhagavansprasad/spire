@@ -131,7 +131,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-045 | wrong-data | 1 | `mcp_server/tools/purchase_orders.py` (composite bound), `synthesizer/synthesizer.py` (capped-note wording) | not-started | — | — |
 | F-046 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `planner.py`, `context_assembly.py` | fixed | — | 2026-09-23 |
 | F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `mcp_server/server.py`, `plan_builders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt, `context_assembly.py` | fixed | — | 2026-09-23 |
-| F-048 | missing-capability | 4 | parser sysprompt | not-started | — | — |
+| F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | fixed | — | 2026-09-23 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the

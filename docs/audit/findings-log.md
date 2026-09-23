@@ -2015,6 +2015,51 @@ The parser has no rule for a vague relative adjective with no explicit N. The mo
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+
+Sysprompt-only fix. Two files: `b_po_created_date.sysprompt` and
+the byte-equality literal in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`.
+No KG rows, no plan_builders change, no tool change.
+
+**Pod-drift note.** The finding's evidence recorded both
+reproducers as `unsupported_filter`. On `dabpqy` they have
+drifted apart: `new purchase orders` still self-declares
+`unsupported_filter`, but `recent purchase orders` self-declares
+`missing_identifier` — the parser does not recognise `recent` as
+a date phrase at all, so it treats the prompt as a rootless PO
+list and the F-001 guard refuses it. The fix's VAGUE RECENT rule
+teaches both recognition and mapping, so it closes both shapes.
+
+The rule: `recent` / `new` / `latest` / `fresh` / `the most
+recent` / `recently created` — where the adjective names recency
+but gives no explicit N — emits
+`created_in_last_n_months: {"months": 3}`. The default fires
+only when NO explicit N is present; `in the last 6 months` still
+uses months=6.
+
+Verification: V1 (`recent purchase orders`) answers — intent
+`created_in_last_n_months: {months: 3}`, plan
+`created_since: 2026-06-23`, 25 of 259. V2 (`new purchase
+orders`) same shape. V3a (`in the last 6 months`) unchanged,
+months=6. V3b (`older than 6 months`) unchanged, F-011b intact.
+V4 (bare `purchase orders`) still refuses missing_identifier.
+V5 goldens untouched. V6 new `tests/test_f048_vague_relative.py`
+— 3 tests, all fail pre-fix.
+Suite: 1156 passed, 22 deselected (baseline 1153 + 3 new).
+
+**V9 outstanding.** Three sysprompt files were edited across this
+branch (F-046, F-047, F-048). Per FIX_PLAN §4 row 11, one full
+`--validate` run covers all three and is the last step of the
+branch before the PR.
+
+**Not checked.** Other adjectives (`current`, `modern`,
+`up-to-date`); whether the fixed 3-month default should be
+configurable; narration of the assumption as a synthesized
+lead-in; the same defaulting pattern on other list entities
+(Invoice, CreditMemo).
+
+---
+
 ## F-047 — PO last-updated-date filter missing; "not touched in the last year" has no honest answer
 
 **Date:** 2026-09-23
