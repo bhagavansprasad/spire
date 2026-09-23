@@ -128,7 +128,14 @@ def generate_plan(
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
         has_root_ref = any(
-            f.get("type") in ("supplier", "purchase_order", "invoice_number")
+            f.get("type") in (
+                "supplier",
+                "purchase_order",
+                "invoice_number",
+                "invoice_date",
+                "older_than_n_months",
+                "created_in_last_n_months",
+            )
             for f in intent.filters
         )
         if not has_root_ref:

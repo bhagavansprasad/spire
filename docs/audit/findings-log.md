@@ -2139,6 +2139,56 @@ The prompt is in-scope: the user named the entity (Invoice) and a date window. T
 
 ---
 
+**Update 2026-09-23 — fixed on `phase-2-fix-F046-F047-F048-date-filters`.**
+
+Four-site fix (the entry named three). Sites 2b and 3 were surfaced by
+the parse probes recorded in `docs/phase-2/fixes/F-046.md`.
+
+1. **KG.** Two new `(Invoice, ...)` rows in `scripts/sql/kg_schema.sql`:
+   `older_than_n_months` → `invoice_date_before` and
+   `created_in_last_n_months` → `invoice_date_after`, mirroring F-011b's
+   PO split exactly. `kg_entity_filter` 30 → 32.
+
+2. **Sysprompt.** `b_invoice_date.sysprompt` gains the two relative
+   rules. `b_invoices_for_supplier.sysprompt`'s "MUST include this
+   supplier filter" clause was rewritten to scope the requirement to
+   the supplier-shaped query — pre-fix it blocked date-only Invoice
+   queries (parse probe: `invoices in the last 30 days` self-declared
+   `missing_identifier` sourced from that clause). Both edits are
+   mirrored in `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`, the
+   byte-equality oracle `tests/test_parser_context_assembly.py` checks
+   the disk-assembled preamble against.
+
+3. **Guard.** `planner.py::generate_plan`'s Invoice guard widened from
+   `("supplier", "purchase_order", "invoice_number")` to also accept
+   `"invoice_date"`, `"older_than_n_months"`, `"created_in_last_n_months"`.
+   Pre-fix `invoices in 2024` parsed to a correct `invoice_date` intent
+   and refused at the guard — a pre-existing wrong-refusal this fix
+   also closes. Not in the entry's fix location.
+
+4. **No plan_builders change.** The entry's "no code change" claim was
+   correct: the F-011b branch matches on ftype name and is
+   entity-agnostic; Invoice rows reusing the same ftype names pick up
+   the branch automatically. An earlier fix-file draft claimed a
+   change here; retracted before commit.
+
+Verification: V1 (`invoices older than 6 months`) answers — intent
+`older_than_n_months: {months: 6}`, plan `invoice_date_before:
+2026-03-23`. V2 (`invoices in the last 30 days`) same shape,
+`invoice_date_after: 2026-08-23`. V3a (`invoices in 2024`) now
+answers, previously refused. V3b (`invoices for Lee Supplies`)
+unchanged. V4 (bare `invoices`) still refuses with the same shape.
+V5 goldens untouched. V6 new `tests/test_f046_invoice_relative_date.py`
+— 9 tests, 8 fail pre-fix. V9 deferred to end of branch.
+Suite: 1144 passed, 22 deselected (baseline 1135 + 9 new).
+
+**Not checked.** Day-vs-month lossiness (`in the last 30 days` parses
+to `months: 1`); the duplicated invoice-number rule in
+`b_invoices_for_supplier.sysprompt` (cosmetic); class-level
+consistency of the other guards' root-ref accept lists.
+
+---
+
 ## F-020 — supplier-contacts summary flattens 47 administrative names into one sentence, unattributed and unverifiable against the tables below
 
 **Date:** 2026-09-18
