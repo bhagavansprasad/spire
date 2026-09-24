@@ -1,0 +1,90 @@
+# Spire prompt set — 19 FIELDS AND INCLUDE. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# PURPOSE: the F-051 regression set. F-051 landed on
+# phase-2-fix-F051-summary-gate (2026-09-24).
+#
+#   F-051 — a prompt naming BOTH a column (`fields`) and a child
+#           (`include`) fetched the child, built it into the response,
+#           and then dropped it. The caller's `summary_only` gate
+#           suppressed the typed record block whenever `fields` was
+#           non-empty, and the projected table that followed renders
+#           only the PARENT bucket — never the include's child rows.
+#           The DFF was in the response object; the answer did not
+#           show it.
+#
+# THE BRANCH IN PLAY:
+#
+#   fields only    ->  summary_only=True,  projected table      (F-020)
+#   fields+include ->  summary_only=not include                 (F-051)
+#   include only   ->  else branch, full render
+#   neither        ->  else branch, full render
+#
+# The fix is `summary_only=not state["intent"].include` inside the
+# shared helper `formatters.render_answer`. Fields-only is unchanged;
+# fields-plus-include now shows its child content.
+#
+# HOW TO SCORE — the summary line proves nothing; the INTENT line does:
+#
+#   1. Read the printed `Intent:`. Does it carry BOTH `fields: [...]`
+#      and `include: [...]`? If `include` is missing, the prompt is not
+#      exercising the fix — it falls into section C and should be
+#      reworded, not scored as a pass.
+#   2. If both are present, the ANSWER must contain the child content
+#      (lines, schedules, distributions, contacts, DFF value, tax rows,
+#      etc.). A blank record block with only the projected table is the
+#      pre-fix failure.
+#   3. Sibling sections B/C/D must be UNCHANGED from before the fix.
+#
+# Anchors:
+#   AR invoice CustomerTransactionId 1002 — 4 lines, DFF context 'DOO'
+#   PO 2144 (OrderNumber 162352, EIP Inc) — 2 lines, 2 schedules,
+#     2 distributions
+#   Supplier EIP Inc (SupplierNumber 1262) — 10 contacts, 3
+#     classifications, 22 sites
+#   Customer "ABC Application Software" — AccountId 300000047368512
+#
+# PRINCIPLE (operator): if the pod has the data and the user asked a
+# real question, SPIRE answers. When the user asks for a column AND a
+# child, the answer contains both.
+
+
+# ====================================================================
+# A. F-051 REPRODUCER + ANALOGUES. fields + include, must render child.
+#    A1 is the finding's own reproducer; the rest are structurally
+#    analogous shapes F-051's branch affects equally.
+# ====================================================================
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+Show PO 2144 with order number and its lines
+Show PO 2144 with order number and its schedules
+Show PO 2144 with order number and its distributions
+Show supplier EIP Inc with supplier number and its contacts
+Show supplier EIP Inc with supplier number and its sites
+Show customer ABC Application Software with account number and its transactions
+Show customer ABC Application Software with account number and its receipts
+
+
+# ====================================================================
+# B. F-020 REGRESSION GUARD. fields only, NO include. summary_only=True
+#    must stay; the typed record block must NOT print alongside the
+#    projected table. If either of these starts printing records too,
+#    the fix has over-reached.
+# ====================================================================
+List active suppliers with supplier name and status
+Show me invoices for EIP Inc with invoice number and amount
+
+
+# ====================================================================
+# C. INCLUDE ONLY. Else branch, unchanged by the fix.
+# ====================================================================
+Show PO 2144 and its lines
+Get tax lines for invoice 1002
+
+
+# ====================================================================
+# D. PLAIN. Else branch, unchanged by the fix. Bare list, no columns,
+#    no include.
+# ====================================================================
+List active suppliers
