@@ -2663,6 +2663,75 @@ The pod holds ~13,500 POs in the 2015-2024 window (878 before 2015, 14,387 befor
 
 ---
 
+**Update 2026-09-24 — fixed on `phase-2-fix-F045-created-since-priority`.**
+
+Neither of the entry's two named fix shapes is what landed.
+
+**What the probe showed, and what it ruled out.** Three pod facts
+established live on `dabpqy` 2026-09-24, none of which the entry's
+evidence anticipated:
+
+1. **Composite `q=` on `/purchaseOrders` returns HTTP 400, not
+   silent-zero.** Different failure mode from F-012's `/invoices`
+   falsifier (which returned 200 with `totalResults: 0`). But the tool
+   never sends a composite, so this is a red herring for the mechanism.
+2. **The pod's default physical scan starts at the far end of the
+   collection.** `q=CreationDate >= '2023-01-01'&limit=200` (no
+   projection, no orderBy) returned 200 rows beginning 2024-07-01 —
+   outside the range under test. The same query with `fields=` or
+   `orderBy=` returned rows beginning 2023-01-11.
+3. **`orderBy=CreationDate:asc` composes with `q=`.** Two identical
+   calls returned identical rows starting 2023-01-11.
+
+**What actually caused the 0.** The tool sends exactly one clause to
+the server. With both `created_since` and `created_before` set, the
+priority chain picked `created_before` — so the fetch sent
+`CreationDate < '2024-01-01'` and pulled the 200-row window from the
+bottom of the collection (2013-12-11 → 2014-02-12 in the probe). The
+client-side `>= 2023-01-01` filter dropped all 200. Reordering the
+chain so `created_since` wins fixed the clause choice — but not the
+window, because the pod then returned 200 rows beginning 2024-07-01
+for the correct clause. The orderBy was the second half.
+
+**The narration half of the entry is a non-issue after the fix.** The
+"capped" note was honest: the fetch WAS capped, the total WAS unknown.
+Suppressing it (the entry's option 2) would have hidden a real signal
+— a genuinely truncated answer — behind a false "everything is fine."
+With the fetch returning rows, the F-015 empty-bucket path does not
+fire, and a genuine cap still narrates honestly.
+
+**Two-part fix, both in `mcp_server/tools/purchase_orders.py`:**
+
+- Priority chain: `created_since` above `created_before`.
+- New `server_order_by` variable; set to `CreationDate:asc` when the
+  server clause is the `created_since` branch; passed as the `orderBy`
+  param when present.
+
+Full V-standard in `docs/phase-2/fixes/F-045.md`. V6: 1229 passed, 1
+skipped, 22 deselected. V7 formal: 3 red pre-fix (one reorder test,
+two orderBy tests), 13 green post-restore. V1 reproducer now returns
+25 records, all CreationDate in 2023.
+
+**Two corrections worth carrying forward.** V7 was mispredicted twice
+— an early stash attempt stashed nothing (the change was committed,
+not in the working tree), and the first prediction said 2 red when the
+correct count is 3. Both recorded in the fix file per append-only
+discipline. The F-045 entry's own "Not checked" list is what let the
+two misdiagnoses survive — every one of the three pod facts above was
+on that list as an open question, and every one was answered by a
+probe rather than by reading the code. The lesson is the same as
+F-006's and F-007's: when the entry names a symptom, run the pod probe
+before trusting any of its proposed mechanisms.
+
+**Endpoints-reference follow-up.** Two new pod facts to add to
+`docs/spire_fusion_endpoints_reference.md`: (a) the default physical
+scan order on `/purchaseOrders` is not stable across query shapes;
+(b) `orderBy=CreationDate:asc` composes with `q=` and is the stable
+sort key for a date-bounded fetch on this collection. Not added by
+this branch.
+
+---
+
 ## F-046 — Invoice has no relative-date filter; "invoices older than 6 months" refuses on missing supplier
 
 **Date:** 2026-09-23
