@@ -22,11 +22,11 @@ bundles:
   - docs/spire-robustness/WORKING_STYLE.md
   - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
   - docs/SPIRE_SESSION_HANDOFF.md
-  - docs/spire-robustness/SESSION_HANDOVER.md
-  # The two above are distinct files. SPIRE_SESSION_HANDOFF.md is the
-  # entry point a new window reads; SESSION_HANDOVER.md is its older
-  # sibling, retained for reference. A 2026-09-24 comment here claimed
-  # the first did not exist; it did — the two were simply confused.
+  # This is the canonical entry point a new window reads. Its sibling
+  # docs/spire-robustness/SESSION_HANDOVER.md is retained as a
+  # deprecation stub pointing here. Both files were previously listed;
+  # the split was reconciled 2026-09-24 (window 18) — the two were
+  # once confused and the plan bundle delivered the wrong one.
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
   - docs/developer/context_bundles.md
@@ -57,7 +57,7 @@ bundles:
   # received only `plan` previously had to ask for these separately.
   - docs/spire-robustness/WORKING_STYLE.md
   - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
-  - docs/spire-robustness/SESSION_HANDOVER.md
+  - docs/SPIRE_SESSION_HANDOFF.md
   # the audit + findings log — the two documents the handoff says to read
   # first. Were unbundled until 2026-09-18; a new session asking for the
   # plan bundle now gets the full working state.
