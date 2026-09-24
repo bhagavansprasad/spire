@@ -21,11 +21,12 @@ bundles:
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
   - docs/spire-robustness/WORKING_STYLE.md
   - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
+  - docs/SPIRE_SESSION_HANDOFF.md
   - docs/spire-robustness/SESSION_HANDOVER.md
-  # The path docs/SPIRE_SESSION_HANDOFF.md was listed here until 2026-09-24
-  # and did not exist — the file is docs/spire-robustness/SESSION_HANDOVER.md
-  # (listed above). AUDIT_AND_FIX.md carried the same stale path; corrected
-  # in the same commit. Do not add SPIRE_SESSION_HANDOFF.md back.
+  # The two above are distinct files. SPIRE_SESSION_HANDOFF.md is the
+  # entry point a new window reads; SESSION_HANDOVER.md is its older
+  # sibling, retained for reference. A 2026-09-24 comment here claimed
+  # the first did not exist; it did — the two were simply confused.
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
   - docs/developer/context_bundles.md
@@ -69,6 +70,9 @@ bundles:
   # F-044, with a gap that omitted the three most recently landed.
   # F-016 added 2026-09-24 (was landed and merged but not bundled).
   - docs/phase-2/fixes/F-002.md
+  - docs/phase-2/fixes/F-003.md
+  - docs/phase-2/fixes/F-003-v1-sweep.txt
+  - docs/phase-2/fixes/F-003-v8-sweep.txt
   - docs/phase-2/fixes/F-008.md
   - docs/phase-2/fixes/F-010.md
   - docs/phase-2/fixes/F-011.md
@@ -118,6 +122,7 @@ bundles:
   - scripts/prompts/14_truncation_narration.txt
   - scripts/prompts/15_po_relative_date_filters.txt
   - scripts/prompts/16_date_filter_cluster.txt
+  - scripts/prompts/17_modes_and_columns.txt
   - scripts/prompts/README.md
   - scripts/prompts/new/retest_prompts.txt
   - scripts/prompts/qa_testcases.txt
@@ -128,20 +133,25 @@ bundles:
 
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora:
-  - scripts/prompts/00_dipstick.json
-  - scripts/prompts/01_supplier.json
-  - scripts/prompts/02_purchase_order.json
-  - scripts/prompts/03_ar.json
-  - scripts/prompts/04_columns.json
-  - scripts/prompts/05_refusals.json
-  - scripts/prompts/06_slow.json
-  - scripts/prompts/07_alacarte.json
-  - scripts/prompts/08_lifecycle.json
-  - scripts/prompts/11_column_vocabulary.json
-  - scripts/prompts/12_po_supplier_include.json
-  - scripts/prompts/qa_testcases.json
+  # The 13 .json files below were deleted on 2026-09-24 (PR #167).
+  # Their recorded module/tool metadata was stale by construction after
+  # the _TIER1 change; a --validate run against it would false-positive
+  # on every aggregation prompt. Left commented until
+  # scripts/promptkit.py --generate produces a fresh set (separate task).
+  # - scripts/prompts/00_dipstick.json
+  # - scripts/prompts/01_supplier.json
+  # - scripts/prompts/02_purchase_order.json
+  # - scripts/prompts/03_ar.json
+  # - scripts/prompts/04_columns.json
+  # - scripts/prompts/05_refusals.json
+  # - scripts/prompts/06_slow.json
+  # - scripts/prompts/07_alacarte.json
+  # - scripts/prompts/08_lifecycle.json
+  # - scripts/prompts/11_column_vocabulary.json
+  # - scripts/prompts/12_po_supplier_include.json
+  # - scripts/prompts/qa_testcases.json
   - scripts/prompts/mini.txt
-  - scripts/prompts/mini.json
+  # - scripts/prompts/mini.json
 
   scripts:
   - scripts/draw_graph.py
