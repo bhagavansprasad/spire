@@ -94,6 +94,11 @@ bundles:
   - docs/phase-2/fixes/F-048.md
   - docs/phase-2/fixes/F-049.md
   - docs/phase-2/fixes/F-051.md
+  # Added 2026-09-24 (window 18). F-045 landed on PR #170; Reg #30 was
+  # closed as not-a-bug and its reproducer is the closure evidence.
+  - docs/phase-2/fixes/F-045.md
+  - docs/phase-2/fixes/F-045-v1v4.txt
+  - docs/phase-2/fixes/Reg-30-v1-repro.txt
   # Evidence files the fix files reference by name. Not themselves fix
   # files; included so a reader of a fix file's V7/V8 section has the
   # raw output in the same bundle rather than a dangling filename.
@@ -444,6 +449,10 @@ bundles:
   - tests/test_f048_vague_relative.py
   - tests/test_f049_invoice_created_dates.py
   - tests/test_f051_summary_gate.py
+  # F-003 added 2026-09-24 (was landed with PR #167 but not bundled).
+  - tests/test_f003_modes_reachable.py
+  # F-045 added 2026-09-24 (window 18, PR #170).
+  - tests/test_f045_created_since_priority.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
