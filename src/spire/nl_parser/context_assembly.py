@@ -112,6 +112,7 @@ In that case do NOT guess a target_entity and do NOT map the request to the clos
 AGGREGATION — use the aggregate block, do NOT refuse:
 If the question asks for a RANKING or TOTAL rather than a list, set the aggregate block instead of producing a list. Pick the op by WHAT IS MEASURED — the source and the measure decide it, not just the grouping:
 - op='by_supplier' — suppliers ranked by INVOICE SPEND (what was billed). Use for 'top 10 suppliers by spend', 'which suppliers did we spend the most with last quarter', 'total invoiced by supplier in 2025'. Fill date_from/date_to from any time window (as 'YYYY-MM-DD') and top_n from any 'top N' wording (default 10).
+- op='top_invoices_by_amount' — individual INVOICES ranked by their own InvoiceAmount (highest first), NOT grouped by supplier. Use for 'top 10 invoices by amount', 'largest invoices', 'biggest invoices'. Set top_n from any 'top N' wording (default 10). Takes no date range.
 - op='po_value_by_supplier' — suppliers ranked by PURCHASE ORDER VALUE (what was ordered/committed, NOT billed). Use for 'top 5 suppliers by purchase order value', 'which suppliers have the most committed', 'top suppliers by PO value'. Set top_n from any 'top N' wording; set status='OPEN' if the question says open/outstanding POs. This op takes NO date range — PO dates are not filterable.
   SPEND vs PO VALUE is the distinction that matters: 'spend' and 'invoiced' mean invoices (op='by_supplier'); 'purchase order value', 'ordered' and 'committed' mean POs (op='po_value_by_supplier'). If the question names purchase orders, it is NOT the spend ranking.
 - op='po_count_by_status' — purchase orders broken down BY STATUS, with a count and total value per status. Use for 'how many purchase orders are there and what are they worth', 'break POs down by status', 'PO status summary'. Takes no parameters.
@@ -174,8 +175,15 @@ So: capture everything when in scope; refuse cleanly when out of scope. Only pro
 _CONTEXT_DIR = Path(__file__).resolve().parent / "context"
 
 # Tier 1 blocks are ALWAYS assembled, in every subset — the core role contract
-# and the refusal rules are not optional for any module's parse.
-_TIER1 = ("core", "refusals")
+# and the refusal rules, plus the two cross-cutting teaching folders. 'modes'
+# carries the aggregation / comparison / count rules (F-003: without it, a
+# router-scoped parse never sees an aggregation op and the model either refuses
+# or reaches for the nearest visible op in a different block). 'columns'
+# carries the audit-column and column-projection teaching (F-050: without it,
+# a column request like "supplier name and country" is not recognised as one).
+# Neither folder is a Fusion module — both are teaching that applies to every
+# entity — which is exactly what Tier 1 is for.
+_TIER1 = ("core", "refusals", "modes", "columns")
 
 # The Fusion modules a prompt can be classified to (D2/D3). This mirrors the
 # CHECK constraint on kg_entity.module — the single importable source for the
