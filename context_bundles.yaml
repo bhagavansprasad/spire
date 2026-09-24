@@ -28,6 +28,7 @@ bundles:
   # sibling file was removed from the repo.
   - docs/AUDIT_AND_FIX.md
   - docs/phase-2/FIX_PLAN.md
+  - docs/prompt-sets/SURFACE.md
   - docs/developer/context_bundles.md
   - docs/spire_fusion_endpoints_reference.md
   - tests/spire_sme_validation_checklist.md
@@ -63,6 +64,10 @@ bundles:
   - docs/audit/phase-1-audit.md
   - docs/audit/findings-log.md
   - docs/AUDIT_AND_FIX.md
+  # The prompt-set capability surface, tier plan, and legacy
+  # cross-walk. Referenced by the window-19 handoff; needed by any
+  # window working the prompt sets.
+  - docs/prompt-sets/SURFACE.md
   - docs/phase-2/FIX_PLAN.md
   # Fix files. Cluster 2's three (F-014 / F-017 / F-027) added 2026-09-23
   # after they were found missing — the earlier list stopped at F-012 and
@@ -166,6 +171,9 @@ bundles:
   - prompts/smoke_modes.txt
   - prompts/verify_modes.txt
   - prompts/exhaust_modes.txt
+  # Layout doc and the refusal-examples contract file.
+  - prompts/README.md
+  - prompts/refusal_examples.txt
   # External corpus — verbatim, no tier.
   - prompts/qa_testcases.txt
   # Scorer corpus — different format, different runner.
@@ -388,6 +396,7 @@ bundles:
 
   tests:
   - tests/spire_sme_validation_checklist.md
+  - tests/manual/ui/checklist.md
   - tests/test_agent_runner.py
   - tests/test_aggregate_invoices_tool.py
   - tests/test_aggregation_routing.py
@@ -521,4 +530,9 @@ excludes:
 - archive
 - isolation
 - isolation/*
+- prompts/archive
+- prompts/archive/*
+- 15_po_relative_date_filters_after.txt
+- 15_po_relative_date_filters_after2.txt
+- 15_po_relative_date_filters_before.txt
 - source-tree.txt
