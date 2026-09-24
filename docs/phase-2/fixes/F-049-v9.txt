@@ -1,0 +1,862 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=590 out=190 total=780
+Router: modules=['payables']
+[llm] stage=parse in=5471 out=745 total=6216
+[cache] HIT   cached=5455  fresh=16  total_in=5471
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'to': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_before': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 22 record(s)
+    [1] {'InvoiceId': 489504, 'InvoiceNumber': 'ABC-10172016001', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'ABC Consulting'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 493527, 'InvoiceNumber': 'ERS-50741-182311', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 80876.7, 'InvoiceCurrency': 'USD', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 493528, 'InvoiceNumber': 'ERS-50742-182312', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 137494.77, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 493529, 'InvoiceNumber': 'ERS-50743-182313', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 69551.12, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (17 more)
+
+
+========================================================================
+PROMPT: invoices created before 2024-01-01
+========================================================================
+Answer:
+All 22 have InvoiceCurrency USD.
+InvoiceDate: 18 2016-10-19, 2 2016-10-17, 1 2022-03-29, 1 2016-10-24.
+
+Invoices:
+  Invoice          | InvoiceId       |     Amount | Currency | Date       | Supplier               
+  -----------------+-----------------+------------+----------+------------+------------------------
+  ABC-10172016001  | 489504          |        0.0 | USD      | 2016-10-17 | ABC Consulting         
+  LEE-01-1006-111  | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies           
+  ERS-50741-182311 | 493527          |    80876.7 | USD      | 2016-10-19 | Advanced Corp          
+  ERS-50742-182312 | 493528          |  137494.77 | USD      | 2016-10-19 | Office Depot           
+  ERS-50743-182313 | 493529          |   69551.12 | USD      | 2016-10-19 | Office Depot           
+  RR-US164379-L1   | 300000244417567 |      985.5 | USD      | 2022-03-29 | JGA                    
+  ERS-50744-183300 | 495503          | 1321053.99 | USD      | 2016-10-24 | Staffing Services      
+  ERS-50726-182296 | 493512          |  121320.53 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50727-182297 | 493513          |  341822.87 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50728-182298 | 493514          |  149004.32 | USD      | 2016-10-19 | JGA                    
+  ERS-50729-182299 | 493515          |  175294.17 | USD      | 2016-10-19 | JGA                    
+  ERS-50730-182300 | 493516          |  210354.98 | USD      | 2016-10-19 | JGA                    
+  ERS-50731-182301 | 493517          |  153667.92 | USD      | 2016-10-19 | Dell Inc.              
+  ERS-50732-182302 | 493518          |   32401.05 | USD      | 2016-10-19 | US Gas and Electric    
+  ERS-50733-182303 | 493519          |  105137.52 | USD      | 2016-10-19 | Howell Engineering Inc.
+  ERS-50734-182304 | 493520          |   63525.33 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50735-182305 | 493521          |  169399.79 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50736-182306 | 493522          |   84699.35 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50737-182307 | 493523          |  105874.46 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50738-182308 | 493524          |   64704.65 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50739-182309 | 493525          |   16174.25 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50740-182310 | 493526          |   97056.42 | USD      | 2016-10-19 | Advanced Corp          
+Summary:
+  Steps planned:        1
+  Records returned:     22 (across all steps)
+  Final raw output:     22 record(s) under 'invoices'
+  Synthesized answer:   22 record(s)
+Token usage:
+  classify     in=    590  out=    190  total=    780
+  parse        in=   5471  out=    745  total=   6216
+  TOTAL        in=   6061  out=    935  total=   6996
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=144 total=729
+Router: modules=['payables']
+[llm] stage=parse in=5466 out=755 total=6221
+[cache] HIT   cached=5455  fresh=11  total_in=5466
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 1476378, 'InvoiceNumber': 'PCS10053_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3350, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1476379, 'InvoiceNumber': 'PCS10059_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1476380, 'InvoiceNumber': 'PCS10027_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1476381, 'InvoiceNumber': 'PCS10064_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2699.98, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1476383, 'InvoiceNumber': 'PCS10031_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2737.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices created since January 2024
+========================================================================
+Answer:
+Showing 25 of 7,098 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice             | InvoiceId |    Amount | Currency | Date       | Supplier                        
+  --------------------+-----------+-----------+----------+------------+---------------------------------
+  PCS10053_0825       | 1476378   |    3350.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10059_0825       | 1476379   |    3300.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10027_0825       | 1476380   |    3300.0 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10064_0825       | 1476381   |   2699.98 | USD      | 2025-08-23 | Staffing Services               
+  PCS10031_0825       | 1476383   |    2737.5 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10053_09251      | 1480378   |    3300.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10059_09251      | 1480379   |    3350.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10027_09251      | 1480380   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10064_09251      | 1480381   |    2737.5 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10029_09251      | 1480382   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10031_09251      | 1480383   |    2737.5 | USD      | 2025-09-09 | Staffing Services               
+  45809US             | 1445406   | 113216.43 | USD      | 2025-06-01 | Allied Manufacturing            
+  45810US             | 1445407   | 218885.03 | USD      | 2025-06-02 | Allied Manufacturing            
+  45811US             | 1445408   |  45287.01 | USD      | 2025-06-03 | United Parcel Service           
+  45812US             | 1445409   | 518584.34 | USD      | 2025-06-04 | Building Management             
+  45813US             | 1445410   | 178497.05 | USD      | 2025-06-05 | American Telephone and Telegraph
+  45814US             | 1445411   |  45094.29 | USD      | 2025-06-06 | Staples                         
+  45815US             | 1445412   |  98095.58 | USD      | 2025-06-07 | JGA                             
+  45816US             | 1445413   |   5637.06 | USD      | 2025-06-08 | American Telephone and Telegraph
+  45817US             | 1445414   |   3758.04 | USD      | 2025-06-09 | American Telephone and Telegraph
+  FLA-US1EXP002-17001 | 1596378   |    3277.5 | USD      | 2026-08-01 | Advanced Corp                   
+  FLA-US1EXP003-17002 | 1596379   |    4494.0 | USD      | 2026-08-01 | Advanced Corp                   
+  INV-001             | 1580380   |   1088.75 | USD      | 2026-06-18 | EFG Company                     
+  ABC-01-2026         | 1580382   |    3000.0 | USD      | 2026-06-08 | ABC Consulting                  
+  FLA-US1EXP002-17003 | 1596380   |     547.5 | USD      | 2026-08-01 | Advanced Corp                   
+
+Truncation:
+  - invoices: 7098 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=    144  total=    729
+  parse        in=   5466  out=    755  total=   6221
+  TOTAL        in=   6051  out=    899  total=   6950
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=590 out=239 total=829
+Router: modules=['payables']
+[llm] stage=parse in=5471 out=470 total=5941
+[cache] HIT   cached=5455  fresh=16  total_in=5471
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 1476378, 'InvoiceNumber': 'PCS10053_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3350, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1476379, 'InvoiceNumber': 'PCS10059_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1476380, 'InvoiceNumber': 'PCS10027_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1476381, 'InvoiceNumber': 'PCS10064_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2699.98, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1476383, 'InvoiceNumber': 'PCS10031_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2737.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices created after 2024-01-01
+========================================================================
+Answer:
+Showing 25 of 7,098 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice             | InvoiceId |    Amount | Currency | Date       | Supplier                        
+  --------------------+-----------+-----------+----------+------------+---------------------------------
+  PCS10053_0825       | 1476378   |    3350.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10059_0825       | 1476379   |    3300.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10027_0825       | 1476380   |    3300.0 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10064_0825       | 1476381   |   2699.98 | USD      | 2025-08-23 | Staffing Services               
+  PCS10031_0825       | 1476383   |    2737.5 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10053_09251      | 1480378   |    3300.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10059_09251      | 1480379   |    3350.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10027_09251      | 1480380   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10064_09251      | 1480381   |    2737.5 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10029_09251      | 1480382   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10031_09251      | 1480383   |    2737.5 | USD      | 2025-09-09 | Staffing Services               
+  45809US             | 1445406   | 113216.43 | USD      | 2025-06-01 | Allied Manufacturing            
+  45810US             | 1445407   | 218885.03 | USD      | 2025-06-02 | Allied Manufacturing            
+  45811US             | 1445408   |  45287.01 | USD      | 2025-06-03 | United Parcel Service           
+  45812US             | 1445409   | 518584.34 | USD      | 2025-06-04 | Building Management             
+  45813US             | 1445410   | 178497.05 | USD      | 2025-06-05 | American Telephone and Telegraph
+  45814US             | 1445411   |  45094.29 | USD      | 2025-06-06 | Staples                         
+  45815US             | 1445412   |  98095.58 | USD      | 2025-06-07 | JGA                             
+  45816US             | 1445413   |   5637.06 | USD      | 2025-06-08 | American Telephone and Telegraph
+  45817US             | 1445414   |   3758.04 | USD      | 2025-06-09 | American Telephone and Telegraph
+  FLA-US1EXP002-17001 | 1596378   |    3277.5 | USD      | 2026-08-01 | Advanced Corp                   
+  FLA-US1EXP003-17002 | 1596379   |    4494.0 | USD      | 2026-08-01 | Advanced Corp                   
+  INV-001             | 1580380   |   1088.75 | USD      | 2026-06-18 | EFG Company                     
+  ABC-01-2026         | 1580382   |    3000.0 | USD      | 2026-06-08 | ABC Consulting                  
+  FLA-US1EXP002-17003 | 1596380   |     547.5 | USD      | 2026-08-01 | Advanced Corp                   
+
+Truncation:
+  - invoices: 7098 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    590  out=    239  total=    829
+  parse        in=   5471  out=    470  total=   5941
+  TOTAL        in=   6061  out=    709  total=   6770
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=590 out=241 total=831
+Router: modules=['payables']
+[llm] stage=parse in=5471 out=416 total=5887
+[cache] HIT   cached=5455  fresh=16  total_in=5471
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'to': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_before': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 22 record(s)
+    [1] {'InvoiceId': 489504, 'InvoiceNumber': 'ABC-10172016001', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'ABC Consulting'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 493527, 'InvoiceNumber': 'ERS-50741-182311', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 80876.7, 'InvoiceCurrency': 'USD', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 493528, 'InvoiceNumber': 'ERS-50742-182312', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 137494.77, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 493529, 'InvoiceNumber': 'ERS-50743-182313', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 69551.12, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (17 more)
+
+
+========================================================================
+PROMPT: invoices raised before 2024-01-01
+========================================================================
+Answer:
+All 22 have InvoiceCurrency USD.
+InvoiceDate: 18 2016-10-19, 2 2016-10-17, 1 2022-03-29, 1 2016-10-24.
+
+Invoices:
+  Invoice          | InvoiceId       |     Amount | Currency | Date       | Supplier               
+  -----------------+-----------------+------------+----------+------------+------------------------
+  ABC-10172016001  | 489504          |        0.0 | USD      | 2016-10-17 | ABC Consulting         
+  LEE-01-1006-111  | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies           
+  ERS-50741-182311 | 493527          |    80876.7 | USD      | 2016-10-19 | Advanced Corp          
+  ERS-50742-182312 | 493528          |  137494.77 | USD      | 2016-10-19 | Office Depot           
+  ERS-50743-182313 | 493529          |   69551.12 | USD      | 2016-10-19 | Office Depot           
+  RR-US164379-L1   | 300000244417567 |      985.5 | USD      | 2022-03-29 | JGA                    
+  ERS-50744-183300 | 495503          | 1321053.99 | USD      | 2016-10-24 | Staffing Services      
+  ERS-50726-182296 | 493512          |  121320.53 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50727-182297 | 493513          |  341822.87 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50728-182298 | 493514          |  149004.32 | USD      | 2016-10-19 | JGA                    
+  ERS-50729-182299 | 493515          |  175294.17 | USD      | 2016-10-19 | JGA                    
+  ERS-50730-182300 | 493516          |  210354.98 | USD      | 2016-10-19 | JGA                    
+  ERS-50731-182301 | 493517          |  153667.92 | USD      | 2016-10-19 | Dell Inc.              
+  ERS-50732-182302 | 493518          |   32401.05 | USD      | 2016-10-19 | US Gas and Electric    
+  ERS-50733-182303 | 493519          |  105137.52 | USD      | 2016-10-19 | Howell Engineering Inc.
+  ERS-50734-182304 | 493520          |   63525.33 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50735-182305 | 493521          |  169399.79 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50736-182306 | 493522          |   84699.35 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50737-182307 | 493523          |  105874.46 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50738-182308 | 493524          |   64704.65 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50739-182309 | 493525          |   16174.25 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50740-182310 | 493526          |   97056.42 | USD      | 2016-10-19 | Advanced Corp          
+Summary:
+  Steps planned:        1
+  Records returned:     22 (across all steps)
+  Final raw output:     22 record(s) under 'invoices'
+  Synthesized answer:   22 record(s)
+Token usage:
+  classify     in=    590  out=    241  total=    831
+  parse        in=   5471  out=    416  total=   5887
+  TOTAL        in=   6061  out=    657  total=   6718
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=363 total=948
+Router: modules=['payables']
+[llm] stage=parse in=5466 out=522 total=5988
+[cache] HIT   cached=5455  fresh=11  total_in=5466
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 1476378, 'InvoiceNumber': 'PCS10053_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3350, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1476379, 'InvoiceNumber': 'PCS10059_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1476380, 'InvoiceNumber': 'PCS10027_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1476381, 'InvoiceNumber': 'PCS10064_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2699.98, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1476383, 'InvoiceNumber': 'PCS10031_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2737.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices raised since January 2024
+========================================================================
+Answer:
+Showing 25 of 7,098 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice             | InvoiceId |    Amount | Currency | Date       | Supplier                        
+  --------------------+-----------+-----------+----------+------------+---------------------------------
+  PCS10053_0825       | 1476378   |    3350.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10059_0825       | 1476379   |    3300.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10027_0825       | 1476380   |    3300.0 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10064_0825       | 1476381   |   2699.98 | USD      | 2025-08-23 | Staffing Services               
+  PCS10031_0825       | 1476383   |    2737.5 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10053_09251      | 1480378   |    3300.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10059_09251      | 1480379   |    3350.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10027_09251      | 1480380   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10064_09251      | 1480381   |    2737.5 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10029_09251      | 1480382   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10031_09251      | 1480383   |    2737.5 | USD      | 2025-09-09 | Staffing Services               
+  45809US             | 1445406   | 113216.43 | USD      | 2025-06-01 | Allied Manufacturing            
+  45810US             | 1445407   | 218885.03 | USD      | 2025-06-02 | Allied Manufacturing            
+  45811US             | 1445408   |  45287.01 | USD      | 2025-06-03 | United Parcel Service           
+  45812US             | 1445409   | 518584.34 | USD      | 2025-06-04 | Building Management             
+  45813US             | 1445410   | 178497.05 | USD      | 2025-06-05 | American Telephone and Telegraph
+  45814US             | 1445411   |  45094.29 | USD      | 2025-06-06 | Staples                         
+  45815US             | 1445412   |  98095.58 | USD      | 2025-06-07 | JGA                             
+  45816US             | 1445413   |   5637.06 | USD      | 2025-06-08 | American Telephone and Telegraph
+  45817US             | 1445414   |   3758.04 | USD      | 2025-06-09 | American Telephone and Telegraph
+  FLA-US1EXP002-17001 | 1596378   |    3277.5 | USD      | 2026-08-01 | Advanced Corp                   
+  FLA-US1EXP003-17002 | 1596379   |    4494.0 | USD      | 2026-08-01 | Advanced Corp                   
+  INV-001             | 1580380   |   1088.75 | USD      | 2026-06-18 | EFG Company                     
+  ABC-01-2026         | 1580382   |    3000.0 | USD      | 2026-06-08 | ABC Consulting                  
+  FLA-US1EXP002-17003 | 1596380   |     547.5 | USD      | 2026-08-01 | Advanced Corp                   
+
+Truncation:
+  - invoices: 7098 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=    363  total=    948
+  parse        in=   5466  out=    522  total=   5988
+  TOTAL        in=   6051  out=    885  total=   6936
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=198 total=782
+Router: modules=['payables']
+[llm] stage=parse in=5465 out=845 total=6310
+[cache] HIT   cached=5455  fresh=10  total_in=5465
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'to': '2015-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_before': '2015-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 0 record(s)
+
+
+========================================================================
+PROMPT: invoices created before 2015
+========================================================================
+Answer:
+No invoices found matching the criteria.
+No invoices found.
+Summary:
+  Steps planned:        1
+  Records returned:     0 (across all steps)
+  Final raw output:     0 record(s) under 'invoices'
+  Synthesized answer:   0 record(s)
+Token usage:
+  classify     in=    584  out=    198  total=    782
+  parse        in=   5465  out=    845  total=   6310
+  TOTAL        in=   6049  out=   1043  total=   7092
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=225 total=810
+Router: modules=['payables']
+[llm] stage=parse in=5466 out=305 total=5771
+[cache] HIT   cached=5455  fresh=11  total_in=5466
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-03-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-03-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 1476378, 'InvoiceNumber': 'PCS10053_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3350, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1476379, 'InvoiceNumber': 'PCS10059_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1476380, 'InvoiceNumber': 'PCS10027_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1476381, 'InvoiceNumber': 'PCS10064_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2699.98, 'InvoiceCurrency': 'USD', 'Supplier': 'Staffing Services'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1476383, 'InvoiceNumber': 'PCS10031_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2737.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices created since March 2024
+========================================================================
+Answer:
+Showing 25 of 6,703 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice             | InvoiceId |    Amount | Currency | Date       | Supplier                        
+  --------------------+-----------+-----------+----------+------------+---------------------------------
+  PCS10053_0825       | 1476378   |    3350.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10059_0825       | 1476379   |    3300.0 | USD      | 2025-08-23 | Staffing Services               
+  PCS10027_0825       | 1476380   |    3300.0 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10064_0825       | 1476381   |   2699.98 | USD      | 2025-08-23 | Staffing Services               
+  PCS10031_0825       | 1476383   |    2737.5 | USD      | 2025-08-23 | Lee Supplies                    
+  PCS10053_09251      | 1480378   |    3300.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10059_09251      | 1480379   |    3350.0 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10027_09251      | 1480380   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10064_09251      | 1480381   |    2737.5 | USD      | 2025-09-09 | Lee Supplies                    
+  PCS10029_09251      | 1480382   |    3300.0 | USD      | 2025-09-09 | Staffing Services               
+  PCS10031_09251      | 1480383   |    2737.5 | USD      | 2025-09-09 | Staffing Services               
+  45809US             | 1445406   | 113216.43 | USD      | 2025-06-01 | Allied Manufacturing            
+  45810US             | 1445407   | 218885.03 | USD      | 2025-06-02 | Allied Manufacturing            
+  45811US             | 1445408   |  45287.01 | USD      | 2025-06-03 | United Parcel Service           
+  45812US             | 1445409   | 518584.34 | USD      | 2025-06-04 | Building Management             
+  45813US             | 1445410   | 178497.05 | USD      | 2025-06-05 | American Telephone and Telegraph
+  45814US             | 1445411   |  45094.29 | USD      | 2025-06-06 | Staples                         
+  45815US             | 1445412   |  98095.58 | USD      | 2025-06-07 | JGA                             
+  45816US             | 1445413   |   5637.06 | USD      | 2025-06-08 | American Telephone and Telegraph
+  45817US             | 1445414   |   3758.04 | USD      | 2025-06-09 | American Telephone and Telegraph
+  FLA-US1EXP002-17001 | 1596378   |    3277.5 | USD      | 2026-08-01 | Advanced Corp                   
+  FLA-US1EXP003-17002 | 1596379   |    4494.0 | USD      | 2026-08-01 | Advanced Corp                   
+  INV-001             | 1580380   |   1088.75 | USD      | 2026-06-18 | EFG Company                     
+  ABC-01-2026         | 1580382   |    3000.0 | USD      | 2026-06-08 | ABC Consulting                  
+  FLA-US1EXP002-17003 | 1596380   |     547.5 | USD      | 2026-08-01 | Advanced Corp                   
+
+Truncation:
+  - invoices: 6703 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    585  out=    225  total=    810
+  parse        in=   5466  out=    305  total=   5771
+  TOTAL        in=   6051  out=    530  total=   6581
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=593 out=232 total=825
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7021 out=428 total=7449
+[cache] HIT   cached=7002  fresh=19  total_in=7021
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': 'Lee Supplies'}
+    - {'type': 'invoice_date', 'value': {'to': '2024-01-01'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_name': 'Lee Supplies', 'invoice_date_before': '2024-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000073847590, 'InvoiceNumber': 'Lee 20141209', 'InvoiceDate': '2014-02-02', 'InvoiceAmount': 594.27, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 300000076967539, 'InvoiceNumber': 'LSFA01022014', 'InvoiceDate': '2014-02-01', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000187479939, 'InvoiceNumber': '1324', 'InvoiceDate': '2019-09-25', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000066761806, 'InvoiceNumber': 'PCS10003-3', 'InvoiceDate': '2013-09-05', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices for Lee Supplies created before 2024-01-01
+========================================================================
+Answer:
+Showing 25 invoices from an examined sample; the true matching count is not known.
+All 25 have InvoiceCurrency USD.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  LEE-01-1006-111    | 489503          | 11138.34 | USD      | 2016-10-17 | Lee Supplies
+  Lee 20141209       | 300000073847590 |   594.27 | USD      | 2014-02-02 | Lee Supplies
+  LSFA01022014       | 300000076967539 |      0.0 | USD      | 2014-02-01 | Lee Supplies
+  1324               | 300000187479939 |      0.0 | USD      | 2019-09-25 | Lee Supplies
+  PCS10003-3         | 300000066761806 |      0.0 | USD      | 2013-09-05 | Lee Supplies
+  PCS10048_0623      | 1197319         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10066_0623      | 1197322         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10043_0623      | 1197323         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10049_0623      | 1197325         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10054_0623      | 1197326         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10053_0925      | 1479378         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10059_0925      | 1479379         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10064_0925      | 1479381         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  Lee US 3/21        | 300000074067563 |      0.0 | USD      | 2014-03-21 | Lee Supplies
+  Lee 1017 002       | 300000187479405 |      0.0 | USD      | 2019-09-24 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    593  out=    232  total=    825
+  parse        in=   7021  out=    428  total=   7449
+  TOTAL        in=   7614  out=    660  total=   8274
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=260 total=843
+Router: modules=['payables']
+[llm] stage=parse in=5464 out=749 total=6213
+[cache] HIT   cached=5455  fresh=9  total_in=5464
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-01-01', 'to': '2024-12-31'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-01-01', 'invoice_date_before': '2024-12-31'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 19 record(s)
+    [1] {'InvoiceId': 1287322, 'InvoiceNumber': 'Allid_Inv01241', 'InvoiceDate': '2024-01-01', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Allied Manufacturing'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1287323, 'InvoiceNumber': 'Allid_Inv01242', 'InvoiceDate': '2024-01-02', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Allied Manufacturing'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1287324, 'InvoiceNumber': 'UPS_Inv0124', 'InvoiceDate': '2024-01-03', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'United Parcel Service'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1287325, 'InvoiceNumber': 'BM_Inv0124', 'InvoiceDate': '2024-01-04', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Building Management'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1287329, 'InvoiceNumber': 'ATT_Inv01242', 'InvoiceDate': '2024-01-08', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'American Telephone and Telegraph'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (14 more)
+
+
+========================================================================
+PROMPT: invoices in 2024
+========================================================================
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+All 19 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice        | InvoiceId |  Amount | Currency | Date       | Supplier                        
+  ---------------+-----------+---------+----------+------------+---------------------------------
+  Allid_Inv01241 | 1287322   |     0.0 | USD      | 2024-01-01 | Allied Manufacturing            
+  Allid_Inv01242 | 1287323   |     0.0 | USD      | 2024-01-02 | Allied Manufacturing            
+  UPS_Inv0124    | 1287324   |     0.0 | USD      | 2024-01-03 | United Parcel Service           
+  BM_Inv0124     | 1287325   |     0.0 | USD      | 2024-01-04 | Building Management             
+  ATT_Inv01242   | 1287329   |     0.0 | USD      | 2024-01-08 | American Telephone and Telegraph
+  ATT_Inv01243   | 1287330   |     0.0 | USD      | 2024-01-09 | American Telephone and Telegraph
+  PG_IDR1        | 1616437   |  2900.0 | USD      | 2024-05-15 | EFG Company                     
+  PI20043_0124   | 1096326   |  1204.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_0224   | 1096327   |  1095.0 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_0324   | 1096328   |  1095.0 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_0424   | 1096329   | 1040.25 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_0524   | 1096330   |  1204.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_0624   | 1096331   |  1095.0 | USD      | 2024-06-28 | Lee Supplies                    
+  PI20043_1_0124 | 1096338   |   547.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_1_0224 | 1096339   |  536.55 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_1_0324 | 1096340   |  602.25 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_1_0424 | 1096341   |  536.55 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_1_0524 | 1096342   |   547.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_1_0624 | 1096343   |  536.55 | USD      | 2024-06-28 | Lee Supplies                    
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     19 (across all steps)
+  Final raw output:     19 record(s) under 'invoices'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    583  out=    260  total=    843
+  parse        in=   5464  out=    749  total=   6213
+  TOTAL        in=   6047  out=   1009  total=   7056
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=582 out=185 total=767
+Router: modules=['payables']
+[llm] stage=parse in=5463 out=480 total=5943
+[cache] HIT   cached=5455  fresh=8  total_in=5463
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'older_than_n_months', 'value': {'months': 6}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_before': '2026-03-24'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 489504, 'InvoiceNumber': 'ABC-10172016001', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'ABC Consulting'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 493527, 'InvoiceNumber': 'ERS-50741-182311', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 80876.7, 'InvoiceCurrency': 'USD', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 493528, 'InvoiceNumber': 'ERS-50742-182312', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 137494.77, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 493529, 'InvoiceNumber': 'ERS-50743-182313', 'InvoiceDate': '2016-10-19', 'InvoiceAmount': 69551.12, 'InvoiceCurrency': 'USD', 'Supplier': 'Office Depot'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices older than 6 months
+========================================================================
+Answer:
+Showing 25 of 53,127 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice          | InvoiceId       |     Amount | Currency | Date       | Supplier               
+  -----------------+-----------------+------------+----------+------------+------------------------
+  ABC-10172016001  | 489504          |        0.0 | USD      | 2016-10-17 | ABC Consulting         
+  LEE-01-1006-111  | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies           
+  ERS-50741-182311 | 493527          |    80876.7 | USD      | 2016-10-19 | Advanced Corp          
+  ERS-50742-182312 | 493528          |  137494.77 | USD      | 2016-10-19 | Office Depot           
+  ERS-50743-182313 | 493529          |   69551.12 | USD      | 2016-10-19 | Office Depot           
+  RR-US164379-L1   | 300000244417567 |      985.5 | USD      | 2022-03-29 | JGA                    
+  ERS-50744-183300 | 495503          | 1321053.99 | USD      | 2016-10-24 | Staffing Services      
+  ERS-50726-182296 | 493512          |  121320.53 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50727-182297 | 493513          |  341822.87 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50728-182298 | 493514          |  149004.32 | USD      | 2016-10-19 | JGA                    
+  ERS-50729-182299 | 493515          |  175294.17 | USD      | 2016-10-19 | JGA                    
+  ERS-50730-182300 | 493516          |  210354.98 | USD      | 2016-10-19 | JGA                    
+  ERS-50731-182301 | 493517          |  153667.92 | USD      | 2016-10-19 | Dell Inc.              
+  ERS-50732-182302 | 493518          |   32401.05 | USD      | 2016-10-19 | US Gas and Electric    
+  ERS-50733-182303 | 493519          |  105137.52 | USD      | 2016-10-19 | Howell Engineering Inc.
+  ERS-50734-182304 | 493520          |   63525.33 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50735-182305 | 493521          |  169399.79 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50736-182306 | 493522          |   84699.35 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50737-182307 | 493523          |  105874.46 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50738-182308 | 493524          |   64704.65 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50739-182309 | 493525          |   16174.25 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50740-182310 | 493526          |   97056.42 | USD      | 2016-10-19 | Advanced Corp          
+  PCS10053_0825    | 1476378         |     3350.0 | USD      | 2025-08-23 | Staffing Services      
+  PCS10059_0825    | 1476379         |     3300.0 | USD      | 2025-08-23 | Staffing Services      
+  PCS10027_0825    | 1476380         |     3300.0 | USD      | 2025-08-23 | Lee Supplies           
+
+Truncation:
+  - invoices: 53127 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    582  out=    185  total=    767
+  parse        in=   5463  out=    480  total=   5943
+  TOTAL        in=   6045  out=    665  total=   6710
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=64 total=648
+Router: modules=['procurement']
+[llm] stage=parse in=6621 out=464 total=7085
+[cache] HIT   cached=6611  fresh=10  total_in=6621
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_before', 'value': '2015-01-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2015-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000079335542, 'OrderNumber': '701331', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [2] {'POHeaderId': 300000081255594, 'OrderNumber': '701337', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'JGA', 'SupplierId': 300000047414635}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [3] {'POHeaderId': 1304, 'OrderNumber': '55216', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [4] {'POHeaderId': 1305, 'OrderNumber': '55217', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [5] {'POHeaderId': 1306, 'OrderNumber': '55218', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Progressive Corp', 'SupplierId': 300000049521222}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: purchase orders created before 2015
+========================================================================
+Answer:
+Showing 25 of 878 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 878 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=     64  total=    648
+  parse        in=   6621  out=    464  total=   7085
+  TOTAL        in=   7205  out=    528  total=   7733
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=577 out=183 total=760
+Router: modules=['payables']
+[llm] stage=parse in=5458 out=256 total=5714
+[cache] HIT   cached=5455  fresh=3  total_in=5458
+
+========================================================================
+PROMPT: invoices
+========================================================================
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    577  out=    183  total=    760
+  parse        in=   5458  out=    256  total=   5714
+  TOTAL        in=   6035  out=    439  total=   6474
+
