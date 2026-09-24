@@ -41,7 +41,7 @@ Examples:
     python scripts/promptkit.py --run --prompt-file a.txt b.txt
     python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
     python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
-        --outdir results/tonight --timeout 3600 --show-planner
+        --outdir results/tonight --show-planner
 """
 
 from __future__ import annotations
@@ -64,6 +64,14 @@ from spire.nl_parser.result import RefusalError
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.planner.planner import generate_plan
 from spire.config import mcp_server_url, reset_usage, usage_report
+
+
+# ==========================================================================
+# Defaults
+# ==========================================================================
+
+# Per-set timeout for --manifest batch mode, in seconds. Four hours.
+DEFAULT_SET_TIMEOUT = 14400
 
 
 # ==========================================================================
@@ -554,6 +562,7 @@ def _run_one_set(txt: Path, out_file: Path,
     cmd = [sys.executable, str(Path(__file__).resolve()),
            "--run", "--prompt-file", str(txt), *diag_args]
     start = time.monotonic()
+    out_file.parent.mkdir(parents=True, exist_ok=True)
     with out_file.open("w", encoding="utf-8") as fh:
         fh.write(f"# promptkit batch — {_timestamp()}\n")
         fh.write(f"# $ {' '.join(cmd)}\n\n")
@@ -666,9 +675,9 @@ def main() -> int:
                     default=Path("prompts"),
                     help="with --manifest: dir holding <name>.txt "
                          "(default prompts)")
-    ap.add_argument("--timeout", type=int, default=3600,
-                    help="with --manifest: per-set timeout seconds "
-                         "(default 3600)")
+    ap.add_argument("--timeout", type=int, default=DEFAULT_SET_TIMEOUT,
+                    help=("with --manifest: per-set timeout seconds "
+                          f"(default {DEFAULT_SET_TIMEOUT})"))
 
     from spire.diagnostics import add_diagnostic_arguments
     add_diagnostic_arguments(ap)
