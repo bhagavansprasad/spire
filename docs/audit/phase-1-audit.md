@@ -249,7 +249,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-25 | F-019 | verified 2026-09-23 (#163) |
 | B-26 | F-016 | verified 2026-09-24 (#166) |
 | B-27 | F-020 | verified 2026-09-23 (#161) |
-| B-28 | F-045 | confirmed |
+| B-28 | F-045 | fixed 2026-09-24 |
 | B-29 | F-046 | verified 2026-09-23 |
 | B-30 | F-047 | verified 2026-09-23 |
 | B-31 | F-048 | verified 2026-09-23 |

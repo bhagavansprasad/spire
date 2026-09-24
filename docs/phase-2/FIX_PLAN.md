@@ -128,7 +128,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
-| F-045 | wrong-data | 1 | `mcp_server/tools/purchase_orders.py` (composite bound), `synthesizer/synthesizer.py` (capped-note wording) | not-started | — | — |
+| F-045 | wrong-data | 1 | `mcp_server/tools/purchase_orders.py` (server-clause priority + orderBy) | fixed | — | 2026-09-24 |
 | F-046 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `planner.py`, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `mcp_server/server.py`, `plan_builders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
