@@ -1537,12 +1537,16 @@ def render_answer(state: dict, menu, emit) -> None:
     Two paths:
 
     Column query (fields or unresolved non-empty):
-      - the summary prints first, when one succeeded; skipped when
-        synthesis failed OR when every requested column was unknown
-        (COL-03: the note below carries the message; there is no
-        summary to print)
-      - the projected table follows, trimmed to the requested columns
-        and (self-gating) flattening nested addresses.
+      - when the intent ALSO carries an `include`, the full synthesized
+        response is emitted: the child content lives only there, and
+        the projected table below renders the parent bucket alone
+        (F-051). Fields-only intents are unaffected.
+      - otherwise the summary prints first, when one succeeded; skipped
+        when synthesis failed OR when every requested column was
+        unknown (COL-03: the note below carries the message; there is
+        no summary to print)
+      - the projected table follows in both cases, trimmed to the
+        requested columns and (self-gating) flattening nested addresses.
 
     Plain query (no fields, no unresolved):
       - the full synthesized response renders, as before.
@@ -1570,6 +1574,9 @@ def render_answer(state: dict, menu, emit) -> None:
         )
         emit("")
     else:
-        emit(_format_synthesized(state.get("response"), summary_only=True))
+        emit(_format_synthesized(
+            state.get("response"),
+            summary_only=not state["intent"].include,
+        ))
         emit("")
     emit(_format_projected_table(outputs, fields, unresolved, available, entity))
