@@ -12,7 +12,7 @@ points to everything else.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `ac06469`.
+**Branch:** `hardening-master` at `da68989`.
 
 **Test suite:** 1214 passed, 1 skipped, 22 deselected (verify at window open).
 
@@ -22,7 +22,8 @@ points to everything else.
 
 - `verified | #167 | 2026-09-24`: F-003, F-004, F-050.
 - `verified | #168 | 2026-09-24`: F-049.
-- `not-started`: F-045, F-051, Reg #30.
+- `verified | #169 | 2026-09-24`: F-051.
+- `not-started`: F-045, Reg #30.
 
 **Everything before window 16 shipped under earlier windows:** F-002,
 F-006–F-020, F-033, F-036, F-039, F-041, F-043–F-044, F-046–F-048,
@@ -58,7 +59,7 @@ F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
 
 ## Outstanding — remaining Phase 2 queue
 
-Three items, in severity order (wrong-data > crash > missing-capability
+Two items, in severity order (wrong-data > crash > missing-capability
 > cosmetic) per FIX_PLAN §8.3.1:
 
 1. ~~**F-049**~~ — **shipped under PR #168, 2026-09-24.** "invoices
@@ -69,24 +70,26 @@ Three items, in severity order (wrong-data > crash > missing-capability
    `/purchaseOrders` returns 0 with a misleading capped note
    (wrong-data). Two fix sites: the tool, and the note wording.
 
-3. **F-051** — `fields` + `include`: the caller's `summary_only` gate
-   drops child content. Three sites (`promptkit.py:437`,
-   `run_prompt_set.py:227`, `run_graph.py:194`). Small.
+3. ~~**F-051**~~ — **shipped under PR #169, 2026-09-24.** `fields` +
+   `include` now renders its child content; the display branch was
+   extracted into `formatters.render_answer` so the fix landed in one
+   place instead of three.
 
 4. **Reg #30** — compare path pages all POs before narrowing (perf,
    may slip to Phase 6 if architectural).
 
-**Recommendation for window 17 (updated mid-window).** **F-051** next —
-three sites, one shape, deterministic, no pod probe. **F-045** after
-(wrong-data, two sites, needs a probe against /purchaseOrders).
-**Reg #30** last, or defer to Phase 6.
+**Recommendation for window 17 (updated a second time).** **F-045**
+next — wrong-data, two sites, needs a pod probe against
+/purchaseOrders first. **Reg #30** after, or defer to Phase 6 if the
+fix turns out to be architectural. Phase 2's queue closes with these
+two.
 
 ---
 
 ## First steps in the new window
 
 1. `git checkout hardening-master && git pull`
-2. `git log --oneline -3` — expect `ac06469` at HEAD.
+2. `git log --oneline -3` — expect `da68989` at HEAD.
 3. `git status` — expect clean tree.
 4. `pytest -q` — expect 1214 passed, 22 deselected.
 5. Open `docs/phase-2/FIX_PLAN.md` §5. Pick the next `not-started` row

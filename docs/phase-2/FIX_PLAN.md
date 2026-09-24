@@ -134,7 +134,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-049 | wrong-refusal | 4 | parser sysprompt, `context_assembly.py` | verified | #168 | 2026-09-24 |
 | F-050 | missing-capability | 5 | `nl_parser/context_assembly.py` (`_TIER1`) | verified | #167 | 2026-09-24 |
-| F-051 | missing-projection | 2 | `scripts/promptkit.py`, `scripts/run_prompt_set.py`, `scripts/run_graph.py` | not-started | — | 2026-09-23 |
+| F-051 | missing-projection | 2 | `scripts/promptkit.py`, `scripts/run_prompt_set.py`, `scripts/run_graph.py`, `rendering/formatters.py` | verified | #169 | 2026-09-24 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
 **Session log.** The window label for each fix is recorded in the

@@ -58,7 +58,7 @@ The two layers are one fix; neither half alone solves the user's problem.
 ## F-051 — `fields` + `include` intent: the caller's summary_only gate drops child content
 
 **Date:** 2026-09-23
-**Status:** open
+**Status:** verified (PR #169, 2026-09-24)
 **Cross-refs:** F-021 (the finding whose symptom this subsumes — audit
 row B-23), F-020 (the fix that introduced the summary_only gate for
 fields-only intents; its scope was correct for that case), F-014
@@ -200,6 +200,42 @@ concerns would make the PR body incoherent.
   prompt was not swept.
 
 ---
+
+**Update 2026-09-24 — fixed on `phase-2-fix-F051-summary-gate` (PR #169).**
+
+Two-commit fix, plus one follow-up commit for wiring.
+
+**Commit 1 (`0687a0c`)** — extracted the display branch from three
+near-identical copies (`promptkit.py`, `run_prompt_set.py`,
+`run_graph.py`) into `src/spire/rendering/formatters.py::render_answer`.
+The three had already drifted (promptkit's skip-message string differed
+from the other two). Behaviour-preserving.
+
+**Commit 2 (`f7ec4d3`)** — the fix. `summary_only=not
+state["intent"].include`. Fields-only intents keep `summary_only=True`
+(F-020 unchanged); fields+include intents now pass `False` and get the
+full synthesized render, which carries the child rows the projected
+table cannot.
+
+**Commit 3 (`516bd04`)** — import wiring. The extraction left the three
+runners without `render_answer` in their import lists, so every one
+crashed at the call with `NameError`. Caught by the V9 sweep at the
+first prompt; V6 pytest was green because `tests/` imports from
+`src/spire/`, not `scripts/`. Same class as F-049's design — the
+pipeline run is what catches runner-script regressions.
+
+Full V-standard in `docs/phase-2/fixes/F-051.md`. V6 suite 1216 passed,
+1 skipped (`tests/test_corpus_consistency.py`, module-level by design
+since `1f980d1`), 22 deselected. V9 dedicated 15-prompt set
+`scripts/prompts/19_fields_and_include.txt` — 15/15 answered, 0 errors.
+Every Section A prompt (fields+include) produced both channels and
+rendered its child content; Section B (fields-only) preserved F-020.
+
+One deviation from the F-051 entry: §8.3.5 (no refactoring in Phase 2)
+was accepted for the extraction, on the grounds that the three copies
+had already drifted and the fix lands in one place instead of three.
+
+The branch merged as PR #169, `da68989` on `hardening-master`.
 
 ## F-050 — `columns/` parser-context blocks unreachable from router-scoped parses
 
