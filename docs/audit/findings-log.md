@@ -297,7 +297,7 @@ still matches the assembled preamble. Full V-standard in
 ## F-049 — absolute-date Invoice phrasings starting with `created` refuse
 
 **Date:** 2026-09-23
-**Status:** open
+**Status:** verified (PR #168, 2026-09-24)
 **Cross-refs:** F-046 (sibling — relative-date Invoice now works; this is the absolute-date gap left untouched), B-29
 
 **Evidence.** V9 sweep on `phase-2-fix-F046-F047-F048-date-filters`:
@@ -358,6 +358,29 @@ gap, this is the absolute-date gap in the same family. The
 asymmetry with PO (`b_po_created_date.sysprompt` teaches "created
 before" verbatim) suggests the Invoice block was authored less
 completely.
+
+---
+
+**Update 2026-09-24 — fixed on `phase-2-fix-F049-invoice-created-dates` (PR #168).**
+
+The Invoice absolute-date bullet in `b_invoice_date.sysprompt` now teaches
+the `created` / `raised` phrasing leads (`invoices created before X`,
+`created since X`, `created after X`, `raised before/since X`) and names
+InvoiceDate as the column with `before` -> `to` and `since`/`after` ->
+`from`. Same edit mirrored byte-identically into
+`context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`. Sysprompt-only; no code
+change, no KG row. Mirrors F-046's split exactly.
+
+Full V-standard in `docs/phase-2/fixes/F-049.md`. V6 suite 1214 passed, 1
+skipped (`tests/test_corpus_consistency.py`, module-level by design since
+`1f980d1`), 22 deselected. V9 dedicated 12-prompt set
+`scripts/prompts/18_invoice_created_dates.txt` — 12/12 answered, 1 correct
+refusal, 0 errors. Siblings unchanged; cross-entity control
+(`purchase orders created before 2015`) still routes to the PO
+`created_before` filter. Pre-fix reproducers both refused
+`missing_identifier`; both answer post-fix.
+
+The branch merged as PR #168, `ac06469` on `hardening-master`.
 
 ---
 

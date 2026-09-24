@@ -12,16 +12,17 @@ points to everything else.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `1f980d1`.
+**Branch:** `hardening-master` at `ac06469`.
 
-**Test suite:** 1214 passed, 22 deselected (verify at window open).
+**Test suite:** 1214 passed, 1 skipped, 22 deselected (verify at window open).
 
 **Pod:** `dabpqy`.
 
 **Ledger state — FIX_PLAN §5:**
 
 - `verified | #167 | 2026-09-24`: F-003, F-004, F-050.
-- `not-started`: F-045, F-049, F-051, Reg #30.
+- `verified | #168 | 2026-09-24`: F-049.
+- `not-started`: F-045, F-051, Reg #30.
 
 **Everything before window 16 shipped under earlier windows:** F-002,
 F-006–F-020, F-033, F-036, F-039, F-041, F-043–F-044, F-046–F-048,
@@ -57,11 +58,12 @@ F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
 
 ## Outstanding — remaining Phase 2 queue
 
-Four items, in severity order (wrong-data > crash > missing-capability
+Three items, in severity order (wrong-data > crash > missing-capability
 > cosmetic) per FIX_PLAN §8.3.1:
 
-1. **F-049** — "invoices created before/since X" refuse on
-   missing_supplier. **Sysprompt-only**, mirrors F-046's split. Small.
+1. ~~**F-049**~~ — **shipped under PR #168, 2026-09-24.** "invoices
+   created before/since X" now routes to `invoice_date`; sysprompt-only,
+   mirrors F-046's split.
 
 2. **F-045** — composite `created_since AND created_before` on
    `/purchaseOrders` returns 0 with a misleading capped note
@@ -74,9 +76,9 @@ Four items, in severity order (wrong-data > crash > missing-capability
 4. **Reg #30** — compare path pages all POs before narrowing (perf,
    may slip to Phase 6 if architectural).
 
-**Recommendation for window 17.** **F-049** is the warm-up — self
-contained, sysprompt-only, mirrors the F-046 split. Then **F-051**
-(three sites, one shape) or **F-045** (two sites, needs a pod probe).
+**Recommendation for window 17 (updated mid-window).** **F-051** next —
+three sites, one shape, deterministic, no pod probe. **F-045** after
+(wrong-data, two sites, needs a probe against /purchaseOrders).
 **Reg #30** last, or defer to Phase 6.
 
 ---
@@ -84,7 +86,7 @@ contained, sysprompt-only, mirrors the F-046 split. Then **F-051**
 ## First steps in the new window
 
 1. `git checkout hardening-master && git pull`
-2. `git log --oneline -3` — expect `1f980d1` at HEAD.
+2. `git log --oneline -3` — expect `ac06469` at HEAD.
 3. `git status` — expect clean tree.
 4. `pytest -q` — expect 1214 passed, 22 deselected.
 5. Open `docs/phase-2/FIX_PLAN.md` §5. Pick the next `not-started` row
