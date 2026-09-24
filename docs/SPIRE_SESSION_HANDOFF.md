@@ -1,9 +1,12 @@
-# SPIRE — Session Handoff, 2026-09-24 (window 16)
+# SPIRE — Session Handoff, 2026-09-24 (window 17)
 
-**This file supersedes the 2026-09-23 window-5 handoff.** Window 16 closed
-F-003, F-050 and F-004 on PR #167; the F-003 regression set shipped as
-`ee2b6ca`; WORKING_STYLE 15.1 tightened and 15.3 added. This window
-starts the remaining Phase 2 queue.
+**This file supersedes the window-16 handoff.** Window 17 closed F-049
+(PR #168, `ac06469`) and F-051 (PR #169, `da68989`). F-049 extended the
+Invoice absolute-date sysprompt bullet to teach the `created`/`raised`
+phrasing leads. F-051 fixed a caller-side `summary_only` gate that
+dropped `include` child content whenever `fields` was non-empty; the fix
+was preceded by extracting three drifted copies of the display branch
+into `formatters.render_answer`. Phase 2 now has two rows left.
 
 **Read this first.** Then `docs/AUDIT_AND_FIX.md` (the playbook), which
 points to everything else.
@@ -14,7 +17,7 @@ points to everything else.
 
 **Branch:** `hardening-master` at `da68989`.
 
-**Test suite:** 1214 passed, 1 skipped, 22 deselected (verify at window open).
+**Test suite:** 1216 passed, 1 skipped, 22 deselected (verify at window open).
 
 **Pod:** `dabpqy`.
 
@@ -32,7 +35,36 @@ F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
 
 ---
 
-## What shipped in window 16
+## What shipped in window 17
+
+- **PR #168** (`ac06469`) — F-049. Extended the Invoice absolute-date
+  bullet in `b_invoice_date.sysprompt` to name `created before` /
+  `created since` / `created after` / `raised before` / `raised since`,
+  with a clause stating that `created`/`raised` name InvoiceDate (not a
+  separate CreationDate). Mirrored byte-identically into
+  `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`. New regression test
+  `tests/test_f049_invoice_created_dates.py`; new prompt set
+  `scripts/prompts/18_invoice_created_dates.txt` (12 prompts).
+- **PR #169** (`da68989`) — F-051. The display branch (summary-only +
+  projected table vs. full synthesized render) existed in three
+  near-identical copies that had already drifted; commit `0687a0c`
+  extracted them into `formatters.render_answer`. Commit `f7ec4d3`
+  then fixed the gate: `summary_only=not state['intent'].include`.
+  Commit `516bd04` wired the missing imports (caught by V9, not V6 —
+  pytest never imports from `scripts/`). New regression test
+  `tests/test_f051_summary_gate.py`; new prompt set
+  `scripts/prompts/19_fields_and_include.txt` (15 prompts).
+- **Post-merge bookkeeping** — `5e08a77` (F-049) and `f35deb9` (F-051),
+  one commit each, four tracking files per commit.
+- **`WORKING_STYLE.md` unchanged** — no rule additions this window.
+- **Doc B entries** — Phase 2 file carries no S005 (matching the
+  convention: Phase 2 windows between S003 and S004 have their forensic
+  record in FIX_PLAN §5 and the per-fix files, not Doc B).
+- **Known V6 blind spot recorded** — the runner scripts have no test
+  coverage. Any display-layer change that touches `scripts/` needs the
+  pipeline run (V9) as primary evidence, not just pytest.
+
+### Earlier window (window 16, for reference)
 
 - **PR #167** (`d93d5fd`) — F-003 / F-050 / F-004 on one `_TIER1` edit
   in `src/spire/nl_parser/context_assembly.py`. Every router-scoped
@@ -142,10 +174,32 @@ two.
 
 ---
 
-## Commit hashes for reference (window 16)
+## Commit hashes for reference (window 17)
+
+    f35deb9  post-merge bookkeeping: F-051 -> verified | #169
+             (hardening-master tip)
+    da68989  Merge pull request #169 (F-051)
+    7dcc91c  F-051: fix file and V-standard evidence
+    c44e3db  F-051: add 19_fields_and_include prompt set
+    516bd04  F-051: wire render_answer imports into the three runners
+    f7ec4d3  F-051: fields+include intents render their child content
+    4c837c4  F-051: red regression test for fields+include summary gate
+    0687a0c  F-051 (refactor): extract render_answer into formatters.py
+    5e08a77  post-merge bookkeeping: F-049 -> verified | #168
+    ac06469  Merge pull request #168 (F-049)
+    4d1ba1a  F-049: fix file and V-standard evidence
+    1c3892e  F-049: add 18_invoice_created_dates prompt set
+    5c07510  F-049: teach 'invoices created before/since' in the
+             Invoice absolute-date bullet
+    7121e65  F-049: red regression test for Invoice 'created' date
+             phrasings
+    bc91f47  handover: tip SHA 1f980d1; corpus-consistency fix in
+             shipped list (before this window)
+
+### Window 16 for reference
 
     1f980d1  test_corpus_consistency: skip module when no .json
-             corpora (hardening-master tip)
+             corpora (window-16 tip)
     081e842  context_bundles: refresh for PR #167 +
              17_modes_and_columns corpus
     14e7cfa  post-merge bookkeeping: F-003 / F-004 / F-050

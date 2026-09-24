@@ -244,7 +244,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-20 | F-003 / F-004 (cross-ref) | verified 2026-09-24 (#167) |
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | verified 2026-09-23 (#165) |
-| B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate) |
+| B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate). Verified 2026-09-24, #169 — display branch extracted into `formatters.render_answer`, `summary_only=not include`; 15/15 V9 sweep. |
 | B-24 | F-018 | verified 2026-09-23 (#163) |
 | B-25 | F-019 | verified 2026-09-23 (#163) |
 | B-26 | F-016 | verified 2026-09-24 (#166) |
