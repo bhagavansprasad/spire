@@ -1,0 +1,26 @@
+# Spire prompt set — smoke_modes. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does each of the four mode flags work at all.
+# Four prompts, seconds. All MUST ANSWER.
+#
+# SCOPE: the four mode flags the intent can carry:
+#   count_only, open_only, invoice_limit, balance_only.
+#
+# HOW TO SCORE — read the INTENT line, not the answer:
+#   - count_only=True
+#   - open_only=True
+#   - open_only=True + invoice_limit=N
+#   - balance_only=True
+
+# count_only.
+count of suppliers
+
+# open_only.
+open invoices for ABC Corporation Americas
+
+# open_only + invoice_limit.
+top 5 open invoices for ABC Corporation Americas
+
+# balance_only.
+Show me the account balance for customer ABC Application Software

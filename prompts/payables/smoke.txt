@@ -1,0 +1,40 @@
+# Spire prompt set — payables/smoke. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the payables module work at all.
+# Six prompts, seconds. Every prompt MUST ANSWER except the last.
+#
+# SCOPE: the payables module. Invoice and its entity-level filters
+# (supplier by number or name, purchase_order, invoice_number,
+# invoice_date, older_than_n_months, created_in_last_n_months,
+# invoice_amount).
+#
+# RUN FIRST. If smoke fails, nothing below is worth reading.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices). The Invoice
+# filter's tool_arg_name is a PLACEHOLDER: all-digit routes to
+# supplier_number, anything else to supplier_name.
+
+# Depth 1 — Invoice root, supplier NUMBER filter.
+invoices for supplier 1252
+
+# Depth 2 — Invoice root, supplier NAME filter. Different arg name on
+# the same tool.
+invoices for Lee Supplies
+
+# Depth 3 — supplier filter + amount bound. Composite: one clause
+# server-side, the rest client-side over an over-fetch.
+invoices over 100000 for supplier 1252
+
+# Depth 4 — absolute date bound. Invoice guard accepts invoice_date as
+# a root reference (no supplier needed).
+invoices in 2024
+
+# Depth 5 — relative date bound.
+invoices in the last 30 days
+
+# Depth 6 — refusal path. Bare noun, no identifier. Must refuse with
+# missing_identifier, not guess a supplier.
+invoices

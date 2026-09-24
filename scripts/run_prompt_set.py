@@ -11,7 +11,7 @@ across every prompt in every set.
 --prompt-file takes SEVERAL paths, so a whole batch runs under one MCP
 connection and produces one grouped summary:
 
-    python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+    python scripts/run_prompt_set.py --prompt-file prompts/0*.txt
 
 This replaces the bash for-loop that used to wrap the script. The loop
 worked, but it opened a fresh connection per set and produced seven
@@ -53,8 +53,8 @@ Prerequisites (same as a manual run_plan.py run):
   - GEMINI_API_KEY set; KG reachable
 
 Usage:
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/03_ar.txt
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+  python scripts/run_prompt_set.py --prompt-file prompts/03_ar.txt
+  python scripts/run_prompt_set.py --prompt-file prompts/0*.txt
   python scripts/run_prompt_set.py --prompt-file a.txt b.txt c.txt
   python scripts/run_prompt_set.py --prompts "List US suppliers" "Show PO 2144 and its lines"
   python scripts/run_prompt_set.py --all      # every prompt_set_*.txt in scripts/
@@ -315,7 +315,7 @@ def main() -> int:
         metavar="FILE",
         help=(
             "One or more prompt files to run, in the order given. Shell "
-            "globs work: scripts/prompts/0*.txt"
+            "globs work: prompts/0*.txt"
         ),
     )
     parser.add_argument(

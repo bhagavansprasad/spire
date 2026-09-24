@@ -37,7 +37,7 @@ Examples:
     python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
     python scripts/promptkit.py --run --prompt "List suppliers in India" \
                                             "Show open POs for supplier 2144"
-    python scripts/promptkit.py --run --prompt-file scripts/prompts/01_supplier.txt
+    python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
     python scripts/promptkit.py --run --prompt-file a.txt b.txt
     python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
     python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
@@ -663,9 +663,9 @@ def main() -> int:
                     help="with --manifest: results dir. Default "
                          "promptkit_<YYYYMMDD_HHMMSS>/ in the cwd.")
     ap.add_argument("--prompts-dir", type=Path,
-                    default=Path("scripts/prompts"),
+                    default=Path("prompts"),
                     help="with --manifest: dir holding <name>.txt "
-                         "(default scripts/prompts)")
+                         "(default prompts)")
     ap.add_argument("--timeout", type=int, default=3600,
                     help="with --manifest: per-set timeout seconds "
                          "(default 3600)")

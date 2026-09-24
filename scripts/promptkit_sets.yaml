@@ -1,20 +1,75 @@
 # promptkit overnight manifest — the prompt sets to generate + validate + run.
 #
-# Each name resolves to scripts/prompts/<name>.txt (for --generate) and
-# scripts/prompts/<name>.json (for --validate / --run). Comment a line out
+# Each name resolves to prompts/<name>.txt (for --generate) and
+# prompts/<name>.json (for --validate / --run). Comment a line out
 # to skip that set. Order is the run order.
 #
-# Slow sets (06_slow, 08_lifecycle) are minutes-per-prompt — keep them last,
-# or comment them out for a faster pass.
+# TIERS:
+#   smoke    — seconds per set. Run always.
+#   verify   — minutes per set. Run before a merge.
+#   exhaust  — minutes-to-hours per set. Overnight.
+#
+# Each set is a module (supplier/payables/procurement/receivables), a
+# combination (combinations/*), or a cross-cutting feature (flat files
+# at the prompts/ root, named <tier>_<feature>.txt).
+#
+# Ordering: smoke (fast triage), then verify, then corpus, then exhaust.
+# Comment out any tier to skip it.
+
 sets:
-  - 00_dipstick
-  - 01_supplier
-  - 02_purchase_order
-  - 03_ar
-  - 04_columns
-  - 05_refusals
-  - 07_alacarte
-  - 11_column_vocabulary
+  # ── smoke — seconds ─────────────────────────────────────────────
+  - smoke_dipstick
+  - supplier/smoke
+  - payables/smoke
+  - procurement/smoke
+  - receivables/smoke
+  - combinations/payables_supplier/smoke
+  - combinations/payables_procurement/smoke
+  - combinations/procurement_supplier/smoke
+  - smoke_columns
+  - smoke_refusals
+  - smoke_lifecycle
+  - smoke_child_as_root
+  - smoke_truncation
+  - smoke_date_filters
+  - smoke_fields_and_include
+  - smoke_modes
+
+  # ── verify — minutes ────────────────────────────────────────────
+  - verify_dipstick
+  - supplier/verify
+  - payables/verify
+  - procurement/verify
+  - receivables/verify
+  - combinations/payables_supplier/verify
+  - combinations/payables_procurement/verify
+  - combinations/procurement_supplier/verify
+  - verify_columns
+  - verify_refusals
+  - verify_lifecycle
+  - verify_child_as_root
+  - verify_truncation
+  - verify_date_filters
+  - verify_fields_and_include
+  - verify_modes
+
+  # ── corpus — external, verbatim, no tier ────────────────────────
   - qa_testcases
-  - 08_lifecycle     # slow — uncomment for the full overnight run
-  - 06_slow          # slowest — minutes each
+
+  # ── exhaust — overnight. Comment out for a faster pass. ─────────
+  - exhaust_dipstick
+  - supplier/exhaust
+  - payables/exhaust
+  - procurement/exhaust
+  - receivables/exhaust
+  - combinations/payables_supplier/exhaust
+  - combinations/payables_procurement/exhaust
+  - combinations/procurement_supplier/exhaust
+  - exhaust_columns
+  - exhaust_refusals
+  - exhaust_lifecycle
+  - exhaust_child_as_root
+  - exhaust_truncation
+  - exhaust_date_filters
+  - exhaust_fields_and_include
+  - exhaust_modes

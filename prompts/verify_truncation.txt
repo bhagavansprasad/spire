@@ -1,0 +1,41 @@
+# Spire prompt set — verify_truncation. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — the 14-prompts from 14_truncation_narration.txt.
+#
+# SCOPE: F-012 (cap with no source total — the composite path) and F-036
+# (unfiltered cap — the "returned" vs "examined for filtering" wording).
+#
+# HOW TO SCORE:
+#   §1 (F-012 composite): Answer MUST contain "from an examined sample".
+#   §2 sibling: MUST contain "Showing" and "of", MUST NOT contain
+#     "examined sample".
+#   §2 negative: MUST refuse with missing_identifier.
+#   §3 (F-036): Truncation note MUST end "N returned." and MUST NOT
+#     contain "for filtering".
+#   §4 sibling: same note rules.
+#   §4 negative: MUST refuse with unknown_entity.
+
+# — §1 F-012 composite — sample sentence MUST fire (5) —
+invoices for supplier 1252 over 10000
+show invoices from supplier 1252 above 10000
+invoices for supplier 1252 above 50000
+Lee Supplies invoices above 10000
+invoices from Lee Supplies over 10000
+
+# — §2 F-012 sibling and negative (2) —
+invoices for supplier 1252
+invoices
+
+# — §3 F-036 unfiltered — note MUST say "returned" (4) —
+Suppliers with their addresses
+List suppliers with their address
+suppliers and their addresses
+list suppliers including their addresses
+
+# — §4 F-036 sibling and negative (2) —
+active suppliers in US
+show me contract renewals
+
+# — Additional composite variants —
+invoices for supplier 1252 with amount over 10000

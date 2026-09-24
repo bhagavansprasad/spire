@@ -1,0 +1,77 @@
+# Spire prompt set — exhaust_truncation. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every truncation surface × every threshold.
+# Goal: find a truncation the narration misses. ~50 prompts.
+#
+# HOW TO SCORE — same rules as verify, applied across more shapes.
+
+# ====================================================================
+# A. F-012 composite × thresholds
+# ====================================================================
+invoices for supplier 1252 over 10000
+invoices for supplier 1252 over 20000
+invoices for supplier 1252 over 30000
+invoices for supplier 1252 over 40000
+invoices for supplier 1252 over 50000
+invoices for supplier 1252 over 100000
+invoices for supplier 1252 over 200000
+invoices for supplier 1252 over 500000
+
+# ====================================================================
+# B. F-012 composite × supplier shapes
+# ====================================================================
+show invoices from supplier 1252 above 10000
+Lee Supplies invoices above 10000
+invoices from Lee Supplies over 10000
+invoices for supplier 1252 with amount over 10000
+EIP Inc invoices above 100000
+invoices from supplier EIP Inc over 100000
+
+# ====================================================================
+# C. F-036 unfiltered cap × every over-fetch-capable tool
+# ====================================================================
+Suppliers with their addresses
+List suppliers with their address
+suppliers and their addresses
+list suppliers including their addresses
+List all purchase orders
+list all POs
+show all purchase orders
+list recent credit memos
+List recent credit memos
+Get list of active suppliers
+list active suppliers
+show me suppliers
+
+# ====================================================================
+# D. Sibling — no truncation, must not fire sample sentence
+# ====================================================================
+invoices for supplier 1252
+invoices for Lee Supplies
+invoices for supplier 1262
+active suppliers in US
+active suppliers in the UK
+
+# ====================================================================
+# E. Boundary — caps at their exact edge
+# ====================================================================
+invoices for supplier 1252 over 1
+invoices for supplier 1252 over 0
+invoices for supplier 1252 over 999999999
+suppliers with their addresses
+Suppliers with their addresses and country
+
+# ====================================================================
+# F. Negative — refusals, no truncation possible
+# ====================================================================
+invoices
+show me contract renewals
+Purchase orders older than 6 months
+
+# ====================================================================
+# G. Cross-feature — fields + include with truncation
+# ====================================================================
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show PO 2144 with order number and its lines
+Show supplier EIP Inc with supplier number and its contacts

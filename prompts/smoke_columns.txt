@@ -1,0 +1,29 @@
+# Spire prompt set — smoke_columns. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does column projection work at all.
+# Five prompts, seconds. All MUST ANSWER.
+#
+# SCOPE: the `fields` channel — the user names columns, the output shows
+# exactly those columns, in order, in a table. Address flattening.
+# Over-run catch.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line:
+#   - does the Intent carry the right `fields` list?
+#   - does the printed table show EXACTLY those columns, in order?
+#   - are same-entity values populated (not em dashes)?
+
+# Baseline — three columns, Supplier root.
+List active suppliers with supplier name, supplier number, and status
+
+# Baseline — three columns, Invoice root.
+Show me invoices for EIP Inc with invoice number, amount, and date
+
+# Baseline — two columns, PO root.
+Order number and status for purchase orders created before 2015
+
+# One column.
+Just the names of active suppliers
+
+# Address as a column — the flatten case.
+List active suppliers with supplier name, supplier number, and address

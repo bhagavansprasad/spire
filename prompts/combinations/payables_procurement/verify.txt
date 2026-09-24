@@ -1,0 +1,49 @@
+# Spire prompt set — combinations/payables_procurement/verify.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the payables↔procurement join work across
+# its normal shapes. Minutes. Run before a merge. 20 prompts.
+#
+# SCOPE: the three compare ops and the purchase_order filter, across
+# their normal phrasings.
+#
+# KG EVIDENCE (SURFACE.md §2): Invoice.purchase_order filter; the
+# compare block (po_invoiced_vs_ordered, supplier_invoiced_vs_ordered,
+# top_suppliers_invoiced_vs_ordered).
+#
+# HOW TO SCORE:
+#   - Intent shows the compare block with the correct op.
+#   - purchase_order filter: value is the PO NUMBER, not POHeaderId.
+#   - The unpaid fraction on these pods is high (most invoices are not
+#     PO-linked) — the answer must state the unmatched_invoice_count.
+#
+# Anchors: PO 162034 = Lee Supplies, Closed, invoice 162034inv (830.01 USD).
+
+# — purchase_order filter (5) —
+Which invoices were raised against PO 162034?
+invoices for PO 162034
+show me invoices for PO 162034
+invoices raised against PO 162034
+invoices referencing this PO 162034
+
+# — compare op: one PO (5) —
+How does invoiced compare to ordered for PO 162034?
+was PO 162034 over-invoiced
+is PO 162034 under-invoiced
+show me invoiced vs ordered for PO 162034
+compare ordered and invoiced for PO 162034
+
+# — compare op: one supplier (5) —
+How does invoiced compare to ordered for Lee Supplies?
+compare ordered vs invoiced for Lee Supplies
+is Lee Supplies over-invoiced
+show invoiced vs ordered for supplier EIP Inc
+compare ordered and invoiced for supplier 1252
+
+# — compare op: top suppliers (5) —
+Compare ordered vs invoiced for our top 3 suppliers
+invoiced vs ordered for our biggest suppliers
+are our biggest suppliers' orders getting invoiced
+compare ordered vs invoiced for our top 5 suppliers
+invoiced vs ordered for our top 10 suppliers

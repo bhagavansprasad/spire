@@ -302,7 +302,7 @@ _FILTER_GUIDANCE: dict[str, tuple[str, str]] = {
 # status or name instead".
 #
 # Every example below was RUN against the pod on 2026-07-31 and answered.
-# They are also in scripts/prompts/10_refusal_examples.txt, which
+# They are also in prompts/refusal_examples.txt, which
 # test_every_promised_example_is_verifiable enforces. Do not add an entry
 # here without adding it there and running it — an example that refuses is
 # worse than no example, because it is offered to someone who has just been
@@ -416,7 +416,7 @@ _NOT_A_ROOT_GUIDANCE: dict[str, tuple[str, str]] = {
         # the advice landed the user straight back in the same refusal.
         # This example is a DIFFERENT prompt that succeeds: it roots on
         # the invoice (a valid target) by its queryable id, and is
-        # already in scripts/prompts/10_refusal_examples.txt.
+        # already in prompts/refusal_examples.txt.
         "Get the AR invoice with CustomerTransactionId 300000248096352",
     ),
     "ReceivablesTaxLine": (

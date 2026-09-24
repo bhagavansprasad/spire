@@ -1,0 +1,130 @@
+# Spire prompt set — exhaust_columns. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every column-naming variant across canonical
+# names, formatting variants, plain-English synonyms, Oracle jargon,
+# EBS-era vocabulary, terms that should NOT resolve, mixed valid +
+# invalid, and the F-014 / F-017 / F-027 / F-051 V1 reproducers.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line:
+#   - does the Intent carry the term in `fields`, in `include`, or
+#     nowhere at all?
+#   - does the printed table show it?
+#   - if not — DOES THE OUTPUT SAY SO? That is COL-03, and it is the
+#     whole point of this set. Score it separately from the first two.
+#
+# A prompt can "run cleanly", print a well-formed table, and still be a
+# total failure of this set.
+
+# ====================================================================
+# A. F-014 V1 — fields on an aggregate intent
+# ====================================================================
+# Pre-fix: the requested column rendered as an em dash. Post-fix: the
+# parser clears `fields` on aggregate/compare intents; the summary
+# carries the ranking.
+Top 5 suppliers by invoice spend in 2022 with supplier name and total
+Top 10 suppliers by spend in 2022 with supplier name and total
+
+# ====================================================================
+# B. F-017 V1 — child field on an include
+# ====================================================================
+# Pre-fix: 'Description' classified unresolved against PurchaseOrder's
+# catalog. Post-fix: resolved against the PurchaseOrderLine include.
+Show PO 2144 and its lines with description
+Show PO 2144 with its lines with description
+
+# ====================================================================
+# C. F-027 V1 — country column request
+# ====================================================================
+# Pre-fix: routed to the Address include, blob rendered. Post-fix: the
+# post-parse correction injects the include AND the field; the display
+# extracts the country.
+Supplier number and country for active suppliers
+Supplier name, number, status and country for active suppliers
+
+# ====================================================================
+# D. F-051 V1 — fields + include
+# ====================================================================
+# Pre-fix: the child content was suppressed. Post-fix: renders both.
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+Show PO 2144 with order number and its lines
+Show supplier EIP Inc with supplier number and its contacts
+
+# ====================================================================
+# E. Plain-English synonyms — field exists, user's word differs
+# ====================================================================
+Show me invoices for EIP Inc with invoice number and value
+List active suppliers with vendor name and vendor number
+Show PO 2144 and its lines with qty and price
+Show PO 2144 and its lines with line number and description
+Show PO 2144 and its lines with line number and amount
+List active suppliers with supplier name and state
+Show me invoices for EIP Inc with invoice number and currency
+
+# ====================================================================
+# F. Oracle jargon — most target fields that do NOT exist
+# ====================================================================
+# DISCLOSE — 1→many. Four fields, none of which exist in the KG.
+Show only supplier name and status for active suppliers, include who columns
+List active suppliers with supplier name and who details
+List active suppliers with supplier name and audit columns
+Show only supplier name and status for active suppliers, include 'created by'
+List active suppliers with supplier name and creation date
+List active suppliers with supplier name and date created
+List active suppliers with supplier name and last updated
+Show the AR invoice with CustomerTransactionId 300000248096352 and its DFF values
+Show the AR invoice with CustomerTransactionId 300000248096352 with transaction number and flexfield
+
+# ====================================================================
+# G. EBS-era vocabulary
+# ====================================================================
+Show only supplier name and status for active suppliers, include supplier-site
+List active suppliers with vendor site
+Show only supplier name and status for active suppliers, include 'business unit'
+List active suppliers with supplier name and operating unit
+Show PO 2144 with order number and agent
+Show PO 2144 and its shipments
+Show PO 2144 and its lines with line number and part number
+
+# ====================================================================
+# H. The count-instead-of-detail defect
+# ====================================================================
+Get me PO 162034 details with item details?
+Show PO 162034 and its lines with line number, description, quantity and price
+Show invoice lines for invoice 300000248096352
+
+# ====================================================================
+# I. Ambiguous across entities
+# ====================================================================
+Show PO 2144 and its lines with line number and status
+Show PO 2144 and its lines with ordered and total
+Show receipts for ABC Application Software with receipt number and amount
+Show PO 2144 with order number and total
+
+# ====================================================================
+# J. Must NOT resolve — the false-positive guard
+# ====================================================================
+Show supplier name and credit rating for active suppliers
+List active suppliers with supplier name and risk score
+List active suppliers with supplier name and payment terms
+Show me invoices for EIP Inc with invoice number, PO number, and PO line number
+List active suppliers with supplier name and quantum flux
+
+# ====================================================================
+# K. Mixed valid + invalid — the partial-success case
+# ====================================================================
+List active suppliers with supplier name, status, and created by
+List active suppliers with supplier name, credit rating, risk score, and payment terms
+List active suppliers with supplier number and who columns
+Show only supplier name and status for active suppliers, include supplier-site and country, 'created by'
+
+# ====================================================================
+# L. Must not regress
+# ====================================================================
+List active suppliers
+Top 5 suppliers by invoice spend last year with supplier name and total
+Show PO 2144 and its lines
+List active suppliers with supplier name, supplier number, and address
+Supplier number and country for active suppliers

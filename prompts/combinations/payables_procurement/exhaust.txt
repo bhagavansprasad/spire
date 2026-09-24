@@ -1,0 +1,101 @@
+# Spire prompt set — combinations/payables_procurement/exhaust.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation of the payables↔procurement
+# join we know. Overnight. Goal: find a crash. ~50 prompts.
+#
+# SCOPE: every compare op × every phrasing; the purchase_order filter ×
+# every phrasing; the F-004 V1 reproducer verbatim; boundary cases.
+#
+# COST: the top-suppliers compare op ranks all ~17k POs, then for each
+# top supplier pages POs + invoices. ~5 min per call. Budget ~30
+# minutes for the file.
+#
+# Anchors: PO 162034 = Lee Supplies, Closed, invoice 162034inv
+# (830.01 USD). F-004's reproducer is 'top 5 suppliers by purchase
+# order value' — it must route to the po_value_by_supplier aggregation
+# op, NOT the top_suppliers_invoiced_vs_ordered compare op.
+
+# ====================================================================
+# A. F-004 V1 reproducer, verbatim — compare vs aggregation misroute
+# ====================================================================
+# Pre-fix: routed to compare_top_suppliers_orders_to_invoices. Post-fix:
+# routes to po_value_by_supplier (aggregation).
+top 5 suppliers by purchase order value
+top suppliers by PO value
+top 3 suppliers by purchase order value
+top 10 suppliers by PO value
+top suppliers by committed value
+
+# ====================================================================
+# B. purchase_order filter × phrasings
+# ====================================================================
+Which invoices were raised against PO 162034?
+invoices for PO 162034
+show me invoices for PO 162034
+invoices raised against PO 162034
+invoices referencing this PO 162034
+show me invoices for purchase order 162034
+list invoices for PO 162034
+find invoices for PO 162034
+what invoices are against PO 162034
+invoices linked to PO 162034
+
+# ====================================================================
+# C. compare op: po_invoiced_vs_ordered × phrasings
+# ====================================================================
+How does invoiced compare to ordered for PO 162034?
+was PO 162034 over-invoiced
+is PO 162034 under-invoiced
+show me invoiced vs ordered for PO 162034
+compare ordered and invoiced for PO 162034
+invoiced vs ordered for PO 162034
+ordered vs billed for PO 162034
+was PO 162034 over-billed
+show me PO 162034 ordered vs invoiced
+did we invoice more than we ordered on PO 162034
+
+# ====================================================================
+# D. compare op: supplier_invoiced_vs_ordered × phrasings
+# ====================================================================
+How does invoiced compare to ordered for Lee Supplies?
+compare ordered vs invoiced for Lee Supplies
+is Lee Supplies over-invoiced
+is Lee Supplies under-invoiced
+show invoiced vs ordered for supplier EIP Inc
+compare ordered and invoiced for supplier 1252
+ordered vs billed for JGA
+did we invoice more than we ordered for Staffing Services
+invoiced vs ordered for Lee Supplies
+is Staffing Services over-invoiced
+
+# ====================================================================
+# E. compare op: top_suppliers_invoiced_vs_ordered × phrasings
+# ====================================================================
+Compare ordered vs invoiced for our top 3 suppliers
+invoiced vs ordered for our biggest suppliers
+are our biggest suppliers' orders getting invoiced
+compare ordered vs invoiced for our top 5 suppliers
+invoiced vs ordered for our top 10 suppliers
+top supplier invoicing comparison
+which of our biggest suppliers are over-invoiced
+which of our biggest suppliers are under-invoiced
+invoiced vs ordered for our top suppliers
+compare our top suppliers' invoiced and ordered
+
+# ====================================================================
+# F. Boundary
+# ====================================================================
+How does invoiced compare to ordered for PO 999999999?
+Which invoices were raised against PO DOES-NOT-EXIST?
+compare ordered vs invoiced for Nonexistent Supplier Name
+invoices for PO 0
+
+# ====================================================================
+# G. Regression guard — must stay on the aggregation op
+# ====================================================================
+top 5 suppliers by purchase order value
+top suppliers by PO value
+which suppliers have the most committed
+biggest suppliers by ordered value

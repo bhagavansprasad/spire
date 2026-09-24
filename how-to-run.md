@@ -257,20 +257,20 @@ Multiple files are accepted per action.
 Write prompts one per line in a `.txt`, then let the router fill in the labels:
 
 ```bash
-python scripts/promptkit.py --generate scripts/prompts/01_supplier.txt
-# writes scripts/prompts/01_supplier.json — REVIEW the module/tool it captured
+python scripts/promptkit.py --generate prompts/supplier/smoke.txt
+# writes prompts/supplier/smoke.json — REVIEW the module/tool it captured
 ```
 
 Generate several at once:
 
 ```bash
-python scripts/promptkit.py --generate scripts/prompts/*.txt
+find prompts -name '*.txt' -not -path 'prompts/archive/*' -print0 | xargs -0 python scripts/promptkit.py --generate
 ```
 
 ### Validate routing (fast, no pod)
 
 ```bash
-python scripts/promptkit.py --validate scripts/prompts/*.json
+python scripts/promptkit.py --validate prompts/supplier/smoke.json
 ```
 
 A mismatch means the router now routes a prompt differently than the corpus
@@ -283,7 +283,7 @@ one breaks.
 
 ```bash
 # MCP server must be up (§3)
-python scripts/promptkit.py --run scripts/prompts/mini.json
+python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
 ```
 
 Each prompt prints its intent, plan, and answer (like a single run), then the
@@ -318,7 +318,7 @@ hung or crashing set cannot stop the batch. Built for an unattended run: the
 results are there to read in the morning.
 
 The manifest `scripts/promptkit_sets.yaml` is a top-level `sets:` list of set
-names (each resolves to `scripts/prompts/<name>.txt` and `<name>.json`). Comment
+names (each resolves to `prompts/<name>.txt` and `<name>.json`). Comment
 a line out to skip it; the slow sets (`06_slow`, `08_lifecycle`) are commented
 out by default.
 
@@ -377,22 +377,24 @@ errored or looks wrong. Remember the tally is not a verdict (below).
 
 ### The prompt files
 
-Plain prompt files live in `scripts/prompts/` (one prompt per line, `#`
+Plain prompt files live in `prompts/` (one prompt per line, `#`
 comments). Run `--generate` on them to produce the matching `.json` corpora,
-then `--validate` / `--run`. A few worth knowing:
+then `--validate` / `--run`. Full inventory in `docs/prompt-sets/SURFACE.md`.
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `00_dipstick.txt` | depth-ordered triage, fast. **Run first** — the first failure tells you the depth at which the pipeline breaks |
-| `01_supplier.txt` | supplier-rooted, paraphrase variety and collision traps |
-| `02_purchase_order.txt` | PO-rooted |
-| `03_ar.txt` | accounts receivable |
-| `04_columns.txt` | column selection |
-| `05_refusals.txt` | out-of-scope. **A refusal is a pass** — what matters is *how* it refuses |
-| `07_alacarte.txt` | column-feature regression |
-| `qa_testcases.txt` | captured external QA prompts |
+| `prompts/smoke_dipstick.txt` | depth-ordered triage. **Run first** |
+| `prompts/supplier/` | supplier module — smoke / verify / exhaust |
+| `prompts/payables/` | payables module |
+| `prompts/procurement/` | procurement module |
+| `prompts/receivables/` | receivables module |
+| `prompts/combinations/` | cross-module capabilities |
+| `prompts/smoke_refusals.txt` | out-of-scope. **A refusal is a pass** |
+| `prompts/verify_columns.txt` | column selection |
+| `prompts/qa_testcases.txt` | external QA corpus, verbatim |
+| `prompts/archive/` | pre-2026-09-24 sets, forensic only |
 
-> `scripts/prompts/scorer/` holds parser-scorer corpora in a different format
+> `prompts/scorer/` holds parser-scorer corpora in a different format
 > (`EXPECT ||| prompt`) — not for promptkit.
 
 ### After you pull
@@ -405,7 +407,7 @@ git pull
 pip install -e .                       # only if deps changed; harmless otherwise
 python scripts/rebuild_kg.py           # always from scratch
 python scripts/print_kg.py --counts-only   # all tables should report ok
-python scripts/promptkit.py --validate scripts/prompts/*.json   # routing still holds?
+python scripts/promptkit.py --validate prompts/supplier/smoke.json   # routing still holds?
 ```
 
 ## 6. Example prompts

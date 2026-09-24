@@ -1,0 +1,24 @@
+# Spire prompt set — smoke_fields_and_include.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the fields-plus-include shape work at all.
+# Three prompts, seconds. All MUST ANSWER with BOTH the child content
+# AND the projected table.
+#
+# SCOPE: intents that carry `fields` AND `include` — the F-051 shape.
+#
+# HOW TO SCORE — read the INTENT line:
+#   1. Does the Intent carry BOTH `fields: [...]` and `include: [...]`?
+#   2. Does the ANSWER contain the child content (lines, DFF, contacts)?
+#      A blank record block with only the projected table is the pre-fix
+#      failure.
+
+# F-051 V1 reproducer — fields + AR invoice DFF.
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+
+# Analogue — fields + PO lines.
+Show PO 2144 with order number and its lines
+
+# Sibling — fields only, NO include. F-020 guard must hold.
+List active suppliers with supplier name and status

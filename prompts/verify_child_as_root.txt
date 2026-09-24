@@ -1,0 +1,72 @@
+# Spire prompt set — verify_child_as_root. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the child-as-root phrasing work across
+# every child entity. 30 prompts from 13_child_as_root.txt.
+#
+# PRINCIPLE: if the pod has the data and the user asked a real question,
+# SPIRE answers. No refusal, no redirect. The user's phrasing is the
+# interface.
+#
+# HOW TO SCORE:
+#   1. Intent roots on the PARENT entity.
+#   2. Intent carries the correct include.
+#   3. Answer contains the child rows.
+
+# ====================================================================
+# 1. AR INVOICE — lines (5)
+# ====================================================================
+show invoice lines for invoice 300000248096352
+show lines for invoice 300000248096352
+show line items for invoice 300000248096352
+show the lines on invoice 300000248096352
+what lines does invoice 300000248096352 have
+
+# ====================================================================
+# 2. AR INVOICE — tax lines (5)
+# ====================================================================
+show tax lines for invoice 1002
+show tax lines for invoice 300000248096352
+what tax was charged on invoice 1002
+show tax breakdown for invoice 1002
+show the tax on invoice 1002
+
+# ====================================================================
+# 3. AR INVOICE — DFF (4)
+# ====================================================================
+show flexfield for invoice 1002
+show DFF for invoice 1002
+what is the flexfield context on invoice 1002
+fetch descriptive flexfield values for invoice 1002
+
+# ====================================================================
+# 4. PO — lines (4)
+# ====================================================================
+show PO lines for PO 2144
+show lines for PO 2144
+PO 2144's lines
+what lines does PO 2144 have
+
+# ====================================================================
+# 5. PO — schedules (4)
+# ====================================================================
+show schedules for PO 2144
+show the schedules on PO 2144
+PO 2144's schedules
+what schedules does PO 2144 have
+
+# ====================================================================
+# 6. PO — distributions (4)
+# ====================================================================
+show distributions for PO 2144
+show the distribution accounts on PO 2144
+PO 2144's distributions
+what accounts is PO 2144 booked to
+
+# ====================================================================
+# 7. SUPPLIER — contacts, addresses, sites, classifications (4)
+# ====================================================================
+show contacts for supplier EIP Inc
+show addresses for supplier 1252
+show sites for supplier EIP Inc
+show classifications for supplier EIP Inc

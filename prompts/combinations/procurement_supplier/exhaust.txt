@@ -1,0 +1,85 @@
+# Spire prompt set — combinations/procurement_supplier/exhaust.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation of the procurement↔supplier
+# join we know. Overnight. Goal: find a crash. ~50 prompts.
+#
+# SCOPE: the has_open_PO edge filter × phrasings; the PO-by-supplier
+# filter × phrasings; the 12_po_supplier_include gradient × paraphrases;
+# boundary cases.
+#
+# COST: the edge filter iterates the candidate supplier set with one
+# child call per supplier. Budget ~15-20 minutes for the file.
+#
+# Anchors: PO 701337 = JGA, Open. PO 2144 = EIP Inc, Closed.
+# Supplier EIP Inc = SupplierNumber 1262. Supplier JGA = 1254.
+
+# ====================================================================
+# A. has_open_PO edge filter × phrasings
+# ====================================================================
+suppliers with open purchase orders
+suppliers with open POs
+which suppliers have open POs
+list suppliers with open purchase orders
+show me suppliers with open POs
+which vendors have open purchase orders
+suppliers that have open POs
+suppliers with outstanding purchase orders
+suppliers with open orders
+suppliers that have pending POs
+
+# ====================================================================
+# B. PO-by-supplier filter × phrasings
+# ====================================================================
+purchase orders for supplier EIP Inc
+POs for supplier JGA
+which POs belong to supplier 1252
+list purchase orders for supplier EIP Inc
+show me purchase orders for supplier 1252
+find POs for EIP Inc
+show me JGA's purchase orders
+all purchase orders for supplier 1254
+which purchase orders were issued to EIP Inc
+supplier EIP Inc's purchase orders
+
+# ====================================================================
+# C. 12_po_supplier_include gradient × paraphrases
+# ====================================================================
+# Safe end
+How much of PO 701337 has been received?
+What is the supplier name and number on PO 701337?
+Show the amounts for PO 701337
+PO 701337 — who is the supplier?
+
+# Middle — supplier details phrasing
+Show supplier details for PO 701337.
+PO 701337 with supplier details.
+What are the supplier details for PO 701337?
+Show me PO 701337 and its supplier details
+Details about the supplier on PO 701337
+
+# Dangerous end — master record / traverse
+PO 701337 with the full supplier record.
+PO 701337 including the supplier's address and classifications.
+Show PO 701337 and the supplier's business relationship and tax details.
+For PO 701337, pull the supplier's master data.
+List PO 701337 and join the supplier's site and contact records.
+Show PO 701337 and everything about its supplier
+
+# ====================================================================
+# D. Both directions combined
+# ====================================================================
+show me open POs for supplier EIP Inc
+suppliers with open POs and their PO counts
+which suppliers have POs open right now
+list suppliers with recent POs
+which suppliers ordered the most last month
+
+# ====================================================================
+# E. Boundary
+# ====================================================================
+purchase orders for supplier 999999999
+POs for Nonexistent Supplier 12345
+suppliers with open POs for Nonexistent Supplier
+PO 999999999 with supplier details

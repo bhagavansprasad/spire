@@ -1,0 +1,213 @@
+# Spire prompt set — receivables/exhaust. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation of the receivables module we
+# know. Overnight. Goal: find a crash. ~70 prompts.
+#
+# SCOPE: every AR child include; every CustomerAccount child include;
+# every mode flag combination; the F-007 / F-015 / F-019 / F-041 / F-051
+# V1 reproducers verbatim; every aggregation op; StandardReceipt vs
+# AccountReceipt; boundary cases.
+#
+# COST: the aggregations page the full AR-invoice / standard-receipt
+# collections (~1-2 min each). The per-customer traversals walk the
+# account's children. Budget ~30-40 minutes for the file.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: AR invoice CustomerTransactionId 300000248096352
+# (TransactionNumber 61765, ABC Corporation Americas, 1 line, no tax).
+# AR invoice CustomerTransactionId 1002 (TransactionNumber 5,
+# Business World, 4 lines, 8 tax rows, DFF context 'DOO').
+# Customer "ABC Application Software" = AccountNumber 26360.
+# Customer "ABC Corporation Americas" = AccountNumber 26370.
+# Customer "ABC Corporation Worldwide" = AccountNumber 25750.
+# Credit memo TransactionNumber 11001 (DMART, -150, 2026-07-09).
+
+# ====================================================================
+# A. F-041 V1 reproducers, verbatim (16 prompts across 3 families)
+# ====================================================================
+# Pre-fix: 'invoice lines for invoice X' and family refused with
+# unknown_entity (or silently dropped the child). Post-fix: root on
+# ReceivablesInvoice, include the child.
+show invoice lines for invoice 300000248096352
+show lines for invoice 300000248096352
+show line items for invoice 300000248096352
+show the lines on invoice 300000248096352
+show the lines of invoice 300000248096352
+list the lines on invoice 300000248096352
+what lines does invoice 300000248096352 have
+lines of invoice 300000248096352
+lines on invoice 300000248096352
+invoice 300000248096352's lines
+show tax lines for invoice 1002
+show tax lines for invoice 300000248096352
+what tax was charged on invoice 1002
+show tax breakdown for invoice 1002
+show the tax on invoice 1002
+show flexfield for invoice 1002
+show DFF for invoice 1002
+what is the flexfield context on invoice 1002
+fetch descriptive flexfield values for invoice 1002
+
+# ====================================================================
+# B. F-007 V1 reproducer — empty child acknowledgement
+# ====================================================================
+# Pre-fix: the answer had no line acknowledging an empty tax-lines
+# bucket. Post-fix: "This invoice has no tax lines." prints above the
+# invoice table.
+Get tax lines for invoice 300000248096352
+get tax lines for invoice 1002
+
+# ====================================================================
+# C. F-019 V1 reproducer — account number routed into by_customer_name
+# ====================================================================
+# Pre-fix: 0 records silently, narrated "No customer accounts found."
+# Post-fix: routes to by_account_number, returns account 25750.
+Trace receipt applications for account 25750
+show receipt applications for account number 25750
+
+# ====================================================================
+# D. F-015 V1 reproducer — truncated-to-zero narrated as clean
+# ====================================================================
+# Pre-fix: 0 records narrated as "No receipts found matching the
+# criteria" with the truncation flag discarded. Post-fix: names the
+# sample.
+Show receipts for ABC Corporation Americas at Santa Clara
+
+# ====================================================================
+# E. F-051 V1 reproducers — fields + include
+# ====================================================================
+# Pre-fix: the DFF was fetched and built into the response, but the
+# caller's summary gate suppressed the record block.
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+
+# ====================================================================
+# F. Every AR invoice child × phrasings
+# ====================================================================
+# Lines (5)
+show the AR invoice with CustomerTransactionId 1002 and its lines
+show lines for AR invoice 1002
+list invoice lines for invoice 1002
+what lines does AR invoice 1002 have
+invoice 1002's lines
+
+# Tax lines (5)
+show the AR invoice with CustomerTransactionId 1002 and its tax lines
+show tax lines for invoice 1002
+what tax was charged on invoice 1002
+show tax breakdown for invoice 1002
+show the tax on invoice 1002
+
+# DFF (5)
+show the AR invoice with CustomerTransactionId 1002 and its DFF
+show DFF for invoice 1002
+what is the flexfield context on invoice 1002
+fetch descriptive flexfield values for invoice 1002
+invoice 1002's flexfield
+
+# ====================================================================
+# G. Every CustomerAccount child × phrasings
+# ====================================================================
+# Transactions (4)
+show transactions for customer ABC Application Software
+list transactions for customer ABC Application Software
+show me customer ABC Application Software's transactions
+customer ABC Application Software's transactions
+
+# Receipts (4)
+show receipts for customer ABC Application Software
+list receipts for customer ABC Application Software
+show me the receipts on customer ABC Application Software
+what payments have we received from ABC Application Software
+
+# Credit memos (4)
+show credit memos for customer ABC Application Software
+list credit memos for customer ABC Application Software
+show me the credit memos on customer ABC Application Software
+what credit memos does customer ABC Application Software have
+
+# Receipt applications (4)
+show receipt applications for customer ABC Application Software
+list receipt applications for customer ABC Application Software
+show me the receipt applications for customer ABC Application Software
+what invoices has ABC Application Software's cash been applied to
+
+# ====================================================================
+# H. Every mode flag
+# ====================================================================
+# count_only
+count of suppliers
+how many AR invoices are there
+count of credit memos
+
+# open_only
+open invoices for ABC Corporation Americas
+outstanding invoices for ABC Application Software
+unpaid invoices for ABC Corporation Worldwide
+
+# open_only + invoice_limit
+top 5 open invoices for ABC Corporation Americas
+the 10 largest outstanding invoices for ABC Application Software
+top 3 open invoices for ABC Corporation Worldwide
+
+# balance_only
+Show me the account balance for customer ABC Application Software
+Show me the account balance for customer ABC Corporation Americas
+Show me the account balance for customer ABC Corporation Worldwide
+account activity summary for ABC Application Software
+
+# ====================================================================
+# I. Every aggregation op (receivables-relevant)
+# ====================================================================
+exposure_ranking
+Rank top accounts by outstanding exposure
+top accounts by exposure
+which accounts have the most outstanding receivables
+top 10 accounts by outstanding exposure
+
+receipt_method_distribution
+Show receipt method distribution for ABC Application Software
+receipts by method for customer ABC Application Software
+what payment methods do we receive
+show me receipt method breakdown
+
+top_invoices_by_amount
+top 10 invoices by amount
+largest invoices
+biggest invoices for supplier Lee Supplies
+top 5 invoices by amount
+
+# ====================================================================
+# J. Top-level CreditMemo phrasings
+# ====================================================================
+list credit memos
+recent credit memos
+show credit memos
+credit memos
+top 5 credit memos
+total value of credit memos
+total credit memo value
+what is the total value of credit memos
+
+# ====================================================================
+# K. StandardReceipt vs AccountReceipt
+# ====================================================================
+Show receipts for ABC Application Software at Santa Clara
+Show receipts for ABC Corporation Americas at Santa Clara
+receipts at [site] for [customer]
+show receipts for customer ABC Application Software at Santa Clara
+receipts for account 26360
+
+# ====================================================================
+# L. Boundary
+# ====================================================================
+Get the AR invoice with CustomerTransactionId 999999999
+Get the AR invoice with CustomerTransactionId 0
+Show me AR invoices for customer Nonexistent Customer 12345
+Show me the account balance for customer Nonexistent Customer 12345
+show credit memos for customer Nonexistent Customer 12345
+Show receipts for Nonexistent Customer at Santa Clara
+rank top accounts by outstanding exposure

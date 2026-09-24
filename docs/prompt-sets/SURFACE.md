@@ -56,7 +56,7 @@ Capabilities that apply to more than one module and are not themselves modules. 
 ## 4. Folder structure
 
 ~~~
-scripts/prompts/
+prompts/
   supplier/          smoke.txt  verify.txt  exhaust.txt
   payables/          smoke.txt  verify.txt  exhaust.txt
   procurement/       smoke.txt  verify.txt  exhaust.txt

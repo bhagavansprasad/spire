@@ -115,30 +115,65 @@ bundles:
   - docs/audit/golden/suppliers_with_open_pos.txt
 
   prompts:
-  - scripts/prompts/00_dipstick.txt
-  - scripts/prompts/01_supplier.txt
-  - scripts/prompts/02_purchase_order.txt
-  - scripts/prompts/03_ar.txt
-  - scripts/prompts/04_columns.txt
-  - scripts/prompts/05_refusals.txt
-  - scripts/prompts/06_slow.txt
-  - scripts/prompts/07_alacarte.txt
-  - scripts/prompts/08_lifecycle.txt
-  - scripts/prompts/10_refusal_examples.txt
-  - scripts/prompts/11_column_vocabulary.txt
-  - scripts/prompts/12_po_supplier_include.txt
-  - scripts/prompts/13_child_as_root.txt
-  - scripts/prompts/14_truncation_narration.txt
-  - scripts/prompts/15_po_relative_date_filters.txt
-  - scripts/prompts/16_date_filter_cluster.txt
-  - scripts/prompts/17_modes_and_columns.txt
-  - scripts/prompts/18_invoice_created_dates.txt
-  - scripts/prompts/19_fields_and_include.txt
-  - scripts/prompts/README.md
-  - scripts/prompts/new/retest_prompts.txt
-  - scripts/prompts/qa_testcases.txt
-  - scripts/prompts/scorer/parser_stress.txt
-  - scripts/prompts/scorer/tool_selection.txt
+  # Module folders — smoke / verify / exhaust per capability.
+  - prompts/supplier/smoke.txt
+  - prompts/supplier/verify.txt
+  - prompts/supplier/exhaust.txt
+  - prompts/payables/smoke.txt
+  - prompts/payables/verify.txt
+  - prompts/payables/exhaust.txt
+  - prompts/procurement/smoke.txt
+  - prompts/procurement/verify.txt
+  - prompts/procurement/exhaust.txt
+  - prompts/receivables/smoke.txt
+  - prompts/receivables/verify.txt
+  - prompts/receivables/exhaust.txt
+  # Combination folders — cross-module capabilities.
+  - prompts/combinations/payables_supplier/smoke.txt
+  - prompts/combinations/payables_supplier/verify.txt
+  - prompts/combinations/payables_supplier/exhaust.txt
+  - prompts/combinations/payables_procurement/smoke.txt
+  - prompts/combinations/payables_procurement/verify.txt
+  - prompts/combinations/payables_procurement/exhaust.txt
+  - prompts/combinations/procurement_supplier/smoke.txt
+  - prompts/combinations/procurement_supplier/verify.txt
+  - prompts/combinations/procurement_supplier/exhaust.txt
+  # Cross-cutting features — flat tier-prefixed files at the prompts/ root.
+  - prompts/smoke_dipstick.txt
+  - prompts/verify_dipstick.txt
+  - prompts/exhaust_dipstick.txt
+  - prompts/smoke_lifecycle.txt
+  - prompts/verify_lifecycle.txt
+  - prompts/exhaust_lifecycle.txt
+  - prompts/smoke_columns.txt
+  - prompts/verify_columns.txt
+  - prompts/exhaust_columns.txt
+  - prompts/smoke_refusals.txt
+  - prompts/verify_refusals.txt
+  - prompts/exhaust_refusals.txt
+  - prompts/smoke_child_as_root.txt
+  - prompts/verify_child_as_root.txt
+  - prompts/exhaust_child_as_root.txt
+  - prompts/smoke_truncation.txt
+  - prompts/verify_truncation.txt
+  - prompts/exhaust_truncation.txt
+  - prompts/smoke_date_filters.txt
+  - prompts/verify_date_filters.txt
+  - prompts/exhaust_date_filters.txt
+  - prompts/smoke_fields_and_include.txt
+  - prompts/verify_fields_and_include.txt
+  - prompts/exhaust_fields_and_include.txt
+  - prompts/smoke_modes.txt
+  - prompts/verify_modes.txt
+  - prompts/exhaust_modes.txt
+  # External corpus — verbatim, no tier.
+  - prompts/qa_testcases.txt
+  # Scorer corpus — different format, different runner.
+  - prompts/scorer/parser_stress.txt
+  - prompts/scorer/tool_selection.txt
+  # Pending disposition.
+  - prompts/new/retest_prompts.txt
+  # Tooling that reads the sets.
   - scripts/run_prompt_set.py
   - src/spire/rendering/formatters.py
 
@@ -149,20 +184,20 @@ bundles:
   # the _TIER1 change; a --validate run against it would false-positive
   # on every aggregation prompt. Left commented until
   # scripts/promptkit.py --generate produces a fresh set (separate task).
-  # - scripts/prompts/00_dipstick.json
-  # - scripts/prompts/01_supplier.json
-  # - scripts/prompts/02_purchase_order.json
-  # - scripts/prompts/03_ar.json
-  # - scripts/prompts/04_columns.json
-  # - scripts/prompts/05_refusals.json
-  # - scripts/prompts/06_slow.json
-  # - scripts/prompts/07_alacarte.json
-  # - scripts/prompts/08_lifecycle.json
-  # - scripts/prompts/11_column_vocabulary.json
-  # - scripts/prompts/12_po_supplier_include.json
-  # - scripts/prompts/qa_testcases.json
-  - scripts/prompts/mini.txt
-  # - scripts/prompts/mini.json
+  # - prompts/00_dipstick.json
+  # - prompts/01_supplier.json
+  # - prompts/02_purchase_order.json
+  # - prompts/03_ar.json
+  # - prompts/04_columns.json
+  # - prompts/05_refusals.json
+  # - prompts/06_slow.json
+  # - prompts/07_alacarte.json
+  # - prompts/08_lifecycle.json
+  # - prompts/11_column_vocabulary.json
+  # - prompts/12_po_supplier_include.json
+  # - prompts/qa_testcases.json
+  # - prompts/mini.txt  # moved to prompts/archive/ (audit C-15: orphan, no runner)
+  # - prompts/mini.json
 
   scripts:
   - scripts/draw_graph.py

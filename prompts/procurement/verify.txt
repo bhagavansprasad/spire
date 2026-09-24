@@ -1,0 +1,79 @@
+# Spire prompt set — procurement/verify. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the procurement module work across its
+# normal shapes. Minutes. Run before a merge. 35 prompts.
+#
+# SCOPE: PurchaseOrder and every entity-level filter on it, across its
+# normal phrasings; every PO child include; date bounds; lifecycle;
+# the F-045 reproducer verbatim.
+#
+# HOW TO SCORE:
+#   - Intent target_entity PurchaseOrder with the expected filter.
+#   - by_id: 'by_id' filter with the value as written.
+#   - Children appear in Intent.include, not target_entity.
+#   - Date bounds: 'created' routes to CreationDate filters,
+#     'updated'/'touched'/'modified' routes to LastUpdateDate filters.
+#
+# Anchors: PO 2144 = OrderNumber 162352, EIP Inc, Closed, 2 lines,
+# 2 schedules, 2 distributions. PO 162034 = Lee Supplies, Closed,
+# has invoices. PO 701337 = JGA, Open (lifecycle anchor).
+
+# — by_id, header only (5) —
+What is purchase order 2144 about?
+show PO 162034
+PO 2144
+purchase order 162352
+show me PO 2144
+
+# — by_id + children (5) —
+Show PO 2144 and its schedules
+Show PO 2144 and its schedules and distributions
+What is purchase order 2144 about? Show its lines.
+Show PO 2144 with its buyer
+PO 2144 with the buyer
+
+# — PO lifecycle (5) —
+# The lifecycle filter reconciles one PO end to end.
+Has PO 701337 been fully received, fully invoiced, and fully paid?
+What is the risk rating on PO 701337 and why?
+Why is PO 701337 still open?
+Has PO 162034 been fully received, fully invoiced, and fully paid?
+Is PO 162034 complete?
+
+# — list-all (2) —
+List all purchase orders
+show all POs
+
+# — created_before / created_since (4) —
+Purchase orders created before 2015
+Purchase orders created before 2024-01-01
+purchase orders created since March 2024
+purchase orders created in the last 6 months
+
+# — relative CreationDate (4) —
+purchase orders older than 6 months
+purchase orders older than 1 year
+purchase orders in the last 12 months
+purchase orders in the last 6 months
+
+# — LastUpdateDate (4) —
+purchase orders not touched in the last year
+purchase orders not updated in the last 6 months
+purchase orders updated in the last 3 months
+purchase orders with activity in the last year
+
+# — supplier filter (3) —
+purchase orders for supplier EIP Inc
+POs for supplier JGA
+which POs belong to supplier 1252
+
+# — status filter (2) —
+open purchase orders
+closed purchase orders
+
+# — F-045 V1 reproducer (1) —
+# Composite created_since + created_before. Pre-fix returned 0 with a
+# misleading 'capped' note. Post-fix routes created_since to the server
+# clause and returns records in 2023.
+purchase orders created in 2023

@@ -1,0 +1,74 @@
+# Spire prompt set — verify_lifecycle. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the lifecycle filter work across its
+# normal shapes. 31 prompts, the same set that was 08_lifecycle.txt.
+#
+# SCOPE: the ONE lifecycle tool that backs five catalog prompts (A.2,
+# A.3, A.4, A.7, A.10) through three output shapes — status matrix,
+# executive summary, diagnostic.
+#
+# THE FIVE MUST ANSWER. A refusal here is a FAILURE.
+#
+# WHAT TO CHECK PER PROMPT:
+#   1. ROUTING. Intent shows target_entity PurchaseOrder and a single
+#      lifecycle_status filter whose value is the PO NUMBER as a string.
+#   2. THE PAID LEG ON 701337. Must read "cannot be determined" and the
+#      Paid row must show an em dash, NEVER 0.00. A 0.00 here is a
+#      REGRESSION.
+#   3. COPIED, NOT DERIVED. risk, risk_reasons, recommended_action,
+#      lifecycle_stage and responsible_team are computed in the tool.
+#      If wording drifts between runs, something is re-deriving them.
+#   4. DERIVED SAYS DERIVED. The received amount is prorated from
+#      quantity (ReceivedAmount is empty on this pod). The answer must
+#      say so. A received figure presented as fetched is wrong.
+#   5. UNCONFIRMED STAYS UNCONFIRMED. 701337's PayOnReceipt note is a
+#      hypothesis.
+
+# ── 1. A.4 — status matrix ─────────────────────────────────────
+Has PO 701337 been fully received, fully invoiced, and fully paid?
+Has PO 162034 been fully received, fully invoiced, and fully paid?
+Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.
+Is PO 162034 complete?
+
+# ── 2. A.7 — diagnostic ────────────────────────────────────────
+Why is PO 701337 still open?
+What is blocking PO 701337, and which team owns the next action?
+Why has PO 701337 not been paid?
+Is anything blocking PO 162034?
+
+# ── 3. A.2 — end-to-end summary ────────────────────────────────
+Give me an end-to-end summary of PO 701337 from supplier setup through payment.
+Trace PO 162034 from supplier setup through to payment and tell me the current stage.
+Summarise PO 701337 and identify the current lifecycle stage and responsible team.
+
+# ── 4. A.10 — executive summary with risk ──────────────────────
+Give me an executive summary of PO 701337 including risk and recommended action.
+Executive summary for PO 162034 — value, delivery, invoice and payment status, risk, and what to do next.
+What is the risk rating on PO 701337 and why?
+
+# ── 5. A.3 — per-module status breakdown ───────────────────────
+What is the supplier status, approval status, receipt status, invoice matching status and payment status of PO 701337?
+For PO 162034, show the supplier status, invoice approval status and payment status, plus any unresolved exceptions.
+
+# ── 6. STABILITY — same question, worded differently ───────────
+Has purchase order 701337 been received and paid?
+PO 701337 — received, invoiced, paid?
+Tell me the lifecycle status of purchase order 701337.
+What stage is PO 162034 at?
+Who is responsible for the next action on PO 701337?
+What is outstanding on PO 701337?
+
+# ── 7. NEGATIVE AND EDGE CASES ─────────────────────────────────
+# A clean refusal or a clean "not found" is CORRECT.
+Has PO 999999999 been fully received, fully invoiced, and fully paid?
+Has PO DOES-NOT-EXIST been paid?
+Have all purchase orders been fully received and paid?
+Compare the lifecycle of PO 701337 and PO 162034.
+
+# ── 8. MUST NOT REGRESS — neighbouring routes ──────────────────
+Show PO 162034 and its lines.
+Show the invoices raised against PO 162034.
+Open POs for supplier JGA.
+Which suppliers have open purchase orders?
+Purchase orders created before 2015.

@@ -202,7 +202,7 @@ Every response has the same shape:
 
 - **promptkit** (`scripts/promptkit.py`): one tool to run Spire prompts end to
   end — a single prompt, a file of prompts, or a whole manifest of prompt sets
-  under a per-set timeout. See [`scripts/prompts/README.md`](scripts/prompts/README.md)
+  under a per-set timeout. See [`docs/prompt-sets/SURFACE.md`](docs/prompt-sets/SURFACE.md)
   for the set inventory and examples.
 
 ---
@@ -224,12 +224,12 @@ python scripts/promptkit.py --run --prompt \
     "active suppliers in US"
 
 # A FILE OF PROMPTS — one prompt per line; '#'/blank skipped
-python scripts/promptkit.py --run --prompt-file scripts/prompts/01_supplier.txt
+python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
 
 # MULTIPLE PROMPT FILES — files run in order, prompts in line order
 python scripts/promptkit.py --run --prompt-file \
-    scripts/prompts/00_dipstick.txt \
-    scripts/prompts/01_supplier.txt
+    prompts/smoke_dipstick.txt \
+    prompts/supplier/smoke.txt
 
 # A MANIFEST — a YAML 'sets:' list; each set is its own subprocess with a
 # per-set timeout, so one hung set cannot stop the batch
@@ -244,7 +244,7 @@ python scripts/promptkit.py --run --manifest \
 
 A **prompt file** is plain text, one prompt per line. A **manifest** is a
 YAML file with a top-level `sets:` list of set names; each name resolves to
-`<prompts-dir>/<name>.txt` (default `scripts/prompts/`). Comment a line out
+`<prompts-dir>/<name>.txt` (default `prompts/`). Comment a line out
 to skip a set. `scripts/promptkit_sets.yaml` is the committed manifest.
 
 **Manifest output.** Each set writes its own file; the run also writes a log
@@ -283,7 +283,7 @@ python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml \
 ```
 
 The prompt-set inventory, known-good baselines, and guidance on reading
-results are in [`scripts/prompts/README.md`](scripts/prompts/README.md).
+results are in [`docs/prompt-sets/SURFACE.md`](docs/prompt-sets/SURFACE.md).
 
 ---
 

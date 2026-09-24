@@ -1,0 +1,147 @@
+# Spire prompt set — procurement/exhaust. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation of the procurement module we
+# know. Overnight. Goal: find a crash. ~65 prompts.
+#
+# SCOPE: every PO status value (13), every PO child include × phrasings,
+# the F-001 / F-006 / F-045 / F-047 / F-048 V1 reproducers verbatim,
+# boundary cases, additional paraphrases.
+#
+# COST: PO fetches are cheap (~10 rows each), but the by_id fetches
+# call out to the pod for each prompt. Budget ~10-15 minutes for the
+# file.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: PO 2144 = OrderNumber 162352, EIP Inc, Closed, 2 lines,
+# 2 schedules, 2 distributions. PO 162034 = Lee Supplies, Closed,
+# has invoices. PO 701337 = JGA, Open (lifecycle anchor).
+# Alpha-prefixed OrderNumber US164932 = POHeaderId 560869.
+
+# ====================================================================
+# A. F-001 V1 reproducer, verbatim — list_all flag
+# ====================================================================
+# Pre-fix: 'list purchase orders' refused with "PurchaseOrder root has
+# no identifier and no explicit list request" — while the user had
+# explicitly requested a list. Post-fix: returns 25 of ~17k POs.
+list purchase orders
+list all purchase orders
+show all POs
+show me all purchase orders
+every purchase order
+
+# ====================================================================
+# B. F-006 V1 reproducer, verbatim — alpha-prefixed OrderNumber
+# ====================================================================
+# Pre-fix: crashed at the MCP boundary with int_parsing on 'US164932'.
+# Post-fix: resolves OrderNumber → POHeaderId 560869.
+What is purchase order US164932 about? Show its lines.
+What is purchase order US164932 about?
+Show PO US164932
+Show purchase order US164932 and its buyer
+
+# ====================================================================
+# C. F-045 V1 reproducer, verbatim — composite date bounds
+# ====================================================================
+# Pre-fix: composite created_since + created_before returned 0 with a
+# misleading 'capped' note. Post-fix: routes created_since to the
+# server clause; 25 records all CreationDate in 2023.
+purchase orders created in 2023
+purchase orders created between Jan and Mar 2025
+
+# ====================================================================
+# D. F-047 V1 reproducer, verbatim — LastUpdateDate
+# ====================================================================
+# Pre-fix: refused with unsupported_filter. Post-fix: routes to
+# last_updated_before / last_updated_after, distinct from CreationDate.
+purchase orders not touched in the last year
+purchase orders not touched in the last 6 months
+purchase orders not updated in the last 12 months
+purchase orders last modified more than 6 months ago
+purchase orders updated in the last 3 months
+purchase orders with activity in the last year
+purchase orders updated in the last 30 days
+
+# ====================================================================
+# E. F-048 V1 reproducer, verbatim — vague-adjective default
+# ====================================================================
+# Pre-fix: refused with unsupported_filter. Post-fix: routes to
+# created_in_last_n_months with months=3 (the default).
+recent purchase orders
+new purchase orders
+latest POs
+fresh POs
+the most recent POs
+recently created POs
+
+# ====================================================================
+# F. Every PO status value (13)
+# ====================================================================
+open purchase orders
+closed purchase orders
+canceled purchase orders
+cancelled purchase orders
+incomplete purchase orders
+draft purchase orders
+rejected purchase orders
+withdrawn purchase orders
+purchase orders on hold
+purchase orders pending approval
+purchase orders pending signature
+purchase orders pending acknowledgment
+purchase orders closed for receiving
+purchase orders closed for invoicing
+purchase orders finally closed
+
+# ====================================================================
+# G. Every PO child include × phrasings
+# ====================================================================
+# Lines (4)
+show PO 2144 and its lines
+show me the lines on PO 2144
+list the lines of PO 2144
+what lines does PO 2144 have
+
+# Schedules (4)
+show PO 2144 and its schedules
+show me the schedules on PO 2144
+list schedules for PO 2144
+what schedules does PO 2144 have
+
+# Distributions (4)
+show PO 2144 and its distributions
+show the distribution accounts on PO 2144
+what accounts is PO 2144 booked to
+list distributions for PO 2144
+
+# Buyer (3)
+Show PO 2144 and its buyer
+Show me PO 2144 with its buyer
+Show PO 2144 with the assigned buyer
+
+# ====================================================================
+# H. Boundary
+# ====================================================================
+show PO 999999999
+show PO DOES-NOT-EXIST
+Has PO 999999999 been fully received, fully invoiced, and fully paid?
+Has PO DOES-NOT-EXIST been paid?
+Have all purchase orders been fully received and paid?
+Compare the lifecycle of PO 701337 and PO 162034.
+purchase orders created after 2050-01-01
+purchase orders created before 1900-01-01
+purchase orders updated in the last 0 months
+
+# ====================================================================
+# I. Additional paraphrases
+# ====================================================================
+show me the purchase order 2144
+what is on PO 2144
+tell me about PO 162352
+PO 162034 with its lines and schedules
+show me PO 2144 with everything
+which POs are open for supplier JGA
+which POs were created last year
+show me closed POs
+list all closed purchase orders

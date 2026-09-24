@@ -34,7 +34,7 @@ Each guards a mistake actually made on 2026-07-30, not a hypothetical:
    ``ReceivablesTaxLine`` at a user.
 
 2. Every example the messages promise appears in
-   ``scripts/prompts/10_refusal_examples.txt``, which is a runnable set.
+   ``prompts/refusal_examples.txt``, a test-only contract file.
    The examples were written from what looked plausible and never run;
    "open purchase orders for supplier EIP Inc" turned out to REFUSE, and
    it was offered as the fix for that very refusal, in three tables.
@@ -68,7 +68,7 @@ from spire.nl_parser.vocabulary import KGMenu
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES_FILE = REPO_ROOT / "scripts" / "prompts" / "10_refusal_examples.txt"
+EXAMPLES_FILE = REPO_ROOT / "prompts" / "refusal_examples.txt"
 
 
 # Every entity the KG declares, as of 2026-07-30. Static on purpose: this
@@ -475,7 +475,7 @@ def test_every_promised_example_is_verifiable():
     """
     missing = sorted(_promised_examples() - _examples_file_prompts())
     assert not missing, (
-        "example(s) not in 10_refusal_examples.txt — add them and RUN the "
+        "example(s) not in refusal_examples.txt — add them and RUN the "
         f"set before committing: {missing}"
     )
 

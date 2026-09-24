@@ -1,0 +1,83 @@
+# Spire prompt set — supplier/verify. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the supplier module work across its normal
+# shapes, edges, and traps. Minutes. Run before a merge.
+#
+# SCOPE: the supplier module. Supplier and its entity-level filters
+# (status, country, business relationship, name fragment, created date,
+# count). 32 prompts.
+#
+# RELATIONSHIP TO OTHER TIERS:
+#   - supplier/smoke.txt holds the 6 depth-sampling prompts.
+#   - combinations/payables_supplier/ holds the 3 Invoice-rooted
+#     prompts that lived in the old 01_supplier.txt.
+#   - supplier/exhaust.txt holds the 10 BU values, 9 classifications,
+#     the 5 supplier edge filters, and the aggregations.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line. The tally has
+# previously reported "ran cleanly" while prompts were being wrongly
+# REFUSED.
+#
+# Anchors: supplier 1252 = Lee Supplies (US, ACTIVE, Spend Authorized,
+# 25 addresses). Supplier 1262 = EIP Inc (10 contacts). ~450 suppliers
+# total.
+#
+# NOTE "Lee Supplies" is AMBIGUOUS by name — the pod also carries
+# clones like "Lee Supplies56 2026". Name-matched results may span them.
+
+# — status (paraphrase variety) —
+which suppliers are currently active
+show me all the active vendors
+suppliers that are not inactive
+List inactive suppliers
+suppliers whose status is inactive
+
+# — country —
+List US suppliers
+suppliers based in America
+vendors in the United States
+which suppliers are located in the UK
+suppliers from India
+show me suppliers in Great Britain
+
+# — name fragment —
+Suppliers named Lee
+find vendors with Corp in the name
+any supplier called Dell
+
+# — business relationship —
+Prospective suppliers
+show me spend authorized suppliers
+which vendors are prospective
+
+# — created date —
+Suppliers created between Jan and Mar 2025
+vendors added in 2024
+suppliers created after June 2025
+
+# — combinations (stacked filters) —
+active US suppliers
+active prospective suppliers
+woman owned suppliers in the US
+
+# — collision traps (most likely to misroute) —
+# "US suppliers" must route to country, NOT the US1 business unit.
+# "small suppliers" is a size adjective, not the Small Business
+# classification — the label case is debatable, not a bug.
+US suppliers
+suppliers in the US1 business unit
+small business suppliers
+suppliers with a UK business unit site
+suppliers in the UK
+
+# — count —
+how many suppliers do we have
+how many active suppliers are there
+
+# — ambiguous / underspecified —
+# Both are debatable rather than broken: "show me suppliers" is a valid
+# unfiltered list; "everything about supplier 1252" is a suppression of
+# the "one record → its details" shape and answers.
+show me suppliers
+everything about supplier 1252

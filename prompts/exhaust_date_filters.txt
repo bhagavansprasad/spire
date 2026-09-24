@@ -1,0 +1,152 @@
+# Spire prompt set — exhaust_date_filters. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every date phrasing × every direction × both
+# entities × combinations. Goal: find a phrasing that flips direction,
+# refuses, or silently answers the wrong question. ~90 prompts.
+#
+# COST: PO date fetches are ~10 rows each. Invoice fetches may page a
+# few hundred rows. Budget ~15-20 minutes for the file.
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices).
+
+# ====================================================================
+# A. PO CreationDate — every phrasings sweep, OLDER
+# ====================================================================
+purchase orders older than 1 month
+purchase orders older than 3 months
+purchase orders older than 6 months
+purchase orders older than 12 months
+purchase orders older than 1 year
+purchase orders older than 2 years
+purchase orders older than 5 years
+stale purchase orders
+aged purchase orders
+old purchase orders
+purchase orders not recent
+purchase orders that are more than 6 months old
+purchase orders that are more than 12 months old
+
+# ====================================================================
+# B. PO CreationDate — RECENT direction sweep
+# ====================================================================
+purchase orders in the last 1 month
+purchase orders in the last 3 months
+purchase orders in the last 6 months
+purchase orders in the last 12 months
+purchase orders in the last 30 days
+purchase orders from the last year
+purchase orders created in the last 6 months
+purchase orders created in the last 30 days
+purchase orders created in the last 12 months
+recent POs
+new POs
+latest POs
+fresh POs
+the most recent POs
+recently created POs
+
+# ====================================================================
+# C. PO CreationDate — absolute sweep
+# ====================================================================
+purchase orders created before 2015
+purchase orders created before 2020-01-01
+purchase orders created before 2024-01-01
+purchase orders created since January 2020
+purchase orders created since March 2024
+purchase orders between Jan and Mar 2025
+purchase orders between 2023-01-01 and 2023-12-31
+purchase orders in 2023
+purchase orders in 2024
+
+# ====================================================================
+# D. PO LastUpdateDate — OLDER (F-047)
+# ====================================================================
+purchase orders not touched in the last year
+purchase orders not touched in the last 6 months
+purchase orders not touched in the last 3 months
+purchase orders not updated in the last 12 months
+purchase orders last modified more than 6 months ago
+purchase orders last modified more than 1 year ago
+purchase orders with no recent activity in the last 6 months
+
+# ====================================================================
+# E. PO LastUpdateDate — RECENT (F-047)
+# ====================================================================
+purchase orders updated in the last 1 month
+purchase orders updated in the last 3 months
+purchase orders updated in the last 6 months
+purchase orders updated in the last 12 months
+purchase orders updated in the last 30 days
+purchase orders with activity in the last year
+purchase orders with activity in the last 6 months
+
+# ====================================================================
+# F. Invoice — absolute sweep
+# ====================================================================
+invoices in 2020
+invoices in 2021
+invoices in 2022
+invoices in 2023
+invoices in 2024
+invoices between Jan and Mar 2023
+invoices between Jan and Mar 2024
+invoices created before 2020-01-01
+invoices created before 2024-01-01
+invoices created before 2015
+invoices created since January 2020
+invoices created since January 2024
+invoices created after 2024-01-01
+invoices raised before 2024-01-01
+invoices raised since January 2024
+invoices raised after 2024-01-01
+invoices raised before 2015
+
+# ====================================================================
+# G. Invoice — relative sweep
+# ====================================================================
+invoices older than 1 month
+invoices older than 3 months
+invoices older than 6 months
+invoices older than 12 months
+invoices older than 1 year
+invoices older than 2 years
+invoices more than 12 months old
+invoices stale
+invoices in the last 30 days
+invoices in the last 6 months
+invoices in the last 12 months
+invoices from the last year
+invoices created in the last 30 days
+invoices created in the last 6 months
+invoices created in the last 12 months
+
+# ====================================================================
+# H. Composite — supplier + date
+# ====================================================================
+invoices for Lee Supplies older than 6 months
+invoices for supplier 1252 in the last 30 days
+invoices for Lee Supplies in 2024
+invoices for supplier 1252 between Jan and Mar 2024
+invoices for Lee Supplies created before 2024-01-01
+
+# ====================================================================
+# I. Cross-column traps — must not cross-contaminate
+# ====================================================================
+Purchase orders older than 6 months
+Purchase orders created before 2024-01-01
+Purchase orders created since March 2024
+purchase orders in the last 6 months
+purchase orders created in the last 6 months
+purchase orders not touched in the last year
+
+# ====================================================================
+# J. Negatives / out-of-scope
+# ====================================================================
+purchase orders
+invoices
+purchase orders created before 1900-01-01
+invoices in 2050
+purchase orders older than 100 years
+purchase orders older than 0 months
+invoices in the last 0 months

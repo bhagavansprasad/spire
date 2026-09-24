@@ -1,0 +1,35 @@
+# Spire prompt set — smoke_date_filters. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — do date bounds work at all. Six prompts, seconds.
+# All MUST ANSWER.
+#
+# SCOPE: absolute and relative date bounds across PO (CreationDate,
+# LastUpdateDate) and Invoice (InvoiceDate). The one place this feature
+# spans two entities, so smoke touches both.
+#
+# HOW TO SCORE — check the Intent line, not the summary:
+#   - Intent target_entity + a filter of the right type.
+#   - Absolute: value is the ISO date as written.
+#   - Relative: routes through months, lands on the _before / _after
+#     tool arg.
+#
+# Anchors: F-011b PO CreationDate; F-046 Invoice; F-047 PO LastUpdateDate.
+
+# PO — CreationDate absolute.
+purchase orders created before 2024-01-01
+
+# PO — CreationDate relative (older direction).
+purchase orders older than 6 months
+
+# PO — LastUpdateDate relative (older direction, F-047).
+purchase orders not touched in the last year
+
+# Invoice — absolute (F-046 guard-widened shape).
+invoices in 2024
+
+# Invoice — relative older (F-046).
+invoices older than 6 months
+
+# Invoice — 'created' phrasing (F-049).
+invoices created before 2024-01-01

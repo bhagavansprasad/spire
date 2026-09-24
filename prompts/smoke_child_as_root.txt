@@ -1,0 +1,34 @@
+# Spire prompt set — smoke_child_as_root. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the child-as-root phrasing work at all. Five
+# prompts, seconds. All MUST ANSWER.
+#
+# SCOPE: prompts that NAME A CHILD entity as the subject and give the
+# parent's identifier afterward. The user's intent is unambiguous: root
+# on the PARENT and fetch the child via include.
+#
+# HOW TO SCORE:
+#   1. Does the Intent root on the PARENT entity (not the child)?
+#   2. Does the Intent carry the correct include for the child?
+#   3. Does the answer contain the child rows?
+#
+# Anchors: AR invoice CustomerTransactionId 300000248096352 (61765).
+# PO 2144 = EIP Inc, 2 lines, 2 schedules, 2 distributions.
+# Supplier EIP Inc = SupplierNumber 1262, 10 contacts.
+# Customer "ABC Application Software" = AccountId 300000047368512.
+
+# AR invoice child — lines.
+show invoice lines for invoice 300000248096352
+
+# AR invoice grandchild — tax.
+show tax lines for invoice 1002
+
+# PO child — lines.
+show PO lines for PO 2144
+
+# Supplier child — contacts.
+show contacts for supplier EIP Inc
+
+# CustomerAccount child — transactions.
+show transactions for customer ABC Application Software

@@ -1,0 +1,81 @@
+# Spire prompt set — exhaust_fields_and_include.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every fields+include shape across every entity
+# with a child, every child, every column-naming variant. Goal: find a
+# shape the caller's summary gate still suppresses. ~60 prompts.
+#
+# HOW TO SCORE — same rules as verify.
+
+# ====================================================================
+# A. AR invoice + every child
+# ====================================================================
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its DFF values
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines and lines
+Show the AR invoice with CustomerTransactionId 1002 with amount and its lines
+Show the AR invoice with CustomerTransactionId 1002 with customer name and its lines
+Show the AR invoice with CustomerTransactionId 1002 with date and its DFF
+
+# ====================================================================
+# B. PO + every child
+# ====================================================================
+Show PO 2144 with order number and its lines
+Show PO 2144 with order number and its schedules
+Show PO 2144 with order number and its distributions
+Show PO 2144 with status and its lines
+Show PO 2144 with order number and its buyer
+Show PO 2144 with order number, status, and its lines
+Show PO 2144 with order number and its schedules and distributions
+
+# ====================================================================
+# C. Supplier + every child
+# ====================================================================
+Show supplier EIP Inc with supplier number and its contacts
+Show supplier EIP Inc with supplier number and its sites
+Show supplier EIP Inc with supplier number and its classifications
+Show supplier EIP Inc with supplier number, status, and its contacts
+Show supplier EIP Inc with supplier name and its contacts and sites
+
+# ====================================================================
+# D. CustomerAccount + every child
+# ====================================================================
+Show customer ABC Application Software with account number and its transactions
+Show customer ABC Application Software with account number and its receipts
+Show customer ABC Application Software with account number and its credit memos
+Show customer ABC Application Software with account number and its receipt applications
+
+# ====================================================================
+# E. F-020 regression — fields only, no include
+# ====================================================================
+List active suppliers with supplier name and status
+List active suppliers with supplier name and supplier number
+Show me invoices for EIP Inc with invoice number and amount
+Show me invoices for EIP Inc with invoice number and date
+Show PO 2144 with order number and status
+
+# ====================================================================
+# F. Include only, no fields
+# ====================================================================
+Show PO 2144 and its lines
+Get tax lines for invoice 1002
+Show PO 2144 and its distributions
+Show supplier EIP Inc and its contacts
+
+# ====================================================================
+# G. Plain, no fields, no include
+# ====================================================================
+List active suppliers
+show me invoices for supplier 1252
+Show PO 2144 and its lines
+
+# ====================================================================
+# H. Boundary
+# ====================================================================
+Show the AR invoice with CustomerTransactionId 999999999 with transaction number and flexfield
+Show PO DOES-NOT-EXIST with order number and its lines
+Show supplier Nonexistent Supplier 12345 with supplier number and its contacts
+Show customer Nonexistent Customer 12345 with account number and its transactions

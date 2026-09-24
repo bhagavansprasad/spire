@@ -171,7 +171,7 @@ def size_check() -> None:
     print("        wrong bullet is bounded by those guards.")
     print()
     print("    Recommendation: proceed. The regression run across")
-    print("    scripts/prompts/*.txt after the fix is what proves it.")
+    print("    prompts/*.txt after the fix is what proves it.")
     print()
 
 

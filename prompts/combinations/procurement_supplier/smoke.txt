@@ -1,0 +1,18 @@
+# Spire prompt set — combinations/procurement_supplier/smoke.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the procurement↔supplier join work at all.
+# Two prompts, seconds. Both MUST ANSWER.
+#
+# SCOPE: the two directions of the join.
+#   1. PO rooted, supplier-id filter.
+#   2. Supplier rooted, open-PO edge filter.
+#
+# Anchors: supplier 1252 = Lee Supplies. Supplier EIP Inc = SupplierNumber 1262.
+
+# Direction 1 — PO rooted, supplier filter.
+purchase orders for supplier EIP Inc
+
+# Direction 2 — Supplier rooted, has_open_PO edge filter.
+suppliers with open purchase orders

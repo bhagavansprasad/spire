@@ -1,0 +1,46 @@
+# Spire prompt set — verify_refusals. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the refusal path produce the right flavor
+# and the right words. 27 prompts, merging 05_refusals (9) and
+# 10_refusal_examples (18).
+#
+# A refusal is a PASS here. What matters:
+#   - right flavor (unknown_entity vs unsupported_filter vs unsupported_operation)
+#   - right reason — names what is missing, not "doesn't track"
+#   - every offered Example ANSWERS when typed
+#
+# HOW TO SCORE — read the refusals, not the tally.
+
+# — from 05_refusals (9) —
+show me contract renewals due next quarter
+suppliers with net 30 payment terms
+which suppliers have the best rating
+suppliers with the highest quality score
+who should we stop buying from
+show me purchase order line items
+recent invoices
+Purchase orders older than 6 months
+
+# — from 10_refusal_examples (18) —
+# Every one MUST ANSWER — they are the Examples Spire promises.
+List active suppliers with supplier name, supplier number, and status
+Get supplier contacts for Lee Supplies
+Get tax lines for invoice 300000248096352
+Get the AR invoice with CustomerTransactionId 300000248096352
+Show PO 2144 and its buyer
+Show PO 2144 and its distributions
+Show PO 2144 and its lines
+Show PO 2144 and its schedules
+Show invoice lines for invoice 300000248096352
+Suppliers with their addresses
+What is the risk rating on PO 701337 and why?
+account balance for ABC Corporation Americas
+addresses for supplier 1252
+active suppliers in US
+credit memos for ABC Application Software
+invoices for Lee Supplies
+open invoices for ABC Corporation Americas
+receipts for ABC Application Software
+supplier sites for Lee Supplies
+suppliers with classification Minority Owned

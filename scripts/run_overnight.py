@@ -5,7 +5,7 @@ each set's output to its own file. Built for an unattended overnight run:
 the results are there to read in the morning.
 
 Each set runs as a SEPARATE subprocess (the same command you would type by
-hand: run_prompt_set.py --prompt-file scripts/prompts/<name>.txt). One set
+hand: run_prompt_set.py --prompt-file prompts/<name>.txt). One set
 crashing or timing out cannot stop the batch — the runner records what
 happened and moves to the next.
 
@@ -14,14 +14,14 @@ run uses, and it isolates failures. A hung prompt in one set is killed by
 that set's timeout without taking the whole night down.
 
 Manifest (overnight_sets.yaml) is just a list of set NAMES. Each name
-resolves to scripts/prompts/<name>.txt. Comment a line out to skip it.
+resolves to prompts/<name>.txt. Comment a line out to skip it.
 
 Usage:
     python scripts/run_overnight.py
     python scripts/run_overnight.py --manifest scripts/overnight_sets.yaml
     python scripts/run_overnight.py --outdir results/tonight
     python scripts/run_overnight.py --timeout 3600
-    python scripts/run_overnight.py --prompts-dir scripts/prompts
+    python scripts/run_overnight.py --prompts-dir prompts
 
 Output (in <outdir>, default overnight_<YYYYMMDD>/):
     <name>.txt      full stdout+stderr of each set's run
@@ -217,9 +217,9 @@ def main() -> int:
     parser.add_argument(
         "--prompts-dir",
         type=Path,
-        default=Path("scripts/prompts"),
+        default=Path("prompts"),
         help="Directory holding the <name>.txt prompt sets "
-        "(default: scripts/prompts).",
+        "(default: prompts).",
     )
     parser.add_argument(
         "--timeout",
