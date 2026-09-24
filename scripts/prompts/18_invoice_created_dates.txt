@@ -1,0 +1,85 @@
+# Spire prompt set — 18 INVOICE CREATED DATES. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# PURPOSE: the F-049 regression set. F-049 landed on
+# phase-2-fix-F049-invoice-created-dates (2026-09-24).
+#
+#   F-049 — the Invoice absolute-date bullet in b_invoice_date.sysprompt
+#           taught only noun-leading phrasings ('invoices in 2023',
+#           'invoices after 2023-01-01', 'invoices between Jan and Mar
+#           2023'). The PO sibling b_po_created_date.sysprompt teaches
+#           'POs created before 2015' verbatim, so the parser had no
+#           rule mapping the 'created' / 'raised' lead onto the
+#           invoice_date filter. Those prompts produced a filter-less
+#           Invoice intent; the planner guard refused on
+#           missing_identifier.
+#
+# ADDITIVE TO 16. Section 3 of 16_date_filter_cluster.txt already carries
+# the two F-049 reproducers ('invoices created before 2024-01-01',
+# 'invoices created since January 2024'). This file repeats them in
+# section A for the record, then adds the phrasings the fix NEWLY
+# taught — 'created after', 'raised before', 'raised since' — plus
+# date-form variety the reproducers do not exercise (bare year,
+# month-year). Do not re-run 16 as F-049's V9 in place of this file:
+# 16 covers F-046/47/48's surface, not F-049's expanded bullet.
+#
+# HOW TO SCORE — the summary line proves nothing; the Intent line does:
+#   Answered prompt: check target_entity Invoice and an 'invoice_date'
+#   filter whose 'from'/'to' matches the phrasing's direction ('before'
+#   sets 'to', 'since'/'after' set 'from').
+#   Refused prompt: Reason must name missing_identifier and the negative
+#   line's own cause, not an unsupported_date_filter.
+#
+# Anchors:
+#   Invoice supplier 1252 = Lee Supplies (~1,329 invoices)
+#   Existing F-046 sibling in 16: same bullet, relative-date rules
+#   F-049 new filter surface: invoice_date_before / invoice_date_after
+#     via the 'created' / 'raised' phrasing lead
+#
+# PRINCIPLE: if the pod has the data and the user asked a real question,
+# SPIRE answers with the correct filter, not a refusal.
+
+
+# ====================================================================
+# A. F-049 REPRODUCERS (also in 16 §3). Baseline — must answer.
+# ====================================================================
+invoices created before 2024-01-01
+invoices created since January 2024
+
+
+# ====================================================================
+# B. NEWLY TAUGHT VARIANTS. The fix's real new surface — these did
+#    NOT exist as phrasings in the pre-fix bullet.
+# ====================================================================
+invoices created after 2024-01-01
+invoices raised before 2024-01-01
+invoices raised since January 2024
+
+
+# ====================================================================
+# C. DATE-FORM VARIETY. Same phrase, different date shape. Tests the
+#    parser's date normalisation, not just the phrase lead.
+# ====================================================================
+invoices created before 2015
+invoices created since March 2024
+
+
+# ====================================================================
+# D. COMPOSITE (supplier + date). Both filters must appear.
+# ====================================================================
+invoices for Lee Supplies created before 2024-01-01
+
+
+# ====================================================================
+# E. SIBLINGS ALREADY WORKING. The fix must not have stolen traffic.
+# ====================================================================
+invoices in 2024
+invoices older than 6 months
+purchase orders created before 2015
+
+
+# ====================================================================
+# F. NEGATIVE. No identifier named — must still refuse on
+#    missing_identifier, NOT on unsupported_date_filter.
+# ====================================================================
+invoices
