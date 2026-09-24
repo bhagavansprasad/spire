@@ -435,21 +435,7 @@ def _emit_run_graph_output(state, menu):
     _fields = state["intent"].fields
     _unresolved = state["intent"].unresolved_fields
     _synth_failed = state.get("synth_failed")
-    if _fields or _unresolved:
-        _entity = state["intent"].target_entity
-        _available = menu.available_columns(_entity)
-        if not _fields:
-            pass
-        elif _synth_failed:
-            answer("Answer summary: (skipped — too large to summarize)")
-            answer("")
-        else:
-            answer(_format_synthesized(state.get("response"), summary_only=True))
-            answer("")
-        answer(_format_projected_table(_outputs, _fields, _unresolved,
-                                       _available, _entity))
-    else:
-        answer(_format_synthesized(state.get("response")))
+    render_answer(state, menu, answer)
 
     _summary_log.info("%s", _format_summary(state["plan"], _outputs,
                                             state.get("response")))

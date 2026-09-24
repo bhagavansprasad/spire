@@ -1522,3 +1522,54 @@ def _format_projected_table(
             cells.append(("—" if v is None else str(v)).ljust(widths[f]))
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
+
+def render_answer(state: dict, menu, emit) -> None:
+    """Render the final answer for one pipeline run.
+
+    Extracted 2026-09-24 (F-051). The branch below existed in three
+    near-identical copies — promptkit.py, run_prompt_set.py,
+    run_graph.py — and the three had already drifted: promptkit's
+    skip-message read "too large to summarize"; the other two read
+    "result too large to summarize; showing the table only". Same
+    lesson as _with_truncation's own docstring: N copies is N chances
+    to miss one. The longer message is canonical here.
+
+    Two paths:
+
+    Column query (fields or unresolved non-empty):
+      - the summary prints first, when one succeeded; skipped when
+        synthesis failed OR when every requested column was unknown
+        (COL-03: the note below carries the message; there is no
+        summary to print)
+      - the projected table follows, trimmed to the requested columns
+        and (self-gating) flattening nested addresses.
+
+    Plain query (no fields, no unresolved):
+      - the full synthesized response renders, as before.
+
+    emit is the caller's answer() function; taking it as a parameter
+    keeps this module free of a spire.diagnostics dependency.
+    """
+    outputs = state.get("outputs") or {}
+    fields = state["intent"].fields
+    unresolved = state["intent"].unresolved_fields
+    synth_failed = state.get("synth_failed")
+
+    if not (fields or unresolved):
+        emit(_format_synthesized(state.get("response")))
+        return
+
+    entity = state["intent"].target_entity
+    available = menu.available_columns(entity)
+    if not fields:
+        pass  # no summary; the note below is the answer
+    elif synth_failed:
+        emit(
+            "Answer summary: (skipped — result too large to summarize; "
+            "showing the table only)"
+        )
+        emit("")
+    else:
+        emit(_format_synthesized(state.get("response"), summary_only=True))
+        emit("")
+    emit(_format_projected_table(outputs, fields, unresolved, available, entity))
