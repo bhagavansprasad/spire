@@ -1,9 +1,9 @@
-# SPIRE — Session Handoff, 2026-09-23 (window 5)
+# SPIRE — Session Handoff, 2026-09-24 (window 16)
 
-**This file supersedes the previous 2026-09-23 handoff.** Same date,
-fifth window. Window 4 closed PR #165 — Cluster 2 (projection) — and
-reclassified F-021 to F-051. Cluster 2 is merged into
-`hardening-master`; this window starts the remaining Phase 2 queue.
+**This file supersedes the 2026-09-23 window-5 handoff.** Window 16 closed
+F-003, F-050 and F-004 on PR #167; the F-003 regression set shipped as
+`ee2b6ca`; WORKING_STYLE 15.1 tightened and 15.3 added. This window
+starts the remaining Phase 2 queue.
 
 **Read this first.** Then `docs/AUDIT_AND_FIX.md` (the playbook), which
 points to everything else.
@@ -12,109 +12,97 @@ points to everything else.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `8510ddd` (the merge of PR #165).
+**Branch:** `hardening-master` at `ee2b6ca`.
 
-**Test suite:** 1181 passed, 22 deselected (verify at window open).
+**Test suite:** 1214 passed, 22 deselected (verify at window open).
 
 **Pod:** `dabpqy`.
 
 **Ledger state — FIX_PLAN §5:**
 
-- `verified | #165 | 2026-09-23`: F-017, F-027, F-014.
-- `closed-as-reclassified | #165 | 2026-09-23`: F-021.
-- `not-started`: F-016, F-003, F-004, F-045, F-049, F-050, F-051,
-  Reg #30.
+- `verified | #167 | 2026-09-24`: F-003, F-004, F-050.
+- `not-started`: F-045, F-049, F-051, Reg #30.
 
-**Everything before Cluster 2 shipped under earlier windows:** F-002,
-F-006–F-015, F-018–F-020, F-033, F-036, F-039, F-041, F-043–F-044,
-F-046–F-048, and the closed-as-not-a-bug family (F-013, F-022–F-026,
-F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
+**Everything before window 16 shipped under earlier windows:** F-002,
+F-006–F-020, F-033, F-036, F-039, F-041, F-043–F-044, F-046–F-048,
+F-016, F-017, F-027, F-014, and the closed-as-not-a-bug family (F-013,
+F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
 
 ---
 
-## What shipped in window 4
+## What shipped in window 16
 
-- **Cluster 2 (projection) merged as PR #165** — three fixes plus one
-  reclassification:
-  - **F-017** (`44a08f5`) — child-entity fields resolve against the
-    include's KG catalog.
-  - **F-027** (`94ad1f5`) — "country" column on Supplier queries;
-    post-parse correction + display extraction. Sysprompt half
-    deferred to F-050.
-  - **F-014** (`8b0d4de`) — aggregate / compare intents carry no
-    projected fields.
-  - **F-021** reclassified to F-051 — both recorded fix sites work;
-    the defect is in the caller's `summary_only` gate.
-- **F-050 filed** — `columns/` parser-context blocks unreachable under
-  the router.
-- **F-051 filed** — the caller's `summary_only` gate drops child
-  content on fields-plus-include intents. Three caller sites.
-- **WORKING_STYLE rules 15.1 and 15.2 added** — full-output capture
-  for repeatable runs; name a slow command's cost before the user runs
-  it.
+- **PR #167** (`d93d5fd`) — F-003 / F-050 / F-004 on one `_TIER1` edit
+  in `src/spire/nl_parser/context_assembly.py`. Every router-scoped
+  parse now loads `modes/` and `columns/`. Two op registries synced:
+  `draft.py`'s `DraftAggregate.op` gained three PO ops;
+  `modes/m_aggregation.sysprompt` gained `top_invoices_by_amount`; the
+  `_SYSTEM_PROMPT_PREAMBLE` oracle carries the same. New test
+  `tests/test_f003_modes_reachable.py`.
+- **`ee2b6ca`** — `scripts/prompts/17_modes_and_columns.txt`, 85-prompt
+  regression set for the three fixes. Not in the manifest; run via
+  `--prompt-file`.
+- **WORKING_STYLE.md 15.1 / 15.3** — two-cell edit discipline;
+  15.1's "one-shot" hedge removed.
+- **`scripts/prompts/*.json` deleted** — 13 files; recorded metadata
+  stale by construction after a scoped-parse change.
+- **Doc B S004** — `02_Phase_02_Correctness.md`; index snapshot
+  refreshed.
 
 ---
 
 ## Outstanding — remaining Phase 2 queue
 
-Seven items. Order below reflects severity (wrong-data > crash >
-missing-capability > cosmetic) per FIX_PLAN §8.3.1, with same-fix-site
-items grouped.
+Four items, in severity order (wrong-data > crash > missing-capability
+> cosmetic) per FIX_PLAN §8.3.1:
 
-1. **F-051** — `fields` + `include` intent: the caller's `summary_only`
-   gate drops child content. Three sites (`promptkit.py:437`,
-   `run_prompt_set.py:227`, `run_graph.py:194`). Fix options in the
-   F-051 entry: extend the gate condition, or factor the branch into a
-   shared helper. Small; new finding; fix-site confirmed by
-   reproduction.
+1. **F-049** — "invoices created before/since X" refuse on
+   missing_supplier. **Sysprompt-only**, mirrors F-046's split. Small.
 
-2. **F-016** — plain-list row cap missing ("top 5" on a list query is
-   dropped). Schema-gap; small.
+2. **F-045** — composite `created_since AND created_before` on
+   `/purchaseOrders` returns 0 with a misleading capped note
+   (wrong-data). Two fix sites: the tool, and the note wording.
 
-3. **F-003 + F-004 + F-050** — one branch, `context_assembly.py`
-   `_TIER1` reachability. F-050 is confirmed; F-003 (`modes/`) is the
-   same class; F-004 may fall out of F-003. Largest single lever
-   remaining in Phase 2.
+3. **F-051** — `fields` + `include`: the caller's `summary_only` gate
+   drops child content. Three sites (`promptkit.py:437`,
+   `run_prompt_set.py:227`, `run_graph.py:194`). Small.
 
 4. **Reg #30** — compare path pages all POs before narrowing (perf,
    may slip to Phase 6 if architectural).
 
-5. **F-045** — composite `created_since AND created_before` on
-   `/purchaseOrders` returns 0 with a misleading capped note
-   (wrong-data).
-
-6. **F-049** — "invoices created before/since X" refusal
-   (sysprompt-only; could be a warm-up anytime).
-
-**Recommendation for window 5.** Two small items are ready: **F-051**
-(fix-site known, three sites, one-line gate change or shared helper)
-and **F-016** (schema-gap, small). Either is a clean window. The
-reachability branch (F-003 + F-004 + F-050) is the bigger win and
-could be run instead if you'd rather tackle the largest remaining
-lever while context is fresh.
+**Recommendation for window 17.** **F-049** is the warm-up — self
+contained, sysprompt-only, mirrors the F-046 split. Then **F-051**
+(three sites, one shape) or **F-045** (two sites, needs a pod probe).
+**Reg #30** last, or defer to Phase 6.
 
 ---
 
 ## First steps in the new window
 
 1. `git checkout hardening-master && git pull`
-2. `git log --oneline -3` — expect `8510ddd` at HEAD.
+2. `git log --oneline -3` — expect `ee2b6ca` at HEAD.
 3. `git status` — expect clean tree.
-4. `pytest -q` — expect 1181 passed, 22 deselected.
+4. `pytest -q` — expect 1214 passed, 22 deselected.
 5. Open `docs/phase-2/FIX_PLAN.md` §5. Pick the next `not-started` row
-   in §4 order, or follow the recommendation above.
+   in §4 order.
 
 ---
 
 ## What to watch — operational notes
 
-- **Slow commands cost minutes.** Rule 15.2. Aggregate prompts and
-  `suppliers with open purchase orders` walk ~13k records across many
-  pages. Expect 2–4 minutes. Unit tests are the cheap evidence for
-  deterministic fixes.
+- **Slow commands cost minutes.** Rule 15.2. Aggregations paginate
+  ~17,552 POs across 36 pages, ~4 minutes each. Say so before handing
+  the command over. Unit tests are the cheap evidence for deterministic
+  fixes.
+
+- **Two cells per edit (rule 15.3).** Cell 1 = Python script that
+  writes the file. Cell 2 = shell commands whose output is the
+  evidence. Cell 1's output does not come back.
 
 - **Full-output capture first.** Rule 15.1. Redirect complete stdout
-  AND stderr to a file, then grep. Never pipe the run through a filter.
+  AND stderr to a file, then grep. Never pipe the run through a filter
+  at capture time — the "one-shot" hedge that used to live in the rule
+  is gone.
 
 - **`parse()` vs `route_and_parse()`.** The direct call loads the full
   preamble; the router loads a scoped subset. A pipeline bug must be
@@ -125,21 +113,38 @@ lever while context is fresh.
   `src/spire/mcp_server/` requires `spire` restart before the new
   signature is live.
 
-- **Terminal shell exits in WSL.** Environmental. Redirect long runs to
-  a file so the output survives.
+- **Terminal shell exits in WSL.** Environmental. Redirect long runs
+  to a file so the output survives.
 
 ---
 
-## Commit hashes for reference (window 4)
+## Known doc-drift, recorded not fixed
 
-    44a08f5  F-017
-    c679e1b  Cluster 2 — F-027 sweep capture + F-050 filing
-    d9f18a8  WORKING_STYLE 15.1
-    94ad1f5  F-027
-    c5f228d  WORKING_STYLE 15.2
-    8b0d4de  F-014
-    0edd467  F-027 fix-file amendment
-    5227056  Removing unwanted file (t_f027_v8.txt)
-    a08c3eb  Cluster 2 close-out docs
-    9693d94  F-021 reclassified to F-051 (branch tip)
-    8510ddd  Merge pull request #165 (hardening-master tip)
+- `docs/spire-robustness/SESSION_HANDOVER.md` — a second handover file
+  in the repo. Not the one a new window reads; the entry point is
+  this file. Retire or reconcile — a later decision.
+- `scripts/prompts/*.json` corpora are deleted. `--validate` has
+  nothing to compare against until they are regenerated. Regeneration
+  is a separate task.
+- `docs/spire-robustness/00_Doc_B_Index.md` §2.1 Bug register is
+  empty (has been since creation). The findings log is the working
+  register.
+- `scripts/promptkit_sets.yaml` does not list `17_modes_and_columns`.
+
+---
+
+## Commit hashes for reference (window 16)
+
+    ee2b6ca  prompts: add 17_modes_and_columns (hardening-master tip)
+    d93d5fd  Merge pull request #167 (F-003 / F-050 / F-004)
+    98bd6d9  F-003 / F-050 / F-004: load modes/ and columns/ from a
+             router-scoped parse
+    a672398  working style: rules 15.1 tightened and 15.3 added
+    4c09ae6  scripts/prompts: delete recorded-metadata .json corpora
+    9d1bfe0  tracking: close F-003 / F-004 / F-050 in FIX_PLAN,
+             findings log, audit
+    52dd040  docs: context_bundles (before this window)
+
+---
+
+*End of handover.*

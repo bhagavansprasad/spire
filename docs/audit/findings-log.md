@@ -282,7 +282,7 @@ same line of the same file.
 
 ---
 
-**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable`.**
+**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable` (PR #167).**
 
 The `_TIER1` tuple that F-003 extends also closes F-050: `columns/` is
 the second name added, so `b_who_columns.sysprompt` and
@@ -4612,7 +4612,7 @@ and "ranked and compared" would accept the answer.
 
 ---
 
-**Update 2026-09-24 — closed as a side-effect of F-003.**
+**Update 2026-09-24 — closed as a side-effect of F-003 (PR #167).**
 
 The same `_TIER1` change that loads `modes/m_aggregation.sysprompt` also
 closes F-004: with `po_value_by_supplier` visible to the parser,
@@ -4724,7 +4724,7 @@ identical.
 
 ---
 
-**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable`.**
+**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable` (PR #167).**
 
 `_TIER1` in `src/spire/nl_parser/context_assembly.py` gains `"modes"` and
 `"columns"`. `assemble_subset` now loads both cross-cutting teaching
