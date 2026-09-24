@@ -1,0 +1,1287 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=594 out=126 total=720
+Router: modules=['receivables']
+[llm] stage=parse in=6736 out=1259 total=7995
+[cache] HIT   cached=6716  fresh=20  total_in=6736
+[debug] shape = None
+Intent:
+  target_entity: ReceivablesInvoice
+  filters:
+    - {'type': 'by_id', 'value': '1002'}
+  include: ['ReceivablesInvoiceTransactionDFF']
+  fields: ['TransactionNumber']
+
+Plan:
+  Step 1: get_receivables_invoice_by_id
+    tool_args:      {'customer_transaction_id': '1002'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    receivables_invoices
+  Step 2: get_receivables_invoice_transaction_dff
+    tool_args:      {'customer_transaction_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoices', 'field': 'CustomerTransactionId'}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionId
+    output_name:    receivablesinvoicetransactiondff
+
+Outputs:
+  receivables_invoices: 1 record(s)
+    [1] {'TransactionNumber': '5'}
+  receivablesinvoicetransactiondff: 1 record(s)
+    [1] {'CustomerTrxId': 1002, '__FLEX_Context': 'DOO', '__FLEX_Context_DisplayValue': None}
+
+
+========================================================================
+PROMPT: Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+========================================================================
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+  DFF                   : DOO
+
+Answer:
+receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+  TransactionNumber
+  -----------------
+  5                
+Summary:
+  Steps planned:        2
+  Records returned:     2 (across all steps)
+  Final raw output:     1 record(s) under 'receivablesinvoicetransactiondff'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    594  out=    126  total=    720
+  parse        in=   6736  out=   1259  total=   7995
+  TOTAL        in=   7330  out=   1385  total=   8715
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=594 out=144 total=738
+Router: modules=['receivables']
+[llm] stage=parse in=6736 out=834 total=7570
+[cache] HIT   cached=6716  fresh=20  total_in=6736
+[debug] shape = None
+Intent:
+  target_entity: ReceivablesInvoice
+  filters:
+    - {'type': 'by_id', 'value': '1002'}
+  include: ['ReceivablesInvoiceLine']
+  fields: ['TransactionNumber']
+
+Plan:
+  Step 1: get_receivables_invoice_by_id
+    tool_args:      {'customer_transaction_id': '1002'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    receivables_invoices
+  Step 2: get_receivables_invoice_lines
+    tool_args:      {'customer_transaction_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoices', 'field': 'CustomerTransactionId'}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionId
+    output_name:    receivables_invoice_lines
+
+Outputs:
+  receivables_invoices: 1 record(s)
+    [1] {'TransactionNumber': '5'}
+  receivables_invoice_lines: 4 record(s)
+    [1] {'CustomerTransactionLineId': 74, 'LineNumber': 1, 'Description': 'Green Server 1000', 'Quantity': 2, 'UnitSellingPrice': 5296, 'LineAmount': 10592}
+        ... +7 more field(s): AssessableValue, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [2] {'CustomerTransactionLineId': 84, 'LineNumber': 2, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +7 more field(s): AssessableValue, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [3] {'CustomerTransactionLineId': 93, 'LineNumber': 3, 'Description': 'Sentinel Power Server 2500', 'Quantity': 10, 'UnitSellingPrice': 21047, 'LineAmount': 210470}
+        ... +7 more field(s): AssessableValue, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [4] {'CustomerTransactionLineId': 107, 'LineNumber': 4, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +7 more field(s): AssessableValue, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+
+
+========================================================================
+PROMPT: Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+========================================================================
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+
+  Invoice 5 — lines:
+    Line | Description                |  Qty | Unit Price |   Amount
+    -----+----------------------------+------+------------+---------
+    1    | Green Server 1000          |  2.0 |     5296.0 |  10592.0
+    2    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+    3    | Sentinel Power Server 2500 | 10.0 |    21047.0 | 210470.0
+    4    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+
+Answer:
+receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+  TransactionNumber
+  -----------------
+  5                
+Summary:
+  Steps planned:        2
+  Records returned:     5 (across all steps)
+  Final raw output:     4 record(s) under 'receivables_invoice_lines'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    594  out=    144  total=    738
+  parse        in=   6736  out=    834  total=   7570
+  TOTAL        in=   7330  out=    978  total=   8308
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=595 out=108 total=703
+Router: modules=['receivables']
+[llm] stage=parse in=6737 out=756 total=7493
+[cache] HIT   cached=6716  fresh=21  total_in=6737
+[debug] shape = None
+Intent:
+  target_entity: ReceivablesInvoice
+  filters:
+    - {'type': 'by_id', 'value': '1002'}
+  include: ['ReceivablesInvoiceLine', 'ReceivablesTaxLine']
+  fields: ['TransactionNumber']
+
+Plan:
+  Step 1: get_receivables_invoice_by_id
+    tool_args:      {'customer_transaction_id': '1002'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    receivables_invoices
+  Step 2: get_receivables_invoice_lines
+    tool_args:      {'customer_transaction_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoices', 'field': 'CustomerTransactionId'}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionId
+    output_name:    receivables_invoice_lines
+    stamp_parent_key: True
+  Step 3: get_receivables_invoice_tax_lines
+    tool_args:      {'customer_transaction_id': '$iteration_value', 'line_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoice_lines', 'fields': {'customer_transaction_id': 'CustomerTransactionId', 'line_id': 'CustomerTransactionLineId'}}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionLineId
+    output_name:    receivablestaxline
+
+Outputs:
+  receivables_invoices: 1 record(s)
+    [1] {'TransactionNumber': '5'}
+  receivables_invoice_lines: 4 record(s)
+    [1] {'CustomerTransactionLineId': 74, 'LineNumber': 1, 'Description': 'Green Server 1000', 'Quantity': 2, 'UnitSellingPrice': 5296, 'LineAmount': 10592}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [2] {'CustomerTransactionLineId': 84, 'LineNumber': 2, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [3] {'CustomerTransactionLineId': 93, 'LineNumber': 3, 'Description': 'Sentinel Power Server 2500', 'Quantity': 10, 'UnitSellingPrice': 21047, 'LineAmount': 210470}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [4] {'CustomerTransactionLineId': 107, 'LineNumber': 4, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+  receivablestaxline: 8 record(s)
+    [1] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [2] {'TaxLineNumber': 1, 'TaxJurisdictionCode': 'ST-050000000', 'TaxRate': 6.5, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [3] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [4] {'TaxLineNumber': 1, 'TaxJurisdictionCode': 'ST-050000000', 'TaxRate': 6.5, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [5] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    ... (3 more)
+
+
+========================================================================
+PROMPT: Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+========================================================================
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+
+  Invoice 5 — lines:
+    Line | Description                |  Qty | Unit Price |   Amount
+    -----+----------------------------+------+------------+---------
+    1    | Green Server 1000          |  2.0 |     5296.0 |  10592.0
+    2    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+    3    | Sentinel Power Server 2500 | 10.0 |    21047.0 | 210470.0
+    4    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+
+  Invoice 5, line 1 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |     238.32 | 10592.0
+    STATE  |    6.5 |     688.48 | 10592.0
+
+  Invoice 5, line 2 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+
+  Invoice 5, line 3 — tax:
+    Tax    | Rate % | Tax Amount | Taxable 
+    -------+--------+------------+---------
+    COUNTY |   2.25 |    4735.58 | 210470.0
+    STATE  |    6.5 |   13680.55 | 210470.0
+
+  Invoice 5, line 4 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+
+Answer:
+receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+  TransactionNumber
+  -----------------
+  5                
+Summary:
+  Steps planned:        3
+  Records returned:     13 (across all steps)
+  Final raw output:     8 record(s) under 'receivablestaxline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    595  out=    108  total=    703
+  parse        in=   6737  out=    756  total=   7493
+  TOTAL        in=   7332  out=    864  total=   8196
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=588 out=127 total=715
+Router: modules=['procurement']
+[llm] stage=parse in=6625 out=595 total=7220
+[cache] HIT   cached=6611  fresh=14  total_in=6625
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['PurchaseOrderLine']
+  fields: ['OrderNumber']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_lines
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    purchaseorderline
+
+Outputs:
+  po: 1 record(s)
+    [1] {'OrderNumber': '162352'}
+  purchaseorderline: 2 record(s)
+    [1] {'OrderNumber': '162352'}
+    [2] {'OrderNumber': '162352'}
+
+
+========================================================================
+PROMPT: Show PO 2144 with order number and its lines
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+
+Answer:
+purchaseorderline (2 record(s)) — columns: OrderNumber
+
+  OrderNumber
+  -----------
+  162352     
+  162352     
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'purchaseorderline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    588  out=    127  total=    715
+  parse        in=   6625  out=    595  total=   7220
+  TOTAL        in=   7213  out=    722  total=   7935
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=588 out=92 total=680
+Router: modules=['procurement']
+[llm] stage=parse in=6625 out=605 total=7230
+[cache] HIT   cached=6611  fresh=14  total_in=6625
+[parse] empty draft (no target_entity, not unanswerable); retrying once
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['POSchedule']
+  fields: ['OrderNumber']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_schedules
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    poschedule
+
+Outputs:
+  po: 1 record(s)
+    [1] {'OrderNumber': '162352'}
+  poschedule: 2 record(s)
+    [1] {'OrderNumber': '162352'}
+    [2] {'OrderNumber': '162352'}
+
+
+========================================================================
+PROMPT: Show PO 2144 with order number and its schedules
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — schedules:
+    Schedule | Ship To | Need-By    | Ordered | Received | Billed 
+    ---------+---------+------------+---------+----------+--------
+    1        | Seattle | 2014-12-01 | 33000.0 |  33000.0 | 33000.0
+    1        | Seattle | 2014-12-01 |  8250.0 |   8250.0 | 8250.0 
+
+Answer:
+poschedule (2 record(s)) — columns: OrderNumber
+
+  OrderNumber
+  -----------
+  162352     
+  162352     
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'poschedule'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    588  out=     92  total=    680
+  parse        in=   6625  out=    605  total=   7230
+  TOTAL        in=   7213  out=    697  total=   7910
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=588 out=97 total=685
+Router: modules=['procurement']
+[llm] stage=parse in=6625 out=888 total=7513
+[cache] HIT   cached=6611  fresh=14  total_in=6625
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['POSchedule', 'PODistribution']
+  fields: ['OrderNumber']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_schedules
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    poschedule
+    stamp_parent_key: True
+  Step 3: get_purchase_order_distributions
+    tool_args:      {'po_header_id': '$iteration_value', 'po_line_id': '$iteration_value', 'line_location_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'poschedule', 'fields': {'po_header_id': 'POHeaderId', 'po_line_id': 'POLineId', 'line_location_id': 'LineLocationId'}}
+    client_filters: (none)
+    dedupe_by:      LineLocationId
+    output_name:    podistribution
+
+Outputs:
+  po: 1 record(s)
+    [1] {'OrderNumber': '162352'}
+  poschedule: 2 record(s)
+    [1] {'OrderNumber': '162352'}
+    [2] {'OrderNumber': '162352'}
+  podistribution: 2 record(s)
+    [1] {'OrderNumber': '162352'}
+    [2] {'OrderNumber': '162352'}
+
+
+========================================================================
+PROMPT: Show PO 2144 with order number and its distributions
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — schedules:
+    Schedule | Ship To | Need-By    | Ordered | Received | Billed 
+    ---------+---------+------------+---------+----------+--------
+    1        | Seattle | 2014-12-01 | 33000.0 |  33000.0 | 33000.0
+    1        | Seattle | 2014-12-01 |  8250.0 |   8250.0 | 8250.0 
+
+  PO 162352 — distributions:
+    Distribution | Charge Account           | %     |  Amount
+    -------------+--------------------------+-------+--------
+    1            | 101.10.63120.251.000.000 | 100.0 | 33000.0
+    1            | 101.10.63120.420.000.000 | 100.0 |  8250.0
+
+Answer:
+podistribution (2 record(s)) — columns: OrderNumber
+
+  OrderNumber
+  -----------
+  162352     
+  162352     
+Summary:
+  Steps planned:        3
+  Records returned:     5 (across all steps)
+  Final raw output:     2 record(s) under 'podistribution'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    588  out=     97  total=    685
+  parse        in=   6625  out=    888  total=   7513
+  TOTAL        in=   7213  out=    985  total=   8198
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=93 total=679
+Router: modules=['supplier']
+[llm] stage=parse in=5759 out=694 total=6453
+[cache] HIT   cached=5747  fresh=12  total_in=5759
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'name_fragment', 'value': 'EIP Inc'}
+  include: ['Contact']
+  fields: ['Supplier', 'SupplierNumber']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'supplier_name_contains': 'EIP Inc'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: get_supplier_contacts
+    tool_args:      {'supplier_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierId'}
+    client_filters: (none)
+    dedupe_by:      SupplierId
+    output_name:    contact
+
+Outputs:
+  suppliers: 1 record(s)
+    [1] {'Supplier': 'EIP Inc', 'SupplierNumber': '1262'}
+  contact: 10 record(s)
+    [1] {'SupplierContactId': 300000047507530, 'ContactName': 'Kim, John', 'FirstName': 'John', 'LastName': 'Kim', 'Email': 'john.kim_dabpqy@oraclepdemos.com', 'JobTitle': None}
+        ... +3 more field(s): AdministrativeContactFlag, Status, SupplierId
+    [2] {'SupplierContactId': 300000131060398, 'ContactName': 'Rossier, Bruce', 'FirstName': 'Bruce', 'LastName': 'Rossier', 'Email': 'bruce.rossier_dabpqy@oraclepdemos.com', 'JobTitle': None}
+        ... +3 more field(s): AdministrativeContactFlag, Status, SupplierId
+    [3] {'SupplierContactId': 300000259580652, 'ContactName': 'Romo, Gabi', 'FirstName': 'Gabi', 'LastName': 'Romo', 'Email': 'gabi.romo_dabpqy@oraclepdemos.com', 'JobTitle': None}
+        ... +3 more field(s): AdministrativeContactFlag, Status, SupplierId
+    [4] {'SupplierContactId': 300000185729461, 'ContactName': 'Iyer, Ansh', 'FirstName': 'Ansh', 'LastName': 'Iyer', 'Email': 'ansh.iyer_dabpqy@oraclepdemos.com', 'JobTitle': None}
+        ... +3 more field(s): AdministrativeContactFlag, Status, SupplierId
+    [5] {'SupplierContactId': 300000138008389, 'ContactName': 'Hass, Henrik', 'FirstName': 'Henrik', 'LastName': 'Hass', 'Email': 'henrik.hass_dabpqy@oraclepdemos.com', 'JobTitle': None}
+        ... +3 more field(s): AdministrativeContactFlag, Status, SupplierId
+    ... (5 more)
+
+
+========================================================================
+PROMPT: Show supplier EIP Inc with supplier number and its contacts
+========================================================================
+Answer:
+EIP Inc has 10 contacts.
+
+Suppliers:
+  Supplier       : EIP Inc
+  SupplierId     : 300000047507499
+  SupplierNumber : 1262
+
+  EIP Inc — contacts:
+    Contact        | Email                                 | Admin
+    ---------------+---------------------------------------+------
+    Kim, John      | john.kim_dabpqy@oraclepdemos.com      | Y    
+    Rossier, Bruce | bruce.rossier_dabpqy@oraclepdemos.com | —    
+    Romo, Gabi     | gabi.romo_dabpqy@oraclepdemos.com     | —    
+    Iyer, Ansh     | ansh.iyer_dabpqy@oraclepdemos.com     | —    
+    Hass, Henrik   | henrik.hass_dabpqy@oraclepdemos.com   | —    
+    Romo, Ross     | ross.romo@supplier.com                | —    
+    Meyer, Gijs    | gijs.meyer_dabpqy@oraclepdemos.com    | —    
+    Hayes, Josef   | josef.hayes_dabpqy@oraclepdemos.com   | —    
+    Shah, Priya    | priya.shah_dabpqy@oraclepdemos.com    | —    
+    Fugh, Uma      | ufugh_dabpqy@oraclepdemos.com         | —    
+
+Answer:
+suppliers (1 record(s)) — columns: Supplier, SupplierNumber
+
+  Supplier | SupplierNumber
+  ---------+---------------
+  EIP Inc  | 1262          
+Summary:
+  Steps planned:        2
+  Records returned:     11 (across all steps)
+  Final raw output:     10 record(s) under 'contact'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=     93  total=    679
+  parse        in=   5759  out=    694  total=   6453
+  TOTAL        in=   6345  out=    787  total=   7132
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=85 total=671
+Router: modules=['supplier']
+[llm] stage=parse in=5759 out=553 total=6312
+[cache] HIT   cached=5747  fresh=12  total_in=5759
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'name_fragment', 'value': 'EIP Inc'}
+  include: ['Site']
+  fields: ['SupplierNumber']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'supplier_name_contains': 'EIP Inc'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: search_suppliers_by_site_bu
+    tool_args:      {'supplier_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierId'}
+    client_filters: (none)
+    dedupe_by:      SupplierId
+    output_name:    site
+
+Outputs:
+  suppliers: 1 record(s)
+    [1] {'SupplierNumber': '1262'}
+  site: 22 record(s)
+    [1] {'SupplierSiteId': 300000047507525, 'SupplierSite': 'EIP US1', 'ProcurementBU': 'US1 Business Unit', 'ProcurementBUId': 300000046987012, 'SupplierId': 300000047507499}
+    [2] {'SupplierSiteId': 300000131060391, 'SupplierSite': 'EIP Australia', 'ProcurementBU': 'Australia Business Unit', 'ProcurementBUId': 300000047826661, 'SupplierId': 300000047507499}
+    [3] {'SupplierSiteId': 300000185729446, 'SupplierSite': 'EIP India', 'ProcurementBU': 'India Business Unit', 'ProcurementBUId': 300000047826665, 'SupplierId': 300000047507499}
+    [4] {'SupplierSiteId': 300000132468662, 'SupplierSite': 'EIP Netherlands', 'ProcurementBU': 'Netherlands Business Unit', 'ProcurementBUId': 300000048608429, 'SupplierId': 300000047507499}
+    [5] {'SupplierSiteId': 300000138008372, 'SupplierSite': 'EIP Sweden', 'ProcurementBU': 'Sweden Business Unit', 'ProcurementBUId': 300000048716584, 'SupplierId': 300000047507499}
+    ... (17 more)
+
+
+========================================================================
+PROMPT: Show supplier EIP Inc with supplier number and its sites
+========================================================================
+Answer:
+EIP Inc has 22 sites.
+
+Suppliers:
+  Supplier       : EIP Inc
+  SupplierId     : 300000047507499
+  SupplierNumber : 1262
+
+  EIP Inc — sites:
+    Site                                            | Procurement BU                              | SiteId         
+    ------------------------------------------------+---------------------------------------------+----------------
+    EIP US1                                         | US1 Business Unit                           | 300000047507525
+    EIP Australia                                   | Australia Business Unit                     | 300000131060391
+    EIP India                                       | India Business Unit                         | 300000185729446
+    EIP Netherlands                                 | Netherlands Business Unit                   | 300000132468662
+    EIP Sweden                                      | Sweden Business Unit                        | 300000138008372
+    EIP Progress US                                 | Progress US Business Unit                   | 300000076246955
+    EIP Prog UK                                     | Progress UK Business Unit                   | 300000223874028
+    EIP Univ US                                     | University US Business Unit                 | 300000095598278
+    EIP Supremo US                                  | Supremo US Business Unit                    | 300000180152739
+    EIP Sup CH                                      | Supremo CH Business Unit                    | 300000188385314
+    EIP Fed US                                      | Federal US Business Unit                    | 300000224618926
+    EIP AU Council                                  | AU Council Business Unit                    | 300000245707776
+    EIP Progress CA                                 | Progress CA Business Unit                   | 300000311369178
+    EIP Supremo Energy US                           | Supremo Energy US BU                        | 300000260366093
+    EIP SA PS                                       | SA PS Business Unit                         | 300000267142744
+    EIP SG Business Services US                     | SG Business Services US                     | 300000319063665
+    EIP SG Auto OEM Production US                   | SG Auto OEM Production US                   | 300000312737670
+    EIP SG Wholesale Distribution US                | SG Wholesale Distribution US                | 300000312736136
+    EIP SG Engineering Construction Self Perform US | SG Engineering Construction Self Perform US | 300000330295805
+    EIP SG Engineering Construction Equipment US    | SG Engineering Construction Equipment US    | 300000319814612
+    EIP SG Engineering Construction US              | SG Engineering Construction US              | 300000330295793
+    EIP SG Engineering Construction Development US  | SG Engineering Construction Development US  | 300000330295800
+
+Answer:
+suppliers (1 record(s)) — columns: SupplierNumber
+
+  SupplierNumber
+  --------------
+  1262          
+Summary:
+  Steps planned:        2
+  Records returned:     23 (across all steps)
+  Final raw output:     22 record(s) under 'site'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=     85  total=    671
+  parse        in=   5759  out=    553  total=   6312
+  TOTAL        in=   6345  out=    638  total=   6983
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=107 total=693
+Router: modules=['receivables']
+[llm] stage=parse in=6728 out=652 total=7380
+[cache] HIT   cached=6716  fresh=12  total_in=6728
+[debug] shape = None
+Intent:
+  target_entity: CustomerAccount
+  filters:
+    - {'type': 'by_customer_name', 'value': 'ABC Application Software'}
+  include: ['CustomerTransaction']
+  fields: ['AccountNumber']
+
+Plan:
+  Step 1: get_customer_account_by_name
+    tool_args:      {'customer_name': 'ABC Application Software'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    customer_accounts
+  Step 2: get_customer_transactions
+    tool_args:      {'account_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'customer_accounts', 'field': 'AccountId'}
+    client_filters: (none)
+    dedupe_by:      AccountId
+    output_name:    customer_transactions
+
+Outputs:
+  customer_accounts: 1 record(s)
+    [1] {'AccountNumber': '26360'}
+  customer_transactions: 25 record(s)
+    [1] {'TransactionId': 1624413, 'TransactionNumber': '1471313', 'TransactionClass': 'Invoice', 'TransactionDate': '2026-07-28', 'PaymentScheduleDueDate': '2026-07-28', 'TotalOriginalAmount': 3298.4}
+        ... +2 more field(s): InstallmentStatus, TotalBalanceAmount
+    [2] {'TransactionId': 1624412, 'TransactionNumber': '1471322', 'TransactionClass': 'Invoice', 'TransactionDate': '2026-07-27', 'PaymentScheduleDueDate': '2026-07-27', 'TotalOriginalAmount': 2710.05}
+        ... +2 more field(s): InstallmentStatus, TotalBalanceAmount
+    [3] {'TransactionId': 1624411, 'TransactionNumber': '1471325', 'TransactionClass': 'Invoice', 'TransactionDate': '2026-07-26', 'PaymentScheduleDueDate': '2026-07-26', 'TotalOriginalAmount': 3695.33}
+        ... +2 more field(s): InstallmentStatus, TotalBalanceAmount
+    [4] {'TransactionId': 1624410, 'TransactionNumber': '1471329', 'TransactionClass': 'Invoice', 'TransactionDate': '2026-07-25', 'PaymentScheduleDueDate': '2026-07-25', 'TotalOriginalAmount': 6697.92}
+        ... +2 more field(s): InstallmentStatus, TotalBalanceAmount
+    [5] {'TransactionId': 1624409, 'TransactionNumber': '1471316', 'TransactionClass': 'Invoice', 'TransactionDate': '2026-07-24', 'PaymentScheduleDueDate': '2026-07-24', 'TotalOriginalAmount': 9106.74}
+        ... +2 more field(s): InstallmentStatus, TotalBalanceAmount
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Show customer ABC Application Software with account number and its transactions
+========================================================================
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Application Software
+  AccountId        : 300000047368512
+  AccountNumber    : 26360
+  Open Receivables : 46864.78
+  Transactions Due : 51980.42
+
+  ABC Application Software — transactions (showing 25 of 484):
+    Transaction | Class   | Date       |   Amount | Balance | Status
+    ------------+---------+------------+----------+---------+-------
+    1471313     | Invoice | 2026-07-28 |   3298.4 |     0.0 | Closed
+    1471322     | Invoice | 2026-07-27 |  2710.05 |     0.0 | Closed
+    1471325     | Invoice | 2026-07-26 |  3695.33 |     0.0 | Closed
+    1471329     | Invoice | 2026-07-25 |  6697.92 |     0.0 | Closed
+    1471316     | Invoice | 2026-07-24 |  9106.74 | 9106.74 | Open  
+    1471328     | Invoice | 2026-07-23 |  3619.21 | 3619.21 | Open  
+    1471307     | Invoice | 2026-07-22 |  4824.16 | 4824.16 | Open  
+    1471309     | Invoice | 2026-07-21 |  5353.77 | 5353.77 | Open  
+    1471311     | Invoice | 2026-07-20 |  1231.05 |     0.0 | Closed
+    1471319     | Invoice | 2026-07-19 |  4109.67 |     0.0 | Closed
+    1471314     | Invoice | 2026-07-18 |  5558.23 |     0.0 | Closed
+    1471323     | Invoice | 2026-07-17 |   1010.3 |     0.0 | Closed
+    1471326     | Invoice | 2026-07-16 |  1463.78 |     0.0 | Closed
+    1471331     | Invoice | 2026-07-15 |    974.4 |     0.0 | Closed
+    1471330     | Invoice | 2026-07-14 |  3657.27 |     0.0 | Closed
+    1471317     | Invoice | 2026-07-13 |  10797.8 |     0.0 | Closed
+    1471303     | Invoice | 2026-07-12 |   9623.3 |     0.0 | Closed
+    1471310     | Invoice | 2026-07-11 |  6633.75 |     0.0 | Closed
+    1471312     | Invoice | 2026-07-10 |  3582.23 |     0.0 | Closed
+    1471320     | Invoice | 2026-07-09 |   477.42 |     0.0 | Closed
+    1471324     | Invoice | 2026-07-08 |   616.62 |     0.0 | Closed
+    1471315     | Invoice | 2026-07-07 | 10768.44 |     0.0 | Closed
+    1471321     | Invoice | 2026-07-06 |  1770.46 |     0.0 | Closed
+    1471305     | Invoice | 2026-07-05 |   769.95 |     0.0 | Closed
+    1471304     | Invoice | 2026-07-04 |  4880.71 |     0.0 | Closed
+
+Answer:
+customer_accounts (1 record(s)) — columns: AccountNumber
+
+  AccountNumber
+  -------------
+  26360        
+Summary:
+  Steps planned:        2
+  Records returned:     26 (across all steps)
+  Final raw output:     25 record(s) under 'customer_transactions'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=    107  total=    693
+  parse        in=   6728  out=    652  total=   7380
+  TOTAL        in=   7314  out=    759  total=   8073
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=105 total=691
+Router: modules=['receivables']
+[llm] stage=parse in=6728 out=520 total=7248
+[cache] HIT   cached=6716  fresh=12  total_in=6728
+[debug] shape = None
+Intent:
+  target_entity: CustomerAccount
+  filters:
+    - {'type': 'by_customer_name', 'value': 'ABC Application Software'}
+  include: ['AccountReceipt']
+  fields: ['AccountNumber']
+
+Plan:
+  Step 1: get_customer_account_by_name
+    tool_args:      {'customer_name': 'ABC Application Software'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    customer_accounts
+  Step 2: get_account_receipts
+    tool_args:      {'account_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'customer_accounts', 'field': 'AccountId'}
+    client_filters: (none)
+    dedupe_by:      AccountId
+    output_name:    account_receipts
+
+Outputs:
+  customer_accounts: 1 record(s)
+    [1] {'AccountNumber': '26360'}
+  account_receipts: 10 record(s)
+    [1] {'StandardReceiptId': 615432, 'ReceiptNumber': '4273', 'ReceiptDate': '2026-07-31', 'Amount': 4306.5, 'Currency': 'USD', 'ReceiptMethod': 'Check (Directly/No Remit)'}
+        ... +5 more field(s): BusinessUnit, CustomerSite, ProcessStatus, State, UnappliedAmount
+    [2] {'StandardReceiptId': 620682, 'ReceiptNumber': '2484', 'ReceiptDate': '2026-07-31', 'Amount': 4109.67, 'Currency': 'USD', 'ReceiptMethod': 'Check (Directly/No Remit)'}
+        ... +5 more field(s): BusinessUnit, CustomerSite, ProcessStatus, State, UnappliedAmount
+    [3] {'StandardReceiptId': 615417, 'ReceiptNumber': '4242', 'ReceiptDate': '2026-07-31', 'Amount': 432.83, 'Currency': 'USD', 'ReceiptMethod': 'Check (Directly/No Remit)'}
+        ... +5 more field(s): BusinessUnit, CustomerSite, ProcessStatus, State, UnappliedAmount
+    [4] {'StandardReceiptId': 620656, 'ReceiptNumber': '2453', 'ReceiptDate': '2026-07-31', 'Amount': 1010.3, 'Currency': 'USD', 'ReceiptMethod': 'Check (Directly/No Remit)'}
+        ... +5 more field(s): BusinessUnit, CustomerSite, ProcessStatus, State, UnappliedAmount
+    [5] {'StandardReceiptId': 620615, 'ReceiptNumber': '2402', 'ReceiptDate': '2026-07-31', 'Amount': 3657.27, 'Currency': 'USD', 'ReceiptMethod': 'Check (Directly/No Remit)'}
+        ... +5 more field(s): BusinessUnit, CustomerSite, ProcessStatus, State, UnappliedAmount
+    ... (5 more)
+
+
+========================================================================
+PROMPT: Show customer ABC Application Software with account number and its receipts
+========================================================================
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Application Software
+  AccountId        : 300000047368512
+  AccountNumber    : 26360
+  Open Receivables : 46864.78
+  Transactions Due : 51980.42
+
+  ABC Application Software — receipts (showing 10 of 2,314):
+    Receipt | Date       |  Amount | Currency | Method                    | State   | Unapplied
+    --------+------------+---------+----------+---------------------------+---------+----------
+    4273    | 2026-07-31 |  4306.5 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2484    | 2026-07-31 | 4109.67 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    4242    | 2026-07-31 |  432.83 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2453    | 2026-07-31 |  1010.3 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2402    | 2026-07-31 | 3657.27 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2385    | 2026-07-31 | 10797.8 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2370    | 2026-07-31 |  9623.3 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2352    | 2026-07-31 | 6633.75 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2335    | 2026-07-31 | 3582.23 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+    2319    | 2026-07-31 |  477.42 | USD      | Check (Directly/No Remit) | Applied | 0.0      
+
+Answer:
+customer_accounts (1 record(s)) — columns: AccountNumber
+
+  AccountNumber
+  -------------
+  26360        
+Summary:
+  Steps planned:        2
+  Records returned:     11 (across all steps)
+  Final raw output:     10 record(s) under 'account_receipts'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=    105  total=    691
+  parse        in=   6728  out=    520  total=   7248
+  TOTAL        in=   7314  out=    625  total=   7939
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=90 total=673
+Router: modules=['supplier']
+[llm] stage=parse in=5756 out=583 total=6339
+[cache] HIT   cached=5747  fresh=9  total_in=5756
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+  fields: ['Supplier', 'Status']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'Supplier': 'Lee Supplies', 'Status': 'ACTIVE'}
+    [2] {'Supplier': 'JGA', 'Status': 'ACTIVE'}
+    [3] {'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE'}
+    [4] {'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE'}
+    [5] {'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE'}
+    ... (20 more)
+
+
+========================================================================
+PROMPT: List active suppliers with supplier name and status
+========================================================================
+Answer:
+Showing 25 of 333 suppliers.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: 333 total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: Supplier, Status
+
+  Supplier                                   | Status
+  -------------------------------------------+-------
+  Lee Supplies                               | ACTIVE
+  JGA                                        | ACTIVE
+  US Gas and Electric                        | ACTIVE
+  Allied Manufacturing                       | ACTIVE
+  Midtown Computer Supplies                  | ACTIVE
+  Consolidated Supplies                      | ACTIVE
+  Progressive Corp                           | ACTIVE
+  Masson Inc                                 | ACTIVE
+  RSM                                        | ACTIVE
+  Utilitaire Inc                             | ACTIVE
+  Shangduo Inc                               | ACTIVE
+  Nihon Communications                       | ACTIVE
+  Ente Idrocarburi                           | ACTIVE
+  Distributori Automatici Roma Miglior Caffe | ACTIVE
+  Inde Elettrodomestici Spa                  | ACTIVE
+  Medtronic                                  | ACTIVE
+  Siemens Medical Solutions                  | ACTIVE
+  Cardinal Health                            | ACTIVE
+  Lagring Systems                            | ACTIVE
+  Servicios Reunidos, SL                     | ACTIVE
+  Misson Corp                                | ACTIVE
+  BD Medical                                 | ACTIVE
+  Staffing Services                          | ACTIVE
+  Dell Inc.                                  | ACTIVE
+  Howell Engineering Inc.                    | ACTIVE
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    583  out=     90  total=    673
+  parse        in=   5756  out=    583  total=   6339
+  TOTAL        in=   6339  out=    673  total=   7012
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=587 out=284 total=871
+Router: modules=['payables']
+[llm] stage=parse in=5468 out=491 total=5959
+[cache] HIT   cached=5455  fresh=13  total_in=5468
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': 'EIP Inc'}
+  fields: ['InvoiceNumber', 'InvoiceAmount']
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_name': 'EIP Inc'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceNumber': 'ERS-50734-182304', 'InvoiceAmount': 63525.33}
+    [2] {'InvoiceNumber': 'ERS-50735-182305', 'InvoiceAmount': 169399.79}
+    [3] {'InvoiceNumber': 'ERS-50736-182306', 'InvoiceAmount': 84699.35}
+    [4] {'InvoiceNumber': 'ERS-50737-182307', 'InvoiceAmount': 105874.46}
+    [5] {'InvoiceNumber': 'ERS-50738-182308', 'InvoiceAmount': 64704.65}
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Show me invoices for EIP Inc with invoice number and amount
+========================================================================
+Answer:
+Showing 25 of 3,284 invoices.
+All 25 have InvoiceCurrency USD.
+All 25 have Supplier EIP Inc.
+
+Truncation:
+  - invoices: 3284 total in source; 25 returned.
+
+Answer:
+invoices (25 record(s)) — columns: InvoiceNumber, InvoiceAmount
+
+  InvoiceNumber    | InvoiceAmount
+  -----------------+--------------
+  ERS-50734-182304 | 63525.33     
+  ERS-50735-182305 | 169399.79    
+  ERS-50736-182306 | 84699.35     
+  ERS-50737-182307 | 105874.46    
+  ERS-50738-182308 | 64704.65     
+  ERS-50739-182309 | 16174.25     
+  123              | 0            
+  INV-US165323     | 872.91       
+  INV-US165322     | 872.91       
+  INV-US165321     | 872.91       
+  Invalid-1534418  | 558.62       
+  Invalid-1534382  | 558.62       
+  EIP 201399014    | 0            
+  ERS-50459-127180 | 0            
+  ERS-50460-127181 | 0            
+  ERS-50461-127182 | 0            
+  ERS-50462-127183 | 0            
+  ERS-50463-127184 | 0            
+  ERS-50464-127185 | 0            
+  ERS-52958-749588 | 103986.68    
+  ERS-52959-749589 | 277298.9     
+  ERS-52961-749591 | 173312.22    
+  ERS-52962-749592 | 74813.69     
+  ERS-52963-749593 | 18702.6      
+  ERS-52960-749590 | 138650       
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    587  out=    284  total=    871
+  parse        in=   5468  out=    491  total=   5959
+  TOTAL        in=   6055  out=    775  total=   6830
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=76 total=661
+Router: modules=['procurement']
+[llm] stage=parse in=6622 out=432 total=7054
+[cache] HIT   cached=6611  fresh=11  total_in=6622
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['PurchaseOrderLine']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_lines
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    purchaseorderline
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+  purchaseorderline: 2 record(s)
+    [1] {'POLineId': 19782, 'POHeaderId': 2144, 'LineNumber': 1, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+    [2] {'POLineId': 19783, 'POHeaderId': 2144, 'LineNumber': 2, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+
+
+========================================================================
+PROMPT: Show PO 2144 and its lines
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'purchaseorderline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    585  out=     76  total=    661
+  parse        in=   6622  out=    432  total=   7054
+  TOTAL        in=   7207  out=    508  total=   7715
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=199 total=784
+Router: modules=['receivables']
+[llm] stage=parse in=6727 out=727 total=7454
+[cache] HIT   cached=6716  fresh=11  total_in=6727
+[debug] shape = None
+Intent:
+  target_entity: ReceivablesInvoice
+  filters:
+    - {'type': 'by_id', 'value': '1002'}
+  include: ['ReceivablesInvoiceLine', 'ReceivablesTaxLine']
+
+Plan:
+  Step 1: get_receivables_invoice_by_id
+    tool_args:      {'customer_transaction_id': '1002'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    receivables_invoices
+  Step 2: get_receivables_invoice_lines
+    tool_args:      {'customer_transaction_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoices', 'field': 'CustomerTransactionId'}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionId
+    output_name:    receivables_invoice_lines
+    stamp_parent_key: True
+  Step 3: get_receivables_invoice_tax_lines
+    tool_args:      {'customer_transaction_id': '$iteration_value', 'line_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'receivables_invoice_lines', 'fields': {'customer_transaction_id': 'CustomerTransactionId', 'line_id': 'CustomerTransactionLineId'}}
+    client_filters: (none)
+    dedupe_by:      CustomerTransactionLineId
+    output_name:    receivablestaxline
+
+Outputs:
+  receivables_invoices: 1 record(s)
+    [1] {'CustomerTransactionId': 1002, 'TransactionNumber': '5', 'BillToCustomerName': 'Business World', 'BillToCustomerNumber': '16080', 'InvoiceCurrencyCode': 'USD', 'EnteredAmount': 297998.93}
+        ... +12 more field(s): AccountingDate, BusinessUnit, CreatedBy, CreationDate, DueDate, InvoiceBalanceAmount, InvoiceStatus, LastUpdateDate, LastUpdatedBy, TransactionDate, TransactionSource, TransactionType
+  receivables_invoice_lines: 4 record(s)
+    [1] {'CustomerTransactionLineId': 74, 'LineNumber': 1, 'Description': 'Green Server 1000', 'Quantity': 2, 'UnitSellingPrice': 5296, 'LineAmount': 10592}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [2] {'CustomerTransactionLineId': 84, 'LineNumber': 2, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [3] {'CustomerTransactionLineId': 93, 'LineNumber': 3, 'Description': 'Sentinel Power Server 2500', 'Quantity': 10, 'UnitSellingPrice': 21047, 'LineAmount': 210470}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+    [4] {'CustomerTransactionLineId': 107, 'LineNumber': 4, 'Description': 'Green Server 1000', 'Quantity': 5, 'UnitSellingPrice': 5296, 'LineAmount': 26480}
+        ... +8 more field(s): AssessableValue, CustomerTransactionId, ItemNumber, LineAmountIncludesTax, TaxClassificationCode, TaxExemptionHandling, TransacationBusinessCategory, UnitOfMeasure
+  receivablestaxline: 8 record(s)
+    [1] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [2] {'TaxLineNumber': 1, 'TaxJurisdictionCode': 'ST-050000000', 'TaxRate': 6.5, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [3] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [4] {'TaxLineNumber': 1, 'TaxJurisdictionCode': 'ST-050000000', 'TaxRate': 6.5, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    [5] {'TaxLineNumber': 2, 'TaxJurisdictionCode': 'CO-050850000', 'TaxRate': 2.25, 'TaxRateCode': 'STD', 'TaxRegimeCode': 'US SALES AND USE TAX', 'TaxStatusCode': 'STANDARD'}
+        ... +7 more field(s): CustomerTransactionLineId, ParentCustomerTransactionLineId, Tax, TaxAmount, TaxInclusiveIndicator, TaxPointDate, TaxableAmount
+    ... (3 more)
+
+
+========================================================================
+PROMPT: Get tax lines for invoice 1002
+========================================================================
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+
+  Invoice 5 — lines:
+    Line | Description                |  Qty | Unit Price |   Amount
+    -----+----------------------------+------+------------+---------
+    1    | Green Server 1000          |  2.0 |     5296.0 |  10592.0
+    2    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+    3    | Sentinel Power Server 2500 | 10.0 |    21047.0 | 210470.0
+    4    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+
+  Invoice 5, line 1 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |     238.32 | 10592.0
+    STATE  |    6.5 |     688.48 | 10592.0
+
+  Invoice 5, line 2 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+
+  Invoice 5, line 3 — tax:
+    Tax    | Rate % | Tax Amount | Taxable 
+    -------+--------+------------+---------
+    COUNTY |   2.25 |    4735.58 | 210470.0
+    STATE  |    6.5 |   13680.55 | 210470.0
+
+  Invoice 5, line 4 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+Summary:
+  Steps planned:        3
+  Records returned:     13 (across all steps)
+  Final raw output:     8 record(s) under 'receivablestaxline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    585  out=    199  total=    784
+  parse        in=   6727  out=    727  total=   7454
+  TOTAL        in=   7312  out=    926  total=   8238
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=99 total=677
+Router: modules=['supplier']
+[llm] stage=parse in=5751 out=330 total=6081
+[cache] HIT   cached=5747  fresh=4  total_in=5751
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+
+
+========================================================================
+PROMPT: List active suppliers
+========================================================================
+Answer:
+Showing 25 of 333 suppliers.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber
+  -------------------------------------------+-----------------+---------------
+  Lee Supplies                               | 300000047414503 | 1252          
+  JGA                                        | 300000047414635 | 1254          
+  US Gas and Electric                        | 300000047507113 | 1256          
+  Allied Manufacturing                       | 300000047572113 | 1265          
+  Midtown Computer Supplies                  | 300000047572163 | 1266          
+  Consolidated Supplies                      | 300000047837244 | 1272          
+  Progressive Corp                           | 300000049521222 | 1274          
+  Masson Inc                                 | 300000051065858 | 1277          
+  RSM                                        | 300000051066029 | 1278          
+  Utilitaire Inc                             | 300000051066302 | 1281          
+  Shangduo Inc                               | 300000075469541 | 1289          
+  Nihon Communications                       | 300000101110596 | 1301          
+  Ente Idrocarburi                           | 300000115609124 | 1306          
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308          
+  Medtronic                                  | 300000116498267 | 1322          
+  Siemens Medical Solutions                  | 300000116498411 | 1324          
+  Cardinal Health                            | 300000116498478 | 1325          
+  Lagring Systems                            | 300000116707121 | 1327          
+  Servicios Reunidos, SL                     | 300000131904822 | 1336          
+  Misson Corp                                | 300000131933370 | 1339          
+  BD Medical                                 | 300000133943993 | 1342          
+  Staffing Services                          | 300000047414571 | 1253          
+  Dell Inc.                                  | 300000047414679 | 1255          
+  Howell Engineering Inc.                    | 300000047507170 | 1257          
+
+Truncation:
+  - suppliers: 333 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     99  total=    677
+  parse        in=   5751  out=    330  total=   6081
+  TOTAL        in=   6329  out=    429  total=   6758
+
