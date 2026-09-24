@@ -87,7 +87,21 @@ class DraftAggregate(BaseModel):
             "RECEIPTS by ReceiptMethod with a count and total per method — "
             "'receipt method distribution', 'receipts by method', 'receipt "
             "method breakdown for customer X'; the customer scope rides as a "
-            "'by_customer_name' filter, NOT in this block)."
+            "'by_customer_name' filter, NOT in this block), "
+            "'po_value_by_supplier' (rank SUPPLIERS by PURCHASE ORDER "
+            "VALUE — what was ordered/committed, NOT billed; use for "
+            "'top 5 suppliers by purchase order value', 'which suppliers "
+            "have the most committed'; set status='OPEN' if the question "
+            "says open/outstanding POs; NO date range — PO dates are not "
+            "filterable), "
+            "'po_count_by_status' (purchase orders broken down BY STATUS "
+            "with a count and total value per status — 'how many purchase "
+            "orders are there and what are they worth'; takes no "
+            "parameters), "
+            "'open_po_summary' (the committed total across OPEN purchase "
+            "orders, with the count — 'how much have we committed in open "
+            "POs', 'total value of outstanding purchase orders'; takes no "
+            "parameters)."
         )
     )
     date_from: str = Field(

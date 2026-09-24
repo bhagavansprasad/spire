@@ -282,6 +282,18 @@ same line of the same file.
 
 ---
 
+**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable`.**
+
+The `_TIER1` tuple that F-003 extends also closes F-050: `columns/` is
+the second name added, so `b_who_columns.sysprompt` and
+`b_column_fields.sysprompt` now load for every routed parse. Verified
+by `tests/test_f003_modes_reachable.py::test_scoped_parse_loads_columns_content`
+(red pre-fix, green post-fix) and by the byte-equality oracle, which
+still matches the assembled preamble. Full V-standard in
+`docs/phase-2/fixes/F-003.md`.
+
+---
+
 ## F-049 — absolute-date Invoice phrasings starting with `created` refuse
 
 **Date:** 2026-09-23
@@ -4600,6 +4612,20 @@ and "ranked and compared" would accept the answer.
 
 ---
 
+**Update 2026-09-24 — closed as a side-effect of F-003.**
+
+The same `_TIER1` change that loads `modes/m_aggregation.sysprompt` also
+closes F-004: with `po_value_by_supplier` visible to the parser,
+`top 5 suppliers by purchase order value` routes to
+`aggregate.op = 'po_value_by_supplier'` instead of the comparison op
+`top_suppliers_invoiced_vs_ordered`. Verified on the finding's own
+reproducer (V1 sweep) and on a paraphrase; zero compare-block fallbacks
+across the V8 sweep. No separate fix; the closing branch is
+`phase-2-fix-F003-modes-reachable`. Full V-standard in
+`docs/phase-2/fixes/F-003.md`.
+
+---
+
 ## F-003 — three PO aggregation ops unreachable from a scoped parse; the two op registries also disagree
 
 **Date:** 2026-09-17 (revised same day after probe series)
@@ -4695,6 +4721,25 @@ two registries must contain the same set of ops.
 `modes/m_aggregation.sysprompt` appears in `draft.py`'s
 `DraftAggregate.op` description, and vice versa. The two lists must be
 identical.
+
+---
+
+**Update 2026-09-24 — fixed on `phase-2-fix-F003-modes-reachable`.**
+
+`_TIER1` in `src/spire/nl_parser/context_assembly.py` gains `"modes"` and
+`"columns"`. `assemble_subset` now loads both cross-cutting teaching
+folders for every routed parse. Three PO aggregation ops
+(`po_value_by_supplier`, `po_count_by_status`, `open_po_summary`) become
+visible; the parser chooses them on the finding's three reproducers and
+their paraphrases. The two op registries are brought back into sync:
+`DraftAggregate.op` gains the three PO ops, `modes/m_aggregation.sysprompt`
+gains `top_invoices_by_amount`, and the `_SYSTEM_PROMPT_PREAMBLE` oracle
+literal carries the same addition. F-050 lands on the same line; F-004
+closes as a side-effect. V8 run as a single pass (3 prompts, all correct)
+rather than N>=20 — this was a set-membership bug, not probabilistic.
+V9 dropped: the fix intentionally changes scoped-parse behaviour, so a
+full `--validate` against pre-fix metadata would false-positive on every
+aggregation prompt. Full V-standard in `docs/phase-2/fixes/F-003.md`.
 
 ---
 

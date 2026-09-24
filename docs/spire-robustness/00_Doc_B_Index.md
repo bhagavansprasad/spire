@@ -3,7 +3,7 @@
 **Companion to:** `SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md` (Doc A), in this folder.
 **Document version:** 1.0
 **Created:** 2026-09-14
-**Last revised:** 2026-09-15
+**Last revised:** 2026-09-24
 
 **What this file is.** The index to SPIRE's forensic record. It carries
 the status snapshot and the registers — the two things that change at
@@ -75,22 +75,22 @@ deleted.
 
 ```
 Date:                2026-09-24
-Last session:        S003 (completed; this file)
+Last session:        S004 (completed; this file)
 Current phase:       Phase 2 — Correctness
 Integration branch:  hardening-master
-Current branch:      hardening-master
+Current branch:      phase-2-fix-F003-modes-reachable
 master:              frozen at 14dce82 (PR #145, phase-4d-ui-api)
 Last commit on
-hardening-master:    1803485 — F-016: plain-list row cap (PR #166)
-Working tree:        clean after this commit
+hardening-master:    52dd040 — docs: context_bundles — drop stale path, add F-016, Doc B Phase 2
+Working tree:        clean after this session's commits
 Runtime tree:        ~/pocs/spire-runtime — running 3333/8000/8888, ngrok-exposed
-pytest -q:           1210 passed / 22 deselected
+pytest -q:           1214 passed / 22 deselected
 Prompt suite:        — (not re-run this session)
 KG version:          — (to be established in Phase 3g)
-Open bugs:           6 (F-003, F-004, F-045, F-049, F-050, F-051 + Reg #30)
+Open bugs:           4 (F-045, F-049, F-051 + Reg #30)
 Open investigations: 0
 Open questions:      2 (Q-001, Q-002)
-Next action:         F-003 — modes/ folder unreachable from a router-scoped parse
+Next action:         F-049 — absolute-date Invoice phrasings ("created before/since X") refuse
 ```
 
 ---
@@ -163,6 +163,7 @@ Promote to Doc A when stable.*
 
 | Session | Date | Phase | Branch | Summary | File |
 |---|---|---|---|---|---|
+| S004 | 2026-09-24 | 2 | `phase-2-fix-F003-modes-reachable` | F-003 / F-050 / F-004 close on one `_TIER1` edit. WORKING_STYLE 15.1 tightened, 15.3 added. `scripts/prompts/*.json` deleted. | `02_Phase_02_Correctness.md` |
 | S003 | 2026-09-24 | 2 | `hardening-master` | Phase 2 closes F-016 (plain-list row cap). Ledger drift from PR #163 closed en route; Doc B refresh. | `02_Phase_02_Correctness.md` |
 | S002 | 2026-09-15 | 1 | `phase-1` | Phase 1 opens: task 1.2 (display_formatters move) + dev/runtime port separation. In progress. | `01_Phase_01_Audit_and_Baseline.md` |
 | S001 | 2026-09-15 | 4 | `phase-4d-ui-api` | Phase 4d: FastAPI backend + Streamlit UI built, verified, merged to `master` (PR #145). Complete. | `04_Phase_04_Structure.md` |

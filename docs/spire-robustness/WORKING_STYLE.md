@@ -98,26 +98,26 @@ For the procedural checklist that accompanies this file, see
 15. **Every claim needs a command and an output.** If a command and its
     output cannot be pasted, it is not evidence.
 
-    **And every pasteable edit ships with its verification commands.**
-    When handing over a block for the user to search-and-replace into a
-    document, include the two or three commands that confirm:
-    - the anchor was unique before the paste (a `grep -c` on the anchor,
-      expecting `1`);
-    - the anchor is intact after (a `grep -n` on the anchor and the
-      lines below it);
-    - the file's sentinel — its end-marker, its newest-entry header —
-      is still unique.
+    **Every edit to a file is delivered as a Python script plus shell
+    verification commands — see rule 15.3.** The anchor-uniqueness
+    discipline still holds; it is asserted by the cell-1 script and
+    confirmed by cell 2.
 
-    Paste-and-verify is one motion, not two. The user runs the commands
-    and reports back; the finding is not considered landed until the
-    verification output has been seen.
+15.1. **Capture the complete output of every run to a file, then grep
+    from the file. Always. No exceptions for "one-shot" checks.**
+    Redirect the COMPLETE stdout AND stderr to a file first, then run
+    `grep` / `sed` / `awk` against the file. Never pipe the run itself
+    through a filter (`grep`, `awk`, `head`, `tail`) at capture time.
 
-15.1. **Full-output capture for any run you may inspect more than once.**
-    When a command produces output you will want to look at again — a
-    multi-prompt sweep, a diagnostic run, a pytest with markers —
-    redirect the COMPLETE stdout AND stderr to a file first, then grep
-    from the file. Never pipe the run itself through a filter (`grep`,
-    `awk`, `head`, `tail`).
+    This applies to EVERY run whose output you will read at all —
+    multi-prompt sweeps, single diagnostic runs, pytest invocations,
+    golden-prompt checks, ad-hoc probes. The earlier wording here read
+    "for any run you may inspect more than once", and that hedge has
+    tempted exactly the mistake it should forbid: a run judged
+    "one-shot" gets piped through a filter, and the full output is gone
+    the moment a follow-up question needs a line the filter did not
+    anticipate. The cost of guessing wrong is a re-run; the cost of
+    always capturing is one file on disk.
 
     The reason is cost, not purity. A filtered run bakes one question
     into the output and throws away everything that question did not
@@ -143,9 +143,6 @@ For the procedural checklist that accompanies this file, see
                                 # question means a second run
         ... | head -80          # truncated permanently
 
-    The single exception: a one-shot command whose complete output will
-    be pasted into a message anyway. If in doubt, unfiltered.
-
 15.2. **Name a slow command's cost before the user runs it.**
     Before handing over any command whose wall-clock may exceed about
     thirty seconds, say so in the same reply, with a rough figure and,
@@ -162,6 +159,44 @@ For the procedural checklist that accompanies this file, see
     This is not a rule about laziness; it is a rule about consent. A
     long fetch the user did not agree to spend time on is a longer
     conversation than one they did.
+
+15.3. **Search-and-replace is a Python script + shell verification, in
+    two cells.** Every edit to a file — code, docs, this file itself — is
+    delivered as two cells, one command at a time.
+
+    **Cell 1 — the edit.** One Python script that does the search and
+    replace and writes the file. That is its whole job. It does not
+    verify its own work, does not print diagnostic checks, and the user
+    does not paste its output back.
+
+    **Cell 2 — the verification.** A separate list of SHELL commands —
+    `grep`, `sed -n`, `wc -l`, `tail` — that the user runs on its own,
+    after cell 1 has finished. The commands re-read the patched file
+    from disk and print the evidence directly: new content present, old
+    content absent, surrounding anchors intact, count-preserving edits
+    still count-preserving. The user pastes THIS output. Cell 2's output
+    is the only evidence that comes back.
+
+    **Do not blend the two.** The edit script and the verification
+    commands are separate cells, run separately. A script that edits
+    then checks itself reports whatever it wrote — the check is worth
+    nothing. The verification reads the file a second time, in a fresh
+    process, and the user sees the raw lines.
+
+    **Why a script, not a paste block.** The paste step is one that can
+    silently fail: a truncated selection, a dropped trailing newline, an
+    editor that auto-indents a block it should not. And the payload lives
+    inside Python string literals, not a Markdown fence, so rule 4's
+    outer-fence discipline does not apply — an edit whose content
+    contains ``` is a non-problem in a script and a real problem in a
+    paste block.
+
+    **Relationship to rule 15's former paragraph.** Rule 15 used to
+    describe a paste-block-with-grep-anchors procedure. That procedure is
+    superseded by this rule. Rule 15's principle — every claim needs a
+    command and its output — is unchanged. The anchor-uniqueness
+    discipline still holds; it is asserted by cell 1 and confirmed by
+    cell 2.
 
 ## Evidence standard for findings (S0–S8)
 
