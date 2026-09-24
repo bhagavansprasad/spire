@@ -27,7 +27,7 @@ Every F-NNN cites the audit row(s) it derives from.
 | Doc | Path |
 |---|---|
 | Fix queue | `docs/phase-2/FIX_PLAN.md` — one row per F-NNN with status |
-| Session state | `docs/spire-robustness/SESSION_HANDOVER.md` — where the previous session stopped |
+| Session state | `docs/SPIRE_SESSION_HANDOFF.md` — where the previous session stopped |
 
 **Rules — read once, don't re-read every session.**
 
@@ -109,7 +109,7 @@ Four places must move in lockstep. Broken lockstep = drift.
 | `FIX_PLAN.md` row | status → `fixed` when the regression test is proven real; status → `verified` when the PR merges. The two flips are separate moments, not one decision. |
 | `findings-log.md` | append a new dated `**Update YYYY-MM-DD**` block inside the entry, recording the verification. Never edit the original. |
 | `phase-1-audit.md` | if the fix closes a §B/§D/§H row, close it in place with the F-NNN citation |
-| `docs/spire-robustness/SESSION_HANDOVER.md` | add the fix to "first steps in the new window" for the next session |
+| `docs/SPIRE_SESSION_HANDOFF.md` | add the fix to "first steps in the new window" for the next session |
 
 Once the branch merges: FIX_PLAN status → `closed`.
 
