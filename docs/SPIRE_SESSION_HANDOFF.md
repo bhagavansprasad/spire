@@ -1,218 +1,221 @@
-# SPIRE — Session Handoff, 2026-09-24 (window 17)
+# SPIRE — Session Handoff, 2026-09-24 (window 18)
 
-**This file supersedes the window-16 handoff.** Window 17 closed F-049
-(PR #168, `ac06469`) and F-051 (PR #169, `da68989`). F-049 extended the
-Invoice absolute-date sysprompt bullet to teach the `created`/`raised`
-phrasing leads. F-051 fixed a caller-side `summary_only` gate that
-dropped `include` child content whenever `fields` was non-empty; the fix
-was preceded by extracting three drifted copies of the display branch
-into `formatters.render_answer`. Phase 2 now has two rows left.
+**This file supersedes the window-17 handoff.** Window 18 closed the
+last two Phase 2 rows: F-045 (PR #170, `f77a093`) and Reg #30 (closed
+as not-a-bug). The Phase 2 ledger is now 24/24 — every row `verified`,
+`closed`, or `closed-as-not-a-bug`. Phase 3a opens next window.
 
 **Read this first.** Then `docs/AUDIT_AND_FIX.md` (the playbook), which
-points to everything else.
+points to everything else. The `plan` context bundle (once regenerated)
+carries this file plus everything referenced below.
 
 ---
 
 ## Where we are
 
-**Branch:** `hardening-master` at `da68989`.
+**Branch:** `hardening-master` at `018f31a`.
 
-**Test suite:** 1216 passed, 1 skipped, 22 deselected (verify at window open).
+**Test suite:** 1229 passed, 1 skipped, 22 deselected (measured
+2026-09-24, post-F-045; verify at window open).
 
 **Pod:** `dabpqy`.
 
-**Ledger state — FIX_PLAN §5:**
+**Ledger state — FIX_PLAN §5:** every row closed. The last two:
 
-- `verified | #167 | 2026-09-24`: F-003, F-004, F-050.
-- `verified | #168 | 2026-09-24`: F-049.
-- `verified | #169 | 2026-09-24`: F-051.
-- `not-started`: F-045, Reg #30.
+- `verified | #170 | 2026-09-24`: F-045.
+- `closed-as-not-a-bug | — | 2026-09-24`: Reg #30.
 
-**Everything before window 16 shipped under earlier windows:** F-002,
-F-006–F-020, F-033, F-036, F-039, F-041, F-043–F-044, F-046–F-048,
-F-016, F-017, F-027, F-014, and the closed-as-not-a-bug family (F-013,
-F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
+Everything before window 18 shipped under earlier windows. Full ledger
+in FIX_PLAN §5; the F-045 and Reg #30 closure narratives are in §4.1
+and §5 respectively.
 
 ---
 
-## What shipped in window 17
+## What shipped in window 18
 
-- **PR #168** (`ac06469`) — F-049. Extended the Invoice absolute-date
-  bullet in `b_invoice_date.sysprompt` to name `created before` /
-  `created since` / `created after` / `raised before` / `raised since`,
-  with a clause stating that `created`/`raised` name InvoiceDate (not a
-  separate CreationDate). Mirrored byte-identically into
-  `context_assembly.py::_SYSTEM_PROMPT_PREAMBLE`. New regression test
-  `tests/test_f049_invoice_created_dates.py`; new prompt set
-  `scripts/prompts/18_invoice_created_dates.txt` (12 prompts).
-- **PR #169** (`da68989`) — F-051. The display branch (summary-only +
-  projected table vs. full synthesized render) existed in three
-  near-identical copies that had already drifted; commit `0687a0c`
-  extracted them into `formatters.render_answer`. Commit `f7ec4d3`
-  then fixed the gate: `summary_only=not state['intent'].include`.
-  Commit `516bd04` wired the missing imports (caught by V9, not V6 —
-  pytest never imports from `scripts/`). New regression test
-  `tests/test_f051_summary_gate.py`; new prompt set
-  `scripts/prompts/19_fields_and_include.txt` (15 prompts).
-- **Post-merge bookkeeping** — `5e08a77` (F-049) and `f35deb9` (F-051),
-  one commit each, four tracking files per commit.
-- **`WORKING_STYLE.md` unchanged** — no rule additions this window.
-- **Doc B entries** — Phase 2 file carries no S005 (matching the
-  convention: Phase 2 windows between S003 and S004 have their forensic
-  record in FIX_PLAN §5 and the per-fix files, not Doc B).
-- **Known V6 blind spot recorded** — the runner scripts have no test
-  coverage. Any display-layer change that touches `scripts/` needs the
-  pipeline run (V9) as primary evidence, not just pytest.
+- **PR #170** (`f77a093`) — F-045. Two parts, both in
+  `src/spire/mcp_server/tools/purchase_orders.py`:
+  1. **Priority reorder** — `created_since` above `created_before`
+     in the server-clause chain. With both bounds set, the chain had
+     been picking `created_before` (the wrong bound for a range query).
+  2. **`orderBy=CreationDate:asc`** on the `created_since` branch.
+     Picking the right clause was not sufficient — the pod's default
+     physical scan on `/purchaseOrders` starts at the far end of the
+     collection, so `q=CreationDate >= '2023-01-01'&limit=200` returned
+     rows beginning **2024-07-01** without an orderBy. Pinning the
+     order puts the window at the range's lower edge.
+  New regression test `tests/test_f045_created_since_priority.py`
+  (13 tests; 3 red pre-fix, 10 both-trees-pass guards). Full V-standard
+  in `docs/phase-2/fixes/F-045.md`; prompt-kit capture in
+  `docs/phase-2/fixes/F-045-v1v4.txt`.
 
-### Earlier window (window 16, for reference)
+- **Reg #30 — closed as not-a-bug.** The entry's specific claim
+  (top-N compare fetches the entire PO universe → pod timeout at
+  145.7s) does not reproduce. Reproducer completes in **5m19s** with
+  exit 0, returns a correct three-supplier comparison, and the
+  per-supplier fetches are bounded. Residual 5m19s latency is real
+  (~104 sequential HTTP calls) but is a Phase 6 subject — see
+  FIX_PLAN §4.1 for the closure and the Phase 6 anchor-case note.
+  Evidence: `docs/phase-2/fixes/Reg-30-v1-repro.txt`.
 
-- **PR #167** (`d93d5fd`) — F-003 / F-050 / F-004 on one `_TIER1` edit
-  in `src/spire/nl_parser/context_assembly.py`. Every router-scoped
-  parse now loads `modes/` and `columns/`. Two op registries synced:
-  `draft.py`'s `DraftAggregate.op` gained three PO ops;
-  `modes/m_aggregation.sysprompt` gained `top_invoices_by_amount`; the
-  `_SYSTEM_PROMPT_PREAMBLE` oracle carries the same. New test
-  `tests/test_f003_modes_reachable.py`.
-- **`ee2b6ca`** — `scripts/prompts/17_modes_and_columns.txt`, 85-prompt
-  regression set for the three fixes. Not in the manifest; run via
-  `--prompt-file`.
-- **WORKING_STYLE.md 15.1 / 15.3** — two-cell edit discipline;
-  15.1's "one-shot" hedge removed.
-- **`scripts/prompts/*.json` deleted** — 13 files; recorded metadata
-  stale by construction after a scoped-parse change.
-- **`tests/test_corpus_consistency.py`** — the file's guard test
-  asserted .json corpora existed, which now fails by design; and its
-  two content tests passed vacuously on the empty entry list.
-  Module-level skip, reason named in the pytest output.
-- **Doc B S004** — `02_Phase_02_Correctness.md`; index snapshot
-  refreshed.
+- **`docs/spire_fusion_endpoints_reference.md`** — three new
+  `/purchaseOrders` discovery rows added during the F-045 probe (see
+  "Two pod facts to know" below). Commit `2573e3c`.
+
+- **Post-merge bookkeeping** — `6d5f76a` (F-045 → verified), `97bed63`
+  (Reg #30 closure), `4b3737c` (Reg #30 evidence), `8012b1b` (Doc B
+  index snapshot), `88a07c6` (Doc B index pointer row), `e887795`
+  (handover rewrite), `018f31a` (context_bundles additions).
+
+- **`WORKING_STYLE.md` unchanged** — no rule additions this window. One
+  clarification worth carrying forward, recorded in the V7 procedure
+  below: `git stash` does NOT stash a committed change; a V7 against a
+  committed fix needs `git checkout HEAD~1 -- <path>` and
+  `git checkout HEAD -- <path>`.
 
 ---
 
-## Outstanding — remaining Phase 2 queue
+## Two pod facts to know before touching a date-bounded fetch
 
-Two items, in severity order (wrong-data > crash > missing-capability
-> cosmetic) per FIX_PLAN §8.3.1:
+Both discovered by the F-045 probe (2026-09-24, `dabpqy`), both now in
+the endpoints reference:
 
-1. ~~**F-049**~~ — **shipped under PR #168, 2026-09-24.** "invoices
-   created before/since X" now routes to `invoice_date`; sysprompt-only,
-   mirrors F-046's split.
+1. **Composite `q=` on `/purchaseOrders` returns HTTP 400, not
+   silent-zero.** Different family member from F-012's `/invoices`
+   falsifier (which returned 200 with `totalResults: 0`). The tool
+   never sends a composite; this is documented so a future debugger
+   does not assume the silent-zero shape applies here.
 
-2. **F-045** — composite `created_since AND created_before` on
-   `/purchaseOrders` returns 0 with a misleading capped note
-   (wrong-data). Two fix sites: the tool, and the note wording.
-
-3. ~~**F-051**~~ — **shipped under PR #169, 2026-09-24.** `fields` +
-   `include` now renders its child content; the display branch was
-   extracted into `formatters.render_answer` so the fix landed in one
-   place instead of three.
-
-4. **Reg #30** — compare path pages all POs before narrowing (perf,
-   may slip to Phase 6 if architectural).
-
-**Recommendation for window 17 (updated a second time).** **F-045**
-next — wrong-data, two sites, needs a pod probe against
-/purchaseOrders first. **Reg #30** after, or defer to Phase 6 if the
-fix turns out to be architectural. Phase 2's queue closes with these
-two.
+2. **The default physical scan order is not stable across query
+   shapes.** `q=CreationDate >= '2023-01-01'&limit=200` returned rows
+   beginning 2024-07-01. The same clause with `fields=` OR with
+   `orderBy=CreationDate:asc` returned rows beginning 2023-01-11.
+   **`orderBy=CreationDate:asc` composes with `q=` and is the stable
+   sort key for a date-bounded fetch on that field.** Sort-key
+   stability is **field-specific**: `LastUpdateDate >=` does NOT need
+   it (the default scan for that field already starts at the range's
+   lower edge). Verify per field.
 
 ---
 
-## First steps in the new window
+## Next action — Phase 3a opens
 
-1. `git checkout hardening-master && git pull`
-2. `git log --oneline -3` — expect `da68989` at HEAD.
-3. `git status` — expect clean tree.
-4. `pytest -q` — expect 1214 passed, 22 deselected.
-5. Open `docs/phase-2/FIX_PLAN.md` §5. Pick the next `not-started` row
-   in §4 order.
+**Phase 3a — Prompt coverage validation** (Doc A §9.3.1).
+
+> **Objective.** Add a test that fails when the KG declares an entity,
+> filter, or field that the parser prompt does not cover.
+
+> **Design.** New test reads `kg_entity` (and `kg_entity_filter`,
+> `kg_entity_field`) via `load_kg_menu()`, then asserts every entity
+> name appears in the assembled parser prompt; then similar for
+> filters and fields.
+
+> **Acceptance.** The test passes today. If it fails, the gap is real
+> — fix the prompt before proceeding.
+
+**Before writing any test**, read Doc A §9.3.1 in full. The design
+section names `_ASSEMBLED_PREAMBLE` — that name may not match what
+`context_assembly.py` exposes after Phase 2's changes; find the
+equivalent surface first. The `parser_context` context bundle carries
+every `.sysprompt` file plus the manifest, so a fresh window can read
+the assembled prompt's inputs directly.
+
+Do not open Phase 3b (prompt generation) until 3a passes. 3a's purpose
+is to establish that the current prompt covers what the KG declares;
+3b's generator is only meaningful against that baseline.
 
 ---
 
-## What to watch — operational notes
+## The one rule
 
-- **Slow commands cost minutes.** Rule 15.2. Aggregations paginate
-  ~17,552 POs across 36 pages, ~4 minutes each. Say so before handing
-  the command over. Unit tests are the cheap evidence for deterministic
-  fixes.
+**Reproduce before you plan.** A finding whose reproducer no longer
+fires is `closed-as-not-a-bug`; a finding whose reproducer still fires
+is the next fix. Guessing which costs more than running the command.
 
-- **Two cells per edit (rule 15.3).** Cell 1 = Python script that
-  writes the file. Cell 2 = shell commands whose output is the
-  evidence. Cell 1's output does not come back.
+**This window's instance, worth remembering.** The F-045 entry named
+two fix shapes; a single pod probe showed the mechanism was neither.
+Had the fix been written from the entry's description, it would have
+shipped silent — the wrong-clause fix alone returns 25 rows on the
+entry's own reproducer and 0 on any range below the pod's physical
+scan window. The actual cause was only visible by running the probe.
 
-- **Full-output capture first.** Rule 15.1. Redirect complete stdout
-  AND stderr to a file, then grep. Never pipe the run through a filter
-  at capture time — the "one-shot" hedge that used to live in the rule
-  is gone.
+---
 
-- **`parse()` vs `route_and_parse()`.** The direct call loads the full
-  preamble; the router loads a scoped subset. A pipeline bug must be
-  reproduced through the pipeline (`promptkit --run --show-planner`),
-  not through `parse()`.
+## Working-style reminders that keep biting
 
-- **MCP server restart after tool signature changes.** Any edit under
-  `src/spire/mcp_server/` requires `spire` restart before the new
-  signature is live.
+- **One command at a time.** Wait for output. Then next.
+- **Complete files, never fragments.** Whole file, one block.
+- **`~~~` for any outer fence whose content contains ` ``` `.** Rule 4.
+- **Full-output capture (rule 15.1).** Redirect long runs to a file,
+  then grep from the file. Never pipe the run itself through a filter.
+- **Name a slow command's cost (rule 15.2)** before handing it over.
+  Reg #30's reproducer was 5m19s; F-045's V1–V4 sweep was ~50s.
+- **Every file edit is two cells (rule 15.3).** Cell 1: Python script
+  that reads the file, checks the anchor, replaces, writes, exits.
+  Cell 2: shell commands that read the file back from disk. The two
+  do not blend.
+- **Ledger reconciliation on open (rule 16).**
+      gh pr list --state merged --limit 20 --json number,title,mergedAt \
+        --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
+      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/phase-2/FIX_PLAN.md
+  Both should come back clean. Last merged PR is **#170**.
+- **The audit is the report; the findings log is the notebook.** Audit
+  rows close in place. Findings-log corrections are new dated update
+  blocks appended inside the entry — never edits to the original text.
+- **`git stash` does not stash committed changes.** V7 against a
+  committed fix uses `git checkout HEAD~1 -- <path>` /
+  `git checkout HEAD -- <path>`. Window 18 got this wrong once;
+  corrected in `F-045.md`'s V7 section.
 
-- **Terminal shell exits in WSL.** Environmental. Redirect long runs
-  to a file so the output survives.
+---
+
+## Commits on `hardening-master`, window 18 (newest first)
+
+    018f31a  context_bundles: add five files landed but not bundled
+    88a07c6  Doc B index: pointer row for window 18
+    e887795  handover: rewrite for window 19 (Phase 3a opens)
+    8012b1b  Doc B index: §1 snapshot refresh for window 18
+    4b3737c  Reg #30: evidence capture for the closure
+    97bed63  Reg #30: closed as not-a-bug; residual latency deferred
+             to Phase 6
+    2573e3c  endpoints ref: /purchaseOrders scan-order facts from F-045
+    6d5f76a  F-045: verified | #170
+    f77a093  Phase 2 — Fix F-045: created_since beats created_before;
+             date fetch gets an orderBy (#170)
+
+### Window 17 for reference
+
+    f35deb9  post-merge bookkeeping: F-051 -> verified | #169
+    da68989  Merge pull request #169 (F-051 summary gate)
+    7dcc91c  F-051: fix file and V-standard evidence
+    5e08a77  post-merge bookkeeping: F-049 -> verified | #168
+    ac06469  Merge pull request #168 (F-049 invoice created dates)
+    4d1ba1a  F-049: fix file and V-standard evidence
+    1c3892e  F-049: add 18_invoice_created_dates prompt set
 
 ---
 
 ## Known doc-drift, recorded not fixed
 
-- `docs/spire-robustness/SESSION_HANDOVER.md` — a second handover file
-  in the repo. Not the one a new window reads; the entry point is
-  this file. Retire or reconcile — a later decision.
-- `scripts/prompts/*.json` corpora are deleted. `--validate` has
-  nothing to compare against until they are regenerated. Regeneration
-  is a separate task.
-- `docs/spire-robustness/00_Doc_B_Index.md` §2.1 Bug register is
-  empty (has been since creation). The findings log is the working
-  register.
-- `scripts/promptkit_sets.yaml` does not list `17_modes_and_columns`.
-
----
-
-## Commit hashes for reference (window 17)
-
-    f35deb9  post-merge bookkeeping: F-051 -> verified | #169
-             (hardening-master tip)
-    da68989  Merge pull request #169 (F-051)
-    7dcc91c  F-051: fix file and V-standard evidence
-    c44e3db  F-051: add 19_fields_and_include prompt set
-    516bd04  F-051: wire render_answer imports into the three runners
-    f7ec4d3  F-051: fields+include intents render their child content
-    4c837c4  F-051: red regression test for fields+include summary gate
-    0687a0c  F-051 (refactor): extract render_answer into formatters.py
-    5e08a77  post-merge bookkeeping: F-049 -> verified | #168
-    ac06469  Merge pull request #168 (F-049)
-    4d1ba1a  F-049: fix file and V-standard evidence
-    1c3892e  F-049: add 18_invoice_created_dates prompt set
-    5c07510  F-049: teach 'invoices created before/since' in the
-             Invoice absolute-date bullet
-    7121e65  F-049: red regression test for Invoice 'created' date
-             phrasings
-    bc91f47  handover: tip SHA 1f980d1; corpus-consistency fix in
-             shipped list (before this window)
-
-### Window 16 for reference
-
-    1f980d1  test_corpus_consistency: skip module when no .json
-             corpora (window-16 tip)
-    081e842  context_bundles: refresh for PR #167 +
-             17_modes_and_columns corpus
-    14e7cfa  post-merge bookkeeping: F-003 / F-004 / F-050
-             -> verified | #167
-    ee2b6ca  prompts: add 17_modes_and_columns
-    d93d5fd  Merge pull request #167 (F-003 / F-050 / F-004)
-    98bd6d9  F-003 / F-050 / F-004: load modes/ and columns/ from a
-             router-scoped parse
-    a672398  working style: rules 15.1 tightened and 15.3 added
-    4c09ae6  scripts/prompts: delete recorded-metadata .json corpora
-    9d1bfe0  tracking: close F-003 / F-004 / F-050 in FIX_PLAN,
-             findings log, audit
-    52dd040  docs: context_bundles (before this window)
+- **`docs/spire-robustness/SESSION_HANDOVER.md`** — deprecated in this
+  window. Its content (a Phase 3a handover written mid-session before
+  the canonical question was settled) is superseded by this file. The
+  file is retained as a three-line pointer at this one to prevent the
+  next window from re-discovering the split. See the deprecation
+  commit for the exact text.
+- **`source-tree.txt` at repo root** — stale (the tree has moved on;
+  the file is not tracked and is `.gitignore`d, but it appears in
+  `source-tree.txt` output because that file lists itself). Not a
+  blocker. Reconciliation is a follow-up, not scheduled.
+- **Doc B's `02_Phase_02_Correctness.md`** carries entries for S003
+  and S004 only. Windows 17 and 18 ran without Doc B session entries —
+  consistent with that file's header convention. The forensic record
+  for window 18 lives in FIX_PLAN §4.1, §5, the fix files, and the
+  pointer row in `00_Doc_B_Index.md` §4.
+- **`context_bundles.yaml`** — its comment block now correctly names
+  this file as the plan bundle's entry point (updated in the same
+  commit as this rewrite). Previous versions named the wrong file in
+  both comment and bundle content.
 
 ---
 
