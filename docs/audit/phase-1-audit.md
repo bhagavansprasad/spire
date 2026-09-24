@@ -241,7 +241,7 @@ Reverse index. Every §B row and candidate, its findings-log entry, and the find
 | B-17 | F-014 | verified 2026-09-23 (#165) |
 | B-18 | F-029 | closed-as-not-a-bug (capability on parked branch; see E-12) |
 | B-19 | F-015 | verified 2026-09-22 (#156) |
-| B-20 | F-003 / F-004 (cross-ref) | confirmed |
+| B-20 | F-003 / F-004 (cross-ref) | verified 2026-09-24 |
 | B-21 | F-023 | closed-as-not-a-bug |
 | B-22 | F-017 | verified 2026-09-23 (#165) |
 | B-23 | F-021 → F-051 | reclassified 2026-09-23, #165 (F-021's recorded fix sites not the cause; caller-side gate) |

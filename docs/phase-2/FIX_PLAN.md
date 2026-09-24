@@ -122,8 +122,8 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-009 | missing-capability | 4 | parser sysprompt, `order.manifest` | verified | #152 (via F-042) | 2026-09-19 |
 | F-011 | missing-capability | 4 | `scripts/sql/kg_schema.sql`, parser sysprompt, `plan_builders.py` | verified | #163 | 2026-09-23 |
 | F-019 | wrong-data | 4 | `mcp_server/tools/customer_account_by_name.py`, parser sysprompt, KG, `parser.py` | verified | #163 | 2026-09-23 |
-| F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | not-started | — | — |
-| F-004 | wrong-data | 5 | (falls out of F-003) | not-started | — | — |
+| F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | fixed | — | 2026-09-24 |
+| F-004 | wrong-data | 5 | (falls out of F-003) | fixed | — | 2026-09-24 |
 | Reg #30 | perf | 8 | `plan_builders.py`, `compare_orders_to_invoices.py` | not-started | — | — |
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
@@ -133,7 +133,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-047 | missing-capability | 4 | `mcp_server/tools/purchase_orders.py`, `mcp_server/server.py`, `plan_builders.py`, `scripts/sql/kg_schema.sql`, parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-048 | missing-capability | 4 | parser sysprompt, `context_assembly.py` | verified | #164 | 2026-09-23 |
 | F-049 | wrong-refusal | 4 | parser sysprompt, `context_assembly.py` | not-started | — | 2026-09-23 |
-| F-050 | missing-capability | 5 | `nl_parser/context_assembly.py` (`_TIER1`) | not-started | — | 2026-09-23 |
+| F-050 | missing-capability | 5 | `nl_parser/context_assembly.py` (`_TIER1`) | fixed | — | 2026-09-24 |
 | F-051 | missing-projection | 2 | `scripts/promptkit.py`, `scripts/run_prompt_set.py`, `scripts/run_graph.py` | not-started | — | 2026-09-23 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
