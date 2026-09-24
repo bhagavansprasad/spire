@@ -73,3 +73,9 @@ sets:
   - exhaust_date_filters
   - exhaust_fields_and_include
   - exhaust_modes
+
+  # ── non-tier prompt files (window 20 parity sweep) ──
+  - new/retest_prompts
+  - refusal_examples
+  - scorer/parser_stress
+  - scorer/tool_selection
