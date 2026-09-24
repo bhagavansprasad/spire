@@ -92,6 +92,7 @@ from spire.rendering.formatters import (
     _format_projected_table,
     _format_summary,
     _format_synthesized,
+    render_answer,
 )
 
 

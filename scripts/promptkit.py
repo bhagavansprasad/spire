@@ -401,6 +401,7 @@ def _emit_run_graph_output(state, menu):
     from spire.rendering.formatters import (
         _format_intent, _format_outputs, _format_plan,
         _format_projected_table, _format_summary, _format_synthesized,
+        render_answer,
     )
 
     _parser_log = get_logger("parser")
