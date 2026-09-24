@@ -75,22 +75,24 @@ deleted.
 
 ```
 Date:                2026-09-24
-Last session:        window 18 (Phase 2 fix session; no Doc B S-number)
+Last session:        window 19 (prompt-set reorg; no Doc B S-number)
 Current phase:       Phase 2 — Correctness
 Integration branch:  hardening-master
 Current branch:      hardening-master
 master:              frozen at 14dce82 (PR #145, phase-4d-ui-api)
 Last commit on
-hardening-master:    4b3737c — Reg #30: evidence capture for the closure
+hardening-master:    3fd75cf — handoff: rewrite for window 20
 Working tree:        clean after this window's commits
 Runtime tree:        ~/pocs/spire-runtime — running 3333/8000/8888, ngrok-exposed
 pytest -q:           1229 passed, 1 skipped / 22 deselected
-Prompt suite:        — (not re-run this session)
+Prompt suite:        smoke_dipstick 6/6 clean (full sweep pending)
 KG version:          — (to be established in Phase 3g)
 Open bugs:           0
 Open investigations: 0
 Open questions:      2 (Q-001, Q-002)
-Next action:         Phase 3a opens — Prompt coverage validation (Doc A §9.3.1). Phase 2 closed 24/24.
+Next action:         Run the prompt sets (window 20). Phase 3a remains
+                     open after that — the A/B/C decision is in the
+                     handoff. Phase 2 closed 24/24.
 ```
 
 ---
@@ -163,6 +165,7 @@ Promote to Doc A when stable.*
 
 | Session | Date | Phase | Branch | Summary | File |
 |---|---|---|---|---|---|
+| window 19 | 2026-09-24 | — | `hardening-master` | Prompt-set reorg. `scripts/prompts/` moved to `prompts/` at repo root; 16 capabilities × 3 tiers (smoke / verify / exhaust); ~1,512 runnable prompts. `docs/prompt-sets/SURFACE.md` added. No Doc B session entry — the record is the handoff and the three commit messages. | `docs/SPIRE_SESSION_HANDOFF.md` |
 | window 18 | 2026-09-24 | 2 | `hardening-master` | F-045 closed (PR #170); Reg #30 closed as not-a-bug, residual latency deferred to Phase 6. Phase 2 ledger at 24/24. No Doc B session entry — full forensic record in the fix file. | `docs/phase-2/fixes/F-045.md` |
 | S004 | 2026-09-24 | 2 | `phase-2-fix-F003-modes-reachable` | F-003 / F-050 / F-004 close on one `_TIER1` edit. WORKING_STYLE 15.1 tightened, 15.3 added. `scripts/prompts/*.json` deleted. | `02_Phase_02_Correctness.md` |
 | S003 | 2026-09-24 | 2 | `hardening-master` | Phase 2 closes F-016 (plain-list row cap). Ledger drift from PR #163 closed en route; Doc B refresh. | `02_Phase_02_Correctness.md` |
