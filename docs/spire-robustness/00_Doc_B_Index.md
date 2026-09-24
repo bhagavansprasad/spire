@@ -75,22 +75,22 @@ deleted.
 
 ```
 Date:                2026-09-24
-Last session:        window 17 (Phase 2 fix session; no Doc B S-number)
+Last session:        window 18 (Phase 2 fix session; no Doc B S-number)
 Current phase:       Phase 2 — Correctness
 Integration branch:  hardening-master
 Current branch:      hardening-master
 master:              frozen at 14dce82 (PR #145, phase-4d-ui-api)
 Last commit on
-hardening-master:    f35deb9 — post-merge bookkeeping: F-051 -> verified | #169
+hardening-master:    4b3737c — Reg #30: evidence capture for the closure
 Working tree:        clean after this window's commits
 Runtime tree:        ~/pocs/spire-runtime — running 3333/8000/8888, ngrok-exposed
-pytest -q:           1216 passed, 1 skipped / 22 deselected
+pytest -q:           1229 passed, 1 skipped / 22 deselected
 Prompt suite:        — (not re-run this session)
 KG version:          — (to be established in Phase 3g)
-Open bugs:           2 (F-045 + Reg #30)
+Open bugs:           0
 Open investigations: 0
 Open questions:      2 (Q-001, Q-002)
-Next action:         F-045 — composite created_since AND created_before on /purchaseOrders returns 0 with a misleading capped note (needs a pod probe first)
+Next action:         Phase 3a opens — Prompt coverage validation (Doc A §9.3.1). Phase 2 closed 24/24.
 ```
 
 ---
