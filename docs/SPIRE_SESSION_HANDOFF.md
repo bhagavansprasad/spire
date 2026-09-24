@@ -12,7 +12,7 @@ points to everything else.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `ee2b6ca`.
+**Branch:** `hardening-master` at `1f980d1`.
 
 **Test suite:** 1214 passed, 22 deselected (verify at window open).
 
@@ -46,6 +46,10 @@ F-022–F-026, F-028–F-031, F-042). Full ledger in FIX_PLAN §5.
   15.1's "one-shot" hedge removed.
 - **`scripts/prompts/*.json` deleted** — 13 files; recorded metadata
   stale by construction after a scoped-parse change.
+- **`tests/test_corpus_consistency.py`** — the file's guard test
+  asserted .json corpora existed, which now fails by design; and its
+  two content tests passed vacuously on the empty entry list.
+  Module-level skip, reason named in the pytest output.
 - **Doc B S004** — `02_Phase_02_Correctness.md`; index snapshot
   refreshed.
 
@@ -80,7 +84,7 @@ contained, sysprompt-only, mirrors the F-046 split. Then **F-051**
 ## First steps in the new window
 
 1. `git checkout hardening-master && git pull`
-2. `git log --oneline -3` — expect `ee2b6ca` at HEAD.
+2. `git log --oneline -3` — expect `1f980d1` at HEAD.
 3. `git status` — expect clean tree.
 4. `pytest -q` — expect 1214 passed, 22 deselected.
 5. Open `docs/phase-2/FIX_PLAN.md` §5. Pick the next `not-started` row
@@ -135,7 +139,13 @@ contained, sysprompt-only, mirrors the F-046 split. Then **F-051**
 
 ## Commit hashes for reference (window 16)
 
-    ee2b6ca  prompts: add 17_modes_and_columns (hardening-master tip)
+    1f980d1  test_corpus_consistency: skip module when no .json
+             corpora (hardening-master tip)
+    081e842  context_bundles: refresh for PR #167 +
+             17_modes_and_columns corpus
+    14e7cfa  post-merge bookkeeping: F-003 / F-004 / F-050
+             -> verified | #167
+    ee2b6ca  prompts: add 17_modes_and_columns
     d93d5fd  Merge pull request #167 (F-003 / F-050 / F-004)
     98bd6d9  F-003 / F-050 / F-004: load modes/ and columns/ from a
              router-scoped parse
