@@ -80,9 +80,51 @@ order is a queue, not a batch.
 | 6 | Cluster 3 (2) | F-001 first (more urgent), F-016 second. Both use the post-parse-helper pattern. |
 | 7 | Cluster 4 (4) | One `--validate` re-run covers all four sysprompt edits. Do them in sequence, run validate once after the last. |
 | 8 | Cluster 5 (2) | Fix F-003; F-004 may fall out. If it does, close F-004 as a side-effect and note it in its fix file. |
-| 9 | Reg #30 | Perf. Independent; can slip to Phase 6 if the fix turns out to be architectural. |
+| 9 | Reg #30 | **Closed 2026-09-24 as not-a-bug** — see §4.1. Residual latency deferred to Phase 6. |
 | 10 | F-044 | Crash, mechanism settled (double-encoded `value_json`, `draft.py::to_intent`). Closed as PR #158, ahead of F-010 — the deliberate §8.3.1 reorder is recorded in the fix file. |
 | 11 | F-046, F-047, F-048 | Follow-ons from the F-011b sweep (findings-log 2026-09-23). F-046 first (cleanest mirror of F-011's split, no new tool arg). F-047 second (adds a LastUpdateDate column to `search_purchase_orders`). F-048 last (highest blast radius — parser default for vague adjectives; V9 mandatory). |
+
+### 4.1 Reg #30 — closure, 2026-09-24
+
+**The entry's specific claim does not reproduce.** The register item
+(from a 2026-08-14 run) read: *"'top N suppliers' compare fetches the
+entire PO universe (17,447 rows) before narrowing → pod timeout at
+145.7s, never reached synthesize."* That mechanism is gone.
+
+Reproducer, 2026-09-24:
+
+    $ time python scripts/promptkit.py --run \
+        --prompt "Compare ordered vs invoiced for our top 3 suppliers" --show-planner
+    real    5m19.133s
+    exit=0
+
+The tool completes, returns a correct three-supplier comparison
+(EIP Inc / Staffing Services / JGA), and the per-supplier fetches are
+bounded — `_compare_resolved_supplier` filters PO and invoice sides by
+`SupplierId` / `SupplierNumber` respectively, so no unbounded scan
+remains. The docstring's "WHY THERE IS NO 'ACROSS EVERYTHING' VERSION"
+block documents the design decision that removed the class.
+
+**Residual, not fixed here.** 5m19s wall-clock for one question. Cause
+is arithmetic, not a defect: the top-N comparison is ~104 sequential
+HTTP calls — one 32-page ranking scan of the whole PO collection, plus
+three per-supplier pairs (PO + invoice) at 8–17 pages each, at 200 rows
+per page. At the pod's ~3s per call, 5 minutes is the cost of the
+current shape.
+
+**Deferred to Phase 6.** Parallelising the per-supplier fetches (three
+concurrent, plus the two sides of each pair) is the obvious fix and is
+Phase 6b's subject. A second candidate — batching the ranking step so
+it does not require a second full scan — is a larger design change on
+`compare_orders_to_invoices.py`. Neither belongs in a Phase 2 close-out
+per §8.3.5's "no scope creep", and the plan's own §4 row 9 pre-authorised
+this deferral for exactly this case.
+
+**Follow-up item for Phase 6.** Phase 6b (parallel execution) should
+take `compare_top_suppliers_orders_to_invoices` as an anchor case: it is
+single-step, single-tool, I/O-bound, and every one of its fetches is
+independent of the others. If parallelising that call does not get it
+under one minute, the design is wrong.
 
 ---
 
@@ -124,7 +166,7 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-019 | wrong-data | 4 | `mcp_server/tools/customer_account_by_name.py`, parser sysprompt, KG, `parser.py` | verified | #163 | 2026-09-23 |
 | F-003 | missing-capability | 5 | `nl_parser/context_assembly.py`, `draft.py` | verified | #167 | 2026-09-24 |
 | F-004 | wrong-data | 5 | (falls out of F-003) | verified | #167 | 2026-09-24 |
-| Reg #30 | perf | 8 | `plan_builders.py`, `compare_orders_to_invoices.py` | not-started | — | — |
+| Reg #30 | perf | 8 | `compare_orders_to_invoices.py` | closed-as-not-a-bug | — | 2026-09-24 |
 | F-041 | missing-capability | 9 (router + parser) | `scripts/sql/kg_schema.sql` (entity_synonym), `context/receivables/b_ar_invoice_lines.sysprompt`, `b_ar_dff.sysprompt`, `b_ar_tax_lines.sysprompt` | verified | #151 | 2026-09-19 |
 | F-043 | missing-capability | (router + parser + synthesizer) | `vocabulary.py`, `intent_validation.py`, `supplier_sites.py`, `supplier_classifications.py`, `p2p.py`, `synthesizer.py`, `formatters.py` | verified | #152 | 2026-09-19 |
 | F-042 | missing-capability | (F-009) | duplicate of F-009 — no separate fix on this branch | closed-as-duplicate | — | 2026-09-19 |
