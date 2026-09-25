@@ -581,6 +581,83 @@ def _run_one_set(txt: Path, out_file: Path,
     return code, time.monotonic() - start
 
 
+def _write_summaries(
+    outdir: Path, results: list[tuple[str, int, float]]
+) -> str:
+    """Write (overwrite) the top-level _summary.log and one
+    <folder>_summary.log per folder represented in `results`. Returns the
+    top-level summary text so the caller can print it once.
+
+    Called after EACH set completes, so a mid-batch kill (Ctrl+C, pkill,
+    host crash, parent exception) leaves valid partial summaries on disk
+    for every set that finished before the interruption. The per-set .log
+    files are written by _run_one_set on their own schedule; this helper
+    is a separate sweep over whatever `results` currently holds.
+    """
+    # ---- top-level summary ----
+    name_w = max((len(n) for n, _, _ in results), default=8)
+    lines = ["PROMPTKIT BATCH SUMMARY", f"As of: {_timestamp()}", ""]
+    lines.append(f"{'set'.ljust(name_w)}   {'exit':>4}  {'secs':>6}   status")
+    lines.append("-" * (name_w + 28))
+    for name, code, secs in results:
+        if code == 0:
+            status = "ok (read the answers, not the tally)"
+        elif code == 124:
+            status = "TIMED OUT (partial)"
+        else:
+            status = f"ERROR (exit {code})"
+        lines.append(
+            f"{name.ljust(name_w)}   {code:>4}  {secs:>6.0f}   {status}"
+        )
+    summary = "\n".join(lines)
+    (outdir / "_summary.log").write_text(summary + "\n", encoding="utf-8")
+
+    # ---- per-folder summaries ----
+    by_folder: dict[str, list[tuple[str, int, float]]] = {}
+    for name, code, secs in results:
+        folder = name.rsplit("/", 1)[0] if "/" in name else ""
+        by_folder.setdefault(folder, []).append((name, code, secs))
+
+    for folder, rows in by_folder.items():
+        if not folder:
+            continue
+        folder_dir = outdir / folder
+        folder_dir.mkdir(parents=True, exist_ok=True)
+        folder_basename = Path(folder).name
+        folder_summary_path = folder_dir / f"{folder_basename}_summary.log"
+
+        f_lines = [
+            f"PROMPTKIT FOLDER SUMMARY: {folder}",
+            f"As of: {_timestamp()}",
+            "",
+        ]
+        short_rows = [
+            (n[len(folder) + 1:] if n.startswith(folder + "/") else n, c, s)
+            for n, c, s in rows
+        ]
+        f_name_w = max((len(n) for n, _, _ in short_rows), default=8)
+        f_lines.append(
+            f"{'set'.ljust(f_name_w)}   {'exit':>4}  {'secs':>6}   status"
+        )
+        f_lines.append("-" * (f_name_w + 28))
+        for short, code, secs in short_rows:
+            if code == 0:
+                f_status = "ok (read the answers, not the tally)"
+            elif code == 124:
+                f_status = "TIMED OUT (partial)"
+            else:
+                f_status = f"ERROR (exit {code})"
+            f_lines.append(
+                f"{short.ljust(f_name_w)}   {code:>4}  {secs:>6.0f}   {f_status}"
+            )
+        folder_summary_path.write_text(
+            "\n".join(f_lines) + "\n", encoding="utf-8"
+        )
+
+    return summary
+
+
+
 def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
              timeout: int, diag_args: list[str]) -> int:
     names = _load_set_names(manifest)
@@ -613,73 +690,15 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
         log(f"    run       exit {code}  ({secs:.0f}s){note}")
         log(f"=== DONE  {name} at {_timestamp()} ===")
         results.append((name, code, secs))
+        _write_summaries(outdir, results)
 
     log(f"ALL SETS COMPLETE at {_timestamp()}")
 
-    # ---- summary ----
-    lines = ["PROMPTKIT BATCH SUMMARY", f"Finished: {_timestamp()}", ""]
-    name_w = max((len(n) for n, _, _ in results), default=8)
-    lines.append(f"{'set'.ljust(name_w)}   {'exit':>4}  {'secs':>6}   status")
-    lines.append("-" * (name_w + 28))
-    for name, code, secs in results:
-        if code == 0:
-            status = "ok (read the answers, not the tally)"
-        elif code == 124:
-            status = "TIMED OUT (partial)"
-        else:
-            status = f"ERROR (exit {code})"
-        lines.append(f"{name.ljust(name_w)}   {code:>4}  {secs:>6.0f}   {status}")
-    summary = "\n".join(lines)
-    summary_path.write_text(summary + "\n", encoding="utf-8")
-    print("\n" + summary, flush=True)
-
-    # ---- per-folder summaries ----
-    # Every folder that holds set outputs gets one file named
-    # <folder_basename>_summary.log inside it, with the same table shape
-    # as the top-level summary but filtered to that folder's sets. Root-
-    # level set files (no folder) are already in the top-level summary
-    # and get no separate file. A folder with exactly one set still gets
-    # its summary, for uniformity.
-    by_folder: dict[str, list[tuple[str, int, float]]] = {}
-    for name, code, secs in results:
-        folder = name.rsplit("/", 1)[0] if "/" in name else ""
-        by_folder.setdefault(folder, []).append((name, code, secs))
-
-    for folder, rows in by_folder.items():
-        if not folder:
-            continue
-        folder_dir = outdir / folder
-        folder_dir.mkdir(parents=True, exist_ok=True)
-        folder_basename = Path(folder).name
-        folder_summary_path = folder_dir / f"{folder_basename}_summary.log"
-
-        f_lines = [
-            f"PROMPTKIT FOLDER SUMMARY: {folder}",
-            f"Finished: {_timestamp()}",
-            "",
-        ]
-        short_rows = [
-            (n[len(folder) + 1:] if n.startswith(folder + "/") else n, c, s)
-            for n, c, s in rows
-        ]
-        f_name_w = max((len(n) for n, _, _ in short_rows), default=8)
-        f_lines.append(
-            f"{'set'.ljust(f_name_w)}   {'exit':>4}  {'secs':>6}   status"
-        )
-        f_lines.append("-" * (f_name_w + 28))
-        for short, code, secs in short_rows:
-            if code == 0:
-                f_status = "ok (read the answers, not the tally)"
-            elif code == 124:
-                f_status = "TIMED OUT (partial)"
-            else:
-                f_status = f"ERROR (exit {code})"
-            f_lines.append(
-                f"{short.ljust(f_name_w)}   {code:>4}  {secs:>6.0f}   {f_status}"
-            )
-        folder_summary_path.write_text(
-            "\n".join(f_lines) + "\n", encoding="utf-8"
-        )
+    # Final pass. The last per-set write above already wrote the same
+    # content; this call returns the summary text so we can print it
+    # once at the end of the batch.
+    final_summary = _write_summaries(outdir, results)
+    print("\n" + final_summary, flush=True)
 
     return 1 if any(code != 0 for _, code, _ in results) else 0
 
