@@ -45,3 +45,7 @@ source-tree.txt
 t_after*.txt
 trash/
 t_*.txt
+
+# Overnight prompt runs and their derivatives
+overnight/
+clean_*

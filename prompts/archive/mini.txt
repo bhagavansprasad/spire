@@ -1,7 +1,0 @@
-# small test set — a few prompts covering the interesting cases
-which vendors are in the US
-Suppliers named Lee
-show contacts for supplier Lee Supplies
-top 10 invoices by amount
-Show me invoices for supplier 1252
-what is the weather today

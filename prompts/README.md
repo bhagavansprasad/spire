@@ -13,14 +13,13 @@ Two axes, one tree.
 
 ~~~
 prompts/
-  supplier/          smoke.txt  verify.txt  exhaust.txt
-  payables/          smoke.txt  verify.txt  exhaust.txt
-  procurement/       smoke.txt  verify.txt  exhaust.txt
-  receivables/       smoke.txt  verify.txt  exhaust.txt
-  combinations/
-    payables_supplier/       smoke.txt  verify.txt  exhaust.txt
-    payables_procurement/    smoke.txt  verify.txt  exhaust.txt
-    procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
+  supplier/                smoke.txt  verify.txt  exhaust.txt
+  payables/                smoke.txt  verify.txt  exhaust.txt
+  procurement/             smoke.txt  verify.txt  exhaust.txt
+  receivables/             smoke.txt  verify.txt  exhaust.txt
+  payables_supplier/       smoke.txt  verify.txt  exhaust.txt
+  payables_procurement/    smoke.txt  verify.txt  exhaust.txt
+  procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
 ~~~
 
 **Cross-cutting features** are flat files at the root, named
@@ -28,24 +27,26 @@ prompts/
 
 ~~~
 prompts/
-  smoke_columns.txt              verify_columns.txt              exhaust_columns.txt
-  smoke_refusals.txt             verify_refusals.txt             exhaust_refusals.txt
-  smoke_lifecycle.txt            verify_lifecycle.txt            exhaust_lifecycle.txt
-  smoke_child_as_root.txt        verify_child_as_root.txt        exhaust_child_as_root.txt
-  smoke_truncation.txt           verify_truncation.txt           exhaust_truncation.txt
-  smoke_date_filters.txt         verify_date_filters.txt         exhaust_date_filters.txt
-  smoke_fields_and_include.txt   verify_fields_and_include.txt   exhaust_fields_and_include.txt
-  smoke_modes.txt                verify_modes.txt                exhaust_modes.txt
-  smoke_dipstick.txt             verify_dipstick.txt             exhaust_dipstick.txt
+  columns/                smoke.txt  verify.txt  exhaust.txt
+  refusals/               smoke.txt  verify.txt  exhaust.txt  refusal_examples.txt
+  lifecycle/              smoke.txt  verify.txt  exhaust.txt
+  child_as_root/          smoke.txt  verify.txt  exhaust.txt
+  truncation/             smoke.txt  verify.txt  exhaust.txt
+  date_filters/           smoke.txt  verify.txt  exhaust.txt
+  fields_and_include/     smoke.txt  verify.txt  exhaust.txt
+  modes/                  smoke.txt  verify.txt  exhaust.txt
+  dipstick/               smoke.txt  verify.txt  exhaust.txt
+  scorer/                 parser_stress.txt  tool_selection.txt
+  sme/                    testcases.txt
+  retest/                 prompts.txt
 ~~~
 
 **Other files, no tier:**
 
-- `qa_testcases.txt` — external QA corpus, verbatim, no runner contract.
-- `refusal_examples.txt` — the refusal Examples from `capability.py`, enforced by `tests/test_nl_parser_capability.py`.
+- `sme/testcases.txt` — external QA corpus, verbatim, no runner contract.
+- `refusals/refusal_examples.txt` — the refusal Examples from `capability.py`, enforced by `tests/test_nl_parser_capability.py`.
 - `scorer/` — parser-scorer corpora in a different format (`EXPECT ||| prompt`). Not for promptkit.
-- `archive/` — the pre-2026-09-24 sets, kept for forensic reference. Do not run.
-- `new/` — pending disposition.
+- `retest/prompts.txt` — pending fold-in to its targets.
 
 ## Tiers
 
@@ -115,7 +116,7 @@ a refusal.
 
 ## Where a set starts
 
-`prompts/smoke_dipstick.txt` is depth-ordered on purpose. If depth 2 fails,
+`prompts/dipstick/smoke.txt` is depth-ordered on purpose. If depth 2 fails,
 the filter layer is broken and every later failure is probably downstream
 of it. Run it first and read it first.
 

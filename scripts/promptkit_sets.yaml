@@ -18,64 +18,64 @@
 
 sets:
   # ── smoke — seconds ─────────────────────────────────────────────
-  - smoke_dipstick
+  - dipstick/smoke
   - supplier/smoke
   - payables/smoke
   - procurement/smoke
   - receivables/smoke
-  - combinations/payables_supplier/smoke
-  - combinations/payables_procurement/smoke
-  - combinations/procurement_supplier/smoke
-  - smoke_columns
-  - smoke_refusals
-  - smoke_lifecycle
-  - smoke_child_as_root
-  - smoke_truncation
-  - smoke_date_filters
-  - smoke_fields_and_include
-  - smoke_modes
+  - payables_supplier/smoke
+  - payables_procurement/smoke
+  - procurement_supplier/smoke
+  - columns/smoke
+  - refusals/smoke
+  - lifecycle/smoke
+  - child_as_root/smoke
+  - truncation/smoke
+  - date_filters/smoke
+  - fields_and_include/smoke
+  - modes/smoke
 
   # ── verify — minutes ────────────────────────────────────────────
-  - verify_dipstick
+  - dipstick/verify
   - supplier/verify
   - payables/verify
   - procurement/verify
   - receivables/verify
-  - combinations/payables_supplier/verify
-  - combinations/payables_procurement/verify
-  - combinations/procurement_supplier/verify
-  - verify_columns
-  - verify_refusals
-  - verify_lifecycle
-  - verify_child_as_root
-  - verify_truncation
-  - verify_date_filters
-  - verify_fields_and_include
-  - verify_modes
+  - payables_supplier/verify
+  - payables_procurement/verify
+  - procurement_supplier/verify
+  - columns/verify
+  - refusals/verify
+  - lifecycle/verify
+  - child_as_root/verify
+  - truncation/verify
+  - date_filters/verify
+  - fields_and_include/verify
+  - modes/verify
 
   # ── corpus — external, verbatim, no tier ────────────────────────
-  - qa_testcases
+  - sme/testcases
 
   # ── exhaust — overnight. Comment out for a faster pass. ─────────
-  - exhaust_dipstick
+  - dipstick/exhaust
   - supplier/exhaust
   - payables/exhaust
   - procurement/exhaust
   - receivables/exhaust
-  - combinations/payables_supplier/exhaust
-  - combinations/payables_procurement/exhaust
-  - combinations/procurement_supplier/exhaust
-  - exhaust_columns
-  - exhaust_refusals
-  - exhaust_lifecycle
-  - exhaust_child_as_root
-  - exhaust_truncation
-  - exhaust_date_filters
-  - exhaust_fields_and_include
-  - exhaust_modes
+  - payables_supplier/exhaust
+  - payables_procurement/exhaust
+  - procurement_supplier/exhaust
+  - columns/exhaust
+  - refusals/exhaust
+  - lifecycle/exhaust
+  - child_as_root/exhaust
+  - truncation/exhaust
+  - date_filters/exhaust
+  - fields_and_include/exhaust
+  - modes/exhaust
 
   # ── non-tier prompt files (window 20 parity sweep) ──
-  - new/retest_prompts
-  - refusal_examples
+  - retest/prompts
+  - refusals/refusal_examples
   - scorer/parser_stress
   - scorer/tool_selection

@@ -134,53 +134,53 @@ bundles:
   - prompts/receivables/verify.txt
   - prompts/receivables/exhaust.txt
   # Combination folders — cross-module capabilities.
-  - prompts/combinations/payables_supplier/smoke.txt
-  - prompts/combinations/payables_supplier/verify.txt
-  - prompts/combinations/payables_supplier/exhaust.txt
-  - prompts/combinations/payables_procurement/smoke.txt
-  - prompts/combinations/payables_procurement/verify.txt
-  - prompts/combinations/payables_procurement/exhaust.txt
-  - prompts/combinations/procurement_supplier/smoke.txt
-  - prompts/combinations/procurement_supplier/verify.txt
-  - prompts/combinations/procurement_supplier/exhaust.txt
+  - prompts/payables_supplier/smoke.txt
+  - prompts/payables_supplier/verify.txt
+  - prompts/payables_supplier/exhaust.txt
+  - prompts/payables_procurement/smoke.txt
+  - prompts/payables_procurement/verify.txt
+  - prompts/payables_procurement/exhaust.txt
+  - prompts/procurement_supplier/smoke.txt
+  - prompts/procurement_supplier/verify.txt
+  - prompts/procurement_supplier/exhaust.txt
   # Cross-cutting features — flat tier-prefixed files at the prompts/ root.
-  - prompts/smoke_dipstick.txt
-  - prompts/verify_dipstick.txt
-  - prompts/exhaust_dipstick.txt
-  - prompts/smoke_lifecycle.txt
-  - prompts/verify_lifecycle.txt
-  - prompts/exhaust_lifecycle.txt
-  - prompts/smoke_columns.txt
-  - prompts/verify_columns.txt
-  - prompts/exhaust_columns.txt
-  - prompts/smoke_refusals.txt
-  - prompts/verify_refusals.txt
-  - prompts/exhaust_refusals.txt
-  - prompts/smoke_child_as_root.txt
-  - prompts/verify_child_as_root.txt
-  - prompts/exhaust_child_as_root.txt
-  - prompts/smoke_truncation.txt
-  - prompts/verify_truncation.txt
-  - prompts/exhaust_truncation.txt
-  - prompts/smoke_date_filters.txt
-  - prompts/verify_date_filters.txt
-  - prompts/exhaust_date_filters.txt
-  - prompts/smoke_fields_and_include.txt
-  - prompts/verify_fields_and_include.txt
-  - prompts/exhaust_fields_and_include.txt
-  - prompts/smoke_modes.txt
-  - prompts/verify_modes.txt
-  - prompts/exhaust_modes.txt
+  - prompts/dipstick/smoke.txt
+  - prompts/dipstick/verify.txt
+  - prompts/dipstick/exhaust.txt
+  - prompts/lifecycle/smoke.txt
+  - prompts/lifecycle/verify.txt
+  - prompts/lifecycle/exhaust.txt
+  - prompts/columns/smoke.txt
+  - prompts/columns/verify.txt
+  - prompts/columns/exhaust.txt
+  - prompts/refusals/smoke.txt
+  - prompts/refusals/verify.txt
+  - prompts/refusals/exhaust.txt
+  - prompts/child_as_root/smoke.txt
+  - prompts/child_as_root/verify.txt
+  - prompts/child_as_root/exhaust.txt
+  - prompts/truncation/smoke.txt
+  - prompts/truncation/verify.txt
+  - prompts/truncation/exhaust.txt
+  - prompts/date_filters/smoke.txt
+  - prompts/date_filters/verify.txt
+  - prompts/date_filters/exhaust.txt
+  - prompts/fields_and_include/smoke.txt
+  - prompts/fields_and_include/verify.txt
+  - prompts/fields_and_include/exhaust.txt
+  - prompts/modes/smoke.txt
+  - prompts/modes/verify.txt
+  - prompts/modes/exhaust.txt
   # Layout doc and the refusal-examples contract file.
   - prompts/README.md
-  - prompts/refusal_examples.txt
+  - prompts/refusals/refusal_examples.txt
   # External corpus — verbatim, no tier.
-  - prompts/qa_testcases.txt
+  - prompts/sme/testcases.txt
   # Scorer corpus — different format, different runner.
   - prompts/scorer/parser_stress.txt
   - prompts/scorer/tool_selection.txt
   # Pending disposition.
-  - prompts/new/retest_prompts.txt
+  - prompts/retest/prompts.txt
   # Tooling that reads the sets.
   - scripts/run_prompt_set.py
   - src/spire/rendering/formatters.py
@@ -530,8 +530,6 @@ excludes:
 - archive
 - isolation
 - isolation/*
-- prompts/archive
-- prompts/archive/*
 - 15_po_relative_date_filters_after.txt
 - 15_po_relative_date_filters_after2.txt
 - 15_po_relative_date_filters_before.txt

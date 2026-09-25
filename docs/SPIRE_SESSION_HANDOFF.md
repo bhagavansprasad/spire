@@ -67,14 +67,14 @@ inventory and per-capability tier plan in `docs/prompt-sets/SURFACE.md`
 
 ### Other files in the tree
 
-- `prompts/refusal_examples.txt` — renamed from
+- `prompts/refusals/refusal_examples.txt` — renamed from
   `10_refusal_examples.txt` and moved out of archive. It is a live
   contract file: `tests/test_nl_parser_capability.py` asserts a
   bijection between it and the guidance tables in `capability.py`.
-- `prompts/qa_testcases.txt` — external, verbatim, no tier.
+- `prompts/sme/testcases.txt` — external, verbatim, no tier.
 - `prompts/scorer/` — different format (`EXPECT ||| prompt`).
   Not for `promptkit --run`.
-- `prompts/new/retest_prompts.txt` — disposition pending.
+- `prompts/retest/prompts.txt` — disposition pending.
 - `prompts/archive/` — the pre-2026-09-24 sets `00`–`19`, the old
   README, `mini.txt`. Forensic reference. Do not run.
 
@@ -86,7 +86,7 @@ inventory and per-capability tier plan in `docs/prompt-sets/SURFACE.md`
   Three tests were red when the file lived under `scripts/prompts/`
   and the test still pointed there; the rename and the test's path
   update restored them.
-- `prompts/smoke_dipstick.txt` — **6/6 clean.** All six depths
+- `prompts/dipstick/smoke.txt` — **6/6 clean.** All six depths
   exercised end-to-end against the pod. The full run capture is not
   committed (grep pattern `t_*.txt` in `.gitignore`); the six prompts
   are in the set file itself.

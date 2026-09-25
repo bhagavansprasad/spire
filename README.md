@@ -228,7 +228,7 @@ python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
 
 # MULTIPLE PROMPT FILES — files run in order, prompts in line order
 python scripts/promptkit.py --run --prompt-file \
-    prompts/smoke_dipstick.txt \
+    prompts/dipstick/smoke.txt \
     prompts/supplier/smoke.txt
 
 # A MANIFEST — a YAML 'sets:' list; each set is its own subprocess with a

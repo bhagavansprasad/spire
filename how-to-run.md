@@ -264,7 +264,7 @@ python scripts/promptkit.py --generate prompts/supplier/smoke.txt
 Generate several at once:
 
 ```bash
-find prompts -name '*.txt' -not -path 'prompts/archive/*' -print0 | xargs -0 python scripts/promptkit.py --generate
+find prompts -name '*.txt' -print0 | xargs -0 python scripts/promptkit.py --generate
 ```
 
 ### Validate routing (fast, no pod)
@@ -383,16 +383,15 @@ then `--validate` / `--run`. Full inventory in `docs/prompt-sets/SURFACE.md`.
 
 | Path | Purpose |
 |---|---|
-| `prompts/smoke_dipstick.txt` | depth-ordered triage. **Run first** |
+| `prompts/dipstick/smoke.txt` | depth-ordered triage. **Run first** |
 | `prompts/supplier/` | supplier module — smoke / verify / exhaust |
 | `prompts/payables/` | payables module |
 | `prompts/procurement/` | procurement module |
 | `prompts/receivables/` | receivables module |
-| `prompts/combinations/` | cross-module capabilities |
-| `prompts/smoke_refusals.txt` | out-of-scope. **A refusal is a pass** |
-| `prompts/verify_columns.txt` | column selection |
-| `prompts/qa_testcases.txt` | external QA corpus, verbatim |
-| `prompts/archive/` | pre-2026-09-24 sets, forensic only |
+| `prompts/payables_supplier/` (etc.) | cross-module capabilities, top-level folders |
+| `prompts/refusals/smoke.txt` | out-of-scope. **A refusal is a pass** |
+| `prompts/columns/verify.txt` | column selection |
+| `prompts/sme/testcases.txt` | external QA corpus, verbatim |
 
 > `prompts/scorer/` holds parser-scorer corpora in a different format
 > (`EXPECT ||| prompt`) — not for promptkit.

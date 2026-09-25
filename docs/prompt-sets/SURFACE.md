@@ -61,22 +61,24 @@ prompts/
   payables/          smoke.txt  verify.txt  exhaust.txt
   procurement/       smoke.txt  verify.txt  exhaust.txt
   receivables/       smoke.txt  verify.txt  exhaust.txt
-  combinations/
-    payables_supplier/       smoke.txt  verify.txt  exhaust.txt
-    payables_procurement/    smoke.txt  verify.txt  exhaust.txt
-    procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
-  smoke_columns.txt              verify_columns.txt              exhaust_columns.txt
-  smoke_refusals.txt             verify_refusals.txt             exhaust_refusals.txt
-  smoke_lifecycle.txt            verify_lifecycle.txt            exhaust_lifecycle.txt
-  smoke_child_as_root.txt        verify_child_as_root.txt        exhaust_child_as_root.txt
-  smoke_truncation.txt           verify_truncation.txt           exhaust_truncation.txt
-  smoke_date_filters.txt         verify_date_filters.txt         exhaust_date_filters.txt
-  smoke_fields_and_include.txt   verify_fields_and_include.txt   exhaust_fields_and_include.txt
-  smoke_modes.txt                verify_modes.txt                exhaust_modes.txt
-  smoke_dipstick.txt             verify_dipstick.txt             exhaust_dipstick.txt
+  payables_supplier/       smoke.txt  verify.txt  exhaust.txt
+  payables_procurement/    smoke.txt  verify.txt  exhaust.txt
+  procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
+  columns/                smoke.txt  verify.txt  exhaust.txt
+  refusals/               smoke.txt  verify.txt  exhaust.txt  refusal_examples.txt
+  lifecycle/              smoke.txt  verify.txt  exhaust.txt
+  child_as_root/          smoke.txt  verify.txt  exhaust.txt
+  truncation/             smoke.txt  verify.txt  exhaust.txt
+  date_filters/           smoke.txt  verify.txt  exhaust.txt
+  fields_and_include/     smoke.txt  verify.txt  exhaust.txt
+  modes/                  smoke.txt  verify.txt  exhaust.txt
+  dipstick/               smoke.txt  verify.txt  exhaust.txt
+  scorer/                 parser_stress.txt  tool_selection.txt
+  sme/                    testcases.txt
+  retest/                 prompts.txt
 ~~~
 
-Rule: a module or combination is a folder with three tier files inside. A feature is three flat files at the root. No subfolders inside features — there is no `features/` folder.
+Rule: every capability — module, combination, or cross-cutting feature — is a folder at prompts/ root, holding three tier files (`smoke.txt` / `verify.txt` / `exhaust.txt`). One level of folders only; one file at root, this tree's README. `refusals/` additionally holds `refusal_examples.txt`, the contract file enforced by `tests/test_nl_parser_capability.py`.
 
 ---
 
@@ -98,25 +100,25 @@ Where each existing file's content goes.
 
 | Current file | New home |
 |---|---|
-| 00_dipstick.txt | smoke_dipstick.txt |
+| 00_dipstick.txt | dipstick/smoke.txt |
 | 01_supplier.txt | supplier/verify.txt (some prompts → smoke, some → exhaust) |
 | 02_purchase_order.txt | procurement/verify.txt |
 | 03_ar.txt | receivables/verify.txt |
-| 04_columns.txt | verify_columns.txt |
-| 05_refusals.txt | verify_refusals.txt |
-| 06_slow.txt | split: supplier parts → supplier/exhaust.txt; PO scans → procurement/exhaust.txt; compare → combinations/payables_procurement/exhaust.txt |
-| 07_alacarte.txt | verify_columns.txt (merge with 04) |
-| 08_lifecycle.txt | verify_lifecycle.txt |
-| 10_refusal_examples.txt | verify_refusals.txt (merge with 05) |
-| 11_column_vocabulary.txt | verify_columns.txt (merge) |
-| 12_po_supplier_include.txt | combinations/procurement_supplier/verify.txt |
-| 13_child_as_root.txt | verify_child_as_root.txt |
-| 14_truncation_narration.txt | verify_truncation.txt |
-| 15_po_relative_date_filters.txt | verify_date_filters.txt (merge) |
-| 16_date_filter_cluster.txt | verify_date_filters.txt (merge) |
-| 17_modes_and_columns.txt | split: modes → verify_modes.txt; columns → verify_columns.txt |
-| 18_invoice_created_dates.txt | verify_date_filters.txt (merge) |
-| 19_fields_and_include.txt | verify_fields_and_include.txt |
+| 04_columns.txt | columns/verify.txt |
+| 05_refusals.txt | refusals/verify.txt |
+| 06_slow.txt | split: supplier parts → supplier/exhaust.txt; PO scans → procurement/exhaust.txt; compare → payables_procurement/exhaust.txt |
+| 07_alacarte.txt | columns/verify.txt (merge with 04) |
+| 08_lifecycle.txt | lifecycle/verify.txt |
+| 10_refusal_examples.txt | refusals/verify.txt (merge with 05) |
+| 11_column_vocabulary.txt | columns/verify.txt (merge) |
+| 12_po_supplier_include.txt | procurement_supplier/verify.txt |
+| 13_child_as_root.txt | child_as_root/verify.txt |
+| 14_truncation_narration.txt | truncation/verify.txt |
+| 15_po_relative_date_filters.txt | date_filters/verify.txt (merge) |
+| 16_date_filter_cluster.txt | date_filters/verify.txt (merge) |
+| 17_modes_and_columns.txt | split: modes → modes/verify.txt; columns → columns/verify.txt |
+| 18_invoice_created_dates.txt | date_filters/verify.txt (merge) |
+| 19_fields_and_include.txt | fields_and_include/verify.txt |
 
 Merged files retain every prompt verbatim and every comment. Nothing is deleted.
 
@@ -126,11 +128,11 @@ Merged files retain every prompt verbatim and every comment. Nothing is deleted.
 
 | File | Why |
 |---|---|
-| qa_testcases.txt | External, kept verbatim by design. Labels stale from 2026-07-28. |
+| sme/testcases.txt | External, kept verbatim by design. Labels stale from 2026-07-28. |
 | scorer/parser_stress.txt | Different format (EXPECT prefix, pipe-separated). Feeds the scorer, not promptkit run. |
 | scorer/tool_selection.txt | Same. |
-| new/retest_prompts.txt | Decide later whether to fold in or retire. |
-| 10_refusal_examples.txt (as a file) | Content merges into verify_refusals.txt, but the file's guard — "every Example in capability.py appears here" — is enforced by a pytest test, not by the prompt set. The test does not move. |
+| retest/prompts.txt | Fold in to its targets (receivables, payables, columns). Header retained until the fold-in pass. |
+| refusals/refusal_examples.txt | Kept as a separate contract file inside refusals/. Its guard — "every Example in capability.py appears here" — is enforced by `tests/test_nl_parser_capability.py`, not by the prompt set. The file is not a tier file. |
 
 ---
 
@@ -189,7 +191,7 @@ For every capability in §1–§3, what each tier file contains. Smoke ⊂ verif
 | verify | smoke × paraphrases · every AR child (lines, tax, DFF) · every CustomerAccount child (transactions, receipts, credit memos, applications) · every mode (count, open_only, balance_only, invoice_limit) · StandardReceipt vs AccountReceipt | 35 |
 | exhaust | verify + F-041 V1 (all 16 AR-child reproducers) · F-051 V1 · F-019 V1 · F-007 V1 · F-015 V1 · every aggregation op · every StandardReceipt phrasing · boundary | 70 |
 
-### 10.5 `combinations/payables_supplier` — folder
+### 10.5 `payables_supplier` — folder
 
 | Tier | Content | Target |
 |---|---|---|
@@ -197,7 +199,7 @@ For every capability in §1–§3, what each tier file contains. Smoke ⊂ verif
 | verify | supplier filter × 4 phrasings · invoice-over-amount edge filter × 2 · no-recent-invoices edge filter × 2 · both directions of the join | 20 |
 | exhaust | verify + F-009 V1 · F-012 V1 · F-036 V1 · F-044 V1 · boundary | 50 |
 
-### 10.6 `combinations/payables_procurement` — folder
+### 10.6 `payables_procurement` — folder
 
 | Tier | Content | Target |
 |---|---|---|
@@ -205,7 +207,7 @@ For every capability in §1–§3, what each tier file contains. Smoke ⊂ verif
 | verify | smoke × paraphrases · all three compare ops · `purchase_order` filter × 3 phrasings · date-bounded comparisons | 20 |
 | exhaust | verify + F-004 V1 · every compare op × 3 phrasings · every PO status × compare · boundary | 55 |
 
-### 10.7 `combinations/procurement_supplier` — folder
+### 10.7 `procurement_supplier` — folder
 
 | Tier | Content | Target |
 |---|---|---|
@@ -213,7 +215,7 @@ For every capability in §1–§3, what each tier file contains. Smoke ⊂ verif
 | verify | 12_po_supplier_include's gradient (15) · `has_open_PO` edge filter · PO-by-supplier filter × 3 · both directions of the join | 22 |
 | exhaust | verify × 2 paraphrases per gradient band · boundary (nonexistent PO, nonexistent supplier) · every safe/middle/dangerous phrasing | 50 |
 
-### 10.8 `features/columns` — flat, three files
+### 10.8 `columns` — folder
 
 Content merged from 04, 07, 11.
 
@@ -223,7 +225,7 @@ Content merged from 04, 07, 11.
 | verify | 04's 8 · 07's 12 · 11's baseline + normalization sections | 35 |
 | exhaust | verify + 11's synonyms / jargon / EBS / must-not-resolve sections · F-014 V1 · F-017 V1 · F-027 V1 · F-051 V1 · boundary | 90 |
 
-### 10.9 `features/refusals` — flat, three files
+### 10.9 `refusals` — folder
 
 Content merged from 05, 10.
 
@@ -233,7 +235,7 @@ Content merged from 05, 10.
 | verify | 05's 9 · 10's 18 | 27 |
 | exhaust | verify + every example in `capability.py` · every flavor × 2 prompts · every entity × 1 unanswerable · cross-entity ambiguous | 60 |
 
-### 10.10 `features/lifecycle` — flat, three files
+### 10.10 `lifecycle` — folder
 
 Content from 08.
 
@@ -243,7 +245,7 @@ Content from 08.
 | verify | 08's 31 (all sections) | 31 |
 | exhaust | verify × paraphrases · every lifecycle shape · boundary (nonexistent PO, multiple POs, no PO) · regression guards vs neighbours | 55 |
 
-### 10.11 `features/child_as_root` — flat, three files
+### 10.11 `child_as_root` — folder
 
 Content from 13.
 
@@ -253,7 +255,7 @@ Content from 13.
 | verify | 13's 64 filtered to a representative 30 (10 per family × 3 families plus one) | 30 |
 | exhaust | all 64 from 13 + new variants per phrasing | 75 |
 
-### 10.12 `features/truncation` — flat, three files
+### 10.12 `truncation` — folder
 
 Content from 14.
 
@@ -263,7 +265,7 @@ Content from 14.
 | verify | 14's 14 | 14 |
 | exhaust | verify × 2 thresholds · every over-fetch-capable tool × 2 · boundary (empty source, one-row source, cap-exact) | 50 |
 
-### 10.13 `features/date_filters` — flat, three files
+### 10.13 `date_filters` — folder
 
 Content merged from 15, 16, 18.
 
@@ -273,7 +275,7 @@ Content merged from 15, 16, 18.
 | verify | 15's 23 · 16's date cluster (PO + Invoice) · 18's 12 | 40 |
 | exhaust | verify × phrasings · every PO status × date · every Invoice amount × date · cross-column traps | 90 |
 
-### 10.14 `features/fields_and_include` — flat, three files
+### 10.14 `fields_and_include` — folder
 
 Content from 19.
 
@@ -283,7 +285,7 @@ Content from 19.
 | verify | 19's 15 | 15 |
 | exhaust | verify × every entity with a child · every child × field naming × 2 phrasings | 60 |
 
-### 10.15 `features/modes` — flat, three files
+### 10.15 `modes` — folder
 
 Content from 17 (mode sections).
 
@@ -293,7 +295,7 @@ Content from 17 (mode sections).
 | verify | 17's mode sections · every op from the KG registries | 40 |
 | exhaust | verify · every op × 3 phrasing variants · every op × boundary | 70 |
 
-### 10.16 `features/dipstick` — flat, three files
+### 10.16 `dipstick` — folder
 
 Content from 00.
 
