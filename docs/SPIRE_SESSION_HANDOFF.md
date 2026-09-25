@@ -91,7 +91,7 @@ inventory and per-capability tier plan in `docs/prompt-sets/SURFACE.md`
   committed (grep pattern `t_*.txt` in `.gitignore`); the six prompts
   are in the set file itself.
 - `promptkit.py`'s default `--prompts-dir` resolves to `prompts/`;
-  the manifest at `scripts/promptkit_sets.yaml` lists all 49 sets and
+  the manifest at `scripts/manifests/promptkit_sets.yaml` lists all 49 sets and
   is picked up correctly.
 
 ## What's not done
@@ -118,7 +118,7 @@ formalized.
 
 **Run the prompt sets.** The entry point is the manifest:
 
-    python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+    python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
 
 It runs all 49 sets in tier order — smoke, verify, corpus, exhaust.
 Comment out the exhaust block for a faster pass. Or run one set:

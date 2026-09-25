@@ -317,7 +317,7 @@ another. Each set runs as a separate subprocess with a per-phase timeout, so one
 hung or crashing set cannot stop the batch. Built for an unattended run: the
 results are there to read in the morning.
 
-The manifest `scripts/promptkit_sets.yaml` is a top-level `sets:` list of set
+The manifest `scripts/manifests/promptkit_sets.yaml` is a top-level `sets:` list of set
 names (each resolves to `prompts/<name>.txt` and `<name>.json`). Comment
 a line out to skip it; the slow sets (`06_slow`, `08_lifecycle`) are commented
 out by default.

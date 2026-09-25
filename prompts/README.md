@@ -82,7 +82,7 @@ python scripts/promptkit.py --run --prompt-file \
 **Everything, via the manifest:**
 
 ~~~
-python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
 ~~~
 
 The manifest lists 49 sets in tier order — smoke first, then verify, then

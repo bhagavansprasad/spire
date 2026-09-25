@@ -233,11 +233,11 @@ python scripts/promptkit.py --run --prompt-file \
 
 # A MANIFEST — a YAML 'sets:' list; each set is its own subprocess with a
 # per-set timeout, so one hung set cannot stop the batch
-python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
 
 # MULTIPLE MANIFESTS — each gets a <stem>/ subfolder under --outdir
 python scripts/promptkit.py --run --manifest \
-    scripts/promptkit_sets.yaml \
+    scripts/manifests/promptkit_sets.yaml \
     smoke.yaml \
     --outdir results/tonight
 ```
@@ -245,7 +245,7 @@ python scripts/promptkit.py --run --manifest \
 A **prompt file** is plain text, one prompt per line. A **manifest** is a
 YAML file with a top-level `sets:` list of set names; each name resolves to
 `<prompts-dir>/<name>.txt` (default `prompts/`). Comment a line out
-to skip a set. `scripts/promptkit_sets.yaml` is the committed manifest.
+to skip a set. `scripts/manifests/promptkit_sets.yaml` is the committed manifest.
 
 **Manifest output.** Each set writes its own file; the run also writes a log
 and a summary. Default outdir is `promptkit_<YYYYMMDD_HHMMSS>/` in the cwd,
@@ -278,7 +278,7 @@ set.
 python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
 
 # a manifest run, but silence token accounting on every set
-python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml \
+python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml \
     --no-show-tokens
 ```
 

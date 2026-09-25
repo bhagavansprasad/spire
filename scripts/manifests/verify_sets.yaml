@@ -1,0 +1,30 @@
+# promptkit verify-tier manifest.
+#
+# Each name resolves to prompts/<name>.txt. Run order is list order.
+#
+# Run this tier alone:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/verify_sets.yaml
+#
+# Or run every tier in one batch via the full manifest:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
+#
+# Split of promptkit_sets.yaml: smoke=16, verify=17, exhaust=18.
+
+sets:
+  - dipstick/verify
+  - supplier/verify
+  - payables/verify
+  - procurement/verify
+  - receivables/verify
+  - payables_supplier/verify
+  - payables_procurement/verify
+  - procurement_supplier/verify
+  - columns/verify
+  - refusals/verify
+  - lifecycle/verify
+  - child_as_root/verify
+  - truncation/verify
+  - date_filters/verify
+  - fields_and_include/verify
+  - modes/verify
+  - sme/testcases

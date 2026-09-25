@@ -227,7 +227,10 @@ bundles:
   - scripts/build_parser_context.py
   # promptkit — the current test tooling (supersedes run_overnight/overnight_sets)
   - scripts/promptkit.py
-  - scripts/promptkit_sets.yaml
+  - scripts/manifests/promptkit_sets.yaml
+  - scripts/manifests/smoke_sets.yaml
+  - scripts/manifests/verify_sets.yaml
+  - scripts/manifests/exhaust_sets.yaml
   # generates the classifier menu from the KG
   - scripts/build_classifier_context.py
   # adds an entity->module mapping row to the KG

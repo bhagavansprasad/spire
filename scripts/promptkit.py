@@ -39,7 +39,7 @@ Examples:
                                             "Show open POs for supplier 2144"
     python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
     python scripts/promptkit.py --run --prompt-file a.txt b.txt
-    python scripts/promptkit.py --run --manifest scripts/promptkit_sets.yaml
+    python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
     python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
         --outdir results/tonight --show-planner
 """
