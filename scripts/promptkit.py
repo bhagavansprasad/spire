@@ -683,6 +683,13 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
             log(f"WARNING: {txt} missing — SKIPPING set {name}")
             continue
         log(f"=== START {name} at {_timestamp()} ===")
+        # Freeze the exact input used for this set: copy it into the
+        # output folder alongside its log. The .txt copy is the version
+        # this run consumed; if prompts/<name>.txt is edited later, the
+        # copy here still records what was actually run.
+        inp_copy = outdir / f"{name}.txt"
+        inp_copy.parent.mkdir(parents=True, exist_ok=True)
+        inp_copy.write_bytes(txt.read_bytes())
         code, secs = _run_one_set(txt, outdir / f"{name}.log",
                                   timeout, diag_args)
         note = ("  <-- TIMED OUT" if code == 124
