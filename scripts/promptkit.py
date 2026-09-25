@@ -17,7 +17,7 @@ Pick ONE source under --run:
                                      subprocess with a per-set --timeout, so
                                      one hung or crashed set cannot stop the
                                      batch. Writes per-set output plus
-                                     _run_log.txt / _summary.txt under --outdir.
+                                     _run_log.txt / _summary.log under --outdir.
 
     When --outdir is not given, batch output goes to
     promptkit_<YYYYMMDD_HHMMSS>/ in the current directory. A single manifest
@@ -586,7 +586,7 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
     names = _load_set_names(manifest)
     outdir.mkdir(parents=True, exist_ok=True)
     log_path = outdir / "_run_log.txt"
-    summary_path = outdir / "_summary.txt"
+    summary_path = outdir / "_summary.log"
 
     def log(line: str) -> None:
         print(line, flush=True)
@@ -606,7 +606,7 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
             log(f"WARNING: {txt} missing — SKIPPING set {name}")
             continue
         log(f"=== START {name} at {_timestamp()} ===")
-        code, secs = _run_one_set(txt, outdir / f"{name}.txt",
+        code, secs = _run_one_set(txt, outdir / f"{name}.log",
                                   timeout, diag_args)
         note = ("  <-- TIMED OUT" if code == 124
                 else f"  <-- exit {code}" if code != 0 else "")
@@ -632,6 +632,54 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
     summary = "\n".join(lines)
     summary_path.write_text(summary + "\n", encoding="utf-8")
     print("\n" + summary, flush=True)
+
+    # ---- per-folder summaries ----
+    # Every folder that holds set outputs gets one file named
+    # <folder_basename>_summary.log inside it, with the same table shape
+    # as the top-level summary but filtered to that folder's sets. Root-
+    # level set files (no folder) are already in the top-level summary
+    # and get no separate file. A folder with exactly one set still gets
+    # its summary, for uniformity.
+    by_folder: dict[str, list[tuple[str, int, float]]] = {}
+    for name, code, secs in results:
+        folder = name.rsplit("/", 1)[0] if "/" in name else ""
+        by_folder.setdefault(folder, []).append((name, code, secs))
+
+    for folder, rows in by_folder.items():
+        if not folder:
+            continue
+        folder_dir = outdir / folder
+        folder_dir.mkdir(parents=True, exist_ok=True)
+        folder_basename = Path(folder).name
+        folder_summary_path = folder_dir / f"{folder_basename}_summary.log"
+
+        f_lines = [
+            f"PROMPTKIT FOLDER SUMMARY: {folder}",
+            f"Finished: {_timestamp()}",
+            "",
+        ]
+        short_rows = [
+            (n[len(folder) + 1:] if n.startswith(folder + "/") else n, c, s)
+            for n, c, s in rows
+        ]
+        f_name_w = max((len(n) for n, _, _ in short_rows), default=8)
+        f_lines.append(
+            f"{'set'.ljust(f_name_w)}   {'exit':>4}  {'secs':>6}   status"
+        )
+        f_lines.append("-" * (f_name_w + 28))
+        for short, code, secs in short_rows:
+            if code == 0:
+                f_status = "ok (read the answers, not the tally)"
+            elif code == 124:
+                f_status = "TIMED OUT (partial)"
+            else:
+                f_status = f"ERROR (exit {code})"
+            f_lines.append(
+                f"{short.ljust(f_name_w)}   {code:>4}  {secs:>6.0f}   {f_status}"
+            )
+        folder_summary_path.write_text(
+            "\n".join(f_lines) + "\n", encoding="utf-8"
+        )
 
     return 1 if any(code != 0 for _, code, _ in results) else 0
 
