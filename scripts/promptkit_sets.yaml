@@ -77,5 +77,3 @@ sets:
   # ── non-tier prompt files (window 20 parity sweep) ──
   - retest/prompts
   - refusals/refusal_examples
-  - scorer/parser_stress
-  - scorer/tool_selection
