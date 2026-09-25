@@ -186,7 +186,7 @@ bundles:
   - src/spire/rendering/formatters.py
 
   # ── generated .json corpora (promptkit routing baselines) + mini ──
-  corpora:
+  corpora: []
   # The 13 .json files below were deleted on 2026-09-24 (PR #167).
   # Their recorded module/tool metadata was stale by construction after
   # the _TIER1 change; a --validate run against it would false-positive
