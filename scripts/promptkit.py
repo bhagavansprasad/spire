@@ -20,7 +20,7 @@ Pick ONE source under --run:
                                      _run_log.txt / _summary.log under --outdir.
 
     When --outdir is not given, batch output goes to
-    promptkit_<YYYYMMDD_HHMMSS>/ in the current directory. A single manifest
+    overnights/<YYYYMMDD_HHMMSS>/ in the current directory. A single manifest
     writes straight into the output dir; multiple manifests each get a
     <stem>/ subfolder so set names can't collide.
 
@@ -774,7 +774,7 @@ def main() -> int:
                 print(f"manifest not found: {m}", file=sys.stderr)
                 return 2
         base = (args.outdir
-                or Path(f"promptkit_{datetime.now():%Y%m%d_%H%M%S}"))
+                or Path(f"overnights/{datetime.now():%Y%m%d_%H%M%S}"))
         diag = _forward_diagnostics(args)
 
         if len(args.manifest) == 1:
