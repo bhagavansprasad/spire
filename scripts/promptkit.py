@@ -662,6 +662,11 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
              timeout: int, diag_args: list[str]) -> int:
     names = _load_set_names(manifest)
     outdir.mkdir(parents=True, exist_ok=True)
+    # Freeze the manifest itself. The per-set .txt copies record what each
+    # set ran; this records WHICH sets were requested, in what order, with
+    # what timeout. Together they make the round self-describing: anyone
+    # can reconstruct the batch from _manifest.yaml + the per-set .txt files.
+    (outdir / "_manifest.yaml").write_bytes(manifest.read_bytes())
     log_path = outdir / "_run_log.txt"
     summary_path = outdir / "_summary.log"
 
