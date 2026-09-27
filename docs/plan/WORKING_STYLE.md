@@ -198,10 +198,10 @@ For the procedural checklist that accompanies this file, see
     discipline still holds; it is asserted by cell 1 and confirmed by
     cell 2.
 
-## Evidence standard for findings (S0–S8)
+## Evidence standard for findings (S0–S11)
 
 Before anything is written into a findings log as a bug, the claim
-walks through S0–S8 in order. If a step fails, the claim stops at that
+walks through S0–S11 in order. If a step fails, the claim stops at that
 step and is classified accordingly. The point is not caution for its
 own sake — it is that a wrong finding costs as much as a missed one,
 because a later session acts on it.
@@ -239,7 +239,20 @@ it may not be written up.
 Cite the specific `file:line` or function that causes the harm. No
 line, no mechanism — just a correlation.
 
-**S4 — Disprove the alternative.**
+**S4 — Name the probable root cause.**
+The mechanism is the line that fails. The root cause is why that line
+is written that way. State one:
+  - a design decision that is wrong
+  - a plan-template selection gap
+  - a parser grammar gap
+  - a missing guard or default
+  - a stale assumption about pod data
+
+If no root cause can be named, record "mechanism known, root cause
+unknown" explicitly. That tells the fix window it may be about to
+patch a symptom.
+
+**S5 — Disprove the alternative.**
 Name one alternative explanation and show it is not the cause. Common
 ones:
   - the pod data changed between runs
@@ -249,20 +262,20 @@ ones:
 
 If no alternative can be named, the cause has not been isolated.
 
-**S5 — Name the falsifier.**
+**S6 — Name the falsifier.**
 If someone said "no, this isn't a bug," what one command would prove
 them right? If no such command can be named, the claim is not
 falsifiable and cannot enter the log.
 
-**S6 — Classify.** Only now write the F-NNN entry:
-  - **Confirmed** — S1–S5 all passed.
+**S7 — Classify.** Only now write the F-NNN entry:
+  - **Confirmed** — S1–S6 all passed.
   - **Candidate** — some steps failed; note which.
   - **Observation** — S1 failed; goes as a note under a related
     finding, not its own entry.
   - **Closed-as-not-a-bug** — a prior claim disproven by stronger
     evidence; cite the old entry ID.
 
-**S6-notes — the two `closed-as-not-a-bug` shapes.**
+**S7-notes — the two `closed-as-not-a-bug` shapes.**
 
 When a prior claim is disproven, it falls into one of two shapes.
 Naming which one it is clarifies what future sessions should and should
@@ -286,13 +299,37 @@ Both shapes cite the audit row in `Cross-refs` and both include the
 audit's original claim in the `Evidence` block for comparison. Neither
 edits the audit row's text.
 
-**S7 — Cross-link.**
+**S8 — The miss record.**
+A confirmed bug is also a miss by the prior audit. Answer three
+questions in order:
+
+  1. Did a prompt of this shape exist? — existing / passed-but-wrong /
+     absent.
+  2. Why did it not surface? — the reason, not the category. "The
+     prompt existed and passed" is a category. "The prompt existed and
+     passed because its plan happened to set
+     `filter_source_when_nonempty` while the sibling plan did not" is a
+     reason.
+  3. What would have caught it? — the prompt or check that did not
+     exist at the time.
+
+This is the record a future audit reads to find its blind spots.
+
+**S9 — Cross-link.**
 Every entry cites at least one §A / §B / §D row or another F-NNN.
 Orphan entries get re-checked before the next session.
 
-**S8 — List what was NOT checked.**
+**S10 — List what was NOT checked.**
 Explicit. This is what a future session reads to decide where to look
 next. "Nothing else was checked" is a valid and useful entry.
+
+**S11 — Coverage expansion.**
+Every confirmed bug has a shape. List the sibling prompts that
+exercise the same shape — existing or to-be-written — naming the tier
+each belongs to (smoke / verify / exhaust). This produces work for the
+prompt-set tree, not the findings log. It is the step that closes the
+gap between "we found this bug" and "we find its siblings before a
+user does."
 
 **Nondeterminism claims need N≥20.** A claim that a prompt behaves
 differently across runs is not falsifiable from one observation or
@@ -302,8 +339,8 @@ as ~14% is not formally excluded by 20 clean runs, but the audit's
 own threshold is N≥20 and empirical clean results at that N are a
 closed finding, not a suspended one.
 
-**The contract.** Every time an F-NNN is proposed, the steps S0–S8 are
-walked in order and it is shown which passed. Any time the question
+**The contract.** Every time an F-NNN is proposed, the steps S0–S11
+are walked in order and it is shown which passed. Any time the question
 "is this a bug?" is asked, the answer names the step, not a paragraph.
 
 **A worked example — F-006, wrongly filed as a bug.** The claim was
@@ -387,6 +424,134 @@ was skipped.
     appears in the same reply that delivers the closure news, before
     the next task's commands. The user should never have to ask
     "what's next?"; that question is answered proactively.
+
+---
+
+## Log analysis — reading, classifying, recording
+
+This is the discipline for analyzing promptkit runs (smoke, verify,
+exhaust tiers), pytest output, and any future tool-run log. It runs
+alongside S0–S11: S0–S11 governs what becomes a finding; this governs how
+logs are read and how candidates are surfaced *before* the review gate.
+
+**LA-1 — Read-only until the review gate.**
+During log analysis: no code fixes, no findings-log writes, no
+repository changes except under `docs/plan/` and the analysis workspace.
+Output is a candidate list plus the on-disk session record. Logging and
+fixing happen after the gate, in a separate window with its own
+approval.
+
+**LA-2 — On-disk files are the source of truth.**
+Chat is not. Every candidate, action item, classification, and set
+observation goes into a file before the window closes. If the window
+dies, the next reads the files and resumes; nothing depends on chat
+history.
+
+**LA-3 — Per-set files, not one growing document.**
+Layout under `docs/audit/log_analysis_sessions/<run_id>_<tier>/`:
+
+- `_index.md` — resume protocol + per-set status table.
+- `_candidates.md` — stable IDs C-001, C-002, ...
+- `_action_items.md` — S0–S11 walk per candidate.
+- `<set>.md` — one per set.
+- `_step6_regression.md` — one per multi-set step that produces its own
+  artifact.
+- `_next_window.md` — read order and steps for the next window.
+
+Append-only. Corrections go under `## Corrections` at the bottom of the
+per-set file; do not rewrite history.
+
+**LA-4 — One set at a time, one command at a time.**
+Extract one set, read it, classify it, write its file, update the
+index, move on. Never batch multiple sets into one analytical pass
+unless the batch is small and explicitly named.
+
+**LA-5 — Priority order for reading a run.**
+
+1. Structural integrity: set count, per-set triad (`.log`, `.txt`,
+   `_summary.log`), timestamps, manifest match.
+2. Exit-code triage: every non-zero exit from `_summary.log` and
+   `_run_log.txt`. Cheapest, highest-signal first pass.
+3. Signature extraction on non-zero sets.
+4. Prompt-level classification for all sets.
+5. Cross-fix regression check for the F-NNNs whose reproducers live in
+   this tier.
+6. Candidate list.
+7. Review gate. Stop and ask.
+
+**LA-6 — Classification vocabulary.**
+Exactly four classes per prompt:
+
+- `pass` — right rows, right claims.
+- `fail` — errored, or refused when it should not have.
+- `wrong-but-no-error` — reads correctly but says something false.
+- `regression` — a previously fixed behavior has reverted.
+
+An observation (no harm named) is not a class. Observations go in the
+per-set file under `## Observations`, and may be promoted to a
+candidate only if a harm can be named.
+
+**LA-7 — Extraction patterns.**
+Capture complete output to a file first; never pipe the run through a
+filter at capture time.
+
+- Plans only: `awk '/^Intent:/,/^Outputs:/' <log>`
+- Answers only: `awk '/^PROMPT: /{p=1} p' <log>`
+- Signatures: `grep -nE '^(ERROR:|Reason:|Refusal|Traceback|KeyError|no plan|error|HDFE|finite)' <log>`
+- Header + first answer line + truncation per prompt: `awk '/^PROMPT: /{p=1; print "---"; print} /^Answer:/{print; getline; print} /^Reason:/{print} /^Truncation:/{getline; print}' <log>`
+- Set map across all sets: a `for` loop producing prompts / refusals /
+  truncations / prompt list.
+
+Prefer header + truncation for the initial pass; drop into full `cat`
+only for a specific prompt when the header is not enough to classify.
+
+**LA-8 — Watchlist of failure shapes.**
+
+- Empty data behind confident prose.
+- A page count stated as a total.
+- A computation over a truncated sample stated as fact.
+- Customer-scoped results that never resolve an `AccountNumber`.
+- A generalisation true of the first few rows but not the set.
+- A list-shaped answer with no `Showing N of M` and no `Truncation:`
+  line.
+- A count computed over the sample rather than over the full set (the
+  F-010 shape).
+- Two prompts of the same shape that plan differently (one filters, one
+  does not).
+
+**LA-9 — Cross-set consistency.**
+Same prompt in two sets should behave the same. When it does not, that
+is a candidate until proven otherwise. Same for the same idempotent
+query across tiers.
+
+**LA-10 — Known mechanisms.**
+Maintain a list per run. For `20260925_150333 smoke`: `F-052`
+(confirmed at signature level) and `HDFE finite` (signature undefined,
+TODO). Add a mechanism to the plan file when confirmed.
+
+**LA-11 — The plan template.**
+The reusable plan lives at `docs/audit/SPIRE_log_analysis_plan.md`. It
+carries the parameter block, step order, signature patterns,
+classification table shapes, review gate, severity-and-confidence
+extension, and the priority-reorder log. Read it before starting a new
+run; update it when a new mechanism or a new recording shape is found.
+
+**LA-12 — Slow commands.**
+Name the cost before handing a command over. A full `cat` of a log can
+be large; a set extraction is instant. Prefer the smallest read that
+answers the current question.
+
+**LA-13 — Review gate.**
+Analysis ends here. Bring the candidate list, the S0–S11 walk per
+candidate, and blast-radius findings. Decide together: log as new
+F-NNN, link to existing, or close-as-not-a-bug. Priority is decided.
+Stop. Do not propose fixes at the gate.
+
+**LA-14 — Working example.**
+The `20260925_150333 smoke` run is the first full application. Its
+artifacts live at `docs/audit/log_analysis_sessions/20260925_150333_smoke/`.
+Its handoff is `docs/plan/HANDOFF.md` Section B. Its next-window steps
+are in `_next_window.md`.
 
 ---
 
