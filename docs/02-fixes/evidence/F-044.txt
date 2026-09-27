@@ -1,3 +1,5 @@
+<!-- ───── merged from: docs/phase-2/fixes/F-044-diag.txt ───── -->
+
 ##################################################################
 PART A — 'invoices for supplier 1252 above 50000'
 Two runs for determinism
@@ -635,4 +637,162 @@ Token usage:
   classify     in=    586  out=    142  total=    728
   parse        in=   4279  out=    515  total=   4794
   TOTAL        in=   4865  out=    657  total=   5522
+
+
+
+<!-- ───── merged from: docs/phase-2/fixes/F-044-v1v4v8.txt ───── -->
+
+#################################################################
+V1 + V8 — reproducer, 20 runs (FIX_PLAN §6 N>=20 for
+parser-adjacent paths; the model intermittently double-encodes)
+#################################################################
+
+=========== V1-RUN-1 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-2 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-3 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-4 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-5 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-6 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-7 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-8 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-9 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-10 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-11 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-12 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-13 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-14 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-15 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-16 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-17 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-18 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-19 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-20 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+#################################################################
+V2 — paraphrase (the second observed failure value, 100000)
+#################################################################
+
+=========== V2-RUN-1 ===========
+Answer:
+Showing 7 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 7 returned.
+
+#################################################################
+V3 — sibling (a passing threshold, must remain passing)
+#################################################################
+
+=========== V3-RUN-1 ===========
+Answer:
+Showing 14 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 14 returned.
+
+#################################################################
+V4 — negative (no supplier named, must still refuse)
+#################################################################
+
+=========== V4-RUN-1 ===========
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+  (refusal: missing_identifier — Invoice queries must specify a supplier filter, which is missing from this request.)
+
 

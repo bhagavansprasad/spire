@@ -1,3 +1,5 @@
+<!-- ───── merged from: docs/phase-2/fixes/F-003-v1-sweep.txt ───── -->
+
 ================================================================================
 PROMPT: count of suppliers
 ================================================================================
@@ -528,5 +530,153 @@ Token usage:
   classify     in=    583  out=     71  total=    654
   parse        in=   5756  out=    545  total=   6301
   TOTAL        in=   6339  out=    616  total=   6955
+
+
+
+
+<!-- ───── merged from: docs/phase-2/fixes/F-003-v8-sweep.txt ───── -->
+
+===== PROMPT: top 5 suppliers by purchase order value =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=144 total=727
+Router: modules=['procurement', 'supplier']
+[llm] stage=parse in=8167 out=352 total=8519
+[cache] HIT   cached=8158  fresh=9  total_in=8167
+[debug] shape = supplier_po_value_ranking
+Intent:
+  target_entity: Supplier
+  aggregate: {'op': 'po_value_by_supplier', 'date_from': None, 'date_to': None, 'top_n': 5}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_supplier
+    tool_args:      {'top_n': 5}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'supplier_po_value_ranking', 'status': None, 'total_suppliers': 94, 'returned': 5, 'truncated': False, 'total_available': 17552}
+        ... +2 more field(s): examined, rows
+
+Answer:
+Top 5 of 94 suppliers by committed value.
+EIP Inc leads with 865,287,107.89 — 2.6x the next.
+
+Top suppliers by PO value:
+  Rank | Supplier          | SupplierId      |  Total Ordered |  POs
+  -----+-------------------+-----------------+----------------+-----
+     1 | EIP Inc           | 300000047507499 | 865,287,107.89 | 2015
+     2 | Staffing Services | 300000047414571 | 328,053,963.10 | 1596
+     3 | JGA               | 300000047414635 | 159,598,443.36 | 1545
+     4 | CDW               | 300000075895541 | 104,419,938.79 |  207
+     5 | Advanced Corp     | 300000047507546 |  83,451,127.05 | 2465
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   5 record(s)
+Token usage:
+  classify     in=    583  out=    144  total=    727
+  parse        in=   8167  out=    352  total=   8519
+  TOTAL        in=   8750  out=    496  total=   9246
+
+
+===== PROMPT: how many purchase orders are there and what are they worth =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=77 total=663
+Router: modules=['procurement']
+[llm] stage=parse in=6623 out=405 total=7028
+[cache] HIT   cached=6611  fresh=12  total_in=6623
+[debug] shape = po_status_breakdown
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'po_count_by_status', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_status
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'po_status_breakdown', 'total_pos': 17552, 'total_ordered': 1990065652.360001, 'truncated': False, 'total_available': 17552, 'examined': 17552}
+        ... +1 more field(s): rows
+
+Answer:
+Across 13 groups.
+CLOSED is the largest at 1,836,788,564.78 (92% of the total).
+
+Total POs: 17552, total value: 1,990,065,652.36
+
+Breakdown by status:
+  Status                 |   POs |    Total Ordered
+  -----------------------+-------+-----------------
+  CLOSED                 | 13363 | 1,836,788,564.78
+  CLOSED FOR RECEIVING   |   938 |    77,798,287.13
+  OPEN                   |  1078 |    51,553,837.96
+  INCOMPLETE             |   252 |    11,162,060.55
+  REJECTED               |   283 |     7,987,383.50
+  PENDING APPROVAL       |    55 |     2,418,907.62
+  CLOSED FOR INVOICING   |    42 |     1,892,536.32
+  WITHDRAWN              |    10 |       387,589.50
+  PENDING ACKNOWLEDGMENT |     8 |        42,366.00
+  PENDING SIGNATURE      |     7 |        24,965.00
+  CANCELED               |  1513 |         4,000.00
+  FINALLY CLOSED         |     1 |         2,904.00
+  ON HOLD                |     2 |         2,250.00
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=     77  total=    663
+  parse        in=   6623  out=    405  total=   7028
+  TOTAL        in=   7209  out=    482  total=   7691
+
+
+===== PROMPT: how much have we committed in open purchase orders =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=104 total=688
+Router: modules=['procurement']
+[llm] stage=parse in=6621 out=575 total=7196
+[cache] HIT   cached=6611  fresh=10  total_in=6621
+[debug] shape = open_po_summary
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'open_po_summary', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: summarize_open_purchase_orders
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'open_po_summary', 'po_count': 1078, 'total_ordered': 51553837.95999999, 'supplier_count': 55, 'truncated': False, 'total_available': 1078}
+        ... +1 more field(s): examined
+
+Answer:
+
+Open PO count: 1078, total ordered: 51,553,837.96, suppliers: 55
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    584  out=    104  total=    688
+  parse        in=   6621  out=    575  total=   7196
+  TOTAL        in=   7205  out=    679  total=   7884
+
+
 
 

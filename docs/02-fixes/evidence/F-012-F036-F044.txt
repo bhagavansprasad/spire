@@ -1,3 +1,920 @@
+<!-- ───── merged from: docs/phase-2/fixes/F-012-F036-L2-run.txt ───── -->
+
+
+==================================================================
+[1/14] PROMPT: invoices for supplier 1252 over 10000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=198 total=789
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=1046 total=5330
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 19 record(s)
+    [1] {'InvoiceId': 300000264684985, 'InvoiceNumber': 'MBP_020620221', 'InvoiceDate': '2022-06-16', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000264334776, 'InvoiceNumber': 'MBP_PREPAY2', 'InvoiceDate': '2023-03-09', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (14 more)
+
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 17 USD, 2 AUD.
+All 19 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  MBP_020620221      | 300000264684985 |    11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |    11300.1 | USD      | 2023-03-09 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     19 (across all steps)
+  Final raw output:     19 record(s) under 'invoices'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    591  out=    198  total=    789
+  parse        in=   4284  out=   1046  total=   5330
+  TOTAL        in=   4875  out=   1244  total=   6119
+
+
+==================================================================
+[2/14] PROMPT: show invoices from supplier 1252 above 10000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=218 total=809
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=640 total=4924
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 19 record(s)
+    [1] {'InvoiceId': 300000264684985, 'InvoiceNumber': 'MBP_020620221', 'InvoiceDate': '2022-06-16', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000264334776, 'InvoiceNumber': 'MBP_PREPAY2', 'InvoiceDate': '2023-03-09', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (14 more)
+
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 17 USD, 2 AUD.
+All 19 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  MBP_020620221      | 300000264684985 |    11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |    11300.1 | USD      | 2023-03-09 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     19 (across all steps)
+  Final raw output:     19 record(s) under 'invoices'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    591  out=    218  total=    809
+  parse        in=   4284  out=    640  total=   4924
+  TOTAL        in=   4875  out=    858  total=   5733
+
+
+==================================================================
+[3/14] PROMPT: invoices for supplier 1252 above 50000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=204 total=795
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=691 total=4975
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+ERROR: execute: 1 validation error for call[search_invoices]
+amount_min
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='{\\"min\\": 50000}', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+
+==================================================================
+[4/14] PROMPT: Lee Supplies invoices above 10000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=250 total=835
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4278 out=525 total=4803
+[cache] HIT   cached=4267  fresh=11  total_in=4278
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': 'Lee Supplies'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_name': 'Lee Supplies', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 10 record(s)
+    [1] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 18, 'InvoiceNumber': 'Lee Supl 201219032', 'InvoiceDate': '2012-01-07', 'InvoiceAmount': 39338.97, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (5 more)
+
+Answer:
+Showing 10 invoices from an examined sample; the true matching count is not known.
+All 10 have InvoiceCurrency USD.
+All 10 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 10 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     10 (across all steps)
+  Final raw output:     10 record(s) under 'invoices'
+  Synthesized answer:   10 record(s)
+Token usage:
+  classify     in=    585  out=    250  total=    835
+  parse        in=   4278  out=    525  total=   4803
+  TOTAL        in=   4863  out=    775  total=   5638
+
+
+==================================================================
+[5/14] PROMPT: invoices from Lee Supplies over 10000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=587 out=227 total=814
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4280 out=466 total=4746
+[cache] HIT   cached=4267  fresh=13  total_in=4280
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': 'Lee Supplies'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_name': 'Lee Supplies', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 10 record(s)
+    [1] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 18, 'InvoiceNumber': 'Lee Supl 201219032', 'InvoiceDate': '2012-01-07', 'InvoiceAmount': 39338.97, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (5 more)
+
+Answer:
+Showing 10 invoices from an examined sample; the true matching count is not known.
+All 10 have InvoiceCurrency USD.
+All 10 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 10 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     10 (across all steps)
+  Final raw output:     10 record(s) under 'invoices'
+  Synthesized answer:   10 record(s)
+Token usage:
+  classify     in=    587  out=    227  total=    814
+  parse        in=   4280  out=    466  total=   4746
+  TOTAL        in=   4867  out=    693  total=   5560
+
+
+==================================================================
+[6/14] PROMPT: invoices for supplier 1252 with amount over 10000
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=593 out=171 total=764
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4286 out=603 total=4889
+[cache] HIT   cached=4267  fresh=19  total_in=4286
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 19 record(s)
+    [1] {'InvoiceId': 300000264684985, 'InvoiceNumber': 'MBP_020620221', 'InvoiceDate': '2022-06-16', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000264334776, 'InvoiceNumber': 'MBP_PREPAY2', 'InvoiceDate': '2023-03-09', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (14 more)
+
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 17 USD, 2 AUD.
+All 19 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  MBP_020620221      | 300000264684985 |    11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |    11300.1 | USD      | 2023-03-09 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     19 (across all steps)
+  Final raw output:     19 record(s) under 'invoices'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    593  out=    171  total=    764
+  parse        in=   4286  out=    603  total=   4889
+  TOTAL        in=   4879  out=    774  total=   5653
+
+
+==================================================================
+[7/14] PROMPT: invoices for supplier 1252
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=239 total=823
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4277 out=335 total=4612
+[cache] HIT   cached=4267  fresh=10  total_in=4277
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 670255, 'InvoiceNumber': '410079-5105', 'InvoiceDate': '2019-05-10', 'InvoiceAmount': -859.88, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 281071, 'InvoiceNumber': '50430-61', 'InvoiceDate': '2015-07-08', 'InvoiceAmount': -163.16, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 215069, 'InvoiceNumber': '500001-21', 'InvoiceDate': '2015-04-13', 'InvoiceAmount': -16092, 'InvoiceCurrency': 'JPY', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 455235, 'InvoiceNumber': '500007-82', 'InvoiceDate': '2016-05-31', 'InvoiceAmount': -162.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 595627, 'InvoiceNumber': '500196-102', 'InvoiceDate': '2018-03-12', 'InvoiceAmount': -984.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+Answer:
+Showing 25 of 1,329 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1329 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=    239  total=    823
+  parse        in=   4277  out=    335  total=   4612
+  TOTAL        in=   4861  out=    574  total=   5435
+
+
+==================================================================
+[8/14] PROMPT: invoices
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=577 out=183 total=760
+Router: modules=['payables']
+[llm] stage=parse in=2723 out=1017 total=3740
+[cache] HIT   cached=2720  fresh=3  total_in=2723
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice queries must specify a supplier, which is missing from the request.)
+Token usage:
+  classify     in=    577  out=    183  total=    760
+  parse        in=   2723  out=   1017  total=   3740
+  TOTAL        in=   3300  out=   1200  total=   4500
+
+
+==================================================================
+[9/14] PROMPT: Suppliers with their addresses
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=69 total=649
+Router: modules=['supplier']
+[llm] stage=parse in=3824 out=369 total=4193
+[cache] HIT   cached=3818  fresh=6  total_in=3824
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+Answer:
+Showing 25 of 303 suppliers.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber | Address                                                                                                   
+  ---------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                     | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                              | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric              | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Staffing Services                | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                        | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  InterChina                       | 300000087887113 | 1298           | 6080 Young Street,HALIFAX NOVA SCOTIA  B3K 5L2,CANADA (+1 more)                                           
+  Howell Engineering Inc.          | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+  United Parcel Service            | 300000047507225 | 1258           | 55 GLENLAKE PKWY,ATLANTA, GA 30328 FULTON (+1 more)                                                       
+  American Telephone and Telegraph | 300000047507272 | 1259           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Staples                          | 300000047507340 | 1260           | 401 EUCLID AVE,CLEVELAND, OH 44114 CUYAHOGA (+5 more)                                                     
+  British Telecom                  | 300000049521119 | 1273           | Osprey House,Osprey Road,EXETER,Devon,EX2 7WN,UNITED KINGDOM                                              
+  Windsor Inc                      | 300000049521294 | 1275           | Dahliastraat,18,1800 VILVOORDE,BELGIUM (+2 more)                                                          
+  Building Management              | 300000047572371 | 1270           | 230 Signal Hill Road,ST. JOHN'S NEWFOUNDLAND  A1A 1B3,CANADA (+2 more)                                    
+  Progressive Corp                 | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  GE                               | 300000047507387 | 1261           | 4432 Lake Rd,SAN MARINO, CA 91108 Los Angeles (+3 more)                                                   
+  Edison Co                        | 300000049521443 | 1276           | Tower Wharf, Cheese Lane, Bristol,BRISTOL,Bristol,BS1 4QF,UNITED KINGDOM (+1 more)                        
+  Northwest Electronic Supply      | 300000047572257 | 1268           | 700 STEWART ST,SEATTLE, WA 98101 KING (+1 more)                                                           
+  Consolidated Supplies            | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Office Depot                     | 300000047507596 | 1264           | no. 2/50-G,Ramnagar,Chanakyapuri,NEW DELHI-110021,Delhi,INDIA (+24 more)                                  
+  Metal Works                      | 300000047572210 | 1267           | 201 Portage Av,WINNIPEG MANITOBA  R3B 3K6,CANADA (+1 more)                                                
+  Prouty Supply House              | 300000047572304 | 1269           | 100 Milverton Drive,MISSISSAUGA ONTARIO  L5R 4H1,CANADA (+2 more)                                         
+  Advanced Corp                    | 300000047507546 | 1263           | 19 EVERETT ALY,TRENTON, NJ 08611 MERCER (+16 more)                                                        
+  EDF                              | 300000047837151 | 1271           | 2 Foxborough,Swallowfield,Reading Borough,READING,Berkshire,RG1 1AA,UNITED KINGDOM                        
+  EIP Inc                          | 300000047507499 | 1262           | 655 West Broadway,SAN DIEGO, CA 92101 San Diego (+21 more)                                                
+  Allied Manufacturing             | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=     69  total=    649
+  parse        in=   3824  out=    369  total=   4193
+  TOTAL        in=   4404  out=    438  total=   4842
+
+
+==================================================================
+[10/14] PROMPT: List suppliers with their address
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=80 total=660
+Router: modules=['supplier']
+[llm] stage=parse in=3824 out=394 total=4218
+[cache] HIT   cached=3818  fresh=6  total_in=3824
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+Answer:
+Showing 25 of 303 suppliers.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber | Address                                                                                                   
+  ---------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                     | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                              | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric              | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Staffing Services                | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                        | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  InterChina                       | 300000087887113 | 1298           | 6080 Young Street,HALIFAX NOVA SCOTIA  B3K 5L2,CANADA (+1 more)                                           
+  Howell Engineering Inc.          | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+  United Parcel Service            | 300000047507225 | 1258           | 55 GLENLAKE PKWY,ATLANTA, GA 30328 FULTON (+1 more)                                                       
+  American Telephone and Telegraph | 300000047507272 | 1259           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Staples                          | 300000047507340 | 1260           | 401 EUCLID AVE,CLEVELAND, OH 44114 CUYAHOGA (+5 more)                                                     
+  British Telecom                  | 300000049521119 | 1273           | Osprey House,Osprey Road,EXETER,Devon,EX2 7WN,UNITED KINGDOM                                              
+  Windsor Inc                      | 300000049521294 | 1275           | Dahliastraat,18,1800 VILVOORDE,BELGIUM (+2 more)                                                          
+  Building Management              | 300000047572371 | 1270           | 230 Signal Hill Road,ST. JOHN'S NEWFOUNDLAND  A1A 1B3,CANADA (+2 more)                                    
+  Progressive Corp                 | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  GE                               | 300000047507387 | 1261           | 4432 Lake Rd,SAN MARINO, CA 91108 Los Angeles (+3 more)                                                   
+  Edison Co                        | 300000049521443 | 1276           | Tower Wharf, Cheese Lane, Bristol,BRISTOL,Bristol,BS1 4QF,UNITED KINGDOM (+1 more)                        
+  Northwest Electronic Supply      | 300000047572257 | 1268           | 700 STEWART ST,SEATTLE, WA 98101 KING (+1 more)                                                           
+  Consolidated Supplies            | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Office Depot                     | 300000047507596 | 1264           | no. 2/50-G,Ramnagar,Chanakyapuri,NEW DELHI-110021,Delhi,INDIA (+24 more)                                  
+  Metal Works                      | 300000047572210 | 1267           | 201 Portage Av,WINNIPEG MANITOBA  R3B 3K6,CANADA (+1 more)                                                
+  Prouty Supply House              | 300000047572304 | 1269           | 100 Milverton Drive,MISSISSAUGA ONTARIO  L5R 4H1,CANADA (+2 more)                                         
+  Advanced Corp                    | 300000047507546 | 1263           | 19 EVERETT ALY,TRENTON, NJ 08611 MERCER (+16 more)                                                        
+  EDF                              | 300000047837151 | 1271           | 2 Foxborough,Swallowfield,Reading Borough,READING,Berkshire,RG1 1AA,UNITED KINGDOM                        
+  EIP Inc                          | 300000047507499 | 1262           | 655 West Broadway,SAN DIEGO, CA 92101 San Diego (+21 more)                                                
+  Allied Manufacturing             | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=     80  total=    660
+  parse        in=   3824  out=    394  total=   4218
+  TOTAL        in=   4404  out=    474  total=   4878
+
+
+==================================================================
+[11/14] PROMPT: suppliers and their addresses
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=74 total=653
+Router: modules=['supplier']
+[llm] stage=parse in=3823 out=268 total=4091
+[cache] HIT   cached=3818  fresh=5  total_in=3823
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+Answer:
+Showing 25 of 303 suppliers.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber | Address                                                                                                   
+  ---------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                     | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                              | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric              | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Staffing Services                | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                        | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  InterChina                       | 300000087887113 | 1298           | 6080 Young Street,HALIFAX NOVA SCOTIA  B3K 5L2,CANADA (+1 more)                                           
+  Howell Engineering Inc.          | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+  United Parcel Service            | 300000047507225 | 1258           | 55 GLENLAKE PKWY,ATLANTA, GA 30328 FULTON (+1 more)                                                       
+  American Telephone and Telegraph | 300000047507272 | 1259           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Staples                          | 300000047507340 | 1260           | 401 EUCLID AVE,CLEVELAND, OH 44114 CUYAHOGA (+5 more)                                                     
+  British Telecom                  | 300000049521119 | 1273           | Osprey House,Osprey Road,EXETER,Devon,EX2 7WN,UNITED KINGDOM                                              
+  Windsor Inc                      | 300000049521294 | 1275           | Dahliastraat,18,1800 VILVOORDE,BELGIUM (+2 more)                                                          
+  Building Management              | 300000047572371 | 1270           | 230 Signal Hill Road,ST. JOHN'S NEWFOUNDLAND  A1A 1B3,CANADA (+2 more)                                    
+  Progressive Corp                 | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  GE                               | 300000047507387 | 1261           | 4432 Lake Rd,SAN MARINO, CA 91108 Los Angeles (+3 more)                                                   
+  Edison Co                        | 300000049521443 | 1276           | Tower Wharf, Cheese Lane, Bristol,BRISTOL,Bristol,BS1 4QF,UNITED KINGDOM (+1 more)                        
+  Northwest Electronic Supply      | 300000047572257 | 1268           | 700 STEWART ST,SEATTLE, WA 98101 KING (+1 more)                                                           
+  Consolidated Supplies            | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Office Depot                     | 300000047507596 | 1264           | no. 2/50-G,Ramnagar,Chanakyapuri,NEW DELHI-110021,Delhi,INDIA (+24 more)                                  
+  Metal Works                      | 300000047572210 | 1267           | 201 Portage Av,WINNIPEG MANITOBA  R3B 3K6,CANADA (+1 more)                                                
+  Prouty Supply House              | 300000047572304 | 1269           | 100 Milverton Drive,MISSISSAUGA ONTARIO  L5R 4H1,CANADA (+2 more)                                         
+  Advanced Corp                    | 300000047507546 | 1263           | 19 EVERETT ALY,TRENTON, NJ 08611 MERCER (+16 more)                                                        
+  EDF                              | 300000047837151 | 1271           | 2 Foxborough,Swallowfield,Reading Borough,READING,Berkshire,RG1 1AA,UNITED KINGDOM                        
+  EIP Inc                          | 300000047507499 | 1262           | 655 West Broadway,SAN DIEGO, CA 92101 San Diego (+21 more)                                                
+  Allied Manufacturing             | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    579  out=     74  total=    653
+  parse        in=   3823  out=    268  total=   4091
+  TOTAL        in=   4402  out=    342  total=   4744
+
+
+==================================================================
+[12/14] PROMPT: list suppliers including their addresses
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=79 total=659
+Router: modules=['supplier']
+[llm] stage=parse in=3824 out=270 total=4094
+[cache] HIT   cached=3818  fresh=6  total_in=3824
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+Answer:
+Showing 25 of 303 suppliers.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber | Address                                                                                                   
+  ---------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                     | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                              | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric              | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Staffing Services                | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                        | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  InterChina                       | 300000087887113 | 1298           | 6080 Young Street,HALIFAX NOVA SCOTIA  B3K 5L2,CANADA (+1 more)                                           
+  Howell Engineering Inc.          | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+  United Parcel Service            | 300000047507225 | 1258           | 55 GLENLAKE PKWY,ATLANTA, GA 30328 FULTON (+1 more)                                                       
+  American Telephone and Telegraph | 300000047507272 | 1259           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Staples                          | 300000047507340 | 1260           | 401 EUCLID AVE,CLEVELAND, OH 44114 CUYAHOGA (+5 more)                                                     
+  British Telecom                  | 300000049521119 | 1273           | Osprey House,Osprey Road,EXETER,Devon,EX2 7WN,UNITED KINGDOM                                              
+  Windsor Inc                      | 300000049521294 | 1275           | Dahliastraat,18,1800 VILVOORDE,BELGIUM (+2 more)                                                          
+  Building Management              | 300000047572371 | 1270           | 230 Signal Hill Road,ST. JOHN'S NEWFOUNDLAND  A1A 1B3,CANADA (+2 more)                                    
+  Progressive Corp                 | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  GE                               | 300000047507387 | 1261           | 4432 Lake Rd,SAN MARINO, CA 91108 Los Angeles (+3 more)                                                   
+  Edison Co                        | 300000049521443 | 1276           | Tower Wharf, Cheese Lane, Bristol,BRISTOL,Bristol,BS1 4QF,UNITED KINGDOM (+1 more)                        
+  Northwest Electronic Supply      | 300000047572257 | 1268           | 700 STEWART ST,SEATTLE, WA 98101 KING (+1 more)                                                           
+  Consolidated Supplies            | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Office Depot                     | 300000047507596 | 1264           | no. 2/50-G,Ramnagar,Chanakyapuri,NEW DELHI-110021,Delhi,INDIA (+24 more)                                  
+  Metal Works                      | 300000047572210 | 1267           | 201 Portage Av,WINNIPEG MANITOBA  R3B 3K6,CANADA (+1 more)                                                
+  Prouty Supply House              | 300000047572304 | 1269           | 100 Milverton Drive,MISSISSAUGA ONTARIO  L5R 4H1,CANADA (+2 more)                                         
+  Advanced Corp                    | 300000047507546 | 1263           | 19 EVERETT ALY,TRENTON, NJ 08611 MERCER (+16 more)                                                        
+  EDF                              | 300000047837151 | 1271           | 2 Foxborough,Swallowfield,Reading Borough,READING,Berkshire,RG1 1AA,UNITED KINGDOM                        
+  EIP Inc                          | 300000047507499 | 1262           | 655 West Broadway,SAN DIEGO, CA 92101 San Diego (+21 more)                                                
+  Allied Manufacturing             | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=     79  total=    659
+  parse        in=   3824  out=    270  total=   4094
+  TOTAL        in=   4404  out=    349  total=   4753
+
+
+==================================================================
+[13/14] PROMPT: active suppliers in US
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=81 total=660
+Router: modules=['supplier']
+[llm] stage=parse in=3823 out=460 total=4283
+[cache] HIT   cached=3818  fresh=5  total_in=3823
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+    - {'type': 'country', 'value': 'US'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'country': 'US'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    ... (20 more)
+
+Answer:
+Showing 25 of 164 suppliers.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  US Gas and Electric              | 300000047507113 | 1256          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  Staples                          | 300000047507340 | 1260          
+  Building Management              | 300000047572371 | 1270          
+  GE                               | 300000047507387 | 1261          
+  Northwest Electronic Supply      | 300000047572257 | 1268          
+  Office Depot                     | 300000047507596 | 1264          
+  Metal Works                      | 300000047572210 | 1267          
+  Prouty Supply House              | 300000047572304 | 1269          
+  Advanced Corp                    | 300000047507546 | 1263          
+  EIP Inc                          | 300000047507499 | 1262          
+  Allied Manufacturing             | 300000047572113 | 1265          
+  Midtown Computer Supplies        | 300000047572163 | 1266          
+  Eiffage                          | 300000051066172 | 1279          
+  David Draper                     | 300000096312107 | 1299          
+  InterUS1                         | 300000055053882 | 1284          
+  Internal Revenue Service         | 300000069320926 | 1287          
+  CLP                              | 300000066744397 | 1286          
+  ABC Consulting                   | 300000075039541 | 1288          
+
+Truncation:
+  - suppliers: 164 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    579  out=     81  total=    660
+  parse        in=   3823  out=    460  total=   4283
+  TOTAL        in=   4402  out=    541  total=   4943
+
+
+==================================================================
+[14/14] PROMPT: show me contract renewals
+==================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=337 total=916
+Router: modules=['procurement']
+[llm] stage=parse in=3920 out=737 total=4657
+[cache] HIT   cached=3915  fresh=5  total_in=3920
+Reason:   that kind of record isn't something I know about.
+
+Solution: What I do have: addresses, credit memos, customer accounts, supplier invoices, purchase orders, AR invoices, receipts and suppliers.
+
+Example:  invoices for Lee Supplies
+  (refusal: unknown_entity — needs a Contract entity, which is not supported)
+Token usage:
+  classify     in=    579  out=    337  total=    916
+  parse        in=   3920  out=    737  total=   4657
+  TOTAL        in=   4499  out=   1074  total=   5573
+
+
+
+<!-- ───── merged from: docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt ───── -->
+
 [llm] provider=gemini model=gemini-3.5-flash
 [llm] stage=classify in=596 out=349 total=945
 Router: modules=['receivables']
@@ -5878,4 +6795,6 @@ Token usage:
   classify     in=    579  out=    337  total=    916
   parse        in=   3920  out=    799  total=   4719
   TOTAL        in=   4499  out=   1136  total=   5635
+
+
 
