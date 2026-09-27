@@ -329,7 +329,7 @@ was skipped.
 
         gh pr list --state merged --limit 20 --json number,title,mergedAt \
           --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
-        grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/phase-2/FIX_PLAN.md
+        grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/02-fixes/FIX_PLAN.md
 
     Every merged PR whose F-NNN row still shows `fixed | —` is
     drift. Flip to `verified | #NNN` (and phase-1-audit §B.6
@@ -381,7 +381,7 @@ was skipped.
     prior turn, use it.
 
 27. **After every bug fix, report the queue.** State how many rows
-    remain pending in `docs/phase-2/FIX_PLAN.md` and name the next
+    remain pending in `docs/02-fixes/FIX_PLAN.md` and name the next
     one being picked up. This runs after every closure — a fix, a
     `closed-as-not-a-bug`, a merge with its tracking flip — and it
     appears in the same reply that delivers the closure news, before
