@@ -30,7 +30,14 @@ Do not log to the findings log from this window.
           non-refusal as the final prompt. F-052 explains the exit-1
           case; the exit-0 case with earlier refusals is a separate
           observation and needs its own mechanism.
-- status: observation, needs mechanism confirmation
+- status: observation — not promoted to F-NNN. S1 fails: no user-facing
+          harm named. The behaviour is: exit code reflects the FINAL
+          prompt's state; the F-052 exit-code mechanism documented in
+          log_analysis/_plan.md explains the observed exit-1 sets. A set
+          whose refusal is non-final exits 0, which is correct — the
+          refusal is a valid answer, not a failure.
+- resolution: attached as a clarifying note to the exit-code mechanism
+              in log_analysis/_plan.md. No new F-NNN.
 
 
 ---
