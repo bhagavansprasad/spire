@@ -215,4 +215,106 @@ Any failure becomes a new F-NNN by the standard S0–S8 discipline.
 
 ---
 
+
+
+---
+
+## SPIRE log analysis — where to read current progress
+
+Pointers only. Stable across windows. On-disk files are the source of truth.
+
+- Round index:        `docs/audit/log_analysis_sessions/20260925_150333_smoke.md`
+- Per-set index:      `docs/audit/log_analysis_sessions/20260925_150333_smoke/_index.md`
+- Per-set files:      `docs/audit/log_analysis_sessions/20260925_150333_smoke/<set>.md`
+- Candidates:         `docs/audit/log_analysis_sessions/20260925_150333_smoke/_candidates.md`
+- Action items:       `docs/audit/log_analysis_sessions/20260925_150333_smoke/_action_items.md`
+- Analysis plan:      `docs/audit/SPIRE_log_analysis_plan.md`
+- Raw run logs:       `overnights/20260925_150333/<set>/smoke.log`
+
+Resume protocol: read `_index.md`, find the first set still `pending`,
+extract that set, write `<set>.md`, update `_index.md`, continue.
+
+
+
+## SPIRE log analysis — current status and next
+
+<!-- BEGIN SPIRE-LOG-ANALYSIS-STATUS -->
+
+- Round:               20260925_150333 smoke
+- Tier:                smoke
+- Run root:            overnights/20260925_150333/
+- Total sets:          16
+- Total prompts:       71
+- Sets classified:     16 of 16   (complete)
+- Prompts classified:  71 of 71   (complete)
+- Step 5:              complete
+- Step 6:              complete  (see _step6_regression.md)
+- Step 7:              pending   (consolidated candidate view)
+- Step 8:              pending   (review gate)
+- Known mechanisms:    F-052 (confirmed at signature level)
+                       HDFE finite (signature undefined, TODO)
+- Rules in force:      read-only, append-only, on-disk is source of truth
+
+### Candidates recorded
+
+- C-001  payables/smoke  "invoices in the last 30 days"
+         wrong-but-no-error. Open-ended date filter admits future rows.
+         Isolated to this one prompt; not a class in this batch.
+- C-002  batch-level     exit code appears tied to the final prompt's
+         state, not to whether the set contained a refusal. Observation.
+- C-003  procurement_supplier/smoke  "suppliers with open purchase orders"
+         wrong-but-no-error. Partial F-010 regression: plan step 2 does
+         not set filter_source_when_nonempty, so suppliers with 0 open POs
+         appear. Same shape passes in payables_supplier.
+- C-004  columns/smoke   "List active suppliers with supplier name,
+         supplier number, and address"
+         fail. Parser produced no target_entity; refused unparseable.
+
+### Step 6 summary
+
+| F-NNN | reproduced | verdict |
+|---|---|---|
+| F-001 | no direct reproducer | cannot confirm |
+| F-007 | yes (all pass)     | no regression |
+| F-008 | no reproducer       | cannot confirm |
+| F-010 | yes                | PASS in payables_supplier, FAIL in procurement_supplier (C-003) |
+| F-012 | yes                | no regression |
+| F-015 | no reproducer       | cannot confirm |
+
+### Next window — pick up here
+
+Read order for the next window:
+
+1. This file (HANDOFF.md). Section A pointers, then this Section B.
+2. `docs/plan/WORKING_STYLE.md` — "Log analysis" section, LA-1..LA-14.
+3. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_index.md`.
+4. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_candidates.md`.
+5. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_action_items.md`.
+6. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_step6_regression.md`.
+
+Steps:
+
+1. Optional Step 7: consolidated candidate view. `_candidates.md`
+   already holds all four candidates. Step 7 is a read-through, not new
+   analysis. Produce a single consolidated view if useful.
+2. Step 8: review gate. For each of C-001 through C-004, decide:
+   - log as a new F-NNN
+   - link to an existing open finding (C-003 -> F-010)
+   - close-as-not-a-bug
+   Then set priority relative to F-052. Then stop and ask.
+3. Do not propose fixes at the gate.
+
+### Do not
+
+- Fix code.
+- Write to `docs/audit/findings-log.md`.
+- Read `overnights/03_verify_sets/`.
+
+### After Step 8
+
+The smoke analysis window closes. Any fixes go into a fresh window with
+explicit approval, on a branch, per WORKING_STYLE rules 7-11.
+<!-- END SPIRE-LOG-ANALYSIS-STATUS -->
+
+
 *End of handover.*
