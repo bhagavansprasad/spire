@@ -1,0 +1,2025 @@
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/child_as_root/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+
+AR Invoices:
+  Transaction           : 61765
+  CustomerTransactionId : 300000248096352
+  Amount                : 39969.0
+  Currency              : GBP
+  Date                  : 2017-06-30
+  Customer              : ABC Corporation Americas
+  Status                : Complete
+
+  Invoice 61765 — lines:
+    Line        : 1
+    Description : Consultation
+    Qty         : 1.0
+    Unit Price  : 39969.0
+    Amount      : 39969.0
+Summary:
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+
+  Invoice 5 — lines:
+    Line | Description                |  Qty | Unit Price |   Amount
+    -----+----------------------------+------+------------+---------
+    1    | Green Server 1000          |  2.0 |     5296.0 |  10592.0
+    2    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+    3    | Sentinel Power Server 2500 | 10.0 |    21047.0 | 210470.0
+    4    | Green Server 1000          |  5.0 |     5296.0 |  26480.0
+
+  Invoice 5, line 1 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |     238.32 | 10592.0
+    STATE  |    6.5 |     688.48 | 10592.0
+
+  Invoice 5, line 2 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+
+  Invoice 5, line 3 — tax:
+    Tax    | Rate % | Tax Amount | Taxable 
+    -------+--------+------------+---------
+    COUNTY |   2.25 |    4735.58 | 210470.0
+    STATE  |    6.5 |   13680.55 | 210470.0
+
+  Invoice 5, line 4 — tax:
+    Tax    | Rate % | Tax Amount | Taxable
+    -------+--------+------------+--------
+    COUNTY |   2.25 |      595.8 | 26480.0
+    STATE  |    6.5 |     1721.2 | 26480.0
+Summary:
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+Answer:
+EIP Inc has 10 contacts.
+
+Suppliers:
+  Supplier       : EIP Inc
+  SupplierId     : 300000047507499
+  SupplierNumber : 1262
+
+  EIP Inc — contacts:
+    Contact        | Email                                     | Admin
+    ---------------+-------------------------------------------+------
+    Kim, John      | john.kim_euth-dev49@oraclepdemos.com      | Y    
+    Rossier, Bruce | bruce.rossier_euth-dev49@oraclepdemos.com | —    
+    Romo, Gabi     | gabi.romo_euth-dev49@oraclepdemos.com     | —    
+    Iyer, Ansh     | ansh.iyer_euth-dev49@oraclepdemos.com     | —    
+    Hass, Henrik   | henrik.hass_euth-dev49@oraclepdemos.com   | —    
+    Romo, Ross     | ross.romo@supplier.com                    | —    
+    Meyer, Gijs    | gijs.meyer_euth-dev49@oraclepdemos.com    | —    
+    Hayes, Josef   | josef.hayes_euth-dev49@oraclepdemos.com   | —    
+    Shah, Priya    | priya.shah_euth-dev49@oraclepdemos.com    | —    
+    Fugh, Uma      | ufugh_euth-dev49@oraclepdemos.com         | —    
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Application Software
+  AccountId        : 300000047368512
+  AccountNumber    : 26360
+  Open Receivables : 46864.78
+  Transactions Due : 51980.42
+
+  ABC Application Software — transactions (showing 25 of 484):
+    Transaction | Class   | Date       |   Amount | Balance | Status
+    ------------+---------+------------+----------+---------+-------
+    1471313     | Invoice | 2026-07-28 |   3298.4 |     0.0 | Closed
+    1471322     | Invoice | 2026-07-27 |  2710.05 |     0.0 | Closed
+    1471325     | Invoice | 2026-07-26 |  3695.33 |     0.0 | Closed
+    1471329     | Invoice | 2026-07-25 |  6697.92 |     0.0 | Closed
+    1471316     | Invoice | 2026-07-24 |  9106.74 | 9106.74 | Open  
+    1471328     | Invoice | 2026-07-23 |  3619.21 | 3619.21 | Open  
+    1471307     | Invoice | 2026-07-22 |  4824.16 | 4824.16 | Open  
+    1471309     | Invoice | 2026-07-21 |  5353.77 | 5353.77 | Open  
+    1471311     | Invoice | 2026-07-20 |  1231.05 |     0.0 | Closed
+    1471319     | Invoice | 2026-07-19 |  4109.67 |     0.0 | Closed
+    1471314     | Invoice | 2026-07-18 |  5558.23 |     0.0 | Closed
+    1471323     | Invoice | 2026-07-17 |   1010.3 |     0.0 | Closed
+    1471326     | Invoice | 2026-07-16 |  1463.78 |     0.0 | Closed
+    1471331     | Invoice | 2026-07-15 |    974.4 |     0.0 | Closed
+    1471330     | Invoice | 2026-07-14 |  3657.27 |     0.0 | Closed
+    1471317     | Invoice | 2026-07-13 |  10797.8 |     0.0 | Closed
+    1471303     | Invoice | 2026-07-12 |   9623.3 |     0.0 | Closed
+    1471310     | Invoice | 2026-07-11 |  6633.75 |     0.0 | Closed
+    1471312     | Invoice | 2026-07-10 |  3582.23 |     0.0 | Closed
+    1471320     | Invoice | 2026-07-09 |   477.42 |     0.0 | Closed
+    1471324     | Invoice | 2026-07-08 |   616.62 |     0.0 | Closed
+    1471315     | Invoice | 2026-07-07 | 10768.44 |     0.0 | Closed
+    1471321     | Invoice | 2026-07-06 |  1770.46 |     0.0 | Closed
+    1471305     | Invoice | 2026-07-05 |   769.95 |     0.0 | Closed
+    1471304     | Invoice | 2026-07-04 |  4880.71 |     0.0 | Closed
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/columns/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: Supplier, SupplierNumber, Status
+
+  Supplier                                   | SupplierNumber | Status
+  -------------------------------------------+----------------+-------
+  Lee Supplies                               | 1252           | ACTIVE
+  JGA                                        | 1254           | ACTIVE
+  US Gas and Electric                        | 1256           | ACTIVE
+  Allied Manufacturing                       | 1265           | ACTIVE
+  Midtown Computer Supplies                  | 1266           | ACTIVE
+  Consolidated Supplies                      | 1272           | ACTIVE
+  Progressive Corp                           | 1274           | ACTIVE
+  Masson Inc                                 | 1277           | ACTIVE
+  RSM                                        | 1278           | ACTIVE
+  Utilitaire Inc                             | 1281           | ACTIVE
+  Shangduo Inc                               | 1289           | ACTIVE
+  Nihon Communications                       | 1301           | ACTIVE
+  Ente Idrocarburi                           | 1306           | ACTIVE
+  Distributori Automatici Roma Miglior Caffe | 1307           | ACTIVE
+  Inde Elettrodomestici Spa                  | 1308           | ACTIVE
+  Medtronic                                  | 1322           | ACTIVE
+  Siemens Medical Solutions                  | 1324           | ACTIVE
+  Cardinal Health                            | 1325           | ACTIVE
+  Lagring Systems                            | 1327           | ACTIVE
+  Servicios Reunidos, SL                     | 1336           | ACTIVE
+  Misson Corp                                | 1339           | ACTIVE
+  BD Medical                                 | 1342           | ACTIVE
+  Staffing Services                          | 1253           | ACTIVE
+  Dell Inc.                                  | 1255           | ACTIVE
+  Howell Engineering Inc.                    | 1257           | ACTIVE
+Summary:
+Answer:
+Showing 25 of 3,284 invoices.
+All 25 have InvoiceCurrency USD.
+All 25 have Supplier EIP Inc.
+
+Truncation:
+  - invoices: 3284 total in source; 25 returned.
+
+Answer:
+invoices (25 record(s)) — columns: InvoiceNumber, InvoiceAmount, InvoiceDate
+
+  InvoiceNumber    | InvoiceAmount | InvoiceDate
+  -----------------+---------------+------------
+  ERS-50734-182304 | 63525.33      | 2016-10-19 
+  ERS-50735-182305 | 169399.79     | 2016-10-19 
+  ERS-50736-182306 | 84699.35      | 2016-10-19 
+  ERS-50737-182307 | 105874.46     | 2016-10-19 
+  ERS-50738-182308 | 64704.65      | 2016-10-19 
+  ERS-50739-182309 | 16174.25      | 2016-10-19 
+  123              | 0             | 2016-12-15 
+  INV-US165323     | 872.91        | 2026-07-07 
+  INV-US165322     | 872.91        | 2026-07-07 
+  INV-US165321     | 872.91        | 2026-07-07 
+  Invalid-1534418  | 558.62        | 2026-02-13 
+  Invalid-1534382  | 558.62        | 2026-02-12 
+  EIP 201399014    | 0             | 2013-09-01 
+  ERS-50459-127180 | 0             | 2015-09-23 
+  ERS-50460-127181 | 0             | 2015-09-23 
+  ERS-50461-127182 | 0             | 2015-09-23 
+  ERS-50462-127183 | 0             | 2015-09-23 
+  ERS-50463-127184 | 0             | 2015-09-23 
+  ERS-50464-127185 | 0             | 2015-09-23 
+  ERS-52958-749588 | 103986.68     | 2026-08-02 
+  ERS-52959-749589 | 277298.9      | 2026-08-02 
+  ERS-52961-749591 | 173312.22     | 2026-08-02 
+  ERS-52962-749592 | 74813.69      | 2026-08-02 
+  ERS-52963-749593 | 18702.6       | 2026-08-02 
+  ERS-52960-749590 | 138650        | 2026-08-02 
+Summary:
+Answer:
+Showing 25 of 878 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Truncation:
+  - open_pos: 878 total in source; 25 returned.
+
+Answer:
+open_pos (25 record(s)) — columns: OrderNumber, Status
+
+  OrderNumber | Status              
+  ------------+---------------------
+  701331      | Closed              
+  701337      | Open                
+  55216       | Closed              
+  55217       | Closed              
+  55218       | Closed              
+  55219       | Closed              
+  162296      | Closed              
+  162297      | Closed              
+  162298      | Closed              
+  44763       | Closed              
+  44764       | Closed              
+  44765       | Closed              
+  162263      | Closed              
+  162264      | Closed              
+  162265      | Closed              
+  630338      | Closed for Receiving
+  162266      | Closed for Receiving
+  162267      | Open                
+  162268      | Closed for Receiving
+  162269      | Closed for Receiving
+  162270      | Closed              
+  162277      | Closed for Receiving
+  162282      | Closed for Receiving
+  701335      | Closed              
+  162299      | Closed              
+Summary:
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: Supplier
+
+  Supplier                                  
+  ------------------------------------------
+  Lee Supplies                              
+  JGA                                       
+  US Gas and Electric                       
+  Allied Manufacturing                      
+  Midtown Computer Supplies                 
+  Consolidated Supplies                     
+  Progressive Corp                          
+  Masson Inc                                
+  RSM                                       
+  Utilitaire Inc                            
+  Shangduo Inc                              
+  Nihon Communications                      
+  Ente Idrocarburi                          
+  Distributori Automatici Roma Miglior Caffe
+  Inde Elettrodomestici Spa                 
+  Medtronic                                 
+  Siemens Medical Solutions                 
+  Cardinal Health                           
+  Lagring Systems                           
+  Servicios Reunidos, SL                    
+  Misson Corp                               
+  BD Medical                                
+  Staffing Services                         
+  Dell Inc.                                 
+  Howell Engineering Inc.                   
+Summary:
+Reason:   the model produced a draft with no target_entity
+
+Solution: Name a record type and one thing to narrow it by.
+
+Example:  invoices for Lee Supplies
+  (refusal: unparseable — the model produced a draft with no target_entity)
+Token usage:
+  classify     in=    587  out=     78  total=    665
+  parse        in=   5760  out=    754  total=   6514
+  TOTAL        in=   6347  out=    832  total=   7179
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/date_filters/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 of 14,387 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 14387 total in source; 25 returned.
+Summary:
+Answer:
+Showing 25 of 16,937 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16937 total in source; 25 returned.
+Summary:
+Answer:
+Showing 25 of 16,123 purchase orders.
+Status: 22 Closed, 2 Open, 1 Closed for Receiving.
+Buyer: 22 Roth, Calvin, 2 Petrova, Laura, 1 ProcurementManager, Pat.
+
+Purchase Orders:
+  Order    | POHeaderId      | Status               | Supplier                  | Buyer                  
+  ---------+-----------------+----------------------+---------------------------+------------------------
+  US164932 | 560869          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164933 | 560870          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164934 | 560871          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164935 | 560872          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164936 | 560873          | Closed               | EIP Inc                   | Roth, Calvin           
+  US164937 | 560874          | Closed               | Staffing Services         | Roth, Calvin           
+  US164938 | 560875          | Closed               | US Gas and Electric       | Roth, Calvin           
+  US164939 | 560876          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164940 | 560877          | Closed               | Advanced Corp             | Roth, Calvin           
+  US164941 | 560878          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US164942 | 560879          | Closed               | Office Depot              | Roth, Calvin           
+  US164943 | 560880          | Closed               | Dell Inc.                 | Roth, Calvin           
+  SU616730 | 300000286016443 | Closed for Receiving | Lee Supplies              | ProcurementManager, Pat
+  US165003 | 579881          | Closed               | EIP Inc                   | Roth, Calvin           
+  US165004 | 579882          | Closed               | JGA                       | Roth, Calvin           
+  US165005 | 579883          | Closed               | JGA                       | Roth, Calvin           
+  US165006 | 579884          | Closed               | JGA                       | Roth, Calvin           
+  US165007 | 579885          | Closed               | Staffing Services         | Roth, Calvin           
+  US165008 | 579886          | Closed               | Staffing Services         | Roth, Calvin           
+  US165009 | 579887          | Closed               | Office Depot              | Roth, Calvin           
+  SU616773 | 300000292223748 | Closed               | Vexicon Manufacturing     | Petrova, Laura         
+  US165072 | 300000299268497 | Open                 | JGA                       | Roth, Calvin           
+  SU616888 | 300000304242799 | Open                 | Midtown Computer Supplies | Petrova, Laura         
+  US165010 | 587869          | Closed               | Howell Engineering Inc.   | Roth, Calvin           
+  US165011 | 587870          | Closed               | Office Depot              | Roth, Calvin           
+
+Truncation:
+  - open_pos: 16123 total in source; 25 returned.
+Summary:
+Answer:
+Showing 18 invoices from an examined sample; the true matching count is not known.
+All 18 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice        | InvoiceId |  Amount | Currency | Date       | Supplier                        
+  ---------------+-----------+---------+----------+------------+---------------------------------
+  Allid_Inv01241 | 1287322   |     0.0 | USD      | 2024-01-01 | Allied Manufacturing            
+  Allid_Inv01242 | 1287323   |     0.0 | USD      | 2024-01-02 | Allied Manufacturing            
+  UPS_Inv0124    | 1287324   |     0.0 | USD      | 2024-01-03 | United Parcel Service           
+  BM_Inv0124     | 1287325   |     0.0 | USD      | 2024-01-04 | Building Management             
+  ATT_Inv01242   | 1287329   |     0.0 | USD      | 2024-01-08 | American Telephone and Telegraph
+  ATT_Inv01243   | 1287330   |     0.0 | USD      | 2024-01-09 | American Telephone and Telegraph
+  PI20043_0124   | 1096326   |  1204.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_0224   | 1096327   |  1095.0 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_0324   | 1096328   |  1095.0 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_0424   | 1096329   | 1040.25 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_0524   | 1096330   |  1204.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_0624   | 1096331   |  1095.0 | USD      | 2024-06-28 | Lee Supplies                    
+  PI20043_1_0124 | 1096338   |   547.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_1_0224 | 1096339   |  536.55 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_1_0324 | 1096340   |  602.25 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_1_0424 | 1096341   |  536.55 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_1_0524 | 1096342   |   547.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_1_0624 | 1096343   |  536.55 | USD      | 2024-06-28 | Lee Supplies                    
+
+Truncation:
+  - invoices: unknown total in source; 18 returned.
+Summary:
+Answer:
+Showing 25 of 53,359 invoices.
+All 25 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice          | InvoiceId       |     Amount | Currency | Date       | Supplier               
+  -----------------+-----------------+------------+----------+------------+------------------------
+  ABC-10172016001  | 489504          |        0.0 | USD      | 2016-10-17 | ABC Consulting         
+  LEE-01-1006-111  | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies           
+  ERS-50741-182311 | 493527          |    80876.7 | USD      | 2016-10-19 | Advanced Corp          
+  ERS-50742-182312 | 493528          |  137494.77 | USD      | 2016-10-19 | Office Depot           
+  ERS-50743-182313 | 493529          |   69551.12 | USD      | 2016-10-19 | Office Depot           
+  RR-US164379-L1   | 300000244417567 |      985.5 | USD      | 2022-03-29 | JGA                    
+  ERS-50744-183300 | 495503          | 1321053.99 | USD      | 2016-10-24 | Staffing Services      
+  ERS-50726-182296 | 493512          |  121320.53 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50727-182297 | 493513          |  341822.87 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50728-182298 | 493514          |  149004.32 | USD      | 2016-10-19 | JGA                    
+  ERS-50729-182299 | 493515          |  175294.17 | USD      | 2016-10-19 | JGA                    
+  ERS-50730-182300 | 493516          |  210354.98 | USD      | 2016-10-19 | JGA                    
+  ERS-50731-182301 | 493517          |  153667.92 | USD      | 2016-10-19 | Dell Inc.              
+  ERS-50732-182302 | 493518          |   32401.05 | USD      | 2016-10-19 | US Gas and Electric    
+  ERS-50733-182303 | 493519          |  105137.52 | USD      | 2016-10-19 | Howell Engineering Inc.
+  ERS-50734-182304 | 493520          |   63525.33 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50735-182305 | 493521          |  169399.79 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50736-182306 | 493522          |   84699.35 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50737-182307 | 493523          |  105874.46 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50738-182308 | 493524          |   64704.65 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50739-182309 | 493525          |   16174.25 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50740-182310 | 493526          |   97056.42 | USD      | 2016-10-19 | Advanced Corp          
+  PCS10053_0825    | 1476378         |     3350.0 | USD      | 2025-08-23 | Staffing Services      
+  PCS10059_0825    | 1476379         |     3300.0 | USD      | 2025-08-23 | Staffing Services      
+  PCS10027_0825    | 1476380         |     3300.0 | USD      | 2025-08-23 | Lee Supplies           
+
+Truncation:
+  - invoices: 53359 total in source; 25 returned.
+Summary:
+Answer:
+All 22 have InvoiceCurrency USD.
+InvoiceDate: 18 2016-10-19, 2 2016-10-17, 1 2022-03-29, 1 2016-10-24.
+
+Invoices:
+  Invoice          | InvoiceId       |     Amount | Currency | Date       | Supplier               
+  -----------------+-----------------+------------+----------+------------+------------------------
+  ABC-10172016001  | 489504          |        0.0 | USD      | 2016-10-17 | ABC Consulting         
+  LEE-01-1006-111  | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies           
+  ERS-50741-182311 | 493527          |    80876.7 | USD      | 2016-10-19 | Advanced Corp          
+  ERS-50742-182312 | 493528          |  137494.77 | USD      | 2016-10-19 | Office Depot           
+  ERS-50743-182313 | 493529          |   69551.12 | USD      | 2016-10-19 | Office Depot           
+  RR-US164379-L1   | 300000244417567 |      985.5 | USD      | 2022-03-29 | JGA                    
+  ERS-50744-183300 | 495503          | 1321053.99 | USD      | 2016-10-24 | Staffing Services      
+  ERS-50726-182296 | 493512          |  121320.53 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50727-182297 | 493513          |  341822.87 | USD      | 2016-10-19 | Staffing Services      
+  ERS-50728-182298 | 493514          |  149004.32 | USD      | 2016-10-19 | JGA                    
+  ERS-50729-182299 | 493515          |  175294.17 | USD      | 2016-10-19 | JGA                    
+  ERS-50730-182300 | 493516          |  210354.98 | USD      | 2016-10-19 | JGA                    
+  ERS-50731-182301 | 493517          |  153667.92 | USD      | 2016-10-19 | Dell Inc.              
+  ERS-50732-182302 | 493518          |   32401.05 | USD      | 2016-10-19 | US Gas and Electric    
+  ERS-50733-182303 | 493519          |  105137.52 | USD      | 2016-10-19 | Howell Engineering Inc.
+  ERS-50734-182304 | 493520          |   63525.33 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50735-182305 | 493521          |  169399.79 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50736-182306 | 493522          |   84699.35 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50737-182307 | 493523          |  105874.46 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50738-182308 | 493524          |   64704.65 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50739-182309 | 493525          |   16174.25 | USD      | 2016-10-19 | EIP Inc                
+  ERS-50740-182310 | 493526          |   97056.42 | USD      | 2016-10-19 | Advanced Corp          
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/dipstick/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+There are 695 suppliers.
+Summary:
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber
+  -------------------------------------------+-----------------+---------------
+  Lee Supplies                               | 300000047414503 | 1252          
+  JGA                                        | 300000047414635 | 1254          
+  US Gas and Electric                        | 300000047507113 | 1256          
+  Allied Manufacturing                       | 300000047572113 | 1265          
+  Midtown Computer Supplies                  | 300000047572163 | 1266          
+  Consolidated Supplies                      | 300000047837244 | 1272          
+  Progressive Corp                           | 300000049521222 | 1274          
+  Masson Inc                                 | 300000051065858 | 1277          
+  RSM                                        | 300000051066029 | 1278          
+  Utilitaire Inc                             | 300000051066302 | 1281          
+  Shangduo Inc                               | 300000075469541 | 1289          
+  Nihon Communications                       | 300000101110596 | 1301          
+  Ente Idrocarburi                           | 300000115609124 | 1306          
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308          
+  Medtronic                                  | 300000116498267 | 1322          
+  Siemens Medical Solutions                  | 300000116498411 | 1324          
+  Cardinal Health                            | 300000116498478 | 1325          
+  Lagring Systems                            | 300000116707121 | 1327          
+  Servicios Reunidos, SL                     | 300000131904822 | 1336          
+  Misson Corp                                | 300000131933370 | 1339          
+  BD Medical                                 | 300000133943993 | 1342          
+  Staffing Services                          | 300000047414571 | 1253          
+  Dell Inc.                                  | 300000047414679 | 1255          
+  Howell Engineering Inc.                    | 300000047507170 | 1257          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+Answer:
+The data shows 25 addresses associated with the supplier Lee Supplies (Supplier Number 1252). These addresses span multiple countries, including the United States, India, Mexico, Japan, the United Kingdom, Belgium, Poland, Saudi Arabia, Australia, Germany, the Netherlands, Sweden, and Switzerland. Each entry contains specific location details such as the address ID, city, state, and formatted address where available.
+
+Addresses:
+  Address                                                                                             | AddressId       | Supplier     | SupplierNumber
+  ----------------------------------------------------------------------------------------------------+-----------------+--------------+---------------
+  6302 England St,HOUSTON, TX 77021 Harris                                                            | 300000260343485 | Lee Supplies | 1252          
+  758 11Th St SE,WASHINGTON, DC 20003 District of Columbia                                            | 300000224618460 | Lee Supplies | 1252          
+  6200 W William Cannon Dr,AUSTIN, TX 78749 Travis                                                    | 300000330323084 | Lee Supplies | 1252          
+  South Ave,South Avenue Area, President's Estate,NEW DELHI-110011,Delhi,INDIA                        | 300000185706832 | Lee Supplies | 1252          
+  Calle Venustiano Carranza 60,Col Centro,Col Centro,06000  CIUDAD DE MÉXICO, CIUDAD DE MÉXICO,MEXICO | 300000287085787 | Lee Supplies | 1252          
+  JAPAN,1530062,Tokyo,SHINAGAWA-KU,MITA,1-2-3                                                         | 300000101110124 | Lee Supplies | 1252          
+  33 Dartmouth Park Hill,LONDON,Greater London,NW5 1HU,UNITED KINGDOM                                 | 300000223873425 | Lee Supplies | 1252          
+  11900 MARKET ST,RESTON, VA 20190 FAIRFAX                                                            | 300000076246713 | Lee Supplies | 1252          
+  Hendrik I lei,84,1800 VILVOORDE,BELGIUM                                                             | 300000132524404 | Lee Supplies | 1252          
+  Przyokopowa 31,Warsaw,POLAND                                                                        | 300000173063725 | Lee Supplies | 1252          
+  11433 Olaya St,Riyadh 12263,SAUDI ARABIA                                                            | 300000266704355 | Lee Supplies | 1252          
+  3919 Woodward Ave,DETROIT, MI 48201 Wayne                                                           | 300000312737691 | Lee Supplies | 1252          
+  1825 Colorado St,AUSTIN, TX 78701 Travis                                                            | 300000319814661 | Lee Supplies | 1252          
+  5000 CARTER DR.,LOS ANGELES, CA 90032 LOS ANGELES                                                   | 300000047414534 | Lee Supplies | 1252          
+  32 Ryde Rd,Sydney New South Wales 2000,AUSTRALIA                                                    | 300000243483835 | Lee Supplies | 1252          
+  3600 Ranch Road 620 S Ste C,AUSTIN, TX 78738 Travis                                                 | 300000330323074 | Lee Supplies | 1252          
+  855 Hill Street,LOS ANGELES, CA 90014 Los Angeles                                                   | 300000180147083 | Lee Supplies | 1252          
+  1526 E Colfax Ave,DENVER, CO 80218 Denver                                                           | 300000319063714 | Lee Supplies | 1252          
+  Ivo-Hauptmann-Ring 5,Hamburg-Insel Neuwerk,GERMANYStadtkreis Hamburg,Freie und Hansestadt Hamburg   | 300000167722345 | Lee Supplies | 1252          
+  701 S Capital Of Texas Hwy,WEST LAKE HILLS, TX 78746 Travis                                         | 300000330323079 | Lee Supplies | 1252          
+  208 S AKARD ST,DALLAS, TX 75202 DALLAS                                                              | 300000095598109 | Lee Supplies | 1252          
+  3200 Fairlawn,LA CANADA, CA 91011                                                                   | 300000116498666 | Lee Supplies | 1252          
+  Leidsestraat 32-34,1017  AMSTERDAM,NETHERLANDS                                                      | 300000132468397 | Lee Supplies | 1252          
+  Grevgatan 38,114 53 Stockholm,SWEDEN                                                                | 300000138007867 | Lee Supplies | 1252          
+  Aarbergergasse 25,CH3011 BERN,SWITZERLAND                                                           | 300000176066123 | Lee Supplies | 1252          
+Summary:
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Corporation Americas
+  AccountId        : 300000047368527
+  AccountNumber    : 26370
+  Open Receivables : 14435468.28
+  Transactions Due : 15888967.45
+
+  ABC Corporation Americas — transactions (showing 25 of 486):
+    Transaction | Class   | Date       |   Amount | Balance | Status
+    ------------+---------+------------+----------+---------+-------
+    1471201     | Invoice | 2026-07-28 |   693.83 |     0.0 | Closed
+    1471217     | Invoice | 2026-07-26 |  3388.65 |     0.0 | Closed
+    1471203     | Invoice | 2026-07-25 | 13997.22 |     0.0 | Closed
+    1471214     | Invoice | 2026-07-24 |   4542.5 |  4542.5 | Open  
+    1471189     | Invoice | 2026-07-23 |  2021.67 | 2021.67 | Open  
+    1471191     | Invoice | 2026-07-22 |  2214.16 | 2214.16 | Open  
+    1471196     | Invoice | 2026-07-21 |    487.2 |   487.2 | Open  
+    1471199     | Invoice | 2026-07-20 |   3915.0 |     0.0 | Closed
+    1471194     | Invoice | 2026-07-19 |   8439.0 |     0.0 | Closed
+    1471210     | Invoice | 2026-07-18 |  5012.29 |     0.0 | Closed
+    1471218     | Invoice | 2026-07-16 |   320.82 |     0.0 | Closed
+    1471221     | Invoice | 2026-07-15 |  5658.27 |     0.0 | Closed
+    1471204     | Invoice | 2026-07-14 |  5494.05 |     0.0 | Closed
+    1471215     | Invoice | 2026-07-13 |  6109.59 |     0.0 | Closed
+    1471192     | Invoice | 2026-07-12 |   815.63 |     0.0 | Closed
+    1471197     | Invoice | 2026-07-11 |   204.45 |     0.0 | Closed
+    1471200     | Invoice | 2026-07-10 |  1847.67 |     0.0 | Closed
+    1471195     | Invoice | 2026-07-08 |  4505.52 |     0.0 | Closed
+    1471211     | Invoice | 2026-07-07 |    339.3 |     0.0 | Closed
+    1471220     | Invoice | 2026-07-06 |   1026.6 |     0.0 | Closed
+    1471222     | Invoice | 2026-07-05 |  2425.13 |     0.0 | Closed
+    1471190     | Invoice | 2026-07-04 |  2694.83 |     0.0 | Closed
+    1471205     | Invoice | 2026-07-03 |  6270.53 |     0.0 | Closed
+    1471193     | Invoice | 2026-07-02 | 12371.41 |     0.0 | Closed
+    1471198     | Invoice | 2026-07-01 |   140.29 |     0.0 | Closed
+Summary:
+Reason:   that kind of record isn't something I know about.
+
+Solution: What I do have: addresses, credit memos, customer accounts, supplier invoices, purchase orders, AR invoices, receipts and suppliers.
+
+Example:  invoices for Lee Supplies
+  (refusal: unknown_entity — The system does not support a Contract entity or tracking contract renewals. Only procurement entities like PurchaseOrders, Invoices, and Suppliers are available.)
+Token usage:
+  classify     in=    582  out=    337  total=    919
+  parse        in=   6619  out=    405  total=   7024
+  TOTAL        in=   7201  out=    742  total=   7943
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/fields_and_include/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+
+AR Invoices:
+  Transaction           : 5
+  CustomerTransactionId : 1002
+  Amount                : 297998.93
+  Currency              : USD
+  Date                  : 2013-12-20
+  Customer              : Business World
+  Status                : Complete
+  DFF                   : DOO
+
+Answer:
+receivables_invoices (1 record(s)) — columns: TransactionNumber
+
+  TransactionNumber
+  -----------------
+  5                
+Summary:
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+
+Answer:
+purchaseorderline (2 record(s)) — columns: OrderNumber
+
+  OrderNumber
+  -----------
+  162352     
+  162352     
+Summary:
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+
+Answer:
+suppliers (25 record(s)) — columns: Supplier, Status
+
+  Supplier                                   | Status
+  -------------------------------------------+-------
+  Lee Supplies                               | ACTIVE
+  JGA                                        | ACTIVE
+  US Gas and Electric                        | ACTIVE
+  Allied Manufacturing                       | ACTIVE
+  Midtown Computer Supplies                  | ACTIVE
+  Consolidated Supplies                      | ACTIVE
+  Progressive Corp                           | ACTIVE
+  Masson Inc                                 | ACTIVE
+  RSM                                        | ACTIVE
+  Utilitaire Inc                             | ACTIVE
+  Shangduo Inc                               | ACTIVE
+  Nihon Communications                       | ACTIVE
+  Ente Idrocarburi                           | ACTIVE
+  Distributori Automatici Roma Miglior Caffe | ACTIVE
+  Inde Elettrodomestici Spa                  | ACTIVE
+  Medtronic                                  | ACTIVE
+  Siemens Medical Solutions                  | ACTIVE
+  Cardinal Health                            | ACTIVE
+  Lagring Systems                            | ACTIVE
+  Servicios Reunidos, SL                     | ACTIVE
+  Misson Corp                                | ACTIVE
+  BD Medical                                 | ACTIVE
+  Staffing Services                          | ACTIVE
+  Dell Inc.                                  | ACTIVE
+  Howell Engineering Inc.                    | ACTIVE
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/lifecycle/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+PO 701337 — JGA
+  Received: no · Invoiced: no · Paid: cannot be determined
+  Stage: Awaiting receipt  ·  Owner: Supplier / Receiving  ·  Risk: Medium
+
+PO 701337 (JGA) — Awaiting receipt. Ordered 1,235.00 USD; received 398.00 USD; invoiced 398.00 USD; paid not yet determined. (Received is derived from quantities.) Outstanding: 837.00 USD to receive, 837.00 USD to invoice. Risk: Medium — the paid leg cannot be determined; not fully received; not fully invoiced; PO payment terms differ from the site default. Recommended action: Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Amounts (USD):
+  Leg              Amount    Remaining
+  Ordered        1,235.00            —
+  Received         398.00       837.00
+  Invoiced         398.00       837.00
+  Paid                  —            —
+    Received: derived from quantity — the pod carries no received amount
+    Paid: cannot be determined: the schedules record billing but no AP invoice carries this PO number
+
+Risk (Medium):
+  - the paid leg cannot be determined
+  - not fully received
+  - not fully invoiced
+  - PO payment terms differ from the site default
+
+Recommended action:
+  Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Supplier setup:
+  - Supplier JGA (1254) is ACTIVE and Spend Authorized.
+  - Site JGA Progress US is ACTIVE, purchasing enabled, pay enabled.
+  - Invoice matching is 3 Way against Receipt.
+  - PO payment terms (Net 30) differ from the site default (2/10 Net 30).
+
+Outstanding lines:
+   Line Status         Amount    Received  Outstanding
+      1 Open         1,116.00      279.00       837.00
+
+Unresolved:
+  - PO payment terms (Net 30) differ from the supplier site default (2/10 Net 30)
+  - schedules record 398.00 billed but no invoice carries this PO number; the AP document could not be matched, so the paid leg is unknown rather than zero
+  - PayOnReceiptFlag is set on this PO — self-billing may explain the unmatched billing (unconfirmed)
+Summary:
+Answer:
+PO 701337 — JGA
+  Received: no · Invoiced: no · Paid: cannot be determined
+  Stage: Awaiting receipt  ·  Owner: Supplier / Receiving  ·  Risk: Medium
+
+PO 701337 (JGA) — Awaiting receipt. Ordered 1,235.00 USD; received 398.00 USD; invoiced 398.00 USD; paid not yet determined. (Received is derived from quantities.) Outstanding: 837.00 USD to receive, 837.00 USD to invoice. Risk: Medium — the paid leg cannot be determined; not fully received; not fully invoiced; PO payment terms differ from the site default. Recommended action: Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Amounts (USD):
+  Leg              Amount    Remaining
+  Ordered        1,235.00            —
+  Received         398.00       837.00
+  Invoiced         398.00       837.00
+  Paid                  —            —
+    Received: derived from quantity — the pod carries no received amount
+    Paid: cannot be determined: the schedules record billing but no AP invoice carries this PO number
+
+Risk (Medium):
+  - the paid leg cannot be determined
+  - not fully received
+  - not fully invoiced
+  - PO payment terms differ from the site default
+
+Recommended action:
+  Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Supplier setup:
+  - Supplier JGA (1254) is ACTIVE and Spend Authorized.
+  - Site JGA Progress US is ACTIVE, purchasing enabled, pay enabled.
+  - Invoice matching is 3 Way against Receipt.
+  - PO payment terms (Net 30) differ from the site default (2/10 Net 30).
+
+Outstanding lines:
+   Line Status         Amount    Received  Outstanding
+      1 Open         1,116.00      279.00       837.00
+
+Unresolved:
+  - PO payment terms (Net 30) differ from the supplier site default (2/10 Net 30)
+  - schedules record 398.00 billed but no invoice carries this PO number; the AP document could not be matched, so the paid leg is unknown rather than zero
+  - PayOnReceiptFlag is set on this PO — self-billing may explain the unmatched billing (unconfirmed)
+Summary:
+Answer:
+PO 701337 — JGA
+  Received: no · Invoiced: no · Paid: cannot be determined
+  Stage: Awaiting receipt  ·  Owner: Supplier / Receiving  ·  Risk: Medium
+
+PO 701337 (JGA) — Awaiting receipt. Ordered 1,235.00 USD; received 398.00 USD; invoiced 398.00 USD; paid not yet determined. (Received is derived from quantities.) Outstanding: 837.00 USD to receive, 837.00 USD to invoice. Risk: Medium — the paid leg cannot be determined; not fully received; not fully invoiced; PO payment terms differ from the site default. Recommended action: Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Amounts (USD):
+  Leg              Amount    Remaining
+  Ordered        1,235.00            —
+  Received         398.00       837.00
+  Invoiced         398.00       837.00
+  Paid                  —            —
+    Received: derived from quantity — the pod carries no received amount
+    Paid: cannot be determined: the schedules record billing but no AP invoice carries this PO number
+
+Risk (Medium):
+  - the paid leg cannot be determined
+  - not fully received
+  - not fully invoiced
+  - PO payment terms differ from the site default
+
+Recommended action:
+  Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Supplier setup:
+  - Supplier JGA (1254) is ACTIVE and Spend Authorized.
+  - Site JGA Progress US is ACTIVE, purchasing enabled, pay enabled.
+  - Invoice matching is 3 Way against Receipt.
+  - PO payment terms (Net 30) differ from the site default (2/10 Net 30).
+
+Outstanding lines:
+   Line Status         Amount    Received  Outstanding
+      1 Open         1,116.00      279.00       837.00
+
+Unresolved:
+  - PO payment terms (Net 30) differ from the supplier site default (2/10 Net 30)
+  - schedules record 398.00 billed but no invoice carries this PO number; the AP document could not be matched, so the paid leg is unknown rather than zero
+  - PayOnReceiptFlag is set on this PO — self-billing may explain the unmatched billing (unconfirmed)
+Summary:
+Answer:
+PO 701337 — JGA
+  Received: no · Invoiced: no · Paid: cannot be determined
+  Stage: Awaiting receipt  ·  Owner: Supplier / Receiving  ·  Risk: Medium
+
+PO 701337 (JGA) — Awaiting receipt. Ordered 1,235.00 USD; received 398.00 USD; invoiced 398.00 USD; paid not yet determined. (Received is derived from quantities.) Outstanding: 837.00 USD to receive, 837.00 USD to invoice. Risk: Medium — the paid leg cannot be determined; not fully received; not fully invoiced; PO payment terms differ from the site default. Recommended action: Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Amounts (USD):
+  Leg              Amount    Remaining
+  Ordered        1,235.00            —
+  Received         398.00       837.00
+  Invoiced         398.00       837.00
+  Paid                  —            —
+    Received: derived from quantity — the pod carries no received amount
+    Paid: cannot be determined: the schedules record billing but no AP invoice carries this PO number
+
+Risk (Medium):
+  - the paid leg cannot be determined
+  - not fully received
+  - not fully invoiced
+  - PO payment terms differ from the site default
+
+Recommended action:
+  Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Supplier setup:
+  - Supplier JGA (1254) is ACTIVE and Spend Authorized.
+  - Site JGA Progress US is ACTIVE, purchasing enabled, pay enabled.
+  - Invoice matching is 3 Way against Receipt.
+  - PO payment terms (Net 30) differ from the site default (2/10 Net 30).
+
+Outstanding lines:
+   Line Status         Amount    Received  Outstanding
+      1 Open         1,116.00      279.00       837.00
+
+Unresolved:
+  - PO payment terms (Net 30) differ from the supplier site default (2/10 Net 30)
+  - schedules record 398.00 billed but no invoice carries this PO number; the AP document could not be matched, so the paid leg is unknown rather than zero
+  - PayOnReceiptFlag is set on this PO — self-billing may explain the unmatched billing (unconfirmed)
+Summary:
+Answer:
+PO 701337 — JGA
+  Received: no · Invoiced: no · Paid: cannot be determined
+  Stage: Awaiting receipt  ·  Owner: Supplier / Receiving  ·  Risk: Medium
+
+PO 701337 (JGA) — Awaiting receipt. Ordered 1,235.00 USD; received 398.00 USD; invoiced 398.00 USD; paid not yet determined. (Received is derived from quantities.) Outstanding: 837.00 USD to receive, 837.00 USD to invoice. Risk: Medium — the paid leg cannot be determined; not fully received; not fully invoiced; PO payment terms differ from the site default. Recommended action: Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Amounts (USD):
+  Leg              Amount    Remaining
+  Ordered        1,235.00            —
+  Received         398.00       837.00
+  Invoiced         398.00       837.00
+  Paid                  —            —
+    Received: derived from quantity — the pod carries no received amount
+    Paid: cannot be determined: the schedules record billing but no AP invoice carries this PO number
+
+Risk (Medium):
+  - the paid leg cannot be determined
+  - not fully received
+  - not fully invoiced
+  - PO payment terms differ from the site default
+
+Recommended action:
+  Accounts Payable: locate the AP invoice for this PO, or confirm none exists. Until then the payment question has no answer.
+
+Supplier setup:
+  - Supplier JGA (1254) is ACTIVE and Spend Authorized.
+  - Site JGA Progress US is ACTIVE, purchasing enabled, pay enabled.
+  - Invoice matching is 3 Way against Receipt.
+  - PO payment terms (Net 30) differ from the site default (2/10 Net 30).
+
+Outstanding lines:
+   Line Status         Amount    Received  Outstanding
+      1 Open         1,116.00      279.00       837.00
+
+Unresolved:
+  - PO payment terms (Net 30) differ from the supplier site default (2/10 Net 30)
+  - schedules record 398.00 billed but no invoice carries this PO number; the AP document could not be matched, so the paid leg is unknown rather than zero
+  - PayOnReceiptFlag is set on this PO — self-billing may explain the unmatched billing (unconfirmed)
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/modes/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+There are 695 suppliers.
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Corporation Americas
+  AccountId        : 300000047368527
+  AccountNumber    : 26370
+  Open Receivables : 14435468.28
+  Transactions Due : 15888967.45
+
+  ABC Corporation Americas — transactions (showing 25 of 276):
+    Transaction | Class   | Date       |   Amount |  Balance | Status
+    ------------+---------+------------+----------+----------+-------
+    1449128     | Invoice | 2025-09-26 | 608246.0 | 608246.0 | Open  
+    1413807     | Invoice | 2024-12-23 | 492835.0 | 492835.0 | Open  
+    1449180     | Invoice | 2025-12-16 | 328686.0 | 328686.0 | Open  
+    1414783     | Invoice | 2024-12-16 | 328686.0 | 328686.0 | Open  
+    1448812     | Invoice | 2025-04-12 | 303501.0 | 303501.0 | Open  
+    1449032     | Invoice | 2025-08-04 | 297995.0 | 297995.0 | Open  
+    1445706     | Invoice | 2025-08-13 | 272259.0 | 272259.0 | Open  
+    1445691     | Invoice | 2025-11-01 | 258207.0 | 258207.0 | Open  
+    1449173     | Invoice | 2025-11-04 | 249582.0 | 249582.0 | Open  
+    1445677     | Invoice | 2025-10-15 | 237812.0 | 237812.0 | Open  
+    1445653     | Invoice | 2025-03-13 | 237140.0 | 237140.0 | Open  
+    1445650     | Invoice | 2025-12-01 | 219287.0 | 219287.0 | Open  
+    1449147     | Invoice | 2025-10-14 | 216378.0 | 216378.0 | Open  
+    1449179     | Invoice | 2025-12-04 | 213345.0 | 213345.0 | Open  
+    1445660     | Invoice | 2025-08-15 | 202756.0 | 202756.0 | Open  
+    1445689     | Invoice | 2025-06-15 | 199264.0 | 199264.0 | Open  
+    1445937     | Invoice | 2024-01-17 | 185112.0 | 185112.0 | Open  
+    UKJAN1125   | Invoice | 2024-01-17 | 185112.0 | 185112.0 | Open  
+    1445617     | Invoice | 2025-12-03 | 185112.0 | 185112.0 | Open  
+    1445954     | Invoice | 2025-01-15 | 185112.0 | 185112.0 | Open  
+    1445670     | Invoice | 2025-05-28 | 183298.0 | 183298.0 | Open  
+    1448904     | Invoice | 2025-03-15 | 167228.0 | 167228.0 | Open  
+    1445671     | Invoice | 2025-05-01 | 160298.0 | 160298.0 | Open  
+    1449163     | Invoice | 2025-11-12 | 155225.0 | 155225.0 | Open  
+    1445680     | Invoice | 2025-05-17 | 149448.0 | 149448.0 | Open  
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Corporation Americas
+  AccountId        : 300000047368527
+  AccountNumber    : 26370
+  Open Receivables : 14435468.28
+  Transactions Due : 15888967.45
+
+  ABC Corporation Americas — transactions (showing 5 of 276):
+    Transaction | Class   | Date       |   Amount |  Balance | Status
+    ------------+---------+------------+----------+----------+-------
+    1449128     | Invoice | 2025-09-26 | 608246.0 | 608246.0 | Open  
+    1413807     | Invoice | 2024-12-23 | 492835.0 | 492835.0 | Open  
+    1449180     | Invoice | 2025-12-16 | 328686.0 | 328686.0 | Open  
+    1414783     | Invoice | 2024-12-16 | 328686.0 | 328686.0 | Open  
+    1448812     | Invoice | 2025-04-12 | 303501.0 | 303501.0 | Open  
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Application Software
+  AccountId        : 300000047368512
+  AccountNumber    : 26360
+  Open Receivables : 46864.78
+  Transactions Due : 51980.42
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/payables/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 of 1,327 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+Answer:
+Showing 25 of 1,327 invoices.
+All 25 have InvoiceCurrency USD.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice         | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  ----------------+-----------------+----------+----------+------------+-------------
+  LEE-01-1006-111 | 489503          | 11138.34 | USD      | 2016-10-17 | Lee Supplies
+  PCS10027_0825   | 1476380         |   3300.0 | USD      | 2025-08-23 | Lee Supplies
+  PCS10031_0825   | 1476383         |   2737.5 | USD      | 2025-08-23 | Lee Supplies
+  PCS10053_09251  | 1480378         |   3300.0 | USD      | 2025-09-09 | Lee Supplies
+  PCS10059_09251  | 1480379         |   3350.0 | USD      | 2025-09-09 | Lee Supplies
+  PCS10064_09251  | 1480381         |   2737.5 | USD      | 2025-09-09 | Lee Supplies
+  Lee 20141209    | 300000073847590 |   594.27 | USD      | 2014-02-02 | Lee Supplies
+  LSFA01022014    | 300000076967539 |      0.0 | USD      | 2014-02-01 | Lee Supplies
+  1324            | 300000187479939 |      0.0 | USD      | 2019-09-25 | Lee Supplies
+  PCS10003-3      | 300000066761806 |      0.0 | USD      | 2013-09-05 | Lee Supplies
+  PCS10048_0623   | 1197319         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10066_0623   | 1197322         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10043_0623   | 1197323         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10049_0623   | 1197325         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10054_0623   | 1197326         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  AGOD001         | 300000345172471 |  90000.0 | USD      | 2026-09-08 | Lee Supplies
+  INV_PEC_2       | 300000313351283 |      0.0 | USD      | 2025-01-23 | Lee Supplies
+  INV_PEC_4       | 300000313351285 |      0.0 | USD      | 2025-03-23 | Lee Supplies
+  PCS10053_0925   | 1479378         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10059_0925   | 1479379         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10064_0925   | 1479381         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  INV_PEC_5       | 300000313351286 |      0.0 | USD      | 2025-04-23 | Lee Supplies
+  PCS10029_0825   | 1476382         |      0.0 | USD      | 2025-08-23 | Lee Supplies
+  US165073-Inv    | 300000307475580 |   162.58 | USD      | 2025-06-25 | Lee Supplies
+  Lee US 3/21     | 300000074067563 |      0.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+Answer:
+Showing 7 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 6 USD, 1 AUD.
+All 7 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice       | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  --------------+-----------------+------------+----------+------------+-------------
+  LEE03032012   | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013 | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013   | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014  | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L107          | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106          | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  44622         | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 7 returned.
+Summary:
+Answer:
+Showing 18 invoices from an examined sample; the true matching count is not known.
+All 18 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice        | InvoiceId |  Amount | Currency | Date       | Supplier                        
+  ---------------+-----------+---------+----------+------------+---------------------------------
+  Allid_Inv01241 | 1287322   |     0.0 | USD      | 2024-01-01 | Allied Manufacturing            
+  Allid_Inv01242 | 1287323   |     0.0 | USD      | 2024-01-02 | Allied Manufacturing            
+  UPS_Inv0124    | 1287324   |     0.0 | USD      | 2024-01-03 | United Parcel Service           
+  BM_Inv0124     | 1287325   |     0.0 | USD      | 2024-01-04 | Building Management             
+  ATT_Inv01242   | 1287329   |     0.0 | USD      | 2024-01-08 | American Telephone and Telegraph
+  ATT_Inv01243   | 1287330   |     0.0 | USD      | 2024-01-09 | American Telephone and Telegraph
+  PI20043_0124   | 1096326   |  1204.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_0224   | 1096327   |  1095.0 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_0324   | 1096328   |  1095.0 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_0424   | 1096329   | 1040.25 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_0524   | 1096330   |  1204.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_0624   | 1096331   |  1095.0 | USD      | 2024-06-28 | Lee Supplies                    
+  PI20043_1_0124 | 1096338   |   547.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_1_0224 | 1096339   |  536.55 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_1_0324 | 1096340   |  602.25 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_1_0424 | 1096341   |  536.55 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_1_0524 | 1096342   |   547.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_1_0624 | 1096343   |  536.55 | USD      | 2024-06-28 | Lee Supplies                    
+
+Truncation:
+  - invoices: unknown total in source; 18 returned.
+Summary:
+Answer:
+Showing 25 of 545 invoices.
+InvoiceCurrency: 23 USD, 2 PKR.
+
+Invoices:
+  Invoice                           | InvoiceId       |  Amount | Currency | Date       | Supplier                   
+  ----------------------------------+-----------------+---------+----------+------------+----------------------------
+  123                               | 300000344598392 | 18615.0 | PKR      | 2026-09-22 | Advanced Corp              
+  321                               | 300000344598393 |  6898.5 | USD      | 2026-09-22 | Advanced Corp              
+  Test_FBDI_001                     | 1604380         | 60225.0 | USD      | 2026-09-25 | Advanced Corp              
+  11111                             | 1600389         |  2000.0 | USD      | 2026-09-23 | ABC Consulting             
+  AP_INV1                           | 1600390         |  3270.0 | USD      | 2026-09-23 | ABC Consulting             
+  Withholding tax-1600390-4         | 1600391         |   327.0 | USD      | 2026-09-23 | Internal Revenue Service   
+  AGOD001                           | 300000345172471 | 90000.0 | USD      | 2026-09-08 | Lee Supplies               
+  abc123                            | 300000346545254 |   500.0 | USD      | 2026-09-24 | ABC Consulting             
+  AP_Demo_Std_Bad_Data_10I          | 1602378         |    60.0 | USD      | 2026-09-23 | ABC Consulting             
+  Withholding tax-300000345205226-4 | 1606378         |   545.0 | USD      | 2026-09-24 | Internal Revenue Service   
+  INV-2026                          | 300000345205313 |  1200.0 | USD      | 2026-09-24 | Pacific Office Supplies LLC
+  US165389                          | 300000344795193 |   32.85 | USD      | 2026-09-22 | Advanced Corp              
+  jhu                               | 300000344795412 |     8.0 | USD      | 2026-09-22 | ABC Consulting             
+  INV-123                           | 300000345205387 |  2000.0 | USD      | 2026-09-25 | ABC Consulting             
+  ERS-52976-751579                  | 1603378         |   218.0 | USD      | 2026-09-19 | JGA                        
+  ERS-10002-751580                  | 1603379         | 17000.0 | PKR      | 2026-09-22 | Advanced Corp              
+  ERS-10001-751581                  | 1603380         |  6898.5 | USD      | 2026-09-22 | Advanced Corp              
+  Test_Spreadsheet_INV001           | 1605378         |  1642.5 | USD      | 2026-09-23 | Advanced Corp              
+  Test_Spreadsheet_INV002           | 1605379         |  1095.0 | USD      | 2026-09-23 | Advanced Corp              
+  RENT_RECUR_Monthly_1              | 1605380         |  5475.0 | USD      | 2026-09-01 | Advanced Corp              
+  RENT_RECUR_Monthly_2              | 1605381         |  5000.0 | USD      | 2026-10-01 | Advanced Corp              
+  RENT_RECUR_Monthly_3              | 1605382         |  5000.0 | USD      | 2026-11-01 | Advanced Corp              
+  RENT_RECUR_Monthly_4              | 1605383         |  5000.0 | USD      | 2026-12-01 | Advanced Corp              
+  RENT_RECUR_Monthly_5              | 1605384         |  5000.0 | USD      | 2027-01-01 | Advanced Corp              
+  RENT_RECUR_Monthly_6              | 1605385         |  5000.0 | USD      | 2027-02-01 | Advanced Corp              
+
+Truncation:
+  - invoices: 545 total in source; 25 returned.
+Summary:
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    577  out=    222  total=    799
+  parse        in=   5458  out=    415  total=   5873
+  TOTAL        in=   6035  out=    637  total=   6672
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/payables_procurement/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+
+Invoices:
+  Invoice   : 162034inv
+  InvoiceId : 300000049373131
+  Amount    : 830.01
+  Currency  : USD
+  Date      : 2013-12-16
+  Supplier  : Lee Supplies
+Summary:
+Answer:
+PO 162034 (Lee Supplies): ordered 758.00, invoiced 830.01 across 1 invoice — over-invoiced by 72.01.
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/payables_supplier/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 of 1,327 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+Answer:
+Examined 25 of 695 suppliers. Of those 25, 19 match the filter.
+
+Suppliers:
+  Supplier                  | SupplierId      | SupplierNumber
+  --------------------------+-----------------+---------------
+  Lee Supplies              | 300000047414503 | 1252          
+  JGA                       | 300000047414635 | 1254          
+  US Gas and Electric       | 300000047507113 | 1256          
+  Allied Manufacturing      | 300000047572113 | 1265          
+  Midtown Computer Supplies | 300000047572163 | 1266          
+  Consolidated Supplies     | 300000047837244 | 1272          
+  Progressive Corp          | 300000049521222 | 1274          
+  Masson Inc                | 300000051065858 | 1277          
+  RSM                       | 300000051066029 | 1278          
+  Utilitaire Inc            | 300000051066302 | 1281          
+  Nihon Communications      | 300000101110596 | 1301          
+  Medtronic                 | 300000116498267 | 1322          
+  Siemens Medical Solutions | 300000116498411 | 1324          
+  Cardinal Health           | 300000116498478 | 1325          
+  Lagring Systems           | 300000116707121 | 1327          
+  BD Medical                | 300000133943993 | 1342          
+  Staffing Services         | 300000047414571 | 1253          
+  Dell Inc.                 | 300000047414679 | 1255          
+  Howell Engineering Inc.   | 300000047507170 | 1257          
+
+Truncation:
+  - suppliers: 695 total in source; 25 returned.
+
+─── Tip ───
+Reading all 695 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/procurement/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+Summary:
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — schedules:
+    Schedule | Ship To | Need-By    | Ordered | Received | Billed 
+    ---------+---------+------------+---------+----------+--------
+    1        | Seattle | 2014-12-01 | 33000.0 |  33000.0 | 33000.0
+    1        | Seattle | 2014-12-01 |  8250.0 |   8250.0 | 8250.0 
+
+  PO 162352 — distributions:
+    Distribution | Charge Account           | %     |  Amount
+    -------------+--------------------------+-------+--------
+    1            | 101.10.63120.251.000.000 | 100.0 | 33000.0
+    1            | 101.10.63120.420.000.000 | 100.0 |  8250.0
+Summary:
+Answer:
+Showing 25 of 878 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 878 total in source; 25 returned.
+Summary:
+Reason:   I can look up purchase orders, but this doesn't say which one.
+
+Solution: Give me the PO number.
+
+Example:  What is the risk rating on PO 701337 and why?
+  (refusal: missing_identifier — PurchaseOrder root has no identifier and no explicit list request)
+Token usage:
+  classify     in=    577  out=     55  total=    632
+  parse        in=   6614  out=    164  total=   6778
+  TOTAL        in=   7191  out=    219  total=   7410
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/procurement_supplier/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 of 2,013 purchase orders.
+All 25 have Status Closed.
+All 25 have Supplier EIP Inc.
+Buyer: 8 Roth, Calvin, 8 Miller, Saville, 5 Irving, Tiffany, 4 Gee, May.
+
+Purchase Orders:
+  Order  | POHeaderId | Status | Supplier | Buyer          
+  -------+------------+--------+----------+----------------
+  162352 | 2144       | Closed | EIP Inc  | Gee, May       
+  162353 | 2145       | Closed | EIP Inc  | Roth, Calvin   
+  162354 | 2146       | Closed | EIP Inc  | Roth, Calvin   
+  162355 | 2147       | Closed | EIP Inc  | Miller, Saville
+  162356 | 2148       | Closed | EIP Inc  | Miller, Saville
+  162059 | 24         | Closed | EIP Inc  | Gee, May       
+  162060 | 25         | Closed | EIP Inc  | Roth, Calvin   
+  162061 | 26         | Closed | EIP Inc  | Roth, Calvin   
+  162062 | 27         | Closed | EIP Inc  | Miller, Saville
+  162063 | 28         | Closed | EIP Inc  | Miller, Saville
+  162271 | 988        | Closed | EIP Inc  | Roth, Calvin   
+  162272 | 989        | Closed | EIP Inc  | Roth, Calvin   
+  162273 | 990        | Closed | EIP Inc  | Miller, Saville
+  162274 | 991        | Closed | EIP Inc  | Miller, Saville
+  162295 | 1335       | Closed | EIP Inc  | Irving, Tiffany
+  162270 | 987        | Closed | EIP Inc  | Gee, May       
+  162384 | 2529       | Closed | EIP Inc  | Irving, Tiffany
+  162197 | 388        | Closed | EIP Inc  | Irving, Tiffany
+  162205 | 431        | Closed | EIP Inc  | Gee, May       
+  162206 | 432        | Closed | EIP Inc  | Roth, Calvin   
+  162207 | 433        | Closed | EIP Inc  | Roth, Calvin   
+  162208 | 434        | Closed | EIP Inc  | Miller, Saville
+  162209 | 435        | Closed | EIP Inc  | Miller, Saville
+  162217 | 443        | Closed | EIP Inc  | Irving, Tiffany
+  162238 | 683        | Closed | EIP Inc  | Irving, Tiffany
+
+Truncation:
+  - open_pos: 2013 total in source; 25 returned.
+Summary:
+Answer:
+Showing 25 of 695 suppliers. These 25 suppliers have 67 open purchase orders between them.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber | Open POs | Buyers                                         
+  -------------------------------------------+-----------------+----------------+----------+------------------------------------------------
+  Lee Supplies                               | 300000047414503 | 1252           |        6 | Roth, Calvin, Gee, May                         
+  JGA                                        | 300000047414635 | 1254           |        5 | Roth, Calvin                                   
+  US Gas and Electric                        | 300000047507113 | 1256           |        0 | —                                              
+  Allied Manufacturing                       | 300000047572113 | 1265           |        1 | Roth, Calvin                                   
+  Midtown Computer Supplies                  | 300000047572163 | 1266           |        3 | Roth, Calvin                                   
+  Consolidated Supplies                      | 300000047837244 | 1272           |       12 | Morgan, Liz, Fox, Dan, Bird, James             
+  Progressive Corp                           | 300000049521222 | 1274           |        1 | Fox, Dan                                       
+  Masson Inc                                 | 300000051065858 | 1277           |       15 | Grande, Marc, Sonier, Michel, Valence, Caroline
+  RSM                                        | 300000051066029 | 1278           |        0 | —                                              
+  Utilitaire Inc                             | 300000051066302 | 1281           |        0 | —                                              
+  Shangduo Inc                               | 300000075469541 | 1289           |       10 | Tan, Yao, Lin, Yulan                           
+  Nihon Communications                       | 300000101110596 | 1301           |        0 | —                                              
+  Ente Idrocarburi                           | 300000115609124 | 1306           |        0 | —                                              
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           |        0 | —                                              
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           |        0 | —                                              
+  Medtronic                                  | 300000116498267 | 1322           |        1 | Procurement, Camille                           
+  Siemens Medical Solutions                  | 300000116498411 | 1324           |        1 | Procurement, Camille                           
+  Cardinal Health                            | 300000116498478 | 1325           |        1 | Tulane, Casey                                  
+  Lagring Systems                            | 300000116707121 | 1327           |        1 | Roth, Calvin                                   
+  Servicios Reunidos, SL                     | 300000131904822 | 1336           |        0 | —                                              
+  Misson Corp                                | 300000131933370 | 1339           |        0 | —                                              
+  BD Medical                                 | 300000133943993 | 1342           |        3 | Procurement, Camille, Tulane, Casey            
+  Staffing Services                          | 300000047414571 | 1253           |        2 | Roth, Calvin                                   
+  Dell Inc.                                  | 300000047414679 | 1255           |        4 | Roth, Calvin, Brown, Casey                     
+  Howell Engineering Inc.                    | 300000047507170 | 1257           |        1 | Roth, Calvin                                   
+
+Truncation:
+  - suppliers: 695 total in source; 25 returned.
+
+─── Tip ───
+Reading all 695 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/receivables/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+
+AR Invoices:
+  Transaction           : 61765
+  CustomerTransactionId : 300000248096352
+  Amount                : 39969.0
+  Currency              : GBP
+  Date                  : 2017-06-30
+  Customer              : ABC Corporation Americas
+  Status                : Complete
+Summary:
+Answer:
+
+AR Invoices:
+  Transaction           : 61765
+  CustomerTransactionId : 300000248096352
+  Amount                : 39969.0
+  Currency              : GBP
+  Date                  : 2017-06-30
+  Customer              : ABC Corporation Americas
+  Status                : Complete
+
+  Invoice 61765 — lines:
+    Line        : 1
+    Description : Consultation
+    Qty         : 1.0
+    Unit Price  : 39969.0
+    Amount      : 39969.0
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Corporation Americas
+  AccountId        : 300000047368527
+  AccountNumber    : 26370
+  Open Receivables : 14435468.28
+  Transactions Due : 15888967.45
+
+  ABC Corporation Americas — transactions (showing 25 of 486):
+    Transaction | Class   | Date       |   Amount | Balance | Status
+    ------------+---------+------------+----------+---------+-------
+    1471201     | Invoice | 2026-07-28 |   693.83 |     0.0 | Closed
+    1471217     | Invoice | 2026-07-26 |  3388.65 |     0.0 | Closed
+    1471203     | Invoice | 2026-07-25 | 13997.22 |     0.0 | Closed
+    1471214     | Invoice | 2026-07-24 |   4542.5 |  4542.5 | Open  
+    1471189     | Invoice | 2026-07-23 |  2021.67 | 2021.67 | Open  
+    1471191     | Invoice | 2026-07-22 |  2214.16 | 2214.16 | Open  
+    1471196     | Invoice | 2026-07-21 |    487.2 |   487.2 | Open  
+    1471199     | Invoice | 2026-07-20 |   3915.0 |     0.0 | Closed
+    1471194     | Invoice | 2026-07-19 |   8439.0 |     0.0 | Closed
+    1471210     | Invoice | 2026-07-18 |  5012.29 |     0.0 | Closed
+    1471218     | Invoice | 2026-07-16 |   320.82 |     0.0 | Closed
+    1471221     | Invoice | 2026-07-15 |  5658.27 |     0.0 | Closed
+    1471204     | Invoice | 2026-07-14 |  5494.05 |     0.0 | Closed
+    1471215     | Invoice | 2026-07-13 |  6109.59 |     0.0 | Closed
+    1471192     | Invoice | 2026-07-12 |   815.63 |     0.0 | Closed
+    1471197     | Invoice | 2026-07-11 |   204.45 |     0.0 | Closed
+    1471200     | Invoice | 2026-07-10 |  1847.67 |     0.0 | Closed
+    1471195     | Invoice | 2026-07-08 |  4505.52 |     0.0 | Closed
+    1471211     | Invoice | 2026-07-07 |    339.3 |     0.0 | Closed
+    1471220     | Invoice | 2026-07-06 |   1026.6 |     0.0 | Closed
+    1471222     | Invoice | 2026-07-05 |  2425.13 |     0.0 | Closed
+    1471190     | Invoice | 2026-07-04 |  2694.83 |     0.0 | Closed
+    1471205     | Invoice | 2026-07-03 |  6270.53 |     0.0 | Closed
+    1471193     | Invoice | 2026-07-02 | 12371.41 |     0.0 | Closed
+    1471198     | Invoice | 2026-07-01 |   140.29 |     0.0 | Closed
+Summary:
+Answer:
+Showing 25 of 2,248 credit memos.
+All 25 have Currency USD.
+Status: 24 Complete, 1 Incomplete.
+
+Credit Memos (newest first):
+  Transaction | CustomerTransactionId |   Amount | Currency | Date       | Customer                     | Status    
+  ------------+-----------------------+----------+----------+------------+------------------------------+-----------
+  101001      | 300000345205162       |  40000.0 | USD      | 2026-09-25 | cust1                        | Incomplete
+  1001        | 1606939               |   -500.0 | USD      | 2026-07-15 | Fusion Fitness Club          | Complete  
+  1471435     | 1624418               |  -143.97 | USD      | 2026-07-10 | Dixon Industries             | Complete  
+  1471139     | 1624415               |  -192.24 | USD      | 2026-07-09 | Consolidated Services        | Complete  
+  1471343     | 1624416               |   -437.0 | USD      | 2026-07-08 | Computer Service and Rentals | Complete  
+  1471409     | 1624417               |  -420.74 | USD      | 2026-07-07 | Business World               | Complete  
+  1464354     | 1611389               | -1081.42 | USD      | 2026-06-10 | Dixon Industries             | Complete  
+  1465069     | 1612035               | -1078.93 | USD      | 2026-06-09 | Consolidated Services        | Complete  
+  1464347     | 1611387               |  -503.64 | USD      | 2026-06-08 | Computer Service and Rentals | Complete  
+  1464430     | 1611388               | -1088.92 | USD      | 2026-06-07 | Business World               | Complete  
+  1459285     | 1604186               |  -143.97 | USD      | 2026-05-10 | Dixon Industries             | Complete  
+  1459137     | 1604185               |  -192.24 | USD      | 2026-05-09 | Consolidated Services        | Complete  
+  1460115     | 1605114               |   -437.0 | USD      | 2026-05-08 | Computer Service and Rentals | Complete  
+  1460145     | 1605115               |  -420.74 | USD      | 2026-05-07 | Business World               | Complete  
+  1454841     | 1586864               |  -143.97 | USD      | 2026-04-10 | Dixon Industries             | Complete  
+  1454433     | 1586855               |  -192.24 | USD      | 2026-04-09 | Consolidated Services        | Complete  
+  1454700     | 1586861               |   -437.0 | USD      | 2026-04-08 | Computer Service and Rentals | Complete  
+  1454524     | 1586858               |  -420.74 | USD      | 2026-04-07 | Business World               | Complete  
+  1454806     | 1586863               |  -143.97 | USD      | 2026-03-10 | Dixon Industries             | Complete  
+  1454407     | 1586854               |  -192.24 | USD      | 2026-03-09 | Consolidated Services        | Complete  
+  1454674     | 1586860               |   -437.0 | USD      | 2026-03-08 | Computer Service and Rentals | Complete  
+  1454537     | 1586857               |  -420.74 | USD      | 2026-03-07 | Business World               | Complete  
+  1451359     | 1584364               |  -143.97 | USD      | 2026-02-10 | Dixon Industries             | Complete  
+  1451041     | 1584229               |  -192.24 | USD      | 2026-02-09 | Consolidated Services        | Complete  
+  1451172     | 1584067               |   -437.0 | USD      | 2026-02-08 | Computer Service and Rentals | Complete  
+
+Not totalled: these are the 25 most recent of 2248 credit memos. A sum over only the sampled rows would misstate the full set — ask for a bounded set (e.g. a date range or a single customer) and I'll total that.
+
+Truncation:
+  - credit_memos: 2248 total in source; 25 returned.
+Summary:
+Answer:
+
+Customer Accounts:
+  Customer         : ABC Application Software
+  AccountId        : 300000047368512
+  AccountNumber    : 26360
+  Open Receivables : 46864.78
+  Transactions Due : 51980.42
+Summary:
+Reason:   I can look up AR invoices, but this doesn't say which one.
+
+Solution: Give me the transaction number or the CustomerTransactionId.
+
+Example:  Get the AR invoice with CustomerTransactionId 300000248096352
+  (refusal: missing_identifier — The request asks for invoice lines but does not provide an invoice number or identifier to look up.)
+Token usage:
+  classify     in=    580  out=    738  total=   1318
+  parse        in=   7977  out=    455  total=   8432
+  TOTAL        in=   8557  out=   1193  total=   9750
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/refusals/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  US Gas and Electric              | 300000047507113 | 1256          
+  Allied Manufacturing             | 300000047572113 | 1265          
+  Midtown Computer Supplies        | 300000047572163 | 1266          
+  Medtronic                        | 300000116498267 | 1322          
+  Siemens Medical Solutions        | 300000116498411 | 1324          
+  Cardinal Health                  | 300000116498478 | 1325          
+  Lagring Systems                  | 300000116707121 | 1327          
+  BD Medical                       | 300000133943993 | 1342          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  GE                               | 300000047507387 | 1261          
+  EIP Inc                          | 300000047507499 | 1262          
+  Building Management              | 300000047572371 | 1270          
+  Eiffage                          | 300000051066172 | 1279          
+  Mela Spa                         | 300000115699616 | 1314          
+  Office Depot                     | 300000047507596 | 1264          
+  InterUS1                         | 300000055053882 | 1284          
+  ABC Consulting                   | 300000075039541 | 1288          
+  Fisher Scientific                | 300000116498193 | 1321          
+  Baxter Healthcare                | 300000116498330 | 1323          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+Reason:   Contract isn't something I know about.
+
+Solution: What I do have: addresses, credit memos, customer accounts, supplier invoices, purchase orders, AR invoices, receipts and suppliers.
+
+Example:  invoices for Lee Supplies
+  (refusal: unknown_entity — needs a Contract entity, which is not supported)
+Token usage:
+  classify     in=    582  out=    390  total=    972
+  parse        in=   6619  out=    399  total=   7018
+  TOTAL        in=   7201  out=    789  total=   7990
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=581 out=93 total=674
+Router: modules=['procurement']
+[llm] stage=parse in=6618 out=859 total=7477
+[cache] HIT   cached=6611  fresh=7  total_in=6618
+
+========================================================================
+PROMPT: show me purchase order line items
+========================================================================
+Reason:   I can look up purchase order lines, but only as part of the record they belong to.
+
+Solution: Ask for the PO and its lines together.
+
+Example:  Show PO 2144 and its lines
+  (refusal: unknown_entity — PurchaseOrderLine is not a valid target entity)
+Token usage:
+  classify     in=    581  out=     93  total=    674
+  parse        in=   6618  out=    859  total=   7477
+  TOTAL        in=   7199  out=    952  total=   8151
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=581 out=176 total=757
+Router: modules=['supplier']
+[llm] stage=parse in=5754 out=575 total=6329
+[cache] HIT   cached=5747  fresh=7  total_in=5754
+
+========================================================================
+PROMPT: who should we stop buying from
+========================================================================
+Reason:   determining which suppliers to stop buying from requires supplier performance or risk metrics, which are not supported
+
+Solution: Narrow by country, status or name instead.
+
+Example:  active suppliers in US
+  (refusal: unsupported_filter — determining which suppliers to stop buying from requires supplier performance or risk metrics, which are not supported)
+Token usage:
+  classify     in=    581  out=    176  total=    757
+  parse        in=   5754  out=    575  total=   6329
+  TOTAL        in=   6335  out=    751  total=   7086
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=81 total=660
+Router: modules=['supplier']
+[llm] stage=parse in=5752 out=725 total=6477
+[cache] HIT   cached=5747  fresh=5  total_in=5752
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+    - {'type': 'country', 'value': 'US'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'country': 'US'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    ... (20 more)
+
+
+========================================================================
+PROMPT: active suppliers in US
+========================================================================
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  US Gas and Electric              | 300000047507113 | 1256          
+  Allied Manufacturing             | 300000047572113 | 1265          
+  Midtown Computer Supplies        | 300000047572163 | 1266          
+  Medtronic                        | 300000116498267 | 1322          
+  Siemens Medical Solutions        | 300000116498411 | 1324          
+  Cardinal Health                  | 300000116498478 | 1325          
+  Lagring Systems                  | 300000116707121 | 1327          
+  BD Medical                       | 300000133943993 | 1342          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  GE                               | 300000047507387 | 1261          
+  EIP Inc                          | 300000047507499 | 1262          
+  Building Management              | 300000047572371 | 1270          
+  Eiffage                          | 300000051066172 | 1279          
+  Mela Spa                         | 300000115699616 | 1314          
+  Office Depot                     | 300000047507596 | 1264          
+  InterUS1                         | 300000055053882 | 1284          
+  ABC Consulting                   | 300000075039541 | 1288          
+  Fisher Scientific                | 300000116498193 | 1321          
+  Baxter Healthcare                | 300000116498330 | 1323          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/supplier/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+There are 695 suppliers.
+Summary:
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber
+  -------------------------------------------+-----------------+---------------
+  Lee Supplies                               | 300000047414503 | 1252          
+  JGA                                        | 300000047414635 | 1254          
+  US Gas and Electric                        | 300000047507113 | 1256          
+  Allied Manufacturing                       | 300000047572113 | 1265          
+  Midtown Computer Supplies                  | 300000047572163 | 1266          
+  Consolidated Supplies                      | 300000047837244 | 1272          
+  Progressive Corp                           | 300000049521222 | 1274          
+  Masson Inc                                 | 300000051065858 | 1277          
+  RSM                                        | 300000051066029 | 1278          
+  Utilitaire Inc                             | 300000051066302 | 1281          
+  Shangduo Inc                               | 300000075469541 | 1289          
+  Nihon Communications                       | 300000101110596 | 1301          
+  Ente Idrocarburi                           | 300000115609124 | 1306          
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308          
+  Medtronic                                  | 300000116498267 | 1322          
+  Siemens Medical Solutions                  | 300000116498411 | 1324          
+  Cardinal Health                            | 300000116498478 | 1325          
+  Lagring Systems                            | 300000116707121 | 1327          
+  Servicios Reunidos, SL                     | 300000131904822 | 1336          
+  Misson Corp                                | 300000131933370 | 1339          
+  BD Medical                                 | 300000133943993 | 1342          
+  Staffing Services                          | 300000047414571 | 1253          
+  Dell Inc.                                  | 300000047414679 | 1255          
+  Howell Engineering Inc.                    | 300000047507170 | 1257          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+Answer:
+This list displays 25 addresses associated with the supplier Lee Supplies (Supplier Number 1252). These locations span multiple countries, including the United States, India, Mexico, Japan, the United Kingdom, Belgium, Poland, Saudi Arabia, Australia, Germany, the Netherlands, Sweden, and Switzerland. Specific sites include Lee Supremo Energy US in Houston, Lee Fed US in Washington, and Lee India in New Delhi.
+
+Addresses:
+  Address                                                                                             | AddressId       | Supplier     | SupplierNumber
+  ----------------------------------------------------------------------------------------------------+-----------------+--------------+---------------
+  6302 England St,HOUSTON, TX 77021 Harris                                                            | 300000260343485 | Lee Supplies | 1252          
+  758 11Th St SE,WASHINGTON, DC 20003 District of Columbia                                            | 300000224618460 | Lee Supplies | 1252          
+  6200 W William Cannon Dr,AUSTIN, TX 78749 Travis                                                    | 300000330323084 | Lee Supplies | 1252          
+  South Ave,South Avenue Area, President's Estate,NEW DELHI-110011,Delhi,INDIA                        | 300000185706832 | Lee Supplies | 1252          
+  Calle Venustiano Carranza 60,Col Centro,Col Centro,06000  CIUDAD DE MÉXICO, CIUDAD DE MÉXICO,MEXICO | 300000287085787 | Lee Supplies | 1252          
+  JAPAN,1530062,Tokyo,SHINAGAWA-KU,MITA,1-2-3                                                         | 300000101110124 | Lee Supplies | 1252          
+  33 Dartmouth Park Hill,LONDON,Greater London,NW5 1HU,UNITED KINGDOM                                 | 300000223873425 | Lee Supplies | 1252          
+  11900 MARKET ST,RESTON, VA 20190 FAIRFAX                                                            | 300000076246713 | Lee Supplies | 1252          
+  Hendrik I lei,84,1800 VILVOORDE,BELGIUM                                                             | 300000132524404 | Lee Supplies | 1252          
+  Przyokopowa 31,Warsaw,POLAND                                                                        | 300000173063725 | Lee Supplies | 1252          
+  11433 Olaya St,Riyadh 12263,SAUDI ARABIA                                                            | 300000266704355 | Lee Supplies | 1252          
+  3919 Woodward Ave,DETROIT, MI 48201 Wayne                                                           | 300000312737691 | Lee Supplies | 1252          
+  1825 Colorado St,AUSTIN, TX 78701 Travis                                                            | 300000319814661 | Lee Supplies | 1252          
+  5000 CARTER DR.,LOS ANGELES, CA 90032 LOS ANGELES                                                   | 300000047414534 | Lee Supplies | 1252          
+  32 Ryde Rd,Sydney New South Wales 2000,AUSTRALIA                                                    | 300000243483835 | Lee Supplies | 1252          
+  3600 Ranch Road 620 S Ste C,AUSTIN, TX 78738 Travis                                                 | 300000330323074 | Lee Supplies | 1252          
+  855 Hill Street,LOS ANGELES, CA 90014 Los Angeles                                                   | 300000180147083 | Lee Supplies | 1252          
+  1526 E Colfax Ave,DENVER, CO 80218 Denver                                                           | 300000319063714 | Lee Supplies | 1252          
+  Ivo-Hauptmann-Ring 5,Hamburg-Insel Neuwerk,GERMANYStadtkreis Hamburg,Freie und Hansestadt Hamburg   | 300000167722345 | Lee Supplies | 1252          
+  701 S Capital Of Texas Hwy,WEST LAKE HILLS, TX 78746 Travis                                         | 300000330323079 | Lee Supplies | 1252          
+  208 S AKARD ST,DALLAS, TX 75202 DALLAS                                                              | 300000095598109 | Lee Supplies | 1252          
+  3200 Fairlawn,LA CANADA, CA 91011                                                                   | 300000116498666 | Lee Supplies | 1252          
+  Leidsestraat 32-34,1017  AMSTERDAM,NETHERLANDS                                                      | 300000132468397 | Lee Supplies | 1252          
+  Grevgatan 38,114 53 Stockholm,SWEDEN                                                                | 300000138007867 | Lee Supplies | 1252          
+  Aarbergergasse 25,CH3011 BERN,SWITZERLAND                                                           | 300000176066123 | Lee Supplies | 1252          
+Summary:
+Answer:
+Showing 25 of 695 suppliers.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber | Address                                                                                                   
+  -------------------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                               | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                                        | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric                        | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Allied Manufacturing                       | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+  Midtown Computer Supplies                  | 300000047572163 | 1266           | 168 Ultimate Dr,RICHMOND HILL ONTARIO  L4S 8M8,CANADA (+24 more)                                          
+  Consolidated Supplies                      | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Progressive Corp                           | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  Masson Inc                                 | 300000051065858 | 1277           | 5 Avenue du Général de Gaulle,60300 SENLIS,FRANCE                                                         
+  RSM                                        | 300000051066029 | 1278           | 28 Rue Alfred Kastler,76130 MONT-SAINT-AIGNAN,FRANCE                                                      
+  Utilitaire Inc                             | 300000051066302 | 1281           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Shangduo Inc                               | 300000075469541 | 1289           | CHINA,325604  ZHEJIANG,Wenzhou,Zhiguang Industrial Zone                                                   
+  Nihon Communications                       | 300000101110596 | 1301           | JAPAN,272-0127,Chiba,Ichikawa-shi,Shiohama,1-2-3                                                          
+  Ente Idrocarburi                           | 300000115609124 | 1306           | Corso Buenos Aires,MILANO, MILANO,20121,ITALY                                                             
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           | Via Francesco Marucelli,CASAPE, ROMA,00010,ITALY                                                          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           | Viale Aristide Merloni n. 47,FABRIANO, ANCONA,60044,ITALY                                                 
+  Medtronic                                  | 300000116498267 | 1322           | 99 Hereford Street,BRAMPTON ONTARIO  L6Y 0R3,CANADA (+1 more)                                             
+  Siemens Medical Solutions                  | 300000116498411 | 1324           | Houtsingel 21	,2719 EA ZOETERMEER,NETHERLANDS (+1 more)                                                   
+  Cardinal Health                            | 300000116498478 | 1325           | 2105 S Lakeside Dr,WAUKEGAN, IL 60085 (+3 more)                                                           
+  Lagring Systems                            | 300000116707121 | 1327           | 3811 Lyons Ave,HOUSTON, TX 77020 Harris (+3 more)                                                         
+  Servicios Reunidos, SL                     | 300000131904822 | 1336           | Gran Via de les Corts Catalanes, 25,08015 BARCELONA,SPAIN                                                 
+  Misson Corp                                | 300000131933370 | 1339           | 92 Rue Claude Decaen,75012 PARIS,FRANCE                                                                   
+  BD Medical                                 | 300000133943993 | 1342           | 1 Becton Drive,FRANKLIN LAKES, NJ 07417 (+1 more)                                                         
+  Staffing Services                          | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                                  | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  Howell Engineering Inc.                    | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+
+Truncation:
+  - suppliers: 695 total in source; 25 returned.
+Summary:
+Answer:
+EIP Inc has 10 contacts.
+
+Suppliers:
+  Supplier       : EIP Inc
+  SupplierId     : 300000047507499
+  SupplierNumber : 1262
+
+  EIP Inc — contacts:
+    Contact        | Email                                     | Admin
+    ---------------+-------------------------------------------+------
+    Kim, John      | john.kim_euth-dev49@oraclepdemos.com      | Y    
+    Rossier, Bruce | bruce.rossier_euth-dev49@oraclepdemos.com | —    
+    Romo, Gabi     | gabi.romo_euth-dev49@oraclepdemos.com     | —    
+    Iyer, Ansh     | ansh.iyer_euth-dev49@oraclepdemos.com     | —    
+    Hass, Henrik   | henrik.hass_euth-dev49@oraclepdemos.com   | —    
+    Romo, Ross     | ross.romo@supplier.com                    | —    
+    Meyer, Gijs    | gijs.meyer_euth-dev49@oraclepdemos.com    | —    
+    Hayes, Josef   | josef.hayes_euth-dev49@oraclepdemos.com   | —    
+    Shah, Priya    | priya.shah_euth-dev49@oraclepdemos.com    | —    
+    Fugh, Uma      | ufugh_euth-dev49@oraclepdemos.com         | —    
+Summary:
+Reason:   that kind of record isn't something I know about.
+
+Solution: What I do have: addresses, credit memos, customer accounts, supplier invoices, purchase orders, AR invoices, receipts and suppliers.
+
+Example:  invoices for Lee Supplies
+  (refusal: unknown_entity — needs a Contract entity, which is not supported)
+Token usage:
+  classify     in=    582  out=    390  total=    972
+  parse        in=   6619  out=    440  total=   7059
+  TOTAL        in=   7201  out=    830  total=   8031
+
+
+════════════════════════════════════════════════════════════════
+### overnights/20260925_150333/truncation/smoke.log
+════════════════════════════════════════════════════════════════
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 17 USD, 2 AUD.
+All 19 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  MBP_020620221      | 300000264684985 |    11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |    11300.1 | USD      | 2023-03-09 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+Answer:
+Showing 25 of 1,327 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+Answer:
+Showing 25 of 695 suppliers.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber | Address                                                                                                   
+  -------------------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                               | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                                        | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric                        | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Allied Manufacturing                       | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+  Midtown Computer Supplies                  | 300000047572163 | 1266           | 168 Ultimate Dr,RICHMOND HILL ONTARIO  L4S 8M8,CANADA (+24 more)                                          
+  Consolidated Supplies                      | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Progressive Corp                           | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  Masson Inc                                 | 300000051065858 | 1277           | 5 Avenue du Général de Gaulle,60300 SENLIS,FRANCE                                                         
+  RSM                                        | 300000051066029 | 1278           | 28 Rue Alfred Kastler,76130 MONT-SAINT-AIGNAN,FRANCE                                                      
+  Utilitaire Inc                             | 300000051066302 | 1281           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Shangduo Inc                               | 300000075469541 | 1289           | CHINA,325604  ZHEJIANG,Wenzhou,Zhiguang Industrial Zone                                                   
+  Nihon Communications                       | 300000101110596 | 1301           | JAPAN,272-0127,Chiba,Ichikawa-shi,Shiohama,1-2-3                                                          
+  Ente Idrocarburi                           | 300000115609124 | 1306           | Corso Buenos Aires,MILANO, MILANO,20121,ITALY                                                             
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           | Via Francesco Marucelli,CASAPE, ROMA,00010,ITALY                                                          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           | Viale Aristide Merloni n. 47,FABRIANO, ANCONA,60044,ITALY                                                 
+  Medtronic                                  | 300000116498267 | 1322           | 99 Hereford Street,BRAMPTON ONTARIO  L6Y 0R3,CANADA (+1 more)                                             
+  Siemens Medical Solutions                  | 300000116498411 | 1324           | Houtsingel 21	,2719 EA ZOETERMEER,NETHERLANDS (+1 more)                                                   
+  Cardinal Health                            | 300000116498478 | 1325           | 2105 S Lakeside Dr,WAUKEGAN, IL 60085 (+3 more)                                                           
+  Lagring Systems                            | 300000116707121 | 1327           | 3811 Lyons Ave,HOUSTON, TX 77020 Harris (+3 more)                                                         
+  Servicios Reunidos, SL                     | 300000131904822 | 1336           | Gran Via de les Corts Catalanes, 25,08015 BARCELONA,SPAIN                                                 
+  Misson Corp                                | 300000131933370 | 1339           | 92 Rue Claude Decaen,75012 PARIS,FRANCE                                                                   
+  BD Medical                                 | 300000133943993 | 1342           | 1 Becton Drive,FRANKLIN LAKES, NJ 07417 (+1 more)                                                         
+  Staffing Services                          | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                                  | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  Howell Engineering Inc.                    | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+
+Truncation:
+  - suppliers: 695 total in source; 25 returned.
+Summary:
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    577  out=    183  total=    760
+  parse        in=   5458  out=    395  total=   5853
+  TOTAL        in=   6035  out=    578  total=   6613
+
+

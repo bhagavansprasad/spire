@@ -1,0 +1,682 @@
+<!-- ───── merged from: docs/phase-2/fixes/F-003-v1-sweep.txt ───── -->
+
+================================================================================
+PROMPT: count of suppliers
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=52 total=630
+Router: modules=['supplier']
+[llm] stage=parse in=5751 out=111 total=5862
+[cache] HIT   cached=5747  fresh=4  total_in=5751
+Intent:
+  target_entity: Supplier
+  count_only: True
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+
+Answer:
+There are 337 suppliers.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     52  total=    630
+  parse        in=   5751  out=    111  total=   5862
+  TOTAL        in=   6329  out=    163  total=   6492
+
+
+================================================================================
+PROMPT: Show PO 2144 and its lines
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=76 total=661
+Router: modules=['procurement']
+[llm] stage=parse in=6622 out=366 total=6988
+[cache] HIT   cached=6611  fresh=11  total_in=6622
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['PurchaseOrderLine']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_lines
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    purchaseorderline
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+  purchaseorderline: 2 record(s)
+    [1] {'POLineId': 19782, 'POHeaderId': 2144, 'LineNumber': 1, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+    [2] {'POLineId': 19783, 'POHeaderId': 2144, 'LineNumber': 2, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'purchaseorderline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    585  out=     76  total=    661
+  parse        in=   6622  out=    366  total=   6988
+  TOTAL        in=   7207  out=    442  total=   7649
+
+
+================================================================================
+PROMPT: suppliers with open purchase orders
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=176 total=756
+Router: modules=['supplier', 'procurement']
+[llm] stage=parse in=8164 out=725 total=8889
+[cache] HIT   cached=8158  fresh=6  total_in=8164
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'has_open_PO', 'value': True}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: search_purchase_orders
+    tool_args:      {'supplier_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierId'}
+    client_filters: [{'field': 'StatusCode', 'op': 'equals', 'value': 'OPEN'}]
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+  open_pos: 44 record(s)
+    [1] {'POHeaderId': 300000296208759, 'OrderNumber': 'US165029', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [2] {'POHeaderId': 300000092003108, 'OrderNumber': '162306', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [3] {'POHeaderId': 300000051378704, 'OrderNumber': '162090', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [4] {'POHeaderId': 300000052537704, 'OrderNumber': '162092', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [5] {'POHeaderId': 44, 'OrderNumber': '162080', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    ... (39 more)
+
+Answer:
+Showing 25 of 337 suppliers. These 25 suppliers have 44 open purchase orders between them.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber | Open POs | Buyers                            
+  ---------------------------------+-----------------+----------------+----------+-----------------------------------
+  Lee Supplies                     | 300000047414503 | 1252           |        6 | Roth, Calvin, Gee, May            
+  JGA                              | 300000047414635 | 1254           |        5 | Roth, Calvin                      
+  US Gas and Electric              | 300000047507113 | 1256           |        0 | —                                 
+  Staffing Services                | 300000047414571 | 1253           |        2 | Roth, Calvin                      
+  Dell Inc.                        | 300000047414679 | 1255           |        4 | Roth, Calvin, Brown, Casey        
+  InterChina                       | 300000087887113 | 1298           |        0 | —                                 
+  Howell Engineering Inc.          | 300000047507170 | 1257           |        1 | Roth, Calvin                      
+  United Parcel Service            | 300000047507225 | 1258           |        0 | —                                 
+  American Telephone and Telegraph | 300000047507272 | 1259           |        0 | —                                 
+  Staples                          | 300000047507340 | 1260           |        0 | —                                 
+  British Telecom                  | 300000049521119 | 1273           |        0 | —                                 
+  Windsor Inc                      | 300000049521294 | 1275           |        0 | —                                 
+  Building Management              | 300000047572371 | 1270           |        0 | —                                 
+  Progressive Corp                 | 300000049521222 | 1274           |        1 | Fox, Dan                          
+  GE                               | 300000047507387 | 1261           |        0 | —                                 
+  Edison Co                        | 300000049521443 | 1276           |        0 | —                                 
+  Northwest Electronic Supply      | 300000047572257 | 1268           |        0 | —                                 
+  Consolidated Supplies            | 300000047837244 | 1272           |       12 | Morgan, Liz, Fox, Dan, Bird, James
+  Office Depot                     | 300000047507596 | 1264           |        3 | Roth, Calvin                      
+  Metal Works                      | 300000047572210 | 1267           |        0 | —                                 
+  Prouty Supply House              | 300000047572304 | 1269           |        3 | Roth, Calvin                      
+  Advanced Corp                    | 300000047507546 | 1263           |        1 | Roth, Calvin                      
+  EDF                              | 300000047837151 | 1271           |        1 | Morgan, Liz                       
+  EIP Inc                          | 300000047507499 | 1262           |        4 | Roth, Calvin                      
+  Allied Manufacturing             | 300000047572113 | 1265           |        1 | Roth, Calvin                      
+
+Truncation:
+  - suppliers: 337 total in source; 25 returned.
+
+─── Tip ───
+Reading all 337 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+  Steps planned:        2
+  Records returned:     69 (across all steps)
+  Final raw output:     44 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=    176  total=    756
+  parse        in=   8164  out=    725  total=   8889
+  TOTAL        in=   8744  out=    901  total=   9645
+
+
+================================================================================
+PROMPT: top 5 suppliers by purchase order value
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=144 total=727
+Router: modules=['procurement', 'supplier']
+[llm] stage=parse in=8167 out=589 total=8756
+[cache] HIT   cached=8158  fresh=9  total_in=8167
+[debug] shape = supplier_po_value_ranking
+Intent:
+  target_entity: Supplier
+  aggregate: {'op': 'po_value_by_supplier', 'date_from': None, 'date_to': None, 'top_n': 5}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_supplier
+    tool_args:      {'top_n': 5}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'supplier_po_value_ranking', 'status': None, 'total_suppliers': 94, 'returned': 5, 'truncated': False, 'total_available': 17549}
+        ... +2 more field(s): examined, rows
+
+Answer:
+Top 5 of 94 suppliers by committed value.
+EIP Inc leads with 865,287,107.89 — 2.6x the next.
+
+Top suppliers by PO value:
+  Rank | Supplier          | SupplierId      |  Total Ordered |  POs
+  -----+-------------------+-----------------+----------------+-----
+     1 | EIP Inc           | 300000047507499 | 865,287,107.89 | 2015
+     2 | Staffing Services | 300000047414571 | 328,053,963.10 | 1596
+     3 | JGA               | 300000047414635 | 159,598,443.36 | 1545
+     4 | CDW               | 300000075895541 | 104,419,938.79 |  207
+     5 | Advanced Corp     | 300000047507546 |  83,451,127.05 | 2465
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   5 record(s)
+Token usage:
+  classify     in=    583  out=    144  total=    727
+  parse        in=   8167  out=    589  total=   8756
+  TOTAL        in=   8750  out=    733  total=   9483
+
+
+================================================================================
+PROMPT: how many purchase orders are there and what are they worth
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=76 total=662
+Router: modules=['procurement']
+[llm] stage=parse in=6623 out=551 total=7174
+[cache] HIT   cached=6611  fresh=12  total_in=6623
+[debug] shape = po_status_breakdown
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'po_count_by_status', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_status
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'po_status_breakdown', 'total_pos': 17549, 'total_ordered': 1990065652.360001, 'truncated': False, 'total_available': 17549, 'examined': 17549}
+        ... +1 more field(s): rows
+
+Answer:
+Across 13 groups.
+CLOSED is the largest at 1,836,788,564.78 (92% of the total).
+
+Total POs: 17549, total value: 1,990,065,652.36
+
+Breakdown by status:
+  Status                 |   POs |    Total Ordered
+  -----------------------+-------+-----------------
+  CLOSED                 | 13363 | 1,836,788,564.78
+  CLOSED FOR RECEIVING   |   938 |    77,798,287.13
+  OPEN                   |  1078 |    51,553,837.96
+  INCOMPLETE             |   249 |    11,162,060.55
+  REJECTED               |   283 |     7,987,383.50
+  PENDING APPROVAL       |    55 |     2,418,907.62
+  CLOSED FOR INVOICING   |    42 |     1,892,536.32
+  WITHDRAWN              |    10 |       387,589.50
+  PENDING ACKNOWLEDGMENT |     8 |        42,366.00
+  PENDING SIGNATURE      |     7 |        24,965.00
+  CANCELED               |  1513 |         4,000.00
+  FINALLY CLOSED         |     1 |         2,904.00
+  ON HOLD                |     2 |         2,250.00
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=     76  total=    662
+  parse        in=   6623  out=    551  total=   7174
+  TOTAL        in=   7209  out=    627  total=   7836
+
+
+================================================================================
+PROMPT: how much have we committed in open purchase orders
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=104 total=688
+Router: modules=['procurement']
+[llm] stage=parse in=6621 out=279 total=6900
+[cache] HIT   cached=6611  fresh=10  total_in=6621
+[debug] shape = open_po_summary
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'open_po_summary', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: summarize_open_purchase_orders
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'open_po_summary', 'po_count': 1078, 'total_ordered': 51553837.95999999, 'supplier_count': 55, 'truncated': False, 'total_available': 1078}
+        ... +1 more field(s): examined
+
+Answer:
+
+Open PO count: 1078, total ordered: 51,553,837.96, suppliers: 55
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    584  out=    104  total=    688
+  parse        in=   6621  out=    279  total=   6900
+  TOTAL        in=   7205  out=    383  total=   7588
+
+
+================================================================================
+PROMPT: top suppliers by PO value
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=162 total=742
+Router: modules=['procurement', 'supplier']
+[llm] stage=parse in=8164 out=943 total=9107
+[cache] HIT   cached=8158  fresh=6  total_in=8164
+[debug] shape = supplier_po_value_ranking
+Intent:
+  target_entity: Supplier
+  aggregate: {'op': 'po_value_by_supplier', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_supplier
+    tool_args:      {'top_n': 10}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'supplier_po_value_ranking', 'status': None, 'total_suppliers': 94, 'returned': 10, 'truncated': False, 'total_available': 17549}
+        ... +2 more field(s): examined, rows
+
+Answer:
+Top 10 of 94 suppliers by committed value.
+EIP Inc leads with 865,287,107.89 — 2.6x the next.
+
+Top suppliers by PO value:
+  Rank | Supplier          | SupplierId      |  Total Ordered |  POs
+  -----+-------------------+-----------------+----------------+-----
+     1 | EIP Inc           | 300000047507499 | 865,287,107.89 | 2015
+     2 | Staffing Services | 300000047414571 | 328,053,963.10 | 1596
+     3 | JGA               | 300000047414635 | 159,598,443.36 | 1545
+     4 | CDW               | 300000075895541 | 104,419,938.79 |  207
+     5 | Advanced Corp     | 300000047507546 |  83,451,127.05 | 2465
+     6 | MK Supplies       | 300000075469611 |  61,068,623.34 |   15
+     7 | Office Depot      | 300000047507596 |  60,319,285.88 |  814
+     8 | Eiffage           | 300000051066172 |  48,964,031.88 | 1053
+     9 | Dell Inc.         | 300000047414679 |  38,785,511.57 |  873
+    10 | Progressive Corp  | 300000049521222 |  26,492,470.31 |  307
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   10 record(s)
+Token usage:
+  classify     in=    580  out=    162  total=    742
+  parse        in=   8164  out=    943  total=   9107
+  TOTAL        in=   8744  out=   1105  total=   9849
+
+
+================================================================================
+PROMPT: how much is committed in open POs
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=64 total=647
+Router: modules=['procurement']
+[llm] stage=parse in=6620 out=272 total=6892
+[cache] HIT   cached=6611  fresh=9  total_in=6620
+[debug] shape = open_po_summary
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'open_po_summary', 'date_from': None, 'date_to': None, 'top_n': 0}
+
+Plan:
+  Step 1: summarize_open_purchase_orders
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'open_po_summary', 'po_count': 1078, 'total_ordered': 51553837.95999999, 'supplier_count': 55, 'truncated': False, 'total_available': 1078}
+        ... +1 more field(s): examined
+
+Answer:
+
+Open PO count: 1078, total ordered: 51,553,837.96, suppliers: 55
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    583  out=     64  total=    647
+  parse        in=   6620  out=    272  total=   6892
+  TOTAL        in=   7203  out=    336  total=   7539
+
+
+================================================================================
+PROMPT: top 10 suppliers by spend in 2022
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=588 out=91 total=679
+Router: modules=['supplier']
+[llm] stage=parse in=5761 out=1154 total=6915
+[cache] HIT   cached=5747  fresh=14  total_in=5761
+[debug] shape = supplier_spend_ranking
+Intent:
+  target_entity: Supplier
+  aggregate: {'op': 'by_supplier', 'date_from': '2022-01-01', 'date_to': '2023-01-01', 'top_n': 10}
+
+Plan:
+  Step 1: aggregate_invoices_by_supplier
+    tool_args:      {'date_from': '2022-01-01', 'date_to': '2023-01-01', 'top_n': 10}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'supplier_spend_ranking', 'date_from': '2022-01-01', 'date_to': '2023-01-01', 'total_suppliers': 50, 'returned': 10, 'truncated': False}
+        ... +3 more field(s): examined, rows, total_available
+
+Answer:
+Top 10 of 50 suppliers by spend.
+EIP Inc leads with 141,171,590.98 — 3.3x the next.
+
+Top suppliers by spend:
+  Rank | Supplier            | SupplierNumber |    Total Spend | Invoices
+  -----+---------------------+----------------+----------------+---------
+     1 | EIP Inc             | 1262           | 141,171,590.98 |      261
+     2 | Staffing Services   | 1253           |  42,480,855.33 |      122
+     3 | CDW                 | 1295           |  32,963,913.70 |       78
+     4 | JGA                 | 1254           |  28,905,113.17 |      227
+     5 | Advanced Corp       | 1263           |  18,624,046.35 |      169
+     6 | Eiffage             | 1279           |   8,872,462.80 |      325
+     7 | Dell Inc.           | 1255           |   8,361,893.71 |       66
+     8 | Progressive Corp    | 1274           |   7,107,864.00 |      216
+     9 | Building Management | 1270           |   6,358,441.64 |       12
+    10 | Office Depot        | 1264           |   3,237,992.70 |       52
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   10 record(s)
+Token usage:
+  classify     in=    588  out=     91  total=    679
+  parse        in=   5761  out=   1154  total=   6915
+  TOTAL        in=   6349  out=   1245  total=   7594
+
+
+================================================================================
+PROMPT: suppliers with net 30 payment terms
+================================================================================
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=71 total=654
+Router: modules=['supplier']
+[llm] stage=parse in=5756 out=545 total=6301
+[cache] HIT   cached=5747  fresh=9  total_in=5756
+Reason:   filtering suppliers by payment terms (such as 'net 30') is not supported
+
+Solution: Narrow by country, status or name instead.
+
+Example:  active suppliers in US
+  (refusal: unsupported_filter — filtering suppliers by payment terms (such as 'net 30') is not supported)
+Token usage:
+  classify     in=    583  out=     71  total=    654
+  parse        in=   5756  out=    545  total=   6301
+  TOTAL        in=   6339  out=    616  total=   6955
+
+
+
+
+<!-- ───── merged from: docs/phase-2/fixes/F-003-v8-sweep.txt ───── -->
+
+===== PROMPT: top 5 suppliers by purchase order value =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=144 total=727
+Router: modules=['procurement', 'supplier']
+[llm] stage=parse in=8167 out=352 total=8519
+[cache] HIT   cached=8158  fresh=9  total_in=8167
+[debug] shape = supplier_po_value_ranking
+Intent:
+  target_entity: Supplier
+  aggregate: {'op': 'po_value_by_supplier', 'date_from': None, 'date_to': None, 'top_n': 5}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_supplier
+    tool_args:      {'top_n': 5}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'supplier_po_value_ranking', 'status': None, 'total_suppliers': 94, 'returned': 5, 'truncated': False, 'total_available': 17552}
+        ... +2 more field(s): examined, rows
+
+Answer:
+Top 5 of 94 suppliers by committed value.
+EIP Inc leads with 865,287,107.89 — 2.6x the next.
+
+Top suppliers by PO value:
+  Rank | Supplier          | SupplierId      |  Total Ordered |  POs
+  -----+-------------------+-----------------+----------------+-----
+     1 | EIP Inc           | 300000047507499 | 865,287,107.89 | 2015
+     2 | Staffing Services | 300000047414571 | 328,053,963.10 | 1596
+     3 | JGA               | 300000047414635 | 159,598,443.36 | 1545
+     4 | CDW               | 300000075895541 | 104,419,938.79 |  207
+     5 | Advanced Corp     | 300000047507546 |  83,451,127.05 | 2465
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   5 record(s)
+Token usage:
+  classify     in=    583  out=    144  total=    727
+  parse        in=   8167  out=    352  total=   8519
+  TOTAL        in=   8750  out=    496  total=   9246
+
+
+===== PROMPT: how many purchase orders are there and what are they worth =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=77 total=663
+Router: modules=['procurement']
+[llm] stage=parse in=6623 out=405 total=7028
+[cache] HIT   cached=6611  fresh=12  total_in=6623
+[debug] shape = po_status_breakdown
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'po_count_by_status', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: aggregate_purchase_orders_by_status
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'po_status_breakdown', 'total_pos': 17552, 'total_ordered': 1990065652.360001, 'truncated': False, 'total_available': 17552, 'examined': 17552}
+        ... +1 more field(s): rows
+
+Answer:
+Across 13 groups.
+CLOSED is the largest at 1,836,788,564.78 (92% of the total).
+
+Total POs: 17552, total value: 1,990,065,652.36
+
+Breakdown by status:
+  Status                 |   POs |    Total Ordered
+  -----------------------+-------+-----------------
+  CLOSED                 | 13363 | 1,836,788,564.78
+  CLOSED FOR RECEIVING   |   938 |    77,798,287.13
+  OPEN                   |  1078 |    51,553,837.96
+  INCOMPLETE             |   252 |    11,162,060.55
+  REJECTED               |   283 |     7,987,383.50
+  PENDING APPROVAL       |    55 |     2,418,907.62
+  CLOSED FOR INVOICING   |    42 |     1,892,536.32
+  WITHDRAWN              |    10 |       387,589.50
+  PENDING ACKNOWLEDGMENT |     8 |        42,366.00
+  PENDING SIGNATURE      |     7 |        24,965.00
+  CANCELED               |  1513 |         4,000.00
+  FINALLY CLOSED         |     1 |         2,904.00
+  ON HOLD                |     2 |         2,250.00
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=     77  total=    663
+  parse        in=   6623  out=    405  total=   7028
+  TOTAL        in=   7209  out=    482  total=   7691
+
+
+===== PROMPT: how much have we committed in open purchase orders =====
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=104 total=688
+Router: modules=['procurement']
+[llm] stage=parse in=6621 out=575 total=7196
+[cache] HIT   cached=6611  fresh=10  total_in=6621
+[debug] shape = open_po_summary
+Intent:
+  target_entity: PurchaseOrder
+  aggregate: {'op': 'open_po_summary', 'date_from': None, 'date_to': None, 'top_n': 10}
+
+Plan:
+  Step 1: summarize_open_purchase_orders
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    aggregation
+
+Outputs:
+  aggregation: 1 record(s)
+    [1] {'shape': 'open_po_summary', 'po_count': 1078, 'total_ordered': 51553837.95999999, 'supplier_count': 55, 'truncated': False, 'total_available': 1078}
+        ... +1 more field(s): examined
+
+Answer:
+
+Open PO count: 1078, total ordered: 51,553,837.96, suppliers: 55
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'aggregation'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    584  out=    104  total=    688
+  parse        in=   6621  out=    575  total=   7196
+  TOTAL        in=   7205  out=    679  total=   7884
+
+
+
+

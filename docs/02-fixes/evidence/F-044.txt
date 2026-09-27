@@ -1,0 +1,798 @@
+<!-- ───── merged from: docs/phase-2/fixes/F-044-diag.txt ───── -->
+
+##################################################################
+PART A — 'invoices for supplier 1252 above 50000'
+Two runs for determinism
+##################################################################
+
+=========== A-RUN-1 ===========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=204 total=795
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=794 total=5078
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 50000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 50000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 9 record(s)
+    [1] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 300000050864731, 'InvoiceNumber': 'LEEFA11042013', 'InvoiceDate': '2013-04-11', 'InvoiceAmount': 473700, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000050864748, 'InvoiceNumber': 'LEE12122013', 'InvoiceDate': '2013-12-12', 'InvoiceAmount': 927000, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000076967541, 'InvoiceNumber': 'LSFA02022014', 'InvoiceDate': '2014-02-01', 'InvoiceAmount': 3944699.18, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (4 more)
+
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 8 USD, 1 AUD.
+All 9 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     9 (across all steps)
+  Final raw output:     9 record(s) under 'invoices'
+  Synthesized answer:   9 record(s)
+Token usage:
+  classify     in=    591  out=    204  total=    795
+  parse        in=   4284  out=    794  total=   5078
+  TOTAL        in=   4875  out=    998  total=   5873
+
+
+=========== A-RUN-2 ===========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=204 total=795
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=708 total=4992
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 50000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 50000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 9 record(s)
+    [1] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 300000050864731, 'InvoiceNumber': 'LEEFA11042013', 'InvoiceDate': '2013-04-11', 'InvoiceAmount': 473700, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000050864748, 'InvoiceNumber': 'LEE12122013', 'InvoiceDate': '2013-12-12', 'InvoiceAmount': 927000, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000076967541, 'InvoiceNumber': 'LSFA02022014', 'InvoiceDate': '2014-02-01', 'InvoiceAmount': 3944699.18, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (4 more)
+
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 8 USD, 1 AUD.
+All 9 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     9 (across all steps)
+  Final raw output:     9 record(s) under 'invoices'
+  Synthesized answer:   9 record(s)
+Token usage:
+  classify     in=    591  out=    204  total=    795
+  parse        in=   4284  out=    708  total=   4992
+  TOTAL        in=   4875  out=    912  total=   5787
+
+
+##################################################################
+PART B — boundary sweep: same phrasing, different thresholds
+##################################################################
+
+=========== B-N=20000 ===========
+PROMPT: invoices for supplier 1252 above 20000
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=222 total=813
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=878 total=5162
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 20000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 20000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 16 record(s)
+    [1] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 18, 'InvoiceNumber': 'Lee Supl 201219032', 'InvoiceDate': '2012-01-07', 'InvoiceAmount': 39338.97, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 19, 'InvoiceNumber': 'Lee Supl 201219041', 'InvoiceDate': '2012-01-10', 'InvoiceAmount': 49173.17, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (11 more)
+
+Answer:
+Showing 16 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 14 USD, 2 AUD.
+All 16 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 16 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     16 (across all steps)
+  Final raw output:     16 record(s) under 'invoices'
+  Synthesized answer:   16 record(s)
+Token usage:
+  classify     in=    591  out=    222  total=    813
+  parse        in=   4284  out=    878  total=   5162
+  TOTAL        in=   4875  out=   1100  total=   5975
+
+
+=========== B-N=30000 ===========
+PROMPT: invoices for supplier 1252 above 30000
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=201 total=792
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=671 total=4955
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 30000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 30000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 14 record(s)
+    [1] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 18, 'InvoiceNumber': 'Lee Supl 201219032', 'InvoiceDate': '2012-01-07', 'InvoiceAmount': 39338.97, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 19, 'InvoiceNumber': 'Lee Supl 201219041', 'InvoiceDate': '2012-01-10', 'InvoiceAmount': 49173.17, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (9 more)
+
+Answer:
+Showing 14 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 13 USD, 1 AUD.
+All 14 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 14 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     14 (across all steps)
+  Final raw output:     14 record(s) under 'invoices'
+  Synthesized answer:   14 record(s)
+Token usage:
+  classify     in=    591  out=    201  total=    792
+  parse        in=   4284  out=    671  total=   4955
+  TOTAL        in=   4875  out=    872  total=   5747
+
+
+=========== B-N=40000 ===========
+PROMPT: invoices for supplier 1252 above 40000
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=206 total=797
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=883 total=5167
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 40000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 40000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 12 record(s)
+    [1] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 19, 'InvoiceNumber': 'Lee Supl 201219041', 'InvoiceDate': '2012-01-10', 'InvoiceAmount': 49173.17, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000050864731, 'InvoiceNumber': 'LEEFA11042013', 'InvoiceDate': '2013-04-11', 'InvoiceAmount': 473700, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (7 more)
+
+Answer:
+Showing 12 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 11 USD, 1 AUD.
+All 12 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 12 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     12 (across all steps)
+  Final raw output:     12 record(s) under 'invoices'
+  Synthesized answer:   12 record(s)
+Token usage:
+  classify     in=    591  out=    206  total=    797
+  parse        in=   4284  out=    883  total=   5167
+  TOTAL        in=   4875  out=   1089  total=   5964
+
+
+=========== B-N=60000 ===========
+PROMPT: invoices for supplier 1252 above 60000
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=247 total=838
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4284 out=658 total=4942
+[cache] HIT   cached=4267  fresh=17  total_in=4284
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 60000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 60000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 8 record(s)
+    [1] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 300000050864731, 'InvoiceNumber': 'LEEFA11042013', 'InvoiceDate': '2013-04-11', 'InvoiceAmount': 473700, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000050864748, 'InvoiceNumber': 'LEE12122013', 'InvoiceDate': '2013-12-12', 'InvoiceAmount': 927000, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000076967541, 'InvoiceNumber': 'LSFA02022014', 'InvoiceDate': '2014-02-01', 'InvoiceAmount': 3944699.18, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (3 more)
+
+Answer:
+Showing 8 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 7 USD, 1 AUD.
+All 8 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 8 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     8 (across all steps)
+  Final raw output:     8 record(s) under 'invoices'
+  Synthesized answer:   8 record(s)
+Token usage:
+  classify     in=    591  out=    247  total=    838
+  parse        in=   4284  out=    658  total=   4942
+  TOTAL        in=   4875  out=    905  total=   5780
+
+
+=========== B-N=100000 ===========
+PROMPT: invoices for supplier 1252 above 100000
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=592 out=195 total=787
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4285 out=596 total=4881
+[cache] HIT   cached=4267  fresh=18  total_in=4285
+ERROR: execute: 1 validation error for call[search_invoices]
+amount_min
+  Input should be a valid number, unable to parse string as a number [type=float_parsing, input_value='{\\"min\\":100000}', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/float_parsing
+
+##################################################################
+PART C — same shape, different code path
+##################################################################
+
+=========== C-1 ===========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=139 total=724
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4278 out=518 total=4796
+[cache] HIT   cached=4267  fresh=11  total_in=4278
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'has_invoice_over_amount', 'value': 50000}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: search_invoices
+    tool_args:      {'supplier_number': '$iteration_value', 'amount_min': 50000}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierNumber'}
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers_has_invoice_over_amount
+    filter_source_when_nonempty: True
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+  suppliers_has_invoice_over_amount: 23 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047507170, 'SupplierNumber': '1257', 'Supplier': 'Howell Engineering Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (18 more)
+
+Answer:
+Examined 25 of 303 suppliers. Of those 25, 23 match the filter.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  Staples                          | 300000047507340 | 1260          
+  British Telecom                  | 300000049521119 | 1273          
+  Windsor Inc                      | 300000049521294 | 1275          
+  Building Management              | 300000047572371 | 1270          
+  Progressive Corp                 | 300000049521222 | 1274          
+  GE                               | 300000047507387 | 1261          
+  Edison Co                        | 300000049521443 | 1276          
+  Northwest Electronic Supply      | 300000047572257 | 1268          
+  Consolidated Supplies            | 300000047837244 | 1272          
+  Office Depot                     | 300000047507596 | 1264          
+  Metal Works                      | 300000047572210 | 1267          
+  Prouty Supply House              | 300000047572304 | 1269          
+  Advanced Corp                    | 300000047507546 | 1263          
+  EDF                              | 300000047837151 | 1271          
+  EIP Inc                          | 300000047507499 | 1262          
+  Allied Manufacturing             | 300000047572113 | 1265          
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+
+─── Tip ───
+Reading all 303 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+  Steps planned:        2
+  Records returned:     48 (across all steps)
+  Final raw output:     23 record(s) under 'suppliers_has_invoice_over_amount'
+  Synthesized answer:   23 record(s)
+Token usage:
+  classify     in=    585  out=    139  total=    724
+  parse        in=   4278  out=    518  total=   4796
+  TOTAL        in=   4863  out=    657  total=   5520
+
+
+=========== C-2 ===========
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=142 total=728
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=4279 out=515 total=4794
+[cache] HIT   cached=4267  fresh=12  total_in=4279
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'has_invoice_over_amount', 'value': 50000}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: search_invoices
+    tool_args:      {'supplier_number': '$iteration_value', 'amount_min': 50000}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierNumber'}
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers_has_invoice_over_amount
+    filter_source_when_nonempty: True
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+  suppliers_has_invoice_over_amount: 23 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047507170, 'SupplierNumber': '1257', 'Supplier': 'Howell Engineering Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (18 more)
+
+Answer:
+Examined 25 of 303 suppliers. Of those 25, 23 match the filter.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  Staples                          | 300000047507340 | 1260          
+  British Telecom                  | 300000049521119 | 1273          
+  Windsor Inc                      | 300000049521294 | 1275          
+  Building Management              | 300000047572371 | 1270          
+  Progressive Corp                 | 300000049521222 | 1274          
+  GE                               | 300000047507387 | 1261          
+  Edison Co                        | 300000049521443 | 1276          
+  Northwest Electronic Supply      | 300000047572257 | 1268          
+  Consolidated Supplies            | 300000047837244 | 1272          
+  Office Depot                     | 300000047507596 | 1264          
+  Metal Works                      | 300000047572210 | 1267          
+  Prouty Supply House              | 300000047572304 | 1269          
+  Advanced Corp                    | 300000047507546 | 1263          
+  EDF                              | 300000047837151 | 1271          
+  EIP Inc                          | 300000047507499 | 1262          
+  Allied Manufacturing             | 300000047572113 | 1265          
+
+Truncation:
+  - suppliers: 303 total in source; 25 returned.
+
+─── Tip ───
+Reading all 303 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+  Steps planned:        2
+  Records returned:     48 (across all steps)
+  Final raw output:     23 record(s) under 'suppliers_has_invoice_over_amount'
+  Synthesized answer:   23 record(s)
+Token usage:
+  classify     in=    586  out=    142  total=    728
+  parse        in=   4279  out=    515  total=   4794
+  TOTAL        in=   4865  out=    657  total=   5522
+
+
+
+<!-- ───── merged from: docs/phase-2/fixes/F-044-v1v4v8.txt ───── -->
+
+#################################################################
+V1 + V8 — reproducer, 20 runs (FIX_PLAN §6 N>=20 for
+parser-adjacent paths; the model intermittently double-encodes)
+#################################################################
+
+=========== V1-RUN-1 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-2 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-3 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-4 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-5 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-6 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-7 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-8 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-9 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-10 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-11 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-12 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-13 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-14 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-15 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-16 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-17 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-18 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-19 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+=========== V1-RUN-20 ===========
+Answer:
+Showing 9 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 9 returned.
+
+#################################################################
+V2 — paraphrase (the second observed failure value, 100000)
+#################################################################
+
+=========== V2-RUN-1 ===========
+Answer:
+Showing 7 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 7 returned.
+
+#################################################################
+V3 — sibling (a passing threshold, must remain passing)
+#################################################################
+
+=========== V3-RUN-1 ===========
+Answer:
+Showing 14 invoices from an examined sample; the true matching count is not known.
+Truncation:
+  - invoices: unknown total in source; 14 returned.
+
+#################################################################
+V4 — negative (no supplier named, must still refuse)
+#################################################################
+
+=========== V4-RUN-1 ===========
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+  (refusal: missing_identifier — Invoice queries must specify a supplier filter, which is missing from this request.)
+
+
