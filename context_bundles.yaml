@@ -52,7 +52,6 @@ bundles:
   - docs/plan/SESSION_STARTUP_CHECKLIST.md
   - docs/plan/HANDOFF.md
   - docs/audit/phase-1-audit.md
-  - docs/audit/findings-log.md
   - docs/fixes/FIXES.md
   - docs/prompts/SURFACE.md
   - docs/fixes/FIX_PLAN.md
@@ -69,7 +68,7 @@ bundles:
   - docs/audit/golden/suppliers_with_open_pos.txt
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/design/ARCHITECTURE.md
-  - docs/audit/SPIRE_log_analysis_plan.md
+  - docs/audit/log_analysis/_plan.md
   - docs/design/FEATURES.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
