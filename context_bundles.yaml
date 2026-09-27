@@ -13,101 +13,68 @@ bundles:
   - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
-  - docs/spire-robustness/00_Doc_B_Index.md
-  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
-  - docs/spire-robustness/02_Phase_02_Correctness.md
-  - docs/spire-robustness/04_Phase_04_Structure.md
-  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/spire-robustness/TEMPLATE_Session_Entry.md
-  - docs/spire-robustness/WORKING_STYLE.md
-  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
+  - docs/00-plan/00_Doc_B_Index.md
+  - docs/00-plan/01_Phase_01_Audit_and_Baseline.md
+  - docs/00-plan/02_Phase_02_Correctness.md
+  - docs/00-plan/04_Phase_04_Structure.md
+  - docs/00-plan/PLAN.md
+  - docs/00-plan/TEMPLATE_Session_Entry.md
+  - docs/00-plan/WORKING_STYLE.md
+  - docs/00-plan/SESSION_STARTUP_CHECKLIST.md
   - docs/SPIRE_SESSION_HANDOFF.md
   # Canonical entry point for a new window. Its sibling
   # docs/spire-robustness/SESSION_HANDOVER.md was listed alongside it
   # until 2026-09-24; the split was reconciled in window 18 and the
   # sibling file was removed from the repo.
   - docs/AUDIT_AND_FIX.md
-  - docs/phase-2/FIX_PLAN.md
-  - docs/prompt-sets/SURFACE.md
-  - docs/developer/context_bundles.md
-  - docs/spire_fusion_endpoints_reference.md
+  - docs/02-fixes/FIX_PLAN.md
+  - docs/05-prompts/SURFACE.md
+  - docs/03-design/ARCHITECTURE.md
+  - docs/04-reference/spire_fusion_endpoints_reference.md
   - tests/spire_sme_validation_checklist.md
-  - docs/cache_architecture.md
-  - docs/features/parser_context_modularization.md
-  - docs/features/prompt_to_intent_framework.md
-  - docs/features/actionable_refusals.md
+  - docs/03-design/FEATURES.md
   - spire.sh
   - SPIRE-PORTS.env
-  - docs/designs/01_kg_as_mcp_tool.puml
-  - docs/designs/02_kg_as_preLLM.puml
-  - docs/designs/03_static_kg_summary_prompt.puml
-  - docs/designs/04_Hybrid_kg.puml
+  - docs/03-design/diagrams/01_kg_as_mcp_tool.puml
+  - docs/03-design/diagrams/02_kg_as_preLLM.puml
+  - docs/03-design/diagrams/03_static_kg_summary_prompt.puml
+  - docs/03-design/diagrams/04_Hybrid_kg.puml
 
   # ── the master plan + its append-only status log ──
   # This bundle is exactly what a new window needs to resume work.
   plan:
-  - docs/spire-robustness/00_Doc_B_Index.md
-  - docs/spire-robustness/01_Phase_01_Audit_and_Baseline.md
-  - docs/spire-robustness/02_Phase_02_Correctness.md
-  - docs/spire-robustness/04_Phase_04_Structure.md
-  - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
-  - docs/spire-robustness/TEMPLATE_Session_Entry.md
-  - docs/spire-robustness/WORKING_STYLE.md
-  - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
+  - docs/00-plan/00_Doc_B_Index.md
+  - docs/00-plan/01_Phase_01_Audit_and_Baseline.md
+  - docs/00-plan/02_Phase_02_Correctness.md
+  - docs/00-plan/04_Phase_04_Structure.md
+  - docs/00-plan/PLAN.md
+  - docs/00-plan/TEMPLATE_Session_Entry.md
+  - docs/00-plan/WORKING_STYLE.md
+  - docs/00-plan/SESSION_STARTUP_CHECKLIST.md
   - docs/SPIRE_SESSION_HANDOFF.md
-  - docs/audit/phase-1-audit.md
-  - docs/audit/findings-log.md
+  - docs/01-audit/phase-1-audit.md
+  - docs/01-audit/findings-log.md
   - docs/AUDIT_AND_FIX.md
-  - docs/prompt-sets/SURFACE.md
-  - docs/phase-2/FIX_PLAN.md
-  - docs/phase-2/fixes/F-002.md
-  - docs/phase-2/fixes/F-003.md
-  - docs/phase-2/fixes/F-003-v1-sweep.txt
-  - docs/phase-2/fixes/F-003-v8-sweep.txt
-  - docs/phase-2/fixes/F-008.md
-  - docs/phase-2/fixes/F-010.md
-  - docs/phase-2/fixes/F-011.md
-  - docs/phase-2/fixes/F-012.md
-  - docs/phase-2/fixes/F-014.md
-  - docs/phase-2/fixes/F-016.md
-  - docs/phase-2/fixes/F-017.md
-  - docs/phase-2/fixes/F-018.md
-  - docs/phase-2/fixes/F-019.md
-  - docs/phase-2/fixes/F-020.md
-  - docs/phase-2/fixes/F-027.md
-  - docs/phase-2/fixes/F-033.md
-  - docs/phase-2/fixes/F-036.md
-  - docs/phase-2/fixes/F-039.md
-  - docs/phase-2/fixes/F-041.md
-  - docs/phase-2/fixes/F-044.md
-  - docs/phase-2/fixes/F-046.md
-  - docs/phase-2/fixes/F-047.md
-  - docs/phase-2/fixes/F-048.md
-  - docs/phase-2/fixes/F-049.md
-  - docs/phase-2/fixes/F-051.md
-  - docs/phase-2/fixes/F-045.md
-  - docs/phase-2/fixes/F-045-v1v4.txt
-  - docs/phase-2/fixes/Reg-30-v1-repro.txt
-  - docs/phase-2/fixes/F-012-F036-L2-run.txt
-  - docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt
-  - docs/phase-2/fixes/F-044-diag.txt
-  - docs/phase-2/fixes/F-044-v1v4v8.txt
-  - docs/phase-2/fixes/F-046-F047-F048-v9-analysis.md
-  - docs/phase-2/fixes/F-046-F047-F048-v9-sweep.txt
-  - docs/phase-2/fixes/F-049-v1.txt
-  - docs/phase-2/fixes/F-049-v9.txt
-  - docs/phase-2/fixes/F-051-v9.txt
-  - docs/audit/golden/count_suppliers.txt
-  - docs/audit/golden/po_2144_and_lines.txt
-  - docs/audit/golden/suppliers_with_open_pos.txt
+  - docs/05-prompts/SURFACE.md
+  - docs/02-fixes/FIX_PLAN.md
+  - docs/02-fixes/FIXES.md
+  - docs/02-fixes/evidence/F-003.txt
+  - docs/02-fixes/evidence/F-045.txt
+  - docs/02-fixes/evidence/Reg-30.txt
+  - docs/02-fixes/evidence/F-012.txt
+  - docs/02-fixes/evidence/F-044.txt
+  - docs/02-fixes/evidence/F-046-F047-F048.txt
+  - docs/02-fixes/evidence/F-046.txt
+  - docs/02-fixes/evidence/F-049.txt
+  - docs/02-fixes/evidence/F-051.txt
+  - docs/01-audit/golden/count_suppliers.txt
+  - docs/01-audit/golden/po_2144_and_lines.txt
+  - docs/01-audit/golden/suppliers_with_open_pos.txt
   - docs/tester-intro.md
-  - docs/spire_fusion_endpoints_reference.md
-  - docs/cache_architecture.md
-  - docs/audit/SPIRE_log_analysis_plan.md
-  - docs/features/prompt_to_intent_framework.md
-  - docs/features/parser_context_modularization.md
-  - docs/features/actionable_refusals.md
-  - docs/developer/context_bundles.md
+  - docs/04-reference/spire_fusion_endpoints_reference.md
+  - docs/03-design/ARCHITECTURE.md
+  - docs/01-audit/SPIRE_log_analysis_plan.md
+  - docs/03-design/FEATURES.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
   - prompts/supplier/smoke.txt
