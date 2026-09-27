@@ -3,7 +3,7 @@
 Pydantic mirror of the planner's ``Intent`` dataclass, for the LLM's
 structured output.
 
-WHY A MIRROR (see docs/designs/feature_1_nl_parser_design.md, Q1):
+WHY A MIRROR:
 The planner's ``Intent`` is a plain dataclass with a loosely typed
 ``filters: list[dict]``. ``with_structured_output`` needs a Pydantic schema to
 lock the model onto, and the synthesizer already proves this pattern works.

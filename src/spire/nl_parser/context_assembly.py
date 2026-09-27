@@ -2,7 +2,7 @@
 Parser context assembly — build the parser's system prompt from modular blocks.
 
 Extracted from ``parser.py`` in Phase 2 (prompt-to-intent framework,
-docs/features/prompt_to_intent_framework.md §6): assembly is its own concern,
+docs/03-design/FEATURES.md §6): assembly is its own concern,
 and the module-scoping router needs a subset assembler that the scorer harness
 already uses. Keeping one copy here — read by both ``parser.py`` (full preamble)
 and the router/scorer (subset) — is what §6/D-router means by "no drift".

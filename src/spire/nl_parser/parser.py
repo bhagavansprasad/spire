@@ -5,7 +5,7 @@ This is the interpreter stage of the Design 3 pipeline:
 
     Prompt -> [parser: LLM] -> Intent -> planner -> executor -> synthesizer
 
-See docs/designs/feature_1_nl_parser_design.md. The parser is modeled on the
+The parser is modeled on the
 synthesizer: a single bounded LLM call with structured output, plus
 validation. It owns its KG access via the planner's synchronous path.
 

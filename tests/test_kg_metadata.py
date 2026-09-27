@@ -118,7 +118,7 @@ async def test_kg_entity_module_mapping():
 
     Children take the module of the endpoint they hang off (a PO line is
     procurement, a tax line is receivables). See
-    docs/features/parser_context_modularization.md §4.3.
+    docs/03-design/FEATURES.md §4.3.
     """
     expected = {
         # payables

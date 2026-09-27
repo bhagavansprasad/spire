@@ -74,7 +74,7 @@ def anchor_intent() -> Intent:
 def anchor_plan() -> Plan:
     """
     The plan that generate_plan(anchor_intent) must eventually produce.
-    Mirrors the worked example in docs/designs/phase_2_planner_design.md.
+    Mirrors the worked example in the original planner design.
     """
     return [
         Step(

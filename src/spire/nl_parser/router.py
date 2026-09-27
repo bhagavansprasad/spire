@@ -2,7 +2,7 @@
 The module-scoping router — classify a prompt to its Fusion module(s).
 
 Phase 2 of the prompt-to-intent framework
-(docs/features/prompt_to_intent_framework.md §2.1, D-router). The router is a
+(docs/03-design/FEATURES.md §2.1, D-router). The router is a
 layer AROUND ``parse``: it decides which module context to assemble, then calls
 the unchanged ``parse(prompt, system_prompt=scoped)``. This module holds
 both the classifier (``classify_modules``) and the wiring (``route_and_parse``).

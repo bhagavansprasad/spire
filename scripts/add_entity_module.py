@@ -12,7 +12,7 @@ Patches scripts/sql/kg_schema.sql in place, making two edits:
 
 The `module` field is the KG's source of truth for which Fusion module an entity
 belongs to — read by the selective-load harness (part 3) and the Phase-2 router.
-See docs/features/parser_context_modularization.md §4.3.
+See docs/03-design/FEATURES.md §4.3.
 
 This is idempotent-guarded: it asserts the column is not already present and that
 exactly 22 INSERTs are patched, each once. Run from the repo root:

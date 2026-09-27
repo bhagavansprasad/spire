@@ -6,8 +6,7 @@ A parse produces exactly one of two outcomes:
 - a valid ``Intent`` the deterministic planner can consume, or
 - a ``Refusal`` describing why the prompt is out of scope.
 
-Design decisions this encodes (see
-docs/designs/feature_1_nl_parser_design.md):
+Design decisions this encodes:
 
 - Q3: out-of-scope prompts yield a STRUCTURED refusal naming the flavor and
   the raw facts. The user-facing capability wording is feature 8's job; this

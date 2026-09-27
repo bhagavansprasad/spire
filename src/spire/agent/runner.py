@@ -19,7 +19,7 @@ unchanged — KG content informs the LLM's planning but is not exposed
 as MCP tools.
 
 The kg_enabled=False configuration is used for the Tier 2 ablation
-in the evaluation framework (see docs/designs/kg_evaluation_framework.md).
+in the evaluation framework.
 """
 
 from functools import partial

@@ -2,8 +2,7 @@
 KG validation of a draft Intent — Q2 direction 2 (checkpoint 3).
 
 After the LLM produces a draft Intent, the parser validates it BACK against
-the KG menu and rejects anything out of scope, producing a typed Refusal
-(see docs/designs/feature_1_nl_parser_design.md, Q3).
+the KG menu and rejects anything out of scope, producing a typed Refusal.
 
 VALIDATION ORDER (decision B1):
 The target entity is a FIRST-FAIL GATE; filters are COLLECTED all-at-once

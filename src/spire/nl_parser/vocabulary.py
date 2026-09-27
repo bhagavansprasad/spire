@@ -1,7 +1,7 @@
 """
 Synchronous KG vocabulary read for the NL parser.
 
-This is Q2, direction 1 (see docs/designs/feature_1_nl_parser_design.md): the
+This is Q2, direction 1: the
 parser reads the allowed vocabulary from the KG BEFORE the LLM call and embeds
 it in the prompt as the menu the model may order from.
 
