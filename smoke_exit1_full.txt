@@ -1,0 +1,991 @@
+════════════════════════════════════════════════════════════════
+### payables/smoke
+════════════════════════════════════════════════════════════════
+# promptkit batch — 2026-09-25 15:06:50
+# $ /home/bhagavan/venv/spire/bin/python /home/bhagavan/pocs/spire/scripts/promptkit.py --run --prompt-file prompts/payables/smoke.txt
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=272 total=856
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7012 out=339 total=7351
+[cache] HIT   cached=7002  fresh=10  total_in=7012
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 670255, 'InvoiceNumber': '410079-5105', 'InvoiceDate': '2019-05-10', 'InvoiceAmount': -859.88, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 281071, 'InvoiceNumber': '50430-61', 'InvoiceDate': '2015-07-08', 'InvoiceAmount': -163.16, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 215069, 'InvoiceNumber': '500001-21', 'InvoiceDate': '2015-04-13', 'InvoiceAmount': -16092, 'InvoiceCurrency': 'JPY', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 455235, 'InvoiceNumber': '500007-82', 'InvoiceDate': '2016-05-31', 'InvoiceAmount': -162.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 595627, 'InvoiceNumber': '500196-102', 'InvoiceDate': '2018-03-12', 'InvoiceAmount': -984.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices for supplier 1252
+========================================================================
+Answer:
+Showing 25 of 1,327 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=    272  total=    856
+  parse        in=   7012  out=    339  total=   7351
+  TOTAL        in=   7596  out=    611  total=   8207
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=288 total=868
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7008 out=194 total=7202
+[cache] HIT   cached=7002  fresh=6  total_in=7008
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': 'Lee Supplies'}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_name': 'Lee Supplies'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 489503, 'InvoiceNumber': 'LEE-01-1006-111', 'InvoiceDate': '2016-10-17', 'InvoiceAmount': 11138.34, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1476380, 'InvoiceNumber': 'PCS10027_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1476383, 'InvoiceNumber': 'PCS10031_0825', 'InvoiceDate': '2025-08-23', 'InvoiceAmount': 2737.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1480378, 'InvoiceNumber': 'PCS10053_09251', 'InvoiceDate': '2025-09-09', 'InvoiceAmount': 3300, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1480379, 'InvoiceNumber': 'PCS10059_09251', 'InvoiceDate': '2025-09-09', 'InvoiceAmount': 3350, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices for Lee Supplies
+========================================================================
+Answer:
+Showing 25 of 1,327 invoices.
+All 25 have InvoiceCurrency USD.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice         | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  ----------------+-----------------+----------+----------+------------+-------------
+  LEE-01-1006-111 | 489503          | 11138.34 | USD      | 2016-10-17 | Lee Supplies
+  PCS10027_0825   | 1476380         |   3300.0 | USD      | 2025-08-23 | Lee Supplies
+  PCS10031_0825   | 1476383         |   2737.5 | USD      | 2025-08-23 | Lee Supplies
+  PCS10053_09251  | 1480378         |   3300.0 | USD      | 2025-09-09 | Lee Supplies
+  PCS10059_09251  | 1480379         |   3350.0 | USD      | 2025-09-09 | Lee Supplies
+  PCS10064_09251  | 1480381         |   2737.5 | USD      | 2025-09-09 | Lee Supplies
+  Lee 20141209    | 300000073847590 |   594.27 | USD      | 2014-02-02 | Lee Supplies
+  LSFA01022014    | 300000076967539 |      0.0 | USD      | 2014-02-01 | Lee Supplies
+  1324            | 300000187479939 |      0.0 | USD      | 2019-09-25 | Lee Supplies
+  PCS10003-3      | 300000066761806 |      0.0 | USD      | 2013-09-05 | Lee Supplies
+  PCS10048_0623   | 1197319         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10066_0623   | 1197322         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10043_0623   | 1197323         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10049_0623   | 1197325         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  PCS10054_0623   | 1197326         |      0.0 | USD      | 2023-06-23 | Lee Supplies
+  AGOD001         | 300000345172471 |  90000.0 | USD      | 2026-09-08 | Lee Supplies
+  INV_PEC_2       | 300000313351283 |      0.0 | USD      | 2025-01-23 | Lee Supplies
+  INV_PEC_4       | 300000313351285 |      0.0 | USD      | 2025-03-23 | Lee Supplies
+  PCS10053_0925   | 1479378         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10059_0925   | 1479379         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  PCS10064_0925   | 1479381         |      0.0 | USD      | 2023-09-09 | Lee Supplies
+  INV_PEC_5       | 300000313351286 |      0.0 | USD      | 2025-04-23 | Lee Supplies
+  PCS10029_0825   | 1476382         |      0.0 | USD      | 2025-08-23 | Lee Supplies
+  US165073-Inv    | 300000307475580 |   162.58 | USD      | 2025-06-25 | Lee Supplies
+  Lee US 3/21     | 300000074067563 |      0.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=    288  total=    868
+  parse        in=   7008  out=    194  total=   7202
+  TOTAL        in=   7588  out=    482  total=   8070
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=592 out=254 total=846
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7020 out=540 total=7560
+[cache] HIT   cached=7002  fresh=18  total_in=7020
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 100000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 100000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 7 record(s)
+    [1] {'InvoiceId': 300000050422162, 'InvoiceNumber': 'LEE03032012', 'InvoiceDate': '2012-03-03', 'InvoiceAmount': 468960, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000050864731, 'InvoiceNumber': 'LEEFA11042013', 'InvoiceDate': '2013-04-11', 'InvoiceAmount': 473700, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 300000050864748, 'InvoiceNumber': 'LEE12122013', 'InvoiceDate': '2013-12-12', 'InvoiceAmount': 927000, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 300000076967541, 'InvoiceNumber': 'LSFA02022014', 'InvoiceDate': '2014-02-01', 'InvoiceAmount': 3944699.18, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 300000173044854, 'InvoiceNumber': 'L107', 'InvoiceDate': '2018-06-15', 'InvoiceAmount': 235425, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (2 more)
+
+
+========================================================================
+PROMPT: invoices over 100000 for supplier 1252
+========================================================================
+Answer:
+Showing 7 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 6 USD, 1 AUD.
+All 7 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice       | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  --------------+-----------------+------------+----------+------------+-------------
+  LEE03032012   | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013 | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013   | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014  | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  L107          | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106          | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  44622         | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 7 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     7 (across all steps)
+  Final raw output:     7 record(s) under 'invoices'
+  Synthesized answer:   7 record(s)
+Token usage:
+  classify     in=    592  out=    254  total=    846
+  parse        in=   7020  out=    540  total=   7560
+  TOTAL        in=   7612  out=    794  total=   8406
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=583 out=197 total=780
+Router: modules=['payables']
+[llm] stage=parse in=5464 out=563 total=6027
+[cache] HIT   cached=5455  fresh=9  total_in=5464
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'invoice_date', 'value': {'from': '2024-01-01', 'to': '2024-12-31'}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2024-01-01', 'invoice_date_before': '2024-12-31'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 18 record(s)
+    [1] {'InvoiceId': 1287322, 'InvoiceNumber': 'Allid_Inv01241', 'InvoiceDate': '2024-01-01', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Allied Manufacturing'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 1287323, 'InvoiceNumber': 'Allid_Inv01242', 'InvoiceDate': '2024-01-02', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Allied Manufacturing'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1287324, 'InvoiceNumber': 'UPS_Inv0124', 'InvoiceDate': '2024-01-03', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'United Parcel Service'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1287325, 'InvoiceNumber': 'BM_Inv0124', 'InvoiceDate': '2024-01-04', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'Building Management'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1287329, 'InvoiceNumber': 'ATT_Inv01242', 'InvoiceDate': '2024-01-08', 'InvoiceAmount': 0, 'InvoiceCurrency': 'USD', 'Supplier': 'American Telephone and Telegraph'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (13 more)
+
+
+========================================================================
+PROMPT: invoices in 2024
+========================================================================
+Answer:
+Showing 18 invoices from an examined sample; the true matching count is not known.
+All 18 have InvoiceCurrency USD.
+
+Invoices:
+  Invoice        | InvoiceId |  Amount | Currency | Date       | Supplier                        
+  ---------------+-----------+---------+----------+------------+---------------------------------
+  Allid_Inv01241 | 1287322   |     0.0 | USD      | 2024-01-01 | Allied Manufacturing            
+  Allid_Inv01242 | 1287323   |     0.0 | USD      | 2024-01-02 | Allied Manufacturing            
+  UPS_Inv0124    | 1287324   |     0.0 | USD      | 2024-01-03 | United Parcel Service           
+  BM_Inv0124     | 1287325   |     0.0 | USD      | 2024-01-04 | Building Management             
+  ATT_Inv01242   | 1287329   |     0.0 | USD      | 2024-01-08 | American Telephone and Telegraph
+  ATT_Inv01243   | 1287330   |     0.0 | USD      | 2024-01-09 | American Telephone and Telegraph
+  PI20043_0124   | 1096326   |  1204.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_0224   | 1096327   |  1095.0 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_0324   | 1096328   |  1095.0 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_0424   | 1096329   | 1040.25 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_0524   | 1096330   |  1204.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_0624   | 1096331   |  1095.0 | USD      | 2024-06-28 | Lee Supplies                    
+  PI20043_1_0124 | 1096338   |   547.5 | USD      | 2024-01-28 | Lee Supplies                    
+  PI20043_1_0224 | 1096339   |  536.55 | USD      | 2024-02-28 | Lee Supplies                    
+  PI20043_1_0324 | 1096340   |  602.25 | USD      | 2024-03-28 | Lee Supplies                    
+  PI20043_1_0424 | 1096341   |  536.55 | USD      | 2024-04-28 | Lee Supplies                    
+  PI20043_1_0524 | 1096342   |   547.5 | USD      | 2024-05-28 | Lee Supplies                    
+  PI20043_1_0624 | 1096343   |  536.55 | USD      | 2024-06-28 | Lee Supplies                    
+
+Truncation:
+  - invoices: unknown total in source; 18 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     18 (across all steps)
+  Final raw output:     18 record(s) under 'invoices'
+  Synthesized answer:   18 record(s)
+Token usage:
+  classify     in=    583  out=    197  total=    780
+  parse        in=   5464  out=    563  total=   6027
+  TOTAL        in=   6047  out=    760  total=   6807
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=205 total=789
+Router: modules=['payables']
+[llm] stage=parse in=5465 out=605 total=6070
+[cache] HIT   cached=5455  fresh=10  total_in=5465
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'created_in_last_n_months', 'value': {'months': 1}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'invoice_date_after': '2026-08-25'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 300000344598392, 'InvoiceNumber': '123', 'InvoiceDate': '2026-09-22', 'InvoiceAmount': 18615, 'InvoiceCurrency': 'PKR', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000344598393, 'InvoiceNumber': '321', 'InvoiceDate': '2026-09-22', 'InvoiceAmount': 6898.5, 'InvoiceCurrency': 'USD', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 1604380, 'InvoiceNumber': 'Test_FBDI_001', 'InvoiceDate': '2026-09-25', 'InvoiceAmount': 60225, 'InvoiceCurrency': 'USD', 'Supplier': 'Advanced Corp'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 1600389, 'InvoiceNumber': '11111', 'InvoiceDate': '2026-09-23', 'InvoiceAmount': 2000, 'InvoiceCurrency': 'USD', 'Supplier': 'ABC Consulting'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 1600390, 'InvoiceNumber': 'AP_INV1', 'InvoiceDate': '2026-09-23', 'InvoiceAmount': 3270, 'InvoiceCurrency': 'USD', 'Supplier': 'ABC Consulting'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices in the last 30 days
+========================================================================
+Answer:
+Showing 25 of 545 invoices.
+InvoiceCurrency: 23 USD, 2 PKR.
+
+Invoices:
+  Invoice                           | InvoiceId       |  Amount | Currency | Date       | Supplier                   
+  ----------------------------------+-----------------+---------+----------+------------+----------------------------
+  123                               | 300000344598392 | 18615.0 | PKR      | 2026-09-22 | Advanced Corp              
+  321                               | 300000344598393 |  6898.5 | USD      | 2026-09-22 | Advanced Corp              
+  Test_FBDI_001                     | 1604380         | 60225.0 | USD      | 2026-09-25 | Advanced Corp              
+  11111                             | 1600389         |  2000.0 | USD      | 2026-09-23 | ABC Consulting             
+  AP_INV1                           | 1600390         |  3270.0 | USD      | 2026-09-23 | ABC Consulting             
+  Withholding tax-1600390-4         | 1600391         |   327.0 | USD      | 2026-09-23 | Internal Revenue Service   
+  AGOD001                           | 300000345172471 | 90000.0 | USD      | 2026-09-08 | Lee Supplies               
+  abc123                            | 300000346545254 |   500.0 | USD      | 2026-09-24 | ABC Consulting             
+  AP_Demo_Std_Bad_Data_10I          | 1602378         |    60.0 | USD      | 2026-09-23 | ABC Consulting             
+  Withholding tax-300000345205226-4 | 1606378         |   545.0 | USD      | 2026-09-24 | Internal Revenue Service   
+  INV-2026                          | 300000345205313 |  1200.0 | USD      | 2026-09-24 | Pacific Office Supplies LLC
+  US165389                          | 300000344795193 |   32.85 | USD      | 2026-09-22 | Advanced Corp              
+  jhu                               | 300000344795412 |     8.0 | USD      | 2026-09-22 | ABC Consulting             
+  INV-123                           | 300000345205387 |  2000.0 | USD      | 2026-09-25 | ABC Consulting             
+  ERS-52976-751579                  | 1603378         |   218.0 | USD      | 2026-09-19 | JGA                        
+  ERS-10002-751580                  | 1603379         | 17000.0 | PKR      | 2026-09-22 | Advanced Corp              
+  ERS-10001-751581                  | 1603380         |  6898.5 | USD      | 2026-09-22 | Advanced Corp              
+  Test_Spreadsheet_INV001           | 1605378         |  1642.5 | USD      | 2026-09-23 | Advanced Corp              
+  Test_Spreadsheet_INV002           | 1605379         |  1095.0 | USD      | 2026-09-23 | Advanced Corp              
+  RENT_RECUR_Monthly_1              | 1605380         |  5475.0 | USD      | 2026-09-01 | Advanced Corp              
+  RENT_RECUR_Monthly_2              | 1605381         |  5000.0 | USD      | 2026-10-01 | Advanced Corp              
+  RENT_RECUR_Monthly_3              | 1605382         |  5000.0 | USD      | 2026-11-01 | Advanced Corp              
+  RENT_RECUR_Monthly_4              | 1605383         |  5000.0 | USD      | 2026-12-01 | Advanced Corp              
+  RENT_RECUR_Monthly_5              | 1605384         |  5000.0 | USD      | 2027-01-01 | Advanced Corp              
+  RENT_RECUR_Monthly_6              | 1605385         |  5000.0 | USD      | 2027-02-01 | Advanced Corp              
+
+Truncation:
+  - invoices: 545 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=    205  total=    789
+  parse        in=   5465  out=    605  total=   6070
+  TOTAL        in=   6049  out=    810  total=   6859
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=577 out=222 total=799
+Router: modules=['payables']
+[llm] stage=parse in=5458 out=415 total=5873
+[cache] HIT   cached=5455  fresh=3  total_in=5458
+
+========================================================================
+PROMPT: invoices
+========================================================================
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    577  out=    222  total=    799
+  parse        in=   5458  out=    415  total=   5873
+  TOTAL        in=   6035  out=    637  total=   6672
+
+
+════════════════════════════════════════════════════════════════
+### procurement/smoke
+════════════════════════════════════════════════════════════════
+# promptkit batch — 2026-09-25 15:08:09
+# $ /home/bhagavan/venv/spire/bin/python /home/bhagavan/pocs/spire/scripts/promptkit.py --run --prompt-file prompts/procurement/smoke.txt
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=130 total=716
+Router: modules=['procurement']
+[llm] stage=parse in=6623 out=460 total=7083
+[cache] HIT   cached=6611  fresh=12  total_in=6623
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+
+
+========================================================================
+PROMPT: What is purchase order 2144 about?
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'po'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=    130  total=    716
+  parse        in=   6623  out=    460  total=   7083
+  TOTAL        in=   7209  out=    590  total=   7799
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=76 total=661
+Router: modules=['procurement']
+[llm] stage=parse in=6622 out=479 total=7101
+[cache] HIT   cached=6611  fresh=11  total_in=6622
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['PurchaseOrderLine']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_lines
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    purchaseorderline
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+  purchaseorderline: 2 record(s)
+    [1] {'POLineId': 19782, 'POHeaderId': 2144, 'LineNumber': 1, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+    [2] {'POLineId': 19783, 'POHeaderId': 2144, 'LineNumber': 2, 'OrderNumber': '162352', 'LineType': 'Goods', 'Description': 'Marketing Assistance'}
+        ... +9 more field(s): Category, Ordered, Price, Quantity, Status, StatusCode, Total, TotalTax, UOM
+
+
+========================================================================
+PROMPT: Show PO 2144 and its lines
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — lines:
+    Line | Description          | Category          | Qty |  Amount
+    -----+----------------------+-------------------+-----+--------
+    1    | Marketing Assistance | Marketing General | 1.0 | 33000.0
+    2    | Marketing Assistance | Marketing General | 1.0 |  8250.0
+Summary:
+  Steps planned:        2
+  Records returned:     3 (across all steps)
+  Final raw output:     2 record(s) under 'purchaseorderline'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    585  out=     76  total=    661
+  parse        in=   6622  out=    479  total=   7101
+  TOTAL        in=   7207  out=    555  total=   7762
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=95 total=680
+Router: modules=['procurement']
+[llm] stage=parse in=6622 out=334 total=6956
+[cache] HIT   cached=6611  fresh=11  total_in=6622
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'by_id', 'value': '2144'}
+  include: ['POSchedule', 'PODistribution']
+
+Plan:
+  Step 1: get_purchase_order_by_id
+    tool_args:      {'po_header_id': '2144'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    po
+  Step 2: get_purchase_order_schedules
+    tool_args:      {'po_header_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'po', 'field': 'POHeaderId'}
+    client_filters: (none)
+    dedupe_by:      POHeaderId
+    output_name:    poschedule
+    stamp_parent_key: True
+  Step 3: get_purchase_order_distributions
+    tool_args:      {'po_header_id': '$iteration_value', 'po_line_id': '$iteration_value', 'line_location_id': '$iteration_value'}
+    iterate_over:   {'from_step': 'poschedule', 'fields': {'po_header_id': 'POHeaderId', 'po_line_id': 'POLineId', 'line_location_id': 'LineLocationId'}}
+    client_filters: (none)
+    dedupe_by:      LineLocationId
+    output_name:    podistribution
+
+Outputs:
+  po: 1 record(s)
+    [1] {'POHeaderId': 2144, 'OrderNumber': '162352', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'EIP Inc', 'SupplierId': 300000047507499}
+        ... +17 more field(s): BillToLocation, Buyer, BuyerId, CreatedBy, CreationDate, CurrencyCode, Description, LastUpdateDate, LastUpdatedBy, OrderDate, Ordered, PaymentTerms, ShipToLocationCode, SupplierContactDisplayName, SupplierSite, Total, TotalTax
+  poschedule: 2 record(s)
+    [1] {'LineLocationId': 18954, 'POHeaderId': 2144, 'POLineId': 19782, 'OrderNumber': '162352', 'LineNumber': 1, 'ScheduleNumber': 1}
+        ... +12 more field(s): AcceptedQuantity, Amount, BilledAmount, BilledQuantity, Quantity, ReceivedAmount, ReceivedQuantity, RequestedDeliveryDate, ScheduleStatus, ShipToLocation, ShippedQuantity, UOM
+    [2] {'LineLocationId': 18955, 'POHeaderId': 2144, 'POLineId': 19783, 'OrderNumber': '162352', 'LineNumber': 2, 'ScheduleNumber': 1}
+        ... +12 more field(s): AcceptedQuantity, Amount, BilledAmount, BilledQuantity, Quantity, ReceivedAmount, ReceivedQuantity, RequestedDeliveryDate, ScheduleStatus, ShipToLocation, ShippedQuantity, UOM
+  podistribution: 2 record(s)
+    [1] {'PODistributionId': 18952, 'POHeaderId': 2144, 'POLineId': 19782, 'OrderNumber': '162352', 'DistributionNumber': 1, 'ScheduleNumber': 1}
+        ... +10 more field(s): DeliverToLocationCode, Ordered, POAccrualAccount, POChargeAccount, POVarianceAccount, Percentage, Quantity, Status, StatusCode, Total
+    [2] {'PODistributionId': 18953, 'POHeaderId': 2144, 'POLineId': 19783, 'OrderNumber': '162352', 'DistributionNumber': 1, 'ScheduleNumber': 1}
+        ... +10 more field(s): DeliverToLocationCode, Ordered, POAccrualAccount, POChargeAccount, POVarianceAccount, Percentage, Quantity, Status, StatusCode, Total
+
+
+========================================================================
+PROMPT: Show PO 2144 and its distributions
+========================================================================
+Answer:
+
+Purchase Orders:
+  Order      : 162352
+  POHeaderId : 2144
+  Status     : Closed
+  Supplier   : EIP Inc
+  Buyer      : Gee, May
+  Site       : EIP US1
+  Contact    : John Kim
+
+  PO 162352 — schedules:
+    Schedule | Ship To | Need-By    | Ordered | Received | Billed 
+    ---------+---------+------------+---------+----------+--------
+    1        | Seattle | 2014-12-01 | 33000.0 |  33000.0 | 33000.0
+    1        | Seattle | 2014-12-01 |  8250.0 |   8250.0 | 8250.0 
+
+  PO 162352 — distributions:
+    Distribution | Charge Account           | %     |  Amount
+    -------------+--------------------------+-------+--------
+    1            | 101.10.63120.251.000.000 | 100.0 | 33000.0
+    1            | 101.10.63120.420.000.000 | 100.0 |  8250.0
+Summary:
+  Steps planned:        3
+  Records returned:     5 (across all steps)
+  Final raw output:     2 record(s) under 'podistribution'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    585  out=     95  total=    680
+  parse        in=   6622  out=    334  total=   6956
+  TOTAL        in=   7207  out=    429  total=   7636
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=67 total=651
+Router: modules=['procurement']
+[llm] stage=parse in=6621 out=515 total=7136
+[cache] HIT   cached=6611  fresh=10  total_in=6621
+[debug] shape = None
+Intent:
+  target_entity: PurchaseOrder
+  filters:
+    - {'type': 'created_before', 'value': '2015-01-01'}
+
+Plan:
+  Step 1: search_purchase_orders
+    tool_args:      {'created_before': '2015-01-01'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    open_pos
+
+Outputs:
+  open_pos: 25 record(s)
+    [1] {'POHeaderId': 300000079335542, 'OrderNumber': '701331', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [2] {'POHeaderId': 300000081255594, 'OrderNumber': '701337', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'JGA', 'SupplierId': 300000047414635}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [3] {'POHeaderId': 1304, 'OrderNumber': '55216', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [4] {'POHeaderId': 1305, 'OrderNumber': '55217', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Edison Co', 'SupplierId': 300000049521443}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    [5] {'POHeaderId': 1306, 'OrderNumber': '55218', 'Status': 'Closed', 'StatusCode': 'CLOSED', 'Supplier': 'Progressive Corp', 'SupplierId': 300000049521222}
+        ... +7 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, LastUpdateDate, Ordered
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Purchase orders created before 2015
+========================================================================
+Answer:
+Showing 25 of 878 purchase orders.
+Status: 17 Closed, 6 Closed for Receiving, 2 Open.
+
+Purchase Orders:
+  Order  | POHeaderId      | Status               | Supplier                  | Buyer            
+  -------+-----------------+----------------------+---------------------------+------------------
+  701331 | 300000079335542 | Closed               | Lee Supplies              | White, Eleanor   
+  701337 | 300000081255594 | Open                 | JGA                       | White, Eleanor   
+  55216  | 1304            | Closed               | Edison Co                 | Morgan, Liz      
+  55217  | 1305            | Closed               | Edison Co                 | Dodds, Gavin     
+  55218  | 1306            | Closed               | Progressive Corp          | Morgan, Liz      
+  55219  | 1307            | Closed               | EDF                       | Morgan, Liz      
+  162296 | 1336            | Closed               | JGA                       | Gee, May         
+  162297 | 1337            | Closed               | JGA                       | Roth, Calvin     
+  162298 | 1338            | Closed               | JGA                       | Roth, Calvin     
+  44763  | 858             | Closed               | Eiffage                   | Forestier, Alice 
+  44764  | 859             | Closed               | Utilitaire Inc            | Sonier, Michel   
+  44765  | 860             | Closed               | Eiffage                   | Lebreton, Estelle
+  162263 | 300000076281659 | Closed               | Dell Inc.                 | Roth, Calvin     
+  162264 | 300000076281664 | Closed               | CDW                       | Roth, Calvin     
+  162265 | 300000076983545 | Closed               | CDW                       | Roth, Calvin     
+  630338 | 300000077031577 | Closed for Receiving | Shangduo Inc              | Lin, Yulan       
+  162266 | 300000079065539 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162267 | 300000079071539 | Open                 | Midtown Computer Supplies | Roth, Calvin     
+  162268 | 300000079071574 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162269 | 300000079071605 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162270 | 987             | Closed               | EIP Inc                   | Gee, May         
+  162277 | 300000079220572 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  162282 | 300000079220822 | Closed for Receiving | Midtown Computer Supplies | Roth, Calvin     
+  701335 | 300000079375641 | Closed               | JGA                       | White, Eleanor   
+  162299 | 1339            | Closed               | Staffing Services         | Gee, May         
+
+Truncation:
+  - open_pos: 878 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'open_pos'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=     67  total=    651
+  parse        in=   6621  out=    515  total=   7136
+  TOTAL        in=   7205  out=    582  total=   7787
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=577 out=55 total=632
+Router: modules=['procurement']
+[llm] stage=parse in=6614 out=164 total=6778
+[cache] HIT   cached=6611  fresh=3  total_in=6614
+
+========================================================================
+PROMPT: purchase orders
+========================================================================
+Reason:   I can look up purchase orders, but this doesn't say which one.
+
+Solution: Give me the PO number.
+
+Example:  What is the risk rating on PO 701337 and why?
+  (refusal: missing_identifier — PurchaseOrder root has no identifier and no explicit list request)
+Token usage:
+  classify     in=    577  out=     55  total=    632
+  parse        in=   6614  out=    164  total=   6778
+  TOTAL        in=   7191  out=    219  total=   7410
+
+
+════════════════════════════════════════════════════════════════
+### truncation/smoke
+════════════════════════════════════════════════════════════════
+# promptkit batch — 2026-09-25 15:18:32
+# $ /home/bhagavan/venv/spire/bin/python /home/bhagavan/pocs/spire/scripts/promptkit.py --run --prompt-file prompts/truncation/smoke.txt
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=591 out=198 total=789
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7019 out=603 total=7622
+[cache] HIT   cached=7002  fresh=17  total_in=7019
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+    - {'type': 'invoice_amount', 'value': {'min': 10000}}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252', 'amount_min': 10000}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 19 record(s)
+    [1] {'InvoiceId': 300000264684985, 'InvoiceNumber': 'MBP_020620221', 'InvoiceDate': '2022-06-16', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 300000264334776, 'InvoiceNumber': 'MBP_PREPAY2', 'InvoiceDate': '2023-03-09', 'InvoiceAmount': 11300.1, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 7, 'InvoiceNumber': 'Lee Supl 201219014', 'InvoiceDate': '2012-01-01', 'InvoiceAmount': 29503.68, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 8, 'InvoiceNumber': 'Lee Supl 201219023', 'InvoiceDate': '2012-01-04', 'InvoiceAmount': 78676.85, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 29, 'InvoiceNumber': 'Lee Supl 201219048', 'InvoiceDate': '2012-01-13', 'InvoiceAmount': 40908.11, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (14 more)
+
+
+========================================================================
+PROMPT: invoices for supplier 1252 over 10000
+========================================================================
+Answer:
+Showing 19 invoices from an examined sample; the true matching count is not known.
+InvoiceCurrency: 17 USD, 2 AUD.
+All 19 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |     Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+------------+----------+------------+-------------
+  MBP_020620221      | 300000264684985 |    11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |    11300.1 | USD      | 2023-03-09 | Lee Supplies
+  Lee Supl 201219014 | 7               |   29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               |   78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              |   40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              |   39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              |   49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 |   468960.0 | USD      | 2012-03-03 | Lee Supplies
+  LEEFA11042013      | 300000050864731 |   473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 |   927000.0 | USD      | 2013-12-12 | Lee Supplies
+  LSFA02022014       | 300000076967541 | 3944699.18 | USD      | 2014-02-01 | Lee Supplies
+  LEE-01-1006-111    | 489503          |   11138.34 | USD      | 2016-10-17 | Lee Supplies
+  L105               | 300000173044553 |    47632.5 | USD      | 2018-02-26 | Lee Supplies
+  L107               | 300000173044854 |   235425.0 | USD      | 2018-06-15 | Lee Supplies
+  L106               | 300000173044605 |   180675.0 | USD      | 2018-04-15 | Lee Supplies
+  INV-SU616259       | 300000250407895 |   57452.94 | USD      | 2022-07-11 | Lee Supplies
+  INV-SU616239       | 300000250169535 |   38915.39 | USD      | 2022-07-08 | Lee Supplies
+  44622              | 1020263         |   790758.1 | AUD      | 2022-03-02 | Lee Supplies
+  44624              | 1020265         |    23932.7 | AUD      | 2022-03-04 | Lee Supplies
+
+Truncation:
+  - invoices: unknown total in source; 19 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     19 (across all steps)
+  Final raw output:     19 record(s) under 'invoices'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    591  out=    198  total=    789
+  parse        in=   7019  out=    603  total=   7622
+  TOTAL        in=   7610  out=    801  total=   8411
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=584 out=272 total=856
+Router: modules=['payables', 'supplier']
+[llm] stage=parse in=7012 out=389 total=7401
+[cache] HIT   cached=7002  fresh=10  total_in=7012
+[debug] shape = None
+Intent:
+  target_entity: Invoice
+  filters:
+    - {'type': 'supplier', 'value': '1252'}
+
+Plan:
+  Step 1: search_invoices
+    tool_args:      {'supplier_number': '1252'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    invoices
+
+Outputs:
+  invoices: 25 record(s)
+    [1] {'InvoiceId': 670255, 'InvoiceNumber': '410079-5105', 'InvoiceDate': '2019-05-10', 'InvoiceAmount': -859.88, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [2] {'InvoiceId': 281071, 'InvoiceNumber': '50430-61', 'InvoiceDate': '2015-07-08', 'InvoiceAmount': -163.16, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [3] {'InvoiceId': 215069, 'InvoiceNumber': '500001-21', 'InvoiceDate': '2015-04-13', 'InvoiceAmount': -16092, 'InvoiceCurrency': 'JPY', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [4] {'InvoiceId': 455235, 'InvoiceNumber': '500007-82', 'InvoiceDate': '2016-05-31', 'InvoiceAmount': -162.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    [5] {'InvoiceId': 595627, 'InvoiceNumber': '500196-102', 'InvoiceDate': '2018-03-12', 'InvoiceAmount': -984.42, 'InvoiceCurrency': 'USD', 'Supplier': 'Lee Supplies'}
+        ... +8 more field(s): ApprovalStatus, CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, PaidStatus, PurchaseOrderNumber, SupplierNumber
+    ... (20 more)
+
+
+========================================================================
+PROMPT: invoices for supplier 1252
+========================================================================
+Answer:
+Showing 25 of 1,327 invoices.
+InvoiceCurrency: 23 USD, 1 JPY, 1 EUR.
+All 25 have Supplier Lee Supplies.
+
+Invoices:
+  Invoice            | InvoiceId       |   Amount | Currency | Date       | Supplier    
+  -------------------+-----------------+----------+----------+------------+-------------
+  410079-5105        | 670255          |  -859.88 | USD      | 2019-05-10 | Lee Supplies
+  50430-61           | 281071          |  -163.16 | USD      | 2015-07-08 | Lee Supplies
+  500001-21          | 215069          | -16092.0 | JPY      | 2015-04-13 | Lee Supplies
+  500007-82          | 455235          |  -162.42 | USD      | 2016-05-31 | Lee Supplies
+  500196-102         | 595627          |  -984.42 | USD      | 2018-03-12 | Lee Supplies
+  19001-2101         | 599808          |  -831.81 | EUR      | 2018-05-30 | Lee Supplies
+  MBP_020620221      | 300000264684985 |  11300.1 | USD      | 2022-06-16 | Lee Supplies
+  MBP_PREPAY2        | 300000264334776 |  11300.1 | USD      | 2023-03-09 | Lee Supplies
+  16027inv           | 300000048648187 |   163.16 | USD      | 2013-12-11 | Lee Supplies
+  162034inv          | 300000049373131 |   830.01 | USD      | 2013-12-16 | Lee Supplies
+  JMK-Dec16-3324     | 300000049373136 |    219.0 | USD      | 2013-12-16 | Lee Supplies
+  Lee Supl 201219014 | 7               | 29503.68 | USD      | 2012-01-01 | Lee Supplies
+  Lee Supl 201219023 | 8               | 78676.85 | USD      | 2012-01-04 | Lee Supplies
+  Lee Supl 201219048 | 29              | 40908.11 | USD      | 2012-01-13 | Lee Supplies
+  Lee Supl 201219032 | 18              | 39338.97 | USD      | 2012-01-07 | Lee Supplies
+  Lee Supl 201219041 | 19              | 49173.17 | USD      | 2012-01-10 | Lee Supplies
+  LEE03032012        | 300000050422162 | 468960.0 | USD      | 2012-03-03 | Lee Supplies
+  162083inv          | 5016            |   830.01 | USD      | 2014-01-13 | Lee Supplies
+  LEEFA11042013      | 300000050864731 | 473700.0 | USD      | 2013-04-11 | Lee Supplies
+  LEE12122013        | 300000050864748 | 927000.0 | USD      | 2013-12-12 | Lee Supplies
+  162082-inv         | 300000050747720 |   851.91 | USD      | 2014-01-13 | Lee Supplies
+  PCS10001-11        | 300000076283950 |  3230.25 | USD      | 2014-03-21 | Lee Supplies
+  PCS10014-314       | 300000076283956 |   2737.5 | USD      | 2014-03-21 | Lee Supplies
+  PCS10022-314       | 300000076283959 |   3350.0 | USD      | 2014-03-21 | Lee Supplies
+  PCS10030-314       | 300000076283961 |   2190.0 | USD      | 2014-03-21 | Lee Supplies
+
+Truncation:
+  - invoices: 1327 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'invoices'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    584  out=    272  total=    856
+  parse        in=   7012  out=    389  total=   7401
+  TOTAL        in=   7596  out=    661  total=   8257
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=69 total=649
+Router: modules=['supplier']
+[llm] stage=parse in=5753 out=385 total=6138
+[cache] HIT   cached=5747  fresh=6  total_in=5753
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Suppliers with their addresses
+========================================================================
+Answer:
+Showing 25 of 695 suppliers.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber | Address                                                                                                   
+  -------------------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                               | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                                        | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric                        | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Allied Manufacturing                       | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+  Midtown Computer Supplies                  | 300000047572163 | 1266           | 168 Ultimate Dr,RICHMOND HILL ONTARIO  L4S 8M8,CANADA (+24 more)                                          
+  Consolidated Supplies                      | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Progressive Corp                           | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  Masson Inc                                 | 300000051065858 | 1277           | 5 Avenue du Général de Gaulle,60300 SENLIS,FRANCE                                                         
+  RSM                                        | 300000051066029 | 1278           | 28 Rue Alfred Kastler,76130 MONT-SAINT-AIGNAN,FRANCE                                                      
+  Utilitaire Inc                             | 300000051066302 | 1281           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Shangduo Inc                               | 300000075469541 | 1289           | CHINA,325604  ZHEJIANG,Wenzhou,Zhiguang Industrial Zone                                                   
+  Nihon Communications                       | 300000101110596 | 1301           | JAPAN,272-0127,Chiba,Ichikawa-shi,Shiohama,1-2-3                                                          
+  Ente Idrocarburi                           | 300000115609124 | 1306           | Corso Buenos Aires,MILANO, MILANO,20121,ITALY                                                             
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           | Via Francesco Marucelli,CASAPE, ROMA,00010,ITALY                                                          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           | Viale Aristide Merloni n. 47,FABRIANO, ANCONA,60044,ITALY                                                 
+  Medtronic                                  | 300000116498267 | 1322           | 99 Hereford Street,BRAMPTON ONTARIO  L6Y 0R3,CANADA (+1 more)                                             
+  Siemens Medical Solutions                  | 300000116498411 | 1324           | Houtsingel 21	,2719 EA ZOETERMEER,NETHERLANDS (+1 more)                                                   
+  Cardinal Health                            | 300000116498478 | 1325           | 2105 S Lakeside Dr,WAUKEGAN, IL 60085 (+3 more)                                                           
+  Lagring Systems                            | 300000116707121 | 1327           | 3811 Lyons Ave,HOUSTON, TX 77020 Harris (+3 more)                                                         
+  Servicios Reunidos, SL                     | 300000131904822 | 1336           | Gran Via de les Corts Catalanes, 25,08015 BARCELONA,SPAIN                                                 
+  Misson Corp                                | 300000131933370 | 1339           | 92 Rue Claude Decaen,75012 PARIS,FRANCE                                                                   
+  BD Medical                                 | 300000133943993 | 1342           | 1 Becton Drive,FRANKLIN LAKES, NJ 07417 (+1 more)                                                         
+  Staffing Services                          | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                                  | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  Howell Engineering Inc.                    | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+
+Truncation:
+  - suppliers: 695 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=     69  total=    649
+  parse        in=   5753  out=    385  total=   6138
+  TOTAL        in=   6333  out=    454  total=   6787
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=577 out=183 total=760
+Router: modules=['payables']
+[llm] stage=parse in=5458 out=395 total=5853
+[cache] HIT   cached=5455  fresh=3  total_in=5458
+
+========================================================================
+PROMPT: invoices
+========================================================================
+Reason:   I can look up supplier invoices, but this doesn't say which one.
+
+Solution: Name the supplier, or give me the invoice number.
+
+Example:  invoices for Lee Supplies
+  (refusal: missing_identifier — Invoice root has no supplier reference)
+Token usage:
+  classify     in=    577  out=    183  total=    760
+  parse        in=   5458  out=    395  total=   5853
+  TOTAL        in=   6035  out=    578  total=   6613
+
+

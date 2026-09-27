@@ -52,27 +52,14 @@ bundles:
   - docs/spire-robustness/04_Phase_04_Structure.md
   - docs/spire-robustness/SPIRE_ROBUSTNESS_EXTENSIBILITY_v3.2.md
   - docs/spire-robustness/TEMPLATE_Session_Entry.md
-  # The resume-context files the session-start instruction names. Added
-  # 2026-09-24 so the plan bundle is self-contained — a window that
-  # received only `plan` previously had to ask for these separately.
   - docs/spire-robustness/WORKING_STYLE.md
   - docs/spire-robustness/SESSION_STARTUP_CHECKLIST.md
   - docs/SPIRE_SESSION_HANDOFF.md
-  # the audit + findings log — the two documents the handoff says to read
-  # first. Were unbundled until 2026-09-18; a new session asking for the
-  # plan bundle now gets the full working state.
   - docs/audit/phase-1-audit.md
   - docs/audit/findings-log.md
   - docs/AUDIT_AND_FIX.md
-  # The prompt-set capability surface, tier plan, and legacy
-  # cross-walk. Referenced by the window-19 handoff; needed by any
-  # window working the prompt sets.
   - docs/prompt-sets/SURFACE.md
   - docs/phase-2/FIX_PLAN.md
-  # Fix files. Cluster 2's three (F-014 / F-017 / F-027) added 2026-09-23
-  # after they were found missing — the earlier list stopped at F-012 and
-  # F-044, with a gap that omitted the three most recently landed.
-  # F-016 added 2026-09-24 (was landed and merged but not bundled).
   - docs/phase-2/fixes/F-002.md
   - docs/phase-2/fixes/F-003.md
   - docs/phase-2/fixes/F-003-v1-sweep.txt
@@ -98,14 +85,9 @@ bundles:
   - docs/phase-2/fixes/F-048.md
   - docs/phase-2/fixes/F-049.md
   - docs/phase-2/fixes/F-051.md
-  # Added 2026-09-24 (window 18). F-045 landed on PR #170; Reg #30 was
-  # closed as not-a-bug and its reproducer is the closure evidence.
   - docs/phase-2/fixes/F-045.md
   - docs/phase-2/fixes/F-045-v1v4.txt
   - docs/phase-2/fixes/Reg-30-v1-repro.txt
-  # Evidence files the fix files reference by name. Not themselves fix
-  # files; included so a reader of a fix file's V7/V8 section has the
-  # raw output in the same bundle rather than a dangling filename.
   - docs/phase-2/fixes/F-012-F036-L2-run.txt
   - docs/phase-2/fixes/F-012-F036-F044-78-prompt-sweep.txt
   - docs/phase-2/fixes/F-044-diag.txt
@@ -118,7 +100,14 @@ bundles:
   - docs/audit/golden/count_suppliers.txt
   - docs/audit/golden/po_2144_and_lines.txt
   - docs/audit/golden/suppliers_with_open_pos.txt
-
+  - docs/tester-intro.md
+  - docs/spire_fusion_endpoints_reference.md
+  - docs/cache_architecture.md
+  - docs/audit/SPIRE_log_analysis_plan.md
+  - docs/features/prompt_to_intent_framework.md
+  - docs/features/parser_context_modularization.md
+  - docs/features/actionable_refusals.md
+  - docs/developer/context_bundles.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
   - prompts/supplier/smoke.txt
