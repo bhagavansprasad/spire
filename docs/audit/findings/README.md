@@ -1,56 +1,99 @@
-# SPIRE — Findings Log
+# SPIRE — Findings
 
-**Purpose.** Append-only notebook. One entry per finding, as we make it.
-This is the lab notebook, not the report. The formal audit —
-`phase-1-audit.md` — is updated separately, in batches, when we have
-enough to consolidate.
+**Purpose.** One file per finding. This is the live bug record for the
+current phase. Phase-1 findings (F-001..F-051) are frozen under
+`docs/audit/archive/phase-1/findings/` and are not edited here.
 
 **Finding ID:** `F-NNN`, monotonic. Never reused. Never renumbered.
-**Newest at the top.** Append below the header; correct by adding a new
-entry, never by editing an old one.
+Numbering continues from the archived corpus. Next free ID when this
+folder was created: **F-052**.
 
-**Entry format** (keep it short — this is a notebook, not prose):
+**One file per finding.** `findings/F-NNN.md`. Never append a second
+finding to an existing file.
 
-```
+**Every entry walks S0–S11** (see `docs/plan/WORKING_STYLE.md`).
+The walk is the entry. Do not write an F-NNN without it.
+
+**Status vocabulary** (from `FIX_PLAN.md` §5):
+`open` · `root-caused` · `fix-in-progress` · `fixed` · `verified` ·
+`closed` · `closed-as-reclassified` · `closed-as-duplicate` ·
+`closed-as-not-a-bug`.
+
+**Two-way link to runs.** Each finding's `Seen in runs` table lists
+every run that has touched it, with the prompt. Each run's
+`_touched.md` lists every F-NNN that run contributed to. The F-ID is
+the only durable identifier; run IDs are labels.
+
+---
+
+## Template
+
+~~~markdown
 ## F-NNN — {one-line title}
 
 **Date:** YYYY-MM-DD
-**Status:** open · root-caused · fix-in-progress · fixed · closed-as-not-a-bug
-**Cross-refs:** bug IDs from phase-1-audit.md
+**Status:** open
+**Cross-refs:** audit rows, prior F-NNNs, run IDs
 
-**Evidence.** Commands run and what they printed. Copy-paste, not paraphrase.
+### S0 — Claim
+One sentence: "X is a bug" or "X is not a bug."
 
-**Root cause.** One paragraph. The mechanism, not the symptom.
+### S1 — Harm
+Exactly one of: wrong data returned · wrong narration · crash ·
+refusal of an in-scope prompt · silent omission · cost regression ·
+inconsistency between two paths.
 
-**Fix location (for Phase 2).** Where the change goes, not the change itself.
-The fix is Phase 2's job; this log records where.
-```
+### S2 — Evidence
+Verbatim. Tier 1 curl, tier 2 runtime output, tier 3 file:line.
+Paste, do not paraphrase. Tier 4 ("I recall") is not evidence.
 
-**Update 2026-09-19 — scope expanded to two layers.**
+### S3 — Mechanism
+The specific file:line or function that produces the harm.
 
-Working the fix revealed the failure is not one layer but two. The Router:
-line for every failing prompt shows `modules=['payables']` — the receivables
-sysprompt blocks are never loaded. The classifier menu (generated from
-`kg_vocabulary WHERE vocab_kind = 'entity_synonym'`) carries ZERO synonyms
-for the three AR children:
+### S4 — Probable root cause
+Why the mechanism is written that way. One of: a design decision that
+is wrong · a plan-template selection gap · a parser grammar gap · a
+missing guard or default · a stale assumption about pod data.
+If unknown, state "mechanism known, root cause unknown".
 
-    receivables:
-      ReceivablesInvoiceLine               ← no aka
-      ReceivablesInvoiceTransactionDFF     ← no aka
-      ReceivablesTaxLine                   ← no aka
+### S5 — Alternative disproven
+One alternative explanation, and the evidence that rules it out.
 
-So the classifier sees only `invoice` (which maps to the payables `Invoice`)
-and never routes to receivables. Even a perfect parser rule would never run.
+### S6 — Falsifier
+One command that would prove this is not a bug.
 
-Two layers, both required for the same user outcome:
+### S7 — Classification
+Confirmed (S1–S6 all passed) · Candidate (note which failed) ·
+Observation (S1 failed) · Closed-as-not-a-bug (cite old entry).
 
-1. **Router.** Add `entity_synonym` rows in `scripts/sql/kg_schema.sql` for
-   `invoice line(s)`, `tax line(s)`, `DFF`, `flexfield`, `descriptive
-   flexfield`, mapped to the correct receivables entities. Then
-   `rebuild_kg.py` and `build_classifier_context.py`.
-2. **Parser.** The three AR sysprompt edits (previously the whole of
-   F-041's fix location).
+### S8 — The miss record
+1. Did a prompt of this shape exist? existing / passed-but-wrong / absent.
+2. Why did it not surface? The reason, not the category.
+3. What would have caught it? The prompt or check that did not exist.
 
-The two layers are one fix; neither half alone solves the user's problem.
+### S9 — Cross-links
+At least one §A / §B / §D row or another F-NNN.
+
+### S10 — What was NOT checked
+Explicit.
+
+### S11 — Coverage expansion
+Sibling prompts that exercise the same shape, existing or to-be-written,
+with the tier each belongs to (smoke / verify / exhaust).
+
+### Seen in runs
+
+| run_id | role | prompt | resolution |
+|---|---|---|---|
+| 20260925_150333 | first observed | <prompt verbatim> | C-00N → F-NNN |
+
+### Fix
+
+**Fix location:** (Phase 2's job; this records where, not what)
+**PR:** —
+**Commit:** —
+~~~
 
 ---
+
+*End of findings README.*
