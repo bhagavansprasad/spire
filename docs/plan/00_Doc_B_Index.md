@@ -165,8 +165,8 @@ Promote to Doc A when stable.*
 
 | Session | Date | Phase | Branch | Summary | File |
 |---|---|---|---|---|---|
-| window 19 | 2026-09-24 | — | `hardening-master` | Prompt-set reorg. `scripts/prompts/` moved to `prompts/` at repo root; 16 capabilities × 3 tiers (smoke / verify / exhaust); ~1,512 runnable prompts. `docs/prompt-sets/SURFACE.md` added. No Doc B session entry — the record is the handoff and the three commit messages. | `docs/00-plan/HANDOFF.md` |
-| window 18 | 2026-09-24 | 2 | `hardening-master` | F-045 closed (PR #170); Reg #30 closed as not-a-bug, residual latency deferred to Phase 6. Phase 2 ledger at 24/24. No Doc B session entry — full forensic record in the fix file. | `docs/02-fixes/evidence/F-045.md` |
+| window 19 | 2026-09-24 | — | `hardening-master` | Prompt-set reorg. `scripts/prompts/` moved to `prompts/` at repo root; 16 capabilities × 3 tiers (smoke / verify / exhaust); ~1,512 runnable prompts. `docs/prompt-sets/SURFACE.md` added. No Doc B session entry — the record is the handoff and the three commit messages. | `docs/plan/HANDOFF.md` |
+| window 18 | 2026-09-24 | 2 | `hardening-master` | F-045 closed (PR #170); Reg #30 closed as not-a-bug, residual latency deferred to Phase 6. Phase 2 ledger at 24/24. No Doc B session entry — full forensic record in the fix file. | `docs/fixes/evidence/F-045.md` |
 | S004 | 2026-09-24 | 2 | `phase-2-fix-F003-modes-reachable` | F-003 / F-050 / F-004 close on one `_TIER1` edit. WORKING_STYLE 15.1 tightened, 15.3 added. `scripts/prompts/*.json` deleted. | `02_Phase_02_Correctness.md` |
 | S003 | 2026-09-24 | 2 | `hardening-master` | Phase 2 closes F-016 (plain-list row cap). Ledger drift from PR #163 closed en route; Doc B refresh. | `02_Phase_02_Correctness.md` |
 | S002 | 2026-09-15 | 1 | `phase-1` | Phase 1 opens: task 1.2 (display_formatters move) + dev/runtime port separation. In progress. | `01_Phase_01_Audit_and_Baseline.md` |

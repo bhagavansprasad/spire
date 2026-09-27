@@ -4,7 +4,7 @@
 last two Phase 2 rows (F-045, Reg #30). Window 19 was a single-purpose
 session: the prompt-set reorg. Phase 3a has not been started.
 
-**Read this first.** Then `docs/02-fixes/FIXES.md` (the playbook). The
+**Read this first.** Then `docs/fixes/FIXES.md` (the playbook). The
 `plan` context bundle carries this file plus everything referenced
 below.
 
@@ -170,7 +170,7 @@ Any failure becomes a new F-NNN by the standard S0–S8 discipline.
 
       gh pr list --state merged --limit 20 --json number,title,mergedAt \
         --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
-      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/02-fixes/FIX_PLAN.md
+      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/fixes/FIX_PLAN.md
 
   Last merged PR is **#170**. Both should come back clean.
 - **`git stash` does not stash a committed change.** V7 against a
@@ -200,7 +200,7 @@ Any failure becomes a new F-NNN by the standard S0–S8 discipline.
 
 ## Known doc-drift, recorded not fixed
 
-- **`docs/01-audit/findings-log.md`** and **`docs/02-fixes/evidence/F-0*.md`**
+- **`docs/audit/findings-log.md`** and **`docs/fixes/evidence/F-0*.md`**
   still quote `scripts/prompts/...` paths. These are append-only
   forensic records; editing them would rewrite history. Read them with
   the knowledge that the paths have moved.

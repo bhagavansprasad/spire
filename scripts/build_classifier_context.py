@@ -4,7 +4,7 @@ build_classifier_context.py — Generate the module-classification menu for the
 prompt-to-intent router (Phase 2).
 
 The router's first step is a small LLM call that classifies a natural-language
-prompt to its Fusion module(s) (docs/03-design/FEATURES.md,
+prompt to its Fusion module(s) (docs/design/FEATURES.md,
 §2.1, D2/D3/D4). That classifier needs GROUNDING: for each module, the entities
 it owns and their colloquial synonyms ("vendor" -> Supplier, "bill" -> Invoice).
 This script generates that grounding from the KG and writes it to a committed

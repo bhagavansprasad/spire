@@ -74,7 +74,7 @@ recorded in §B.4 as positive examples.
 | A-11 | Drop-order comment in `kg_schema.sql` | Comment lists 8 tables; code drops 9 (`kg_entity_filter` missing) | **disagree** |
 | A-12 | KG `mcp_tool_name` vs actual MCP tool names | KG seed lists 10 + 16; all present in `mcp_server/server.py` (34 tools registered) | **agree** |
 | A-13 | KG `tool_arg_name` vs tool signatures | KG seed lists 26 filter rows; literal names match; two placeholders (`supplier`, `supplier_po`) resolved by `_resolve_arg_name` by value shape | **agree** (F-006 covers the `po_header_id` int/str type mismatch — a signature-type defect, not a name defect) |
-| A-18 | `context_bundles.yaml` references moved files | Lists `scripts/display_formatters.py` (moved) and the two Doc A/B files (moved to `docs/00-plan/`) | **disagree** |
+| A-18 | `context_bundles.yaml` references moved files | Lists `scripts/display_formatters.py` (moved) and the two Doc A/B files (moved to `docs/plan/`) | **disagree** |
 | A-19 | `MatchedCountry` field | Injected by `search_suppliers` when country filter applied; not declared in `kg_entity_field` | **disagree** |
 | A-20 | Aggregate tool names | `kg_entity_tool`/`kg_edge_tool` don't list the 10 aggregate/comparison tools; `registries.py::_AGGREGATION_TOOLS` and `_COMPARISON_TOOLS` are a second registration channel | **disagree** (dual-registry design, not a drift bug) |
 
@@ -443,7 +443,7 @@ None.
 | `--validate` pass rate (12-set, `gemini-3.5-flash`) | 236 / 240 | `SPIRE_SESSION_HANDOFF.md` | cited; not re-run this session |
 | `--validate` pass rate (`gemini-3.1-flash-lite`) | 205 / 240 | `SPIRE_SESSION_HANDOFF.md`, S2 | cited; the degradation that motivated S2 |
 | KG tables matching seed (9 tables) | 9 / 9 | `print_kg.py --counts-only`, 2026-09-18 | measured (A-17) |
-| Golden-file byte-diffs matching | 1 / 3 (byte-identical); 2 / 3 pod-drift only | `docs/01-audit/golden/`, 2026-09-18 | measured (§G) |
+| Golden-file byte-diffs matching | 1 / 3 (byte-identical); 2 / 3 pod-drift only | `docs/audit/golden/`, 2026-09-18 | measured (§G) |
 
 ### F.2 Per-prompt-class token usage
 
@@ -498,7 +498,7 @@ Twenty-one prompts run this session with full `--show-stages`. Totals are the `T
 
 ## ¬ßG. Behavioural byte-diffs
 
-Golden files at `docs/01-audit/golden/`. Re-run 2026-09-18. Each run filtered to the semantic content — `Router:`, `Intent:`, `Plan:`, `Outputs:`, `Answer:`, `Summary:` — excluding `[llm]` token lines, `[cache]` lines, `[debug]` shape lines, and the `Token usage:` block, which vary by invocation.
+Golden files at `docs/audit/golden/`. Re-run 2026-09-18. Each run filtered to the semantic content — `Router:`, `Intent:`, `Plan:`, `Outputs:`, `Answer:`, `Summary:` — excluding `[llm]` token lines, `[cache]` lines, `[debug]` shape lines, and the `Token usage:` block, which vary by invocation.
 
 | File | Prompt (inferred) | Diff | Disposition |
 |---|---|---|---|

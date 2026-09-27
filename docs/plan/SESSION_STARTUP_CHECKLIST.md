@@ -12,13 +12,13 @@ file is the standard.
 **A1. Confirm the previous session is closed.**
 - `git status` is clean (or only shows files you intend to keep).
 - The previous session's commits are on origin (`git log --oneline -3`).
-- The handoff (`docs/00-plan/HANDOFF.md`) was updated by the
+- The handoff (`docs/plan/HANDOFF.md`) was updated by the
   previous window.
 
 **A2. Assemble the three attachment files.**
-- `docs/00-plan/HANDOFF.md`
-- `docs/01-audit/phase-1-audit.md`
-- `docs/01-audit/findings-log.md`
+- `docs/plan/HANDOFF.md`
+- `docs/audit/phase-1-audit.md`
+- `docs/audit/findings-log.md`
 
 Do **not** attach `source-tree.txt`, the golden files, or individual
 source files. Regenerable or bundle-served.
@@ -27,9 +27,9 @@ source files. Regenerable or bundle-served.
 alongside the three files.**
 
 ```
-Read docs/00-plan/HANDOFF.md first — it describes the working
-process. Then read docs/01-audit/phase-1-audit.md and
-docs/01-audit/findings-log.md.
+Read docs/plan/HANDOFF.md first — it describes the working
+process. Then read docs/audit/phase-1-audit.md and
+docs/audit/findings-log.md.
 
 Begin with "First steps in the new window" at the end of the handoff.
 
@@ -97,7 +97,7 @@ messages for multi-paragraph summaries.
 
 ## Part D — Before closing the window
 
-**D1. Update the handoff.** Overwrite `docs/00-plan/HANDOFF.md`
+**D1. Update the handoff.** Overwrite `docs/plan/HANDOFF.md`
 in place (no archive, no dated filename). Carry forward any items
 still open from the previous handoff so nothing is lost.
 

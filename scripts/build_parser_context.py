@@ -3,7 +3,7 @@
 Carve the parser system-prompt monolith into modular .sysprompt files.
 
 This is the ONE-TIME migration tool for Phase 1 of parser context
-modularization (docs/03-design/FEATURES.md, §4.1). It reads
+modularization (docs/design/FEATURES.md, §4.1). It reads
 the live ``_SYSTEM_PROMPT_PREAMBLE`` literal out of
 ``src/spire/nl_parser/parser.py``, slices it at the approved block boundaries,
 and writes 48 ``.sysprompt`` block files plus an ``order.manifest`` under
