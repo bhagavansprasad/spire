@@ -242,78 +242,59 @@ extract that set, write `<set>.md`, update `_index.md`, continue.
 
 - Round:               20260925_150333 smoke
 - Tier:                smoke
-- Run root:            overnights/20260925_150333/
 - Total sets:          16
 - Total prompts:       71
-- Sets classified:     16 of 16   (complete)
-- Prompts classified:  71 of 71   (complete)
-- Step 5:              complete
-- Step 6:              complete  (see _step6_regression.md)
-- Step 7:              pending   (consolidated candidate view)
-- Step 8:              pending   (review gate)
-- Known mechanisms:    F-052 (confirmed at signature level)
-                       HDFE finite (signature undefined, TODO)
-- Rules in force:      read-only, append-only, on-disk is source of truth
+- Gate:                closed 2026-09-27
 
-### Candidates recorded
+### Gate results
 
-- C-001  payables/smoke  "invoices in the last 30 days"
-         wrong-but-no-error. Open-ended date filter admits future rows.
-         Isolated to this one prompt; not a class in this batch.
-- C-002  batch-level     exit code appears tied to the final prompt's
-         state, not to whether the set contained a refusal. Observation.
-- C-003  procurement_supplier/smoke  "suppliers with open purchase orders"
-         wrong-but-no-error. Partial F-010 regression: plan step 2 does
-         not set filter_source_when_nonempty, so suppliers with 0 open POs
-         appear. Same shape passes in payables_supplier.
-- C-004  columns/smoke   "List active suppliers with supplier name,
-         supplier number, and address"
-         fail. Parser produced no target_entity; refused unparseable.
-
-### Step 6 summary
-
-| F-NNN | reproduced | verdict |
+| candidate | disposition | finding |
 |---|---|---|
-| F-001 | no direct reproducer | cannot confirm |
-| F-007 | yes (all pass)     | no regression |
-| F-008 | no reproducer       | cannot confirm |
-| F-010 | yes                | PASS in payables_supplier, FAIL in procurement_supplier (C-003) |
-| F-012 | yes                | no regression |
-| F-015 | no reproducer       | cannot confirm |
+| C-001 | closed-as-not-a-bug (latent) | F-054 |
+| C-002 | observation, no F-NNN | - |
+| C-003 | confirmed | F-053 |
+| C-004 | closed-as-not-a-bug | F-052 |
 
-### Next window — pick up here
+### Findings
 
-Read order for the next window:
+- **F-052** - closed-as-not-a-bug. Columns list + non-column field
+  (`and address`). R: N=20 clean; the original failure was the
+  documented ~3% JSON-mode empty-draft mode.
+- **F-053** - confirmed. `suppliers with open purchase orders` lists
+  suppliers with 0 open POs; `has_open_PO` is missing from
+  `_FILTER_SOURCE_NONEMPTY_SUFFIX` in `src/spire/planner/registries.py`.
+- **F-054** - closed-as-not-a-bug (latent). `invoices in the last 30 days`
+  compiles to a one-sided date filter. Harm not reproducible; shape
+  is latent.
+- **F-055** - confirmed. `invoices in the last 7 days` refuses on
+  fractional-months conversion (`{'months': 0.23}`). Found during
+  F-054's sibling reproduction.
 
-1. This file (HANDOFF.md). Section A pointers, then this Section B.
-2. `docs/plan/WORKING_STYLE.md` — "Log analysis" section, LA-1..LA-14.
-3. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_index.md`.
-4. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_candidates.md`.
-5. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_action_items.md`.
-6. `docs/audit/log_analysis_sessions/20260925_150333_smoke/_step6_regression.md`.
+### Where things live
 
-Steps:
+- Findings: `docs/audit/findings/F-052.md` .. `F-055.md`
+- Run analysis: `docs/audit/log_analysis/20260925_150333/`
+- Plan: `docs/audit/log_analysis/_plan.md`
+- Archive (frozen): `docs/audit/archive/phase-1/`
+- PR for this branch: #172
 
-1. Optional Step 7: consolidated candidate view. `_candidates.md`
-   already holds all four candidates. Step 7 is a read-through, not new
-   analysis. Produce a single consolidated view if useful.
-2. Step 8: review gate. For each of C-001 through C-004, decide:
-   - log as a new F-NNN
-   - link to an existing open finding (C-003 -> F-010)
-   - close-as-not-a-bug
-   Then set priority relative to F-052. Then stop and ask.
-3. Do not propose fixes at the gate.
+### Next window
 
-### Do not
+The smoke gate is closed. Open items carried to the next window:
 
-- Fix code.
-- Write to `docs/audit/findings-log.md`.
-- Read `overnights/03_verify_sets/`.
+1. **Phase 3a** - the prompt-coverage test design
+   (`tests/test_prompt_coverage.py`, Doc A 9.3.1). The A/B/C
+   decision is still open.
+2. **F-053** - fix on a branch per rule 7. Registry entry is one
+   line; regression test asserts no zero-count rows on the
+   `suppliers with open purchase orders` prompt.
+3. **F-055** - fix on a branch per rule 7. Sysprompt edit in
+   `b_invoice_date.sysprompt`; regression test asserts the plan
+   produces a valid filter for `last 7 days`.
+4. **S11 expansions** - non-multiple-of-30 day prompts in
+   `date_filters/`, and the four `last N` sibling prompts already
+   verified. See each F-NNN's S11 section.
 
-### After Step 8
-
-The smoke analysis window closes. Any fixes go into a fresh window with
-explicit approval, on a branch, per WORKING_STYLE rules 7-11.
 <!-- END SPIRE-LOG-ANALYSIS-STATUS -->
 
 
