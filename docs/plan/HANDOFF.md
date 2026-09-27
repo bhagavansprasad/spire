@@ -209,7 +209,7 @@ Any failure becomes a new F-NNN by the standard S0–S8 discipline.
   the field-coverage check. Recorded in the open decision above.
 - **`source-tree.txt`** at repo root is stale and gitignored.
   Reconciliation is a follow-up, not scheduled.
-- **Doc B's `02_Phase_02_Correctness.md`** carries S003 and S004 only.
+- **Doc B's `Phase_02_Correctness.md`** carries S003 and S004 only.
   Window 19 had no Doc B session entry; the reorg's record is this
   handoff plus the commit messages.
 

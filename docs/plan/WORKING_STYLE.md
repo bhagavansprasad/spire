@@ -73,7 +73,7 @@ For the procedural checklist that accompanies this file, see
     reordering. Status and deviation notes only.
 
 13. **Doc B is split:**
-    - `00_Doc_B_Index.md` — snapshot, registers, test taxonomy, session
+    - `Doc_B_Index.md` — snapshot, registers, test taxonomy, session
       pointers, design pointers, dev/runtime, working-style.
     - `NN_Phase_NN_Name.md` — one file per phase, containing that
       phase's session entries and designs.
