@@ -32,9 +32,8 @@ rendered as:
     <contents>
     ```
 
-Bundle definitions live in `context_bundles.yaml` at the repo root. If that
-file is missing, the script falls back to built-in defaults (and writes
-the YAML out for you on first run, so you can edit it).
+Bundle definitions live in `context_bundles.yaml` at the repo root. The
+file is required; this tool has no in-code fallback.
 """
 
 from __future__ import annotations
