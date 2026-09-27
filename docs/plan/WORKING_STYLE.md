@@ -201,10 +201,25 @@ For the procedural checklist that accompanies this file, see
 ## Evidence standard for findings (S0–S11)
 
 Before anything is written into a findings log as a bug, the claim
-walks through S0–S11 in order. If a step fails, the claim stops at that
+walks through R and then S0–S11 in order. If a step fails, the claim stops at that
 step and is classified accordingly. The point is not caution for its
 own sake — it is that a wrong finding costs as much as a missed one,
 because a later session acts on it.
+
+**R — Reproduce the prompt.**
+Read the prompt end to end, exactly as it was written. Run it against
+the current pod. Run it again. Run the sibling prompt — the one nearest
+it in shape that passed. Capture all three runs to files (rule 15.1),
+paste the outputs.
+
+  - The prompt fails the same way it failed in the log → proceed to S0.
+  - The prompt now passes → the bug is closed as **not-reproducible**;
+    nothing further is walked. Cite the original run_id in the closure.
+  - The prompt fails intermittently → N≥20 runs before any
+    classification. This is the only case in which a rate may be quoted.
+
+Without R, a claim written from a stale log is a hypothesis. R is what
+makes it a bug.
 
 **S0 — State the claim in one sentence.**
 Either "X is a bug" or "X is not a bug." No other forms. "X looks
@@ -339,7 +354,7 @@ as ~14% is not formally excluded by 20 clean runs, but the audit's
 own threshold is N≥20 and empirical clean results at that N are a
 closed finding, not a suspended one.
 
-**The contract.** Every time an F-NNN is proposed, the steps S0–S11
+**The contract.** Every time an F-NNN is proposed, the steps R and S0–S11
 are walked in order and it is shown which passed. Any time the question
 "is this a bug?" is asked, the answer names the step, not a paragraph.
 
