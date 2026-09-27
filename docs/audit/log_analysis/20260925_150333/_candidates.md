@@ -65,4 +65,5 @@ Do not log to the findings log from this window.
           so the failure is specific to this combination of list + explicit
           fields + address.
 - related: F-001 (list_all flag on explicit list). F-001 adjacent.
-- status: candidate, not reproduced outside batch, S0-S8 not yet walked
+- status: promoted to F-052 (confirmed, S0-S11 walked 2026-09-27)
+- resolution: see findings/F-052.md
