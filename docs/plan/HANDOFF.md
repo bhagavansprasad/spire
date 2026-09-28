@@ -1,227 +1,136 @@
-# SPIRE — Session Handoff, 2026-09-24 (window 19)
+# SPIRE — Session Handoff, 2026-09-28 (window 23)
 
-**This file supersedes the window-18 handoff.** Window 18 closed the
-last two Phase 2 rows (F-045, Reg #30). Window 19 was a single-purpose
-session: the prompt-set reorg. Phase 3a has not been started.
+**This file supersedes the window-22 handoff.** Window 23 was a fix
+window: F-053 and F-055, both from the smoke-round log analysis, are
+fixed and merged. Phase 3a is still not started.
 
-**Read this first.** Then `docs/fixes/FIXES.md` (the playbook). The
-`plan` context bundle carries this file plus everything referenced
-below.
+**Read this first.** Then `docs/fixes/FIXES.md` (the playbook), then
+`docs/fixes/FIX_PLAN.md` — §5 is the closed Phase 2 ledger; §5.1 is
+the live Phase 3 ledger. The `plan` context bundle carries this file
+plus everything referenced below.
 
 ---
 
 ## Where we are
 
-**Branch:** `hardening-master` at `369cc63`.
+**Branch:** `hardening-master` at `dc61e42`.
 
-**Test suite:** not re-run this session. Last known good after the
-reorg's test-path fix: `tests/test_nl_parser_capability.py` — 101
-passed, 1 deselected. Full suite was 1229 passed / 1 skipped / 22
-deselected at window 18 close.
+**Test suite:** 1243 passed, 1 skipped, 22 deselected (4m00s), measured
+2026-09-28 after F-055 merged.
 
-**Pod:** `dabpqy`.
+**Pod:** dev instance (MCP 4001 / API 4002 / UI 4003).
 
-**Ledger:** FIX_PLAN §5 unchanged — Phase 2 closed 24/24. No new
-F-NNNs from this session.
-
----
-
-## What shipped in window 19
-
-Three commits on `hardening-master`, all pushed:
-
-- `aacf9b2` — `docs/prompt-sets/SURFACE.md`. Capability surface, tier
-  plan, legacy cross-walk. Stages 1+2 of the reorg.
-- `374afd3` — the reorg itself. `scripts/prompts/` moved to `prompts/`
-  at the repo root; new tiered structure; every live reference
-  patched.
-- `369cc63` — `.gitignore` gains `t_*.txt` (run-capture artifacts).
-
-### The reorg, in one paragraph
-
-Prompt sets are content, not build tooling. They moved out of
-`scripts/` to `prompts/` at the repo root — the location Doc A §10.3.1
-already specified for Phase 4a. The new tree has two axes: **modules
-and combinations** are folders, each holding three tiers
-(`smoke.txt` / `verify.txt` / `exhaust.txt`); **cross-cutting
-features** are flat files at the root, named `<tier>_<feature>.txt`.
-16 capabilities, 37 files, ~1,512 runnable prompts — roughly 3x the
-pre-reorg ~500.
-
-### What "the tiers" mean
-
-- **smoke** — alive. Does it work at all. Every prompt must answer.
-- **verify** — correct. Normal shapes, edges, refusals.
-- **exhaust** — stress. Every variation we know. Goal: find a crash.
-  If exhaust runs clean, the prompts are not exhaustive enough yet.
-
-### Capability surface
-
-Four modules: `supplier`, `payables`, `procurement`, `receivables`.
-Three combinations: `payables_supplier`, `payables_procurement`,
-`procurement_supplier`. Nine cross-cutting features: `columns`,
-`refusals`, `lifecycle`, `child_as_root`, `truncation`,
-`date_filters`, `fields_and_include`, `modes`, `dipstick`. Full
-inventory and per-capability tier plan in `docs/prompt-sets/SURFACE.md`
-§10.
-
-### Other files in the tree
-
-- `prompts/refusals/refusal_examples.txt` — renamed from
-  `10_refusal_examples.txt` and moved out of archive. It is a live
-  contract file: `tests/test_nl_parser_capability.py` asserts a
-  bijection between it and the guidance tables in `capability.py`.
-- `prompts/sme/testcases.txt` — external, verbatim, no tier.
-- `prompts/scorer/` — different format (`EXPECT ||| prompt`).
-  Not for `promptkit --run`.
-- `prompts/retest/prompts.txt` — disposition pending.
-- `prompts/archive/` — the pre-2026-09-24 sets `00`–`19`, the old
-  README, `mini.txt`. Forensic reference. Do not run.
+**Ledger:**
+- FIX_PLAN §5 (Phase 2) — closed 24/24, unchanged.
+- FIX_PLAN §5.1 (Phase 3) — F-052 closed-as-not-a-bug, F-053
+  verified (#174), F-054 closed-as-not-a-bug, F-055 verified (#175).
 
 ---
 
-## What's verified this session
+## What shipped in window 23
 
-- `tests/test_nl_parser_capability.py` — **101 passed, 1 deselected.**
-  Three tests were red when the file lived under `scripts/prompts/`
-  and the test still pointed there; the rename and the test's path
-  update restored them.
-- `prompts/dipstick/smoke.txt` — **6/6 clean.** All six depths
-  exercised end-to-end against the pod. The full run capture is not
-  committed (grep pattern `t_*.txt` in `.gitignore`); the six prompts
-  are in the set file itself.
-- `promptkit.py`'s default `--prompts-dir` resolves to `prompts/`;
-  the manifest at `scripts/manifests/promptkit_sets.yaml` lists all 49 sets and
-  is picked up correctly.
+**F-053** (#174, `e948b3d`) — `has_open_PO` missing from
+`_FILTER_SOURCE_NONEMPTY_SUFFIX`; `suppliers with open purchase orders`
+listed suppliers with zero open POs. Three-file fix: the registry
+entry; a computed-args branch in `plan_builders.py` sending
+`status='OPEN'`; and a Block 3 re-fetch step in `planner.py` so the
+anchor prompt's `Buyer` include still chains. Golden
+`suppliers_with_open_pos.txt` updated — the golden captured the bug.
+
+**F-055** (#175, `dc61e42`) — `invoices in the last 7 days` refused
+every run because the model converted days to fractional months
+(`{'months': 0.23}`). The sysprompt (`b_invoice_date.sysprompt`) and
+its byte-equality mirror (`context_assembly.py`) teach a rounding-up
+conversion. N=20 sweep: 20/20 `{'months': 1}`, 0 refusals.
+
+**Process doc updates:**
+- `WORKING_STYLE.md` rules 2.1 / 2.2 — "one command at a time" splits
+  on uncertainty, not on count; obvious commands run together.
+- `FIX_PLAN.md` §8 / §11.1 / §12 — V0 written and committed first
+  (before any source file); test-first with a failing commit; V7 uses
+  `git checkout HEAD~1` not `git stash`; §12 gains two session-start
+  boxes.
+
+---
 
 ## What's not done
 
-**Every other prompt set remains unexecuted.** 15 other smoke sets, 16
-verify sets, 16 exhaust sets — all built, none run. This is the next
-session's work; it is not a defect.
-
-**Phase 3a has not been started.** The prompt-coverage test
-(`tests/test_prompt_coverage.py`, Doc A §9.3.1) is still the next
-*design* action. The A/B/C decision about which surfaces to assert
-against remains open:
-
-- **A** — entity + filter checks only; record the field-coverage gap.
-- **B** — add the field check against the full prompt (tautological).
-- **C** — assert against `_ASSEMBLED_PREAMBLE` literally; fails today.
-
-Window 19 chose A as the honest floor; the decision was not
-formalized.
+- **Phase 3a — the prompt-coverage test design.** The A/B/C decision
+  from window 19 remains open. Not started.
+- **S11 expansions** from F-053 and F-055 — new prompts in
+  `supplier/exhaust`, `date_filters/verify`, `date_filters/exhaust`.
+  Recorded in each finding's S11 section.
+- **A new finding surfaced during F-053's V3.** The anchor prompt
+  `List US suppliers with open purchase orders, include the buyer`
+  returns `Synthesized response: (none)` — the synthesis output cap
+  is hit (`synthesize out≈7985`). Reproduces pre-fix and post-fix;
+  not caused by F-053. Not yet filed.
 
 ---
 
 ## Next action
 
-**Run the prompt sets.** The entry point is the manifest:
-
-    python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
-
-It runs all 49 sets in tier order — smoke, verify, corpus, exhaust.
-Comment out the exhaust block for a faster pass. Or run one set:
-
-    python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
-
-**Read the answers, not the tally.** A screen of "ran cleanly" once
-meant several prompts were being wrongly refused. Score each answer
-into pass / fail / wrong-but-no-error, and check specifically for:
-empty data behind confident prose, a page count stated as a total, a
-computation over a truncated sample stated as fact, customer-scoped
-results that never resolve an AccountNumber.
-
-Any failure becomes a new F-NNN by the standard S0–S8 discipline.
-
----
-
-## Standing rules for the prompt-set work
-
-- **The unit is the set.** A bug's V1 reproducer lands in the
-  capability it belongs to; it does not create its own file. The
-  `exhaust` tier is where reproducers live by default — they test an
-  edge that has already bitten.
-- **Do not add a single prompt as its own file.** Extend the
-  capability's file at the tier the prompt's depth warrants.
-- **Do not run a set without capturing to a file first.** Rule 15.1.
-- **Do not edit `prompts/archive/`.** Content preserved verbatim; it
-  is a forensic record.
-- **`SURFACE.md` is the source of truth for what exists.** If a new
-  capability is added to the code but not to SURFACE.md, the mapping
-  is out of date before the prompt is written.
+1. **File the anchor-prompt synthesis overrun** as a new F-NNN. The
+   symptom signature (`synthesize out≈7985` → empty answer) matches
+   the "Suppliers with their addresses" bug that
+   `build_supplier_records` closed. Walk R + S0–S11.
+2. **Phase 3a** — the prompt-coverage test design; choose A/B/C, then
+   implement.
+3. **S11 expansions** — extend each capability's tier files per the
+   findings' S11 sections.
 
 ---
 
 ## Working-style reminders that keep biting
 
-- **One command at a time.** Wait for output. Then next.
-- **Complete files, never fragments.** Whole file, one block.
-- **`~~~` for any outer fence whose content contains ` ``` `.** Rule 4.
-- **Every file edit is two cells (rule 15.3).** Cell 1: a program that
-  reads the file, checks, replaces, writes. Cell 2: shell commands
-  that read the file back from disk. Do not blend them.
-- **Long heredocs and `python - <<'EOF'` blocks are the way to land
-  multi-line edits.** Do not paste multi-line Python at the shell
-  prompt.
-- **Name a slow command's cost (rule 15.2).** Exhaust sets page full
-  collections.
-- **Ledger reconciliation on open (rule 16).**
-
-      gh pr list --state merged --limit 20 --json number,title,mergedAt \
-        --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
-      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/fixes/FIX_PLAN.md
-
-  Last merged PR is **#170**. Both should come back clean.
-- **`git stash` does not stash a committed change.** V7 against a
-  committed fix uses `git checkout HEAD~1 -- <path>` /
-  `git checkout HEAD -- <path>`.
-- **`t_*.txt` captures are gitignored.** Every prompt run writes one.
+- **Rule 2.1** — obvious commands run together; split only on
+  uncertainty.
+- **Rule 15.1** — capture complete output to a file first, then grep.
+- **Rule 15.2** — name a slow command's cost before handing it over.
+- **Rule 15.3** — edits are two cells: Python script, then shell
+  verification.
+- **Rule 16** — ledger reconciliation on open.
+- **V-standard** — V0 first (before any source file), test-first with
+  a failing commit, V7 via checkout not stash.
 
 ---
 
-## Commits on `hardening-master`, window 19 (newest first)
+## Commits on `hardening-master`, window 23 (newest first)
 
-    369cc63  gitignore: t_*.txt (run-capture artifacts)
-    374afd3  prompt-sets: move out of scripts/, tiered reorg, all paths updated
-    aacf9b2  prompt-sets: SURFACE.md — capability surface, tier plan, legacy cross-walk
+    dc61e42  Phase 3 — Fix F-055: days-based Invoice windows convert to
+             whole months (#175)
+    e948b3d  Phase 3 — Fix F-053: has_open_PO keeps only suppliers with
+             open POs (#174)
+    825ed37  context_bundles: add log_analysis.py, live findings,
+             smoke-round entries
 
-### Window 18, for reference
-
-    4b3737c  Reg #30: evidence capture for the closure
-    97bed63  Reg #30: closed as not-a-bug; residual latency deferred to Phase 6
-    2573e3c  endpoints ref: /purchaseOrders scan-order facts from F-045
-    6d5f76a  F-045: verified | #170
-    f77a093  Phase 2 — Fix F-045: created_since beats created_before;
-             date fetch gets an orderBy (#170)
-    ea4022c  handoff: remove the deprecated sibling; clean up its references
+The individual branch commits (before the squash merges) are preserved
+on the (now-deleted) `Phase3-Fix-F-053` and `Phase3-Fix-F-055` branches
+in the reflog only.
 
 ---
 
 ## Known doc-drift, recorded not fixed
 
 - **`docs/audit/findings-log.md`** and **`docs/fixes/evidence/F-0*.md`**
-  still quote `scripts/prompts/...` paths. These are append-only
-  forensic records; editing them would rewrite history. Read them with
-  the knowledge that the paths have moved.
+  quote `scripts/prompts/...` paths. Append-only forensic records;
+  editing would rewrite history.
 - **Doc A §9.3.1** cites `_ASSEMBLED_PREAMBLE` for Phase 3a. That name
-  still exists in `context_assembly.py`, but is the wrong surface for
-  the field-coverage check. Recorded in the open decision above.
+  is the wrong surface for the field-coverage check.
 - **`source-tree.txt`** at repo root is stale and gitignored.
-  Reconciliation is a follow-up, not scheduled.
-- **Doc B's `Phase_02_Correctness.md`** carries S003 and S004 only.
-  Window 19 had no Doc B session entry; the reorg's record is this
-  handoff plus the commit messages.
-
----
-
-
+- **`docs/phase-2/fixes/`** is where Phase 3 fix files live, despite
+  the directory name. The fix-machinery document is FIX_PLAN; the
+  finding is Phase 3; the mechanism is Phase 2's.
+- **F-053's V3 flagged a behaviour change** — the answer is now a
+  plain supplier list without per-supplier counts, matching F-010's
+  sibling. Deliberate, recorded in the fix file.
 
 ---
 
 ## SPIRE log analysis — where to read current progress
 
-Pointers only. Stable across windows. On-disk files are the source of truth.
+Pointers only. Stable across windows. On-disk files are the source of
+truth.
 
 - Round index:        `docs/audit/log_analysis_sessions/20260925_150333_smoke.md`
 - Per-set index:      `docs/audit/log_analysis_sessions/20260925_150333_smoke/_index.md`
@@ -234,7 +143,7 @@ Pointers only. Stable across windows. On-disk files are the source of truth.
 Resume protocol: read `_index.md`, find the first set still `pending`,
 extract that set, write `<set>.md`, update `_index.md`, continue.
 
-
+---
 
 ## SPIRE log analysis — current status and next
 
@@ -254,52 +163,38 @@ extract that set, write `<set>.md`, update `_index.md`, continue.
 | C-002 | observation, no F-NNN | - |
 | C-003 | confirmed | F-053 |
 | C-004 | closed-as-not-a-bug | F-052 |
+| C-005 | confirmed | F-055 |
 
 ### Findings
 
-- **F-052** - closed-as-not-a-bug. Columns list + non-column field
-  (`and address`). R: N=20 clean; the original failure was the
-  documented ~3% JSON-mode empty-draft mode.
-- **F-053** - confirmed. `suppliers with open purchase orders` lists
-  suppliers with 0 open POs; `has_open_PO` is missing from
-  `_FILTER_SOURCE_NONEMPTY_SUFFIX` in `src/spire/planner/registries.py`.
-- **F-054** - closed-as-not-a-bug (latent). `invoices in the last 30 days`
-  compiles to a one-sided date filter. Harm not reproducible; shape
-  is latent.
-- **F-055** - confirmed. `invoices in the last 7 days` refuses on
-  fractional-months conversion (`{'months': 0.23}`). Found during
-  F-054's sibling reproduction.
+- **F-052** — closed-as-not-a-bug. Columns list + non-column field
+  (`and address`). R: N=20 clean.
+- **F-053** — fixed, verified (#174). `has_open_PO` missing from
+  `_FILTER_SOURCE_NONEMPTY_SUFFIX`. Three-file fix.
+- **F-054** — closed-as-not-a-bug (latent). `invoices in the last 30
+  days` compiles to a one-sided date filter.
+- **F-055** — fixed, verified (#175). `last 7 days` refused on
+  fractional-months conversion. Sysprompt + mirror; N=20 sweep 20/20.
 
 ### Where things live
 
 - Findings: `docs/audit/findings/F-052.md` .. `F-055.md`
-- Run analysis: `docs/audit/log_analysis/20260925_150333/`
-- Plan: `docs/audit/log_analysis/_plan.md`
+- Fix files: `docs/phase-2/fixes/F-053.md`, `F-055.md`
+- Run analysis: `docs/audit/log_analysis_sessions/20260925_150333_smoke/`
+- Plan: `docs/audit/SPIRE_log_analysis_plan.md`
 - Archive (frozen): `docs/audit/archive/phase-1/`
-- PR for the smoke round: #172
-- PR for the generalization: #173
-  (branch `Phase3-Log-Analysis-Generalization`, tier-agnostic
-  pipeline; script + plan + `_candidates.md` drift fix)
+- Smoke PR: #172
+- Generalization PR: #173 (merged 2026-09-28)
 
 ### Next window
 
-The smoke gate is closed. The generalization (PR #173) is done and
-in review. Open items carried to the next window:
-
-1. **F-053** - fix on a branch per rule 7. Registry entry is one
-   line; regression test asserts no zero-count rows on the
-   `suppliers with open purchase orders` prompt.
-2. **F-055** - fix on a branch per rule 7. Sysprompt edit in
-   `b_invoice_date.sysprompt`; regression test asserts the plan
-   produces a valid filter for `last 7 days`.
-3. **Phase 3a** - the prompt-coverage test design
-   (`tests/test_prompt_coverage.py`, Doc A 9.3.1). The A/B/C
-   decision is still open.
-4. **S11 expansions** - non-multiple-of-30 day prompts in
-   `date_filters/`, and the four `last N` sibling prompts already
-   verified. See each F-NNN's S11 section.
+1. **New finding** — the anchor-prompt synthesis overrun. See "Next
+   action" above.
+2. **Phase 3a** — prompt-coverage test design.
+3. **S11 expansions** from F-053 and F-055.
 
 <!-- END SPIRE-LOG-ANALYSIS-STATUS -->
 
+---
 
 *End of handover.*
