@@ -402,6 +402,26 @@ SPIRE_MCP_PORT="$MCP_PORT" \
     > "$LOG_DIR/mcp.log" 2>&1 &
 MCP_PID=$!
 
+# Gate the API spawn on MCP's port being bound.
+#
+# Why: fastmcp --reload forks a worker that takes a couple of seconds to
+# bind the port. The API's lifespan hook connects to MCP ONCE, at
+# startup; if the port isn't up yet, the connect fails and the failure is
+# cached as a permanent pipeline_error. /status then reports
+# "pipeline_ready": false for the life of the process and the UI shows
+# the "Not connected" banner, even though all three services are running.
+# Waiting here removes the race by construction. If MCP never binds we
+# still start the API -- its own timeout will report a clearer error than
+# a missing service would.
+_mcp_deadline=$((SECONDS + BIND_TIMEOUT_SECS))
+while [ "$SECONDS" -lt "$_mcp_deadline" ]; do
+  [ -n "$(pids_on_port "$MCP_PORT")" ] && break
+  sleep 0.5
+done
+if [ -z "$(pids_on_port "$MCP_PORT")" ]; then
+  echo "spire.sh: MCP did not bind within ${BIND_TIMEOUT_SECS}s; starting API anyway" >&2
+fi
+
 SPIRE_API_PORT="$API_PORT" \
 SPIRE_MCP_URL="http://127.0.0.1:$MCP_PORT/mcp" \
 SPIRE_UI_ORIGIN="http://localhost:$UI_PORT" \

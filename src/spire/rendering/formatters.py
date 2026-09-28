@@ -1580,3 +1580,53 @@ def render_answer(state: dict, menu, emit) -> None:
         ))
         emit("")
     emit(_format_projected_table(outputs, fields, unresolved, available, entity))
+
+
+
+def render_cli_stdout(state: dict, menu) -> str:
+    """Return the text the CLI prints to stdout for this pipeline state.
+
+    Single source of truth: promptkit.py emits through this function,
+    and the API hands the same string to the UI, so the two cannot
+    disagree about what the CLI said.
+    """
+    if state.get("refusal"):
+        from spire.nl_parser.capability import capability_message
+        return capability_message(state["refusal"], menu)
+
+    if state.get("error") and state.get("plan_refusal"):
+        return f"REFUSED (planner guard): {state['error']}"
+
+    if state.get("error"):
+        return f"ERROR: {state['error']}"
+
+    outputs = state.get("outputs") or {}
+    fields = state["intent"].fields
+    unresolved = state["intent"].unresolved_fields
+    synth_failed = state.get("synth_failed")
+
+    parts: list[str] = []
+    if not (fields or unresolved):
+        parts.append(_format_synthesized(state.get("response")))
+    else:
+        entity = state["intent"].target_entity
+        available = menu.available_columns(entity)
+        if not fields:
+            pass
+        elif synth_failed:
+            parts.append(
+                "Answer summary: (skipped - result too large to "
+                "summarize; showing the table only)"
+            )
+            parts.append("")
+        else:
+            parts.append(_format_synthesized(
+                state.get("response"),
+                summary_only=not state["intent"].include,
+            ))
+            parts.append("")
+        parts.append(_format_projected_table(
+            outputs, fields, unresolved, available, entity,
+        ))
+
+    return "\n".join(parts)

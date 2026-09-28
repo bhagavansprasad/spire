@@ -86,7 +86,16 @@ class ErrorAnswer(BaseModel):
     error: ErrorDetail
 
 
-Answer = Union[TextAnswer, RefusalAnswer, PartialAnswer, ErrorAnswer]
+class CLIAnswer(BaseModel):
+    """Raw terminal text - the CLI's stdout, verbatim.
+
+    The UI renders this in a monospace block and touches nothing else:
+    no markdown, no dataframe, no per-section widgets.
+    """
+    text: str
+
+
+Answer = Union[TextAnswer, RefusalAnswer, PartialAnswer, ErrorAnswer, CLIAnswer]
 
 
 # ── Envelopes ────────────────────────────────────────────────────────
@@ -94,7 +103,7 @@ Answer = Union[TextAnswer, RefusalAnswer, PartialAnswer, ErrorAnswer]
 
 class ResponseEnvelope(BaseModel):
     request_id: str
-    kind: Literal["text", "table", "refusal", "partial", "error"]
+    kind: Literal["text", "table", "refusal", "partial", "error", "cli"]
     answer: Answer
     metadata: Metadata
 
