@@ -190,7 +190,7 @@ section so the Phase 2 24-row table stays as the audit-closure record.
 | F-052 | wrong-refusal (closed-as-not-a-bug) | — (stochastic parse; N=20 clean) | closed-as-not-a-bug | — | 2026-09-27 |
 | F-053 | wrong-data | `planner/registries.py`, `plan_builders.py`, `planner.py` | verified | #174 | 2026-09-28 |
 | F-054 | wrong-data (latent) | — (closed-as-not-a-bug) | closed-as-not-a-bug | — | 2026-09-27 |
-| F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | in-progress | #175 | 2026-09-28 |
+| F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | verified | #175 | 2026-09-28 |
 
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
@@ -281,10 +281,17 @@ the fix is over- or under-scoped — fix before merging.
 
 One bug at a time. The order is §4.
 
-1. **Open the fix file.** Create `docs/phase-2/fixes/F-NNN.md` from the
-   template in §11. Read the F-NNN entry in the findings log.
+1. **Open the fix file FIRST.** Create `docs/phase-2/fixes/F-NNN.md`
+   from the template in §11. Read the F-NNN entry in the findings log.
+   Write V0 — the one-sentence fix statement — before opening any
+   source file. If V0 cannot be stated in one sentence, the finding
+   is not yet understood; reread the entry and stop. Commit the
+   empty file (header + V0 only) before branching.
 2. **Branch.** `phase-2-fix-F-NNN-<slug>` off `hardening-master`.
-3. **Write the test first.** It must fail. Commit the failing test.
+3. **Write the test first, commit it, run it, see it fail** on the
+   current tree. The failing commit is the V7 evidence base — the
+   ordering is what makes V7's red meaningful rather than a
+   retroactive stash. Then step 4.
 4. **Write the fix.** Smallest change that makes the test pass.
 5. **Run V0–V9.** Record each output in the fix file.
 6. **Update the audit.** The B-row (and any §D row) becomes "fixed in
@@ -386,7 +393,11 @@ Saved as `docs/phase-2/fixes/F-NNN.md` when a bug is started.
 
     ## V7 — Test fails without the fix
 
-    <stash + run + red; restore + run + green>
+    <git checkout HEAD~1 -- <fixed file>; run test; red;
+     git checkout HEAD -- <fixed file>; run test; green>
+    (F-045's fix file established this shape after a stash attempt
+     silently stashed nothing. `git stash` does not stash a
+     committed change; use the checkout pair.)
 
     ## V8 — N≥20 (if applicable)
 
@@ -441,9 +452,12 @@ At the start of every Phase 2 window:
 - [ ] `git log --oneline -3` — HEAD on `hardening-master`
 - [ ] `git status` — clean tree
 - [ ] `pytest -q` — 1011 passed / 22 deselected (or pod-down equivalent)
+- [ ] **Read §8 in full. Walk its steps in order. Do not skip to the fix.**
 - [ ] Read §5 — pick the first `not-started` row in §4 order
 - [ ] Read that F-NNN entry in the findings log
-- [ ] Open the fix file from §11.1 template
+- [ ] **Open the fix file from the §11.1 template and commit it
+      (header + V0 only) BEFORE branching.** The file in git history
+      is what makes the workflow order hard to skip.
 - [ ] Branch off `hardening-master`
 
 ---
