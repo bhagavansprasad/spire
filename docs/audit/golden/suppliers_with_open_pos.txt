@@ -1,10 +1,8 @@
 [llm] provider=gemini model=gemini-3.5-flash
-[llm] stage=classify in=545 out=115 total=660
-[llm] provider=gemini model=gemini-3.5-flash
-[llm] stage=classify in=545 out=115 total=660
-Router: modules=['procurement', 'supplier']
-[llm] stage=parse in=4978 out=534 total=5512
-[cache] HIT   cached=4970  fresh=8  total_in=4978
+[llm] stage=classify in=582 out=136 total=718
+Router: modules=['supplier', 'procurement']
+[llm] stage=parse in=8166 out=383 total=8549
+[cache] HIT   cached=8158  fresh=8  total_in=8166
 [debug] shape = None
 Intent:
   target_entity: Supplier
@@ -19,11 +17,12 @@ Plan:
     dedupe_by:      (none)
     output_name:    suppliers
   Step 2: search_purchase_orders
-    tool_args:      {'supplier_id': '$iteration_value'}
+    tool_args:      {'supplier_id': '$iteration_value', 'status': 'OPEN'}
     iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierId'}
-    client_filters: [{'field': 'StatusCode', 'op': 'equals', 'value': 'OPEN'}]
+    client_filters: (none)
     dedupe_by:      (none)
-    output_name:    open_pos
+    output_name:    suppliers_has_open_PO
+    filter_source_when_nonempty: True
 
 Outputs:
   suppliers: 25 record(s)
@@ -31,72 +30,63 @@ Outputs:
         ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
     [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
         ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
-    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric Rushi', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
         ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
     [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
         ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
     [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
         ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
     ... (20 more)
-  open_pos: 67 record(s)
-    [1] {'POHeaderId': 300000296208759, 'OrderNumber': 'US165029', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
-        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
-    [2] {'POHeaderId': 300000092003108, 'OrderNumber': '162306', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
-        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
-    [3] {'POHeaderId': 300000051378704, 'OrderNumber': '162090', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
-        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
-    [4] {'POHeaderId': 300000052537704, 'OrderNumber': '162092', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
-        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
-    [5] {'POHeaderId': 44, 'OrderNumber': '162080', 'Status': 'Open', 'StatusCode': 'OPEN', 'Supplier': 'Lee Supplies', 'SupplierId': 300000047414503}
-        ... +6 more field(s): Buyer, BuyerId, CreationDate, CurrencyCode, Description, Ordered
-    ... (62 more)
+  suppliers_has_open_PO: 17 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047837244, 'SupplierNumber': '1272', 'Supplier': 'Consolidated Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (12 more)
 
 Answer:
-Showing 25 of 431 suppliers. These 25 suppliers have 67 open purchase orders between them.
+Examined 25 of 6,532 suppliers. Of those 25, 17 match the filter.
 
 Suppliers:
-  Supplier                                   | SupplierId      | SupplierNumber | Open POs | Buyers                                         
-  -------------------------------------------+-----------------+----------------+----------+------------------------------------------------
-  Lee Supplies                               | 300000047414503 | 1252           |        6 | Roth, Calvin, Gee, May                         
-  JGA                                        | 300000047414635 | 1254           |        5 | Roth, Calvin                                   
-  US Gas and Electric Rushi                  | 300000047507113 | 1256           |        0 | —                                              
-  Allied Manufacturing                       | 300000047572113 | 1265           |        1 | Roth, Calvin                                   
-  Midtown Computer Supplies                  | 300000047572163 | 1266           |        3 | Roth, Calvin                                   
-  Consolidated Supplies                      | 300000047837244 | 1272           |       12 | Morgan, Liz, Fox, Dan, Bird, James             
-  Progressive Corp                           | 300000049521222 | 1274           |        1 | Fox, Dan                                       
-  Masson Inc                                 | 300000051065858 | 1277           |       15 | Grande, Marc, Sonier, Michel, Valence, Caroline
-  RSM                                        | 300000051066029 | 1278           |        0 | —                                              
-  Utilitaire Inc                             | 300000051066302 | 1281           |        0 | —                                              
-  Shangduo Inc                               | 300000075469541 | 1289           |       10 | Tan, Yao, Lin, Yulan                           
-  Nihon Communications                       | 300000101110596 | 1301           |        0 | —                                              
-  Ente Idrocarburi                           | 300000115609124 | 1306           |        0 | —                                              
-  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           |        0 | —                                              
-  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           |        0 | —                                              
-  Medtronic                                  | 300000116498267 | 1322           |        1 | Procurement, Camille                           
-  Siemens Medical Solutions                  | 300000116498411 | 1324           |        1 | Procurement, Camille                           
-  Cardinal Health                            | 300000116498478 | 1325           |        1 | Tulane, Casey                                  
-  Lagring Systems                            | 300000116707121 | 1327           |        1 | Roth, Calvin                                   
-  Servicios Reunidos, SL                     | 300000131904822 | 1336           |        0 | —                                              
-  Misson Corp                                | 300000131933370 | 1339           |        0 | —                                              
-  BD Medical                                 | 300000133943993 | 1342           |        3 | Procurement, Camille, Tulane, Casey            
-  Staffing Services                          | 300000047414571 | 1253           |        2 | Roth, Calvin                                   
-  Dell Inc.                                  | 300000047414679 | 1255           |        4 | Roth, Calvin, Brown, Casey                     
-  Howell Engineering Inc.                    | 300000047507170 | 1257           |        1 | Roth, Calvin                                   
+  Supplier                  | SupplierId      | SupplierNumber
+  --------------------------+-----------------+---------------
+  Lee Supplies              | 300000047414503 | 1252          
+  JGA                       | 300000047414635 | 1254          
+  Allied Manufacturing      | 300000047572113 | 1265          
+  Midtown Computer Supplies | 300000047572163 | 1266          
+  Consolidated Supplies     | 300000047837244 | 1272          
+  Progressive Corp          | 300000049521222 | 1274          
+  Masson Inc                | 300000051065858 | 1277          
+  Utilitaire Inc            | 300000051066302 | 1281          
+  Shangduo Inc              | 300000075469541 | 1289          
+  Medtronic                 | 300000116498267 | 1322          
+  Siemens Medical Solutions | 300000116498411 | 1324          
+  Cardinal Health           | 300000116498478 | 1325          
+  Lagring Systems           | 300000116707121 | 1327          
+  BD Medical                | 300000133943993 | 1342          
+  Staffing Services         | 300000047414571 | 1253          
+  Dell Inc.                 | 300000047414679 | 1255          
+  Howell Engineering Inc.   | 300000047507170 | 1257          
 
 Truncation:
-  - suppliers: 431 total in source; 25 returned.
+  - suppliers: 6532 total in source; 25 returned.
 
 ─── Tip ───
-Reading all 431 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+Reading all 6,532 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
 
 Summary:
   Steps planned:        2
-  Records returned:     92 (across all steps)
-  Final raw output:     67 record(s) under 'open_pos'
-  Synthesized answer:   25 record(s)
+  Records returned:     42 (across all steps)
+  Final raw output:     17 record(s) under 'suppliers_has_open_PO'
+  Synthesized answer:   17 record(s)
 Token usage:
-  classify     in=    545  out=    115  total=    660
-  classify     in=    545  out=    115  total=    660
-  parse        in=   4978  out=    534  total=   5512
-  TOTAL        in=   6068  out=    764  total=   6832
+  classify     in=    582  out=    136  total=    718
+  parse        in=   8166  out=    383  total=   8549
+  TOTAL        in=   8748  out=    519  total=   9267
 

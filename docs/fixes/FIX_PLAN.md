@@ -179,6 +179,19 @@ States: `not-started` → `in-progress` → `fixed` → `verified` → `closed`.
 | F-051 | missing-projection | 2 | `scripts/promptkit.py`, `scripts/run_prompt_set.py`, `scripts/run_graph.py`, `rendering/formatters.py` | verified | #169 | 2026-09-24 |
 | F-044 | crash | 3 | `nl_parser/draft.py` | closed | #158 | 2026-09-22 |
 
+### 5.1 Phase 3 findings ledger
+
+Findings surfaced after the Phase 1 audit closed — the prompt-set
+runs and log-analysis rounds. Same states, same discipline, its own
+section so the Phase 2 24-row table stays as the audit-closure record.
+
+| ID | Kind | Fix site | State | PR | Date |
+|---|---|---|---|---|---|
+| F-052 | wrong-refusal (closed-as-not-a-bug) | — (stochastic parse; N=20 clean) | closed-as-not-a-bug | — | 2026-09-27 |
+| F-053 | wrong-data | `planner/registries.py`, `plan_builders.py`, `planner.py` | in-progress | #174 | 2026-09-28 |
+| F-054 | wrong-data (latent) | — (closed-as-not-a-bug) | closed-as-not-a-bug | — | 2026-09-27 |
+| F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | not-started | — | — |
+
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
 This session (`_01`) closed F-002. The `NN` counts windows, not

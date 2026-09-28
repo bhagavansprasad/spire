@@ -547,6 +547,15 @@ def _build_iteration_args_with_computed(
         args["classification"] = cls
         return args
 
+    if intent_filter_type == "has_open_PO":
+        # F-053. Presence flag: the parent is kept when the child
+        # call returns at least one open PO. The status filter rides
+        # as a server-side tool_arg (search_purchase_orders sends
+        # StatusCode='OPEN'), so an empty child result means genuinely
+        # no open POs, not "some POs, none matching a client filter".
+        args["status"] = "OPEN"
+        return args
+
     # Other filter types with computed args would dispatch here.
     raise NotImplementedError(
         f"Computed iteration args not implemented for filter type "
