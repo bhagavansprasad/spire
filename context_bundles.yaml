@@ -38,6 +38,8 @@ bundles:
   - docs/design/diagrams/02_kg_as_preLLM.puml
   - docs/design/diagrams/03_static_kg_summary_prompt.puml
   - docs/design/diagrams/04_Hybrid_kg.puml
+  - .gitignore
+  - docs/README.md
 
   # ── the master plan + its append-only status log ──
   # This bundle is exactly what a new window needs to resume work.
@@ -77,6 +79,28 @@ bundles:
   - docs/audit/findings/F-053.md
   - docs/audit/findings/F-054.md
   - docs/audit/findings/F-055.md
+  - docs/phase-2/fixes/F-053.md
+  - docs/phase-2/fixes/F-055.md
+  - docs/audit/log_analysis/20260925_150333/_index.md
+  - docs/audit/log_analysis/20260925_150333/_action_items.md
+  - docs/audit/log_analysis/20260925_150333/_touched.md
+  - docs/audit/log_analysis/20260925_150333/_step6_regression.md
+  - docs/audit/log_analysis/20260925_150333/child_as_root.md
+  - docs/audit/log_analysis/20260925_150333/columns.md
+  - docs/audit/log_analysis/20260925_150333/date_filters.md
+  - docs/audit/log_analysis/20260925_150333/dipstick.md
+  - docs/audit/log_analysis/20260925_150333/fields_and_include.md
+  - docs/audit/log_analysis/20260925_150333/lifecycle.md
+  - docs/audit/log_analysis/20260925_150333/modes.md
+  - docs/audit/log_analysis/20260925_150333/payables.md
+  - docs/audit/log_analysis/20260925_150333/payables_procurement.md
+  - docs/audit/log_analysis/20260925_150333/payables_supplier.md
+  - docs/audit/log_analysis/20260925_150333/procurement.md
+  - docs/audit/log_analysis/20260925_150333/procurement_supplier.md
+  - docs/audit/log_analysis/20260925_150333/receivables.md
+  - docs/audit/log_analysis/20260925_150333/refusals.md
+  - docs/audit/log_analysis/20260925_150333/supplier.md
+  - docs/audit/log_analysis/20260925_150333/truncation.md
   - docs/design/FEATURES.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
@@ -460,6 +484,9 @@ bundles:
   - tests/test_f003_modes_reachable.py
   # F-045 added 2026-09-24 (window 18, PR #170).
   - tests/test_f045_created_since_priority.py
+  # F-053 and F-055 added 2026-09-28 (window 23, PR #174/#175).
+  - tests/test_f053_open_po_filter.py
+  - tests/test_f055_days_conversion.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
