@@ -34,11 +34,12 @@ aged purchase orders
 purchase orders that are more than 6 months old
 
 # ====================================================================
-# C. PO — CreationDate relative, RECENT direction (3)
+# C. PO — CreationDate relative, RECENT direction (4)
 # ====================================================================
 purchase orders in the last 12 months
 purchase orders in the last 6 months
 purchase orders from the last year
+purchase orders created in the last 7 days
 
 # ====================================================================
 # D. PO — LastUpdateDate OLDER (F-047, 4)
@@ -85,3 +86,9 @@ invoices older than 1 year
 invoices more than 12 months old
 invoices stale
 invoices in the last 30 days
+
+# ====================================================================
+# I. Day-count conversion (F-055)
+# ====================================================================
+invoices in the last 7 days
+invoices in the last 14 days

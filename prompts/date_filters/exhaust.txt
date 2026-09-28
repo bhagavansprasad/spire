@@ -120,6 +120,12 @@ invoices from the last year
 invoices created in the last 30 days
 invoices created in the last 6 months
 invoices created in the last 12 months
+invoices in the last 1 day
+invoices in the last 7 days
+invoices in the last 14 days
+invoices in the last 21 days
+invoices in the last 45 days
+invoices in the last 90 days
 
 # ====================================================================
 # H. Composite — supplier + date
