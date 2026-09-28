@@ -62,14 +62,28 @@ from spire.synthesizer.synthesizer import (
 
 @pytest.fixture
 def sample_outputs() -> dict[str, list[dict]]:
-    """Realistic executor output for the original Track A prompt."""
+    """Executor output shaped to reach the LLM path.
+
+    Two supplier buckets whose names are deliberately NOT in a
+    source/suffix relationship, plus PO and buyer buckets. No
+    local builder in synthesize_response claims this shape, so
+    the LLM-path tests below reach the LLM — which is what they
+    exercise.
+
+    The second bucket was named "us_suppliers_no_recent_invoices"
+    before F-056. That name forms a {source}_{suffix} pair with
+    the first bucket, which is exactly the pattern F-053's plan
+    produces for the anchor prompt. F-056 added a local builder
+    for that shape, so the fixture accidentally stopped reaching
+    the LLM. Renamed to break the prefix relationship.
+    """
     return {
         "us_suppliers": [
             {"SupplierId": 100, "SupplierNumber": "S100", "Supplier": "Acme", "MatchedCountry": "US"},
             {"SupplierId": 200, "SupplierNumber": "S200", "Supplier": "Beta", "MatchedCountry": "US"},
             {"SupplierId": 300, "SupplierNumber": "S300", "Supplier": "Gamma", "MatchedCountry": "US"},
         ],
-        "us_suppliers_no_recent_invoices": [
+        "filtered_suppliers": [
             {"SupplierId": 100, "SupplierNumber": "S100", "Supplier": "Acme", "MatchedCountry": "US"},
             {"SupplierId": 300, "SupplierNumber": "S300", "Supplier": "Gamma", "MatchedCountry": "US"},
         ],

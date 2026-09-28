@@ -155,6 +155,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_suppliers_with_sites,
     _supplier_with_classifications,
     build_suppliers_with_classifications,
+    _supplier_pos_buyers,
+    build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -806,6 +808,59 @@ def synthesize_response(
         summary = (
             f"Showing {examined} of {total_text} suppliers. "
             f"These {examined} suppliers have {total_open} {po_word} between them."
+        )
+        supplier_filters = _entity_level_filter_types().get("Supplier", set())
+        tip = build_narrowing_tip(
+            {ft for ft in supplier_filters if ft != "by_id"},
+            total_available,
+            entity_label="suppliers",
+        )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+            narrowing_tip=tip,
+        )
+
+    # F-056: the F-053 four-bucket shape. The two-bucket detectors above
+    # already handle source + filtered; this handles source + filtered +
+    # refetched POs + buyers, which is what the anchor prompt's plan
+    # produces. Without this branch the four-bucket shape fell through to
+    # the LLM, which was asked to transcribe 183 records (25 suppliers +
+    # 17 filtered + 130 POs + 11 buyers) and hit its output-token cap --
+    # the "Synthesized response: (none)" fallback the user saw. Local
+    # build removes the LLM call entirely, so the overrun cannot occur.
+    supplier_pos_buyers = (
+        _supplier_pos_buyers(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_pos_buyers is not None:
+        source_bucket, supplier_bucket, po_bucket, buyer_bucket = (
+            supplier_pos_buyers
+        )
+        source_rows = outputs[source_bucket]
+        supplier_rows = outputs[supplier_bucket]
+        po_rows = outputs[po_bucket]
+        buyer_rows = outputs[buyer_bucket]
+        records = build_suppliers_with_open_pos_and_buyers(
+            supplier_rows, po_rows, buyer_rows
+        )
+        total_available, notes = _local_truncation(
+            source_bucket, source_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(source_rows)
+        shown = len(supplier_rows)
+        total_open = sum(r.open_po_count or 0 for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        po_word = (
+            "open purchase order" if total_open == 1 else "open purchase orders"
+        )
+        summary = (
+            f"Examined {examined} of {total_text} suppliers. "
+            f"Of those {examined}, {shown} have open purchase orders, "
+            f"with {total_open} {po_word} between them."
         )
         supplier_filters = _entity_level_filter_types().get("Supplier", set())
         tip = build_narrowing_tip(
