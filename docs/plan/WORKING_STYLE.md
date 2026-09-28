@@ -18,6 +18,32 @@ For the procedural checklist that accompanies this file, see
    a command fails mid-block, the remaining commands fire against an
    unintended state.
 
+2.1. **"One command at a time" splits on uncertainty, not on count.**
+    Rule 2's "block of commands" means a block where a later command's
+    meaning depends on an earlier one's output. Commands whose outcome
+    is known in advance — `git checkout -b`, `git add <path>`,
+    `git commit`, `git stash pop`, `git branch`, `git status` on a
+    clean tree — do not qualify. They belong in the same cell as the
+    work they surround.
+
+    The reason rule 2 exists is that a failed command mid-block fires
+    the rest against an unintended state. `git checkout -b` either
+    creates the branch or fails loudly; there is no partial state for
+    the next command to trip over. Split only what can leave the tree
+    in a state the next command would misread.
+
+    What DOES take its own cell: a test run, a grep whose result
+    decides whether a fix landed, a build — any command whose
+    next-step meaning changes if the output surprises you.
+
+2.2. **The user pastes once per cell when the shape is obvious.**
+    When the commands in a cell are all obvious (2.1), the user runs
+    them together and returns ONE output block — not one per
+    command, not "paste that, then paste this". Do not ask for the
+    output of a command whose result is predetermined. The user reads
+    their own terminal; they paste back when the shape of the output
+    determines what you hand them next.
+
 3. **Complete files, never fragments.** When producing a file, produce
    the whole file in one block. Never "replace section X with Y" or
    "insert this between lines N and M". If a change is small, still
