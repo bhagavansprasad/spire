@@ -276,21 +276,25 @@ extract that set, write `<set>.md`, update `_index.md`, continue.
 - Run analysis: `docs/audit/log_analysis/20260925_150333/`
 - Plan: `docs/audit/log_analysis/_plan.md`
 - Archive (frozen): `docs/audit/archive/phase-1/`
-- PR for this branch: #172
+- PR for the smoke round: #172
+- PR for the generalization: #173
+  (branch `Phase3-Log-Analysis-Generalization`, tier-agnostic
+  pipeline; script + plan + `_candidates.md` drift fix)
 
 ### Next window
 
-The smoke gate is closed. Open items carried to the next window:
+The smoke gate is closed. The generalization (PR #173) is done and
+in review. Open items carried to the next window:
 
-1. **Phase 3a** - the prompt-coverage test design
-   (`tests/test_prompt_coverage.py`, Doc A 9.3.1). The A/B/C
-   decision is still open.
-2. **F-053** - fix on a branch per rule 7. Registry entry is one
+1. **F-053** - fix on a branch per rule 7. Registry entry is one
    line; regression test asserts no zero-count rows on the
    `suppliers with open purchase orders` prompt.
-3. **F-055** - fix on a branch per rule 7. Sysprompt edit in
+2. **F-055** - fix on a branch per rule 7. Sysprompt edit in
    `b_invoice_date.sysprompt`; regression test asserts the plan
    produces a valid filter for `last 7 days`.
+3. **Phase 3a** - the prompt-coverage test design
+   (`tests/test_prompt_coverage.py`, Doc A 9.3.1). The A/B/C
+   decision is still open.
 4. **S11 expansions** - non-multiple-of-30 day prompts in
    `date_filters/`, and the four `last N` sibling prompts already
    verified. See each F-NNN's S11 section.
