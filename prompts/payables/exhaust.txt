@@ -64,6 +64,8 @@ invoices from the last year
 invoices created in the last 12 months
 invoices within the past 30 days
 invoices within the past 6 months
+invoices in the last 7 days
+invoices in the last 14 days
 
 # ====================================================================
 # D. Absolute date phrasings

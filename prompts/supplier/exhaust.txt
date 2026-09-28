@@ -54,6 +54,7 @@ suppliers with Kbis
 # has_invoice_over_amount — keeps suppliers with at least one qualifying invoice.
 suppliers with invoice amount greater than 10000
 suppliers who invoiced more than 50000
+suppliers with an invoice over 10000
 
 # has_open_PO — keeps suppliers with at least one open PO.
 suppliers with open purchase orders
