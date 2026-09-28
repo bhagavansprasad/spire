@@ -74,7 +74,12 @@ def anchor_intent() -> Intent:
 def anchor_plan() -> Plan:
     """
     The plan that generate_plan(anchor_intent) must eventually produce.
-    Mirrors the worked example in the original planner design.
+
+    FOUR steps as of F-053 (was three). The parent-keeping filter
+    (has_open_PO) does not advance previous_entity to PurchaseOrder —
+    it keeps Supplier — so Block 3 inserts a re-fetch step (Step 3)
+    that pulls the surviving suppliers' POs before the Buyer include
+    can chain from them.
     """
     return [
         Step(
@@ -89,16 +94,27 @@ def anchor_plan() -> Plan:
         Step(
             step_id=2,
             tool_name="search_purchase_orders",
-            tool_args={"supplier_id": "$iteration_value"},
+            tool_args={"supplier_id": "$iteration_value", "status": "OPEN"},
             iterate_over={"from_step": "us_suppliers", "field": "SupplierId"},
-            client_filters=[
-                {"field": "StatusCode", "op": "equals", "value": "OPEN"},
-            ],
+            client_filters=[],
+            output_name="us_suppliers_has_open_PO",
+            output_dedupe_by=None,
+            filter_source_when_nonempty=True,
+        ),
+        Step(
+            step_id=3,
+            tool_name="search_purchase_orders",
+            tool_args={"supplier_id": "$iteration_value", "status": "OPEN"},
+            iterate_over={
+                "from_step": "us_suppliers_has_open_PO",
+                "field": "SupplierId",
+            },
+            client_filters=[],
             output_name="open_pos",
             output_dedupe_by=None,
         ),
         Step(
-            step_id=3,
+            step_id=4,
             tool_name="get_buyer",
             tool_args={"buyer_id": "$iteration_value"},
             iterate_over={"from_step": "open_pos", "field": "BuyerId"},
@@ -178,13 +194,19 @@ def test_plan_is_a_list_of_steps(anchor_plan: Plan) -> None:
     """Plan is just list[Step]; tests confirm the alias works."""
     assert isinstance(anchor_plan, list)
     assert all(isinstance(s, Step) for s in anchor_plan)
-    assert len(anchor_plan) == 3
+    assert len(anchor_plan) == 4
 
 
 def test_anchor_plan_tool_names_match_kg(anchor_plan: Plan) -> None:
-    """Tool names referenced in the plan must be the MCP tools we have."""
+    """Tool names referenced in the plan must be the MCP tools we have.
+
+    F-053 added a fourth step: a second search_purchase_orders that
+    re-fetches the surviving suppliers' POs so the Buyer include can
+    chain. Same tool, different output bucket (open_pos vs
+    us_suppliers_has_open_PO)."""
     expected_tools = [
         "search_suppliers",
+        "search_purchase_orders",
         "search_purchase_orders",
         "get_buyer",
     ]
@@ -195,22 +217,30 @@ def test_iteration_value_sentinel_used(anchor_plan: Plan) -> None:
     """
     Iterating steps use the '$iteration_value' sentinel in tool_args
     (the Option-b choice from 2b).
+
+    F-053 added Step 3 (the PO refetch); the Buyer lookup moved to
+    Step 4.
     """
     step2 = anchor_plan[1]
     step3 = anchor_plan[2]
+    step4 = anchor_plan[3]
     assert step2.tool_args["supplier_id"] == "$iteration_value"
-    assert step3.tool_args["buyer_id"] == "$iteration_value"
+    assert step3.tool_args["supplier_id"] == "$iteration_value"
+    assert step4.tool_args["buyer_id"] == "$iteration_value"
 
 
-def test_step3_dedupes_on_join_field(anchor_plan: Plan) -> None:
-    """Buyer lookup must dedupe BuyerId before iterating, per the design."""
-    step3 = anchor_plan[2]
-    assert step3.output_dedupe_by == "BuyerId"
+def test_step4_dedupes_on_join_field(anchor_plan: Plan) -> None:
+    """Buyer lookup must dedupe BuyerId before iterating, per the design.
+
+    F-053 inserted a refetch step at position 3, so the Buyer lookup
+    is now Step 4."""
+    step4 = anchor_plan[3]
+    assert step4.output_dedupe_by == "BuyerId"
 
 
 def test_step_ids_are_sequential(anchor_plan: Plan) -> None:
     """Step IDs increment by 1 starting from 1."""
-    assert [s.step_id for s in anchor_plan] == [1, 2, 3]
+    assert [s.step_id for s in anchor_plan] == [1, 2, 3, 4]
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1064,15 +1094,15 @@ def test_generate_plan_anchor_question_produces_expected_plan(
 
 
 def test_generate_plan_anchor_step_count(anchor_intent: Intent) -> None:
-    """Anchor intent must produce exactly 3 steps."""
+    """Anchor intent must produce exactly 4 steps (F-053 added a refetch)."""
     produced = generate_plan(anchor_intent)
-    assert len(produced) == 3
+    assert len(produced) == 4
 
 
 def test_generate_plan_anchor_step_ids_sequential(anchor_intent: Intent) -> None:
-    """Step IDs are 1, 2, 3 in order."""
+    """Step IDs are 1, 2, 3, 4 in order."""
     produced = generate_plan(anchor_intent)
-    assert [s.step_id for s in produced] == [1, 2, 3]
+    assert [s.step_id for s in produced] == [1, 2, 3, 4]
 
 
 def test_generate_plan_step1_no_iteration(anchor_intent: Intent) -> None:
@@ -1091,22 +1121,47 @@ def test_generate_plan_step2_iterates_supplier_id(anchor_intent: Intent) -> None
     }
 
 
-def test_generate_plan_step2_client_filter_is_open_status(
+def test_generate_plan_step2_sends_status_open_to_server(
     anchor_intent: Intent,
 ) -> None:
-    """Step 2's status filter is client-side, with the canonical 'OPEN' value."""
+    """F-053: the status filter is now server-side, not a client filter.
+
+    Before the fix, Step 2 ran search_purchase_orders with no status
+    arg and applied StatusCode=OPEN in Python after the fetch. That made
+    filter_source_when_nonempty impossible to set correctly: an empty
+    child result was ambiguous (no POs at all, or no OPEN POs after the
+    client filter). With status as a server arg, an empty result means
+    genuinely no open POs, and the parent filter is sound.
+    """
     produced = generate_plan(anchor_intent)
     step2 = produced[1]
-    assert step2.client_filters == [
-        {"field": "StatusCode", "op": "equals", "value": "OPEN"}
-    ]
+    assert step2.tool_args.get("status") == "OPEN"
+    assert step2.client_filters == []
+    assert step2.output_name == "us_suppliers_has_open_PO"
+    assert step2.filter_source_when_nonempty is True
 
 
-def test_generate_plan_step3_dedupes_buyer_id(anchor_intent: Intent) -> None:
-    """Step 3 dedupes on BuyerId so the same buyer isn't looked up twice."""
+def test_generate_plan_step3_is_the_refetch(anchor_intent: Intent) -> None:
+    """F-053: Step 3 re-fetches the surviving suppliers' POs so the
+    Buyer include can chain. It iterates the filtered parent bucket and
+    is NOT itself a parent-keeping step (no filter_source_when_nonempty)."""
     produced = generate_plan(anchor_intent)
     step3 = produced[2]
-    assert step3.output_dedupe_by == "BuyerId"
+    assert step3.tool_name == "search_purchase_orders"
+    assert step3.iterate_over == {
+        "from_step": "us_suppliers_has_open_PO",
+        "field": "SupplierId",
+    }
+    assert step3.filter_source_when_nonempty is False
+    assert step3.filter_source_when_empty is False
+    assert step3.output_name == "open_pos"
+
+
+def test_generate_plan_step4_dedupes_buyer_id(anchor_intent: Intent) -> None:
+    """Step 4 dedupes on BuyerId so the same buyer isn't looked up twice."""
+    produced = generate_plan(anchor_intent)
+    step4 = produced[3]
+    assert step4.output_dedupe_by == "BuyerId"
 
 
 def test_generate_plan_country_full_name_normalizes_to_us() -> None:
@@ -1142,16 +1197,18 @@ def test_generate_plan_anchor_no_filter_source_when_empty(
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_generate_plan_original_track_a_prompt_produces_four_steps(
+def test_generate_plan_original_track_a_prompt_produces_five_steps(
     original_track_a_intent: Intent,
     fixed_reference_date: date,
 ) -> None:
-    """F2 headline: original prompt with has_no_recent_invoices
-    produces a 4-step plan, with Step 2 being the negation filter."""
+    """F2 headline, updated for F-053: original prompt with
+    has_no_recent_invoices produces a 5-step plan — the negation filter
+    (Step 2), the has_open_PO parent filter (Step 3), the refetch of
+    surviving suppliers' POs (Step 4), and the buyer lookup (Step 5)."""
     produced = generate_plan(
         original_track_a_intent, reference_date=fixed_reference_date
     )
-    assert len(produced) == 4
+    assert len(produced) == 5
 
 
 def test_generate_plan_original_track_a_step1_is_country_fetch(
@@ -1198,7 +1255,7 @@ def test_generate_plan_original_track_a_step3_iterates_filtered_suppliers(
     fixed_reference_date: date,
 ) -> None:
     """Step 3 (has_open_PO) iterates from the FILTERED supplier list,
-    not the original. This wiring is the key correctness check."""
+    not the original, and carries the server-side status arg (F-053)."""
     produced = generate_plan(
         original_track_a_intent, reference_date=fixed_reference_date
     )
@@ -1208,37 +1265,59 @@ def test_generate_plan_original_track_a_step3_iterates_filtered_suppliers(
         "from_step": "us_suppliers_no_recent_invoices",
         "field": "SupplierId",
     }
-    assert step3.client_filters == [
-        {"field": "StatusCode", "op": "equals", "value": "OPEN"}
-    ]
+    assert step3.tool_args.get("status") == "OPEN"
+    assert step3.client_filters == []
     assert step3.filter_source_when_empty is False
+    assert step3.filter_source_when_nonempty is True
+    assert step3.output_name == (
+        "us_suppliers_no_recent_invoices_has_open_PO"
+    )
 
 
-def test_generate_plan_original_track_a_step4_is_buyer_lookup(
+def test_generate_plan_original_track_a_step4_is_the_refetch(
     original_track_a_intent: Intent,
     fixed_reference_date: date,
 ) -> None:
-    """Step 4 (include Buyer) iterates from open_pos with BuyerId dedup."""
+    """F-053: Step 4 re-fetches the surviving suppliers' POs so the
+    Buyer include can chain off PurchaseOrder."""
     produced = generate_plan(
         original_track_a_intent, reference_date=fixed_reference_date
     )
     step4 = produced[3]
-    assert step4.tool_name == "get_buyer"
+    assert step4.tool_name == "search_purchase_orders"
     assert step4.iterate_over == {
+        "from_step": "us_suppliers_no_recent_invoices_has_open_PO",
+        "field": "SupplierId",
+    }
+    assert step4.filter_source_when_nonempty is False
+    assert step4.output_name == "open_pos"
+
+
+def test_generate_plan_original_track_a_step5_is_buyer_lookup(
+    original_track_a_intent: Intent,
+    fixed_reference_date: date,
+) -> None:
+    """Step 5 (include Buyer) iterates from open_pos with BuyerId dedup."""
+    produced = generate_plan(
+        original_track_a_intent, reference_date=fixed_reference_date
+    )
+    step5 = produced[4]
+    assert step5.tool_name == "get_buyer"
+    assert step5.iterate_over == {
         "from_step": "open_pos", "field": "BuyerId"
     }
-    assert step4.output_dedupe_by == "BuyerId"
+    assert step5.output_dedupe_by == "BuyerId"
 
 
 def test_generate_plan_original_track_a_step_ids_sequential(
     original_track_a_intent: Intent,
     fixed_reference_date: date,
 ) -> None:
-    """Step IDs are 1, 2, 3, 4."""
+    """Step IDs are 1, 2, 3, 4, 5."""
     produced = generate_plan(
         original_track_a_intent, reference_date=fixed_reference_date
     )
-    assert [s.step_id for s in produced] == [1, 2, 3, 4]
+    assert [s.step_id for s in produced] == [1, 2, 3, 4, 5]
 
 
 # ─────────────────────────────────────────────────────────────────────

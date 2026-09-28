@@ -221,6 +221,7 @@ _FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
     "has_invoice_over_amount": "has_invoice_over_amount",
     "has_site_in_bu": "has_site_in_bu",
     "has_classification": "has_classification",
+    "has_open_PO": "has_open_PO",
 }
 
 
