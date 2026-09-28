@@ -201,8 +201,27 @@ def _render_error(answer: dict, meta: dict) -> None:
         st.caption("This failure will not be fixed by retrying.")
 
 
+def _render_cli(answer: dict, meta: dict) -> None:
+    """Render the CLI's stdout verbatim.
+
+    No parsing, no reformatting, no per-section widgets. The text
+    arrives pre-formatted from spire.rendering.formatters.
+    render_cli_stdout, the same function promptkit --run prints
+    through, so this block is the CLI's stdout character for
+    character.
+    """
+    text = answer.get("text") or ""
+    if not text.strip():
+        st.caption("(empty response)")
+        return
+    st.code(text, language=None)
+
+
 _RENDERERS = {
-    "text": _render_text,
+    # The CLI kind is what the API produces by default; the other
+    # kinds are kept so a hand-built envelope still renders.
+    "cli":       _render_cli,
+    "text":      _render_text,
     "table": _render_table,
     "refusal": _render_refusal,
     "partial": _render_partial,

@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from spire.api.models import (
+    CLIAnswer,
     ErrorAnswer,
     ErrorDetail,
     Metadata,
@@ -33,6 +34,7 @@ from spire.api.models import (
     StatusResponse,
 )
 from spire.api.translate import translate
+from spire.rendering.formatters import render_cli_stdout
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -255,10 +257,25 @@ async def prompt(req: PromptRequest, request: Request) -> JSONResponse:
         return JSONResponse(status_code=500, content=env.model_dump())
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
-    envelope = translate(final_state, request_id, stages, latency_ms)
+    # UI contract: show the CLI's stdout verbatim. render_cli_stdout
+    # is the shared renderer promptkit.py also emits through, so
+    # the two cannot drift.
+    cli_text = render_cli_stdout(final_state, request.app.state.menu)
 
-    http_status = 500 if envelope.kind == "error" else 200
-    return JSONResponse(status_code=http_status, content=envelope.model_dump())
+    envelope = ResponseEnvelope(
+        request_id=request_id,
+        kind="cli",
+        answer=CLIAnswer(text=cli_text),
+        metadata=Metadata(
+            latency_ms=latency_ms,
+            llm_calls=0,
+            tokens_in=0,
+            tokens_out=0,
+            kg_version=None,
+            stages=stages,
+        ),
+    )
+    return JSONResponse(status_code=200, content=envelope.model_dump())
 
 
 # ── Entry point ──────────────────────────────────────────────────────
