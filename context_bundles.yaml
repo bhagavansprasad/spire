@@ -69,6 +69,14 @@ bundles:
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/design/ARCHITECTURE.md
   - docs/audit/log_analysis/_plan.md
+  - docs/audit/log_analysis/_generalization_plan.md
+  - docs/audit/log_analysis/20260925_150333/RUN.md
+  - docs/audit/log_analysis/20260925_150333/_candidates.md
+  - docs/audit/findings/README.md
+  - docs/audit/findings/F-052.md
+  - docs/audit/findings/F-053.md
+  - docs/audit/findings/F-054.md
+  - docs/audit/findings/F-055.md
   - docs/design/FEATURES.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
@@ -182,6 +190,8 @@ bundles:
   - scripts/manifests/smoke_sets.yaml
   - scripts/manifests/verify_sets.yaml
   - scripts/manifests/exhaust_sets.yaml
+  # log-analysis helpers (reads promptkit rounds; referenced by _plan.md Part E)
+  - scripts/log_analysis.py
   # generates the classifier menu from the KG
   - scripts/build_classifier_context.py
   # adds an entity->module mapping row to the KG
