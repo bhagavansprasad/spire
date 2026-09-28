@@ -1,5 +1,17 @@
 # SPIRE Log Analysis Plan
 
+## Part A - Scope and contract
+
+**Purpose.** This pipeline is a starting assistant, not a
+bug-finder. It surfaces the material a developer needs to begin and
+continue an investigation - errors, exceptions, refusals,
+signatures, exit codes, per-prompt heads - and hands it over. Its
+output is not expected to be identical across rounds, even on the
+same tier: two smoke rounds with different failures should read
+differently, because the logs differ. It is not expected to find
+every bug; it is expected to point at where the investigation
+should start.
+
 **What this is.** The repeatable pipeline for analyzing one tier's
 promptkit run, from raw run output to merged findings. Every new round
 follows this document.
@@ -7,8 +19,11 @@ follows this document.
 **Scope.** One tier, one run_id. Smoke, verify, and exhaust all follow
 the same process; only the size and depth of the sets differ.
 
-**Input.** A completed run under `overnights/<run_id>/`, plus its
-manifest at `scripts/manifests/<tier>_sets.yaml`.
+**Input.** A completed run under `overnights/<run_id>/`. The round
+folder carries a frozen `_manifest.yaml` (the manifest that was
+run) and one subfolder per set. The live manifest lives at
+`scripts/manifests/<tier>_sets.yaml`; the frozen copy is what this
+pipeline reads.
 
 **Output.** A set of F-NNN findings written into `docs/audit/findings/`,
 plus a closed review gate with a disposition per candidate (promoted,
@@ -31,6 +46,26 @@ reminders, and the worked example from the first full application.
 (`scripts/log_analysis.py`). It points at each of them and explains
 when to use them.
 
+**Contract.** This pipeline applies to promptkit runs only.
+Promptkit is SPIRE's single trigger: it takes one prompt string,
+sends it to SPIRE, captures the output. A run folder is a frozen
+`_manifest.yaml` at the round root plus one subfolder per set, each
+holding the per-set triad. No other producer writes this shape
+today; if one ever does, this section changes with it.
+
+The tier (smoke / verify / exhaust) is a property of the set names
+in the frozen manifest, not of the analysis. Every set basename in
+one round is the same tier. The tier names the per-set files; it
+never reaches SPIRE. Because SPIRE sees only the prompt string, the
+signature list (`SIGNATURE_PATTERNS` in `scripts/log_analysis.py`)
+is flat - one list, checked in every tier. A tier-specific
+signature would be a category error: SPIRE does not know the tier.
+
+Corrections to this document are made in place. There is no
+superseding sibling. The smoke round's own artifacts name
+`smoke.log` and stay correct under the `<tier>` abstraction;
+history is not rewritten by keeping a stale copy alive.
+
 ---
 
 ## Part B - The pipeline at a glance
@@ -41,7 +76,7 @@ findings and land them.
 
 | # | step | output |
 |---|---|---|
-| 1 | Confirm the round exists and matches its manifest | structural pass/fail |
+| 1 | Confirm the round exists and derive its tier | structural pass/fail |
 | 2 | Read `_summary.log` - exit-code triage | anomaly table |
 | 3 | Extract signatures from non-zero sets | signature table |
 | 4 | Classify every prompt: pass / fail / wrong-but-no-error | classification table |
@@ -84,13 +119,22 @@ Commands. Output. Gate.**
 
 ---
 
-### Step 1 - Confirm the round exists and matches its manifest
+### Step 1 - Confirm the round exists and derive its tier
 
 **What it does.** Structural inventory of the run before any answer is
 read. Verifies the round folder exists under `overnights/`, that the
 top-level files (`_manifest.yaml`, `_run_log.txt`, `_summary.log`) are
-present, and that every set folder in the manifest has its triad of
-`smoke.log`, `smoke.txt`, `smoke_summary.log`.
+present, and that every set folder named in the manifest has its triad
+of per-set files.
+
+The tier is derived from the frozen `_manifest.yaml` at the round root:
+every set name is `<folder>/<tier>` and all sets in one round share a
+single tier. The script reads the manifest, extracts the common
+basename, and uses it to name the per-set files — `<tier>.log` (the
+raw run log), `<tier>.txt` (the frozen input copy), and
+`<folder>_summary.log` (the per-folder summary). No tier name is
+hardcoded in the script or in this document; the manifest is the
+single source of truth.
 
 **Why it matters.** A missing set or a half-written log means any
 classification done on this round is invalid. Catching it here costs
@@ -142,7 +186,7 @@ An exit code with no explanation is a stopping point: re-read
 ### Step 3 - Signature extraction for non-zero sets
 
 **What it does.** For each set with a non-zero exit, greps its
-`smoke.log` for failure signatures. Counts hits per pattern. Compares
+`<tier>.log` for failure signatures. Counts hits per pattern. Compares
 the shape to the known mechanisms below.
 
 **Why it matters.** A non-zero exit has a cause. The signature tells
@@ -266,8 +310,8 @@ Answer line, and any Truncation or Reason line. That is usually enough
 to classify. When it is not, read the raw block directly:
 
 ```bash
-grep -n '^PROMPT: ' overnights/<run_id>/<set>/smoke.log
-sed -n '<start>,<end>p' overnights/<run_id>/<set>/smoke.log
+grep -n '^PROMPT: ' overnights/<run_id>/<set>/<tier>.log
+sed -n '<start>,<end>p' overnights/<run_id>/<set>/<tier>.log
 ```
 
 **Watch for - LA-8 failure shapes.** These are the shapes that read
@@ -392,7 +436,7 @@ reproduction (R).
 ```markdown
 ## C-NNN
 
-- file:   <set>/smoke.log
+- file:   <set>/<tier>.log
 - prompt: <the prompt, verbatim>
 - class:  fail | wrong-but-no-error | regression
 - note:   <one sentence naming the shape>
@@ -1051,6 +1095,7 @@ did its raw logs go".
 - tier:              smoke | verify | exhaust
 - date:              YYYY-MM-DD
 - manifest:          scripts/manifests/<tier>_sets.yaml
+- structure:         <the discovered per-set file names>
 - sets:              <N>
 - prompts:           <N>
 - raw:               overnights/<run_id>/ - retained: yes | no
@@ -1128,7 +1173,7 @@ Do not log to the findings log from this window.
 
 ## C-NNN
 
-- file:   <set>/smoke.log
+- file:   <set>/<tier>.log
 - prompt: <the prompt, verbatim>
 - class:  fail | wrong-but-no-error | regression
 - note:   <one sentence naming the shape>
@@ -1293,7 +1338,7 @@ python scripts/log_analysis.py walk-stub         <F-NNN>
 
 Inventories the round: top-level files (`_manifest.yaml`,
 `_run_log.txt`, `_summary.log`), then one row per set showing the
-triad (`smoke.log`, `smoke.txt`, `smoke_summary.log`). Each file is
+triad (`<tier>.log`, `<tier>.txt`, `<folder>_summary.log`). Each file is
 marked `ok` or `MISSING`.
 
 Reads: `overnights/<run_id>/`.
@@ -1313,12 +1358,12 @@ Output: printed table.
 
 **`signatures <run_id> <set>`** - Step 3.
 
-Greps the set's `smoke.log` for the signature patterns listed in the
+Greps the set's `<tier>.log` for the signature patterns listed in the
 script's `SIGNATURE_PATTERNS`. Counts hits per pattern, prints patterns
 with at least one hit. "No signature matched" means the failure is
 silent - it needs a different probe.
 
-Reads: `overnights/<run_id>/<set>/smoke.log`.
+Reads: `overnights/<run_id>/<set>/<tier>.log`.
 Output: printed count table.
 
 ---
@@ -1330,7 +1375,7 @@ Reason or Truncation line. Cheap first pass to classify each prompt as
 pass / fail / wrong-but-no-error. When the header is not enough, drop
 into the raw log for that one prompt.
 
-Reads: `overnights/<run_id>/<set>/smoke.log`.
+Reads: `overnights/<run_id>/<set>/<tier>.log`.
 Output: printed per-prompt header.
 
 ---

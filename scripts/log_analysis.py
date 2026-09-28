@@ -2,6 +2,17 @@
 """
 log_analysis.py - mechanical helpers for analyzing a promptkit run.
 
+PURPOSE
+=======
+A starting assistant, not a bug-finder. It surfaces the material a
+developer needs to begin and continue an investigation - errors,
+exceptions, refusals, signatures, exit codes, per-prompt heads -
+and hands it over. Its output is not expected to be identical
+across rounds, even on the same tier: two smoke rounds with
+different failures should read differently, because the logs
+differ. It is not expected to find every bug; it is expected to
+point at where the investigation should start.
+
 WHAT THIS SCRIPT IS FOR
 =======================
 Reading a run's raw logs is repetitive: inventory the round, triage exit
@@ -10,6 +21,21 @@ codes, grep signatures, extract per-prompt blocks. The judgement work
 analyst. This script only does the mechanical extraction, so the analyst
 sees consistent output every time and does not need to remember exact
 grep patterns.
+
+TIER DERIVATION
+===============
+Every promptkit run declares its sets in a frozen _manifest.yaml at the
+round root. Each set name is "<folder>/<tier>". The tier is the basename
+- smoke, verify, or exhaust. This script reads that manifest and derives
+the tier; it does not hardcode any tier name. The three per-set files
+are:
+
+    <tier>.log              the raw run log
+    <tier>.txt              the input copy that this run consumed
+    <folder>_summary.log    the per-folder summary
+
+All three are named after the manifest entry, not after the script's
+assumptions.
 
 WHY IT EXISTS
 =============
@@ -42,6 +68,11 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    import yaml  # type: ignore
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore
+
 REPO = Path.cwd()
 OVERNIGHTS = REPO / "overnights"
 ANALYSIS = REPO / "docs/audit/log_analysis"
@@ -62,25 +93,70 @@ SIGNATURE_PATTERNS = [
     r"'months': 0(?!\d)",
 ]
 
-SET_TRIAD = ["smoke.log", "smoke.txt", "smoke_summary.log"]
-
 
 def _die(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
 
 
-def _round_root(run_id: str) -> Path:
-    r = OVERNIGHTS / run_id
-    if not r.is_dir():
-        _die(f"round not found: {r}")
-    return r
+def _load_manifest_sets(root: Path) -> list[str]:
+    """Read the frozen _manifest.yaml at the round root, return its sets."""
+    mpath = root / "_manifest.yaml"
+    if not mpath.is_file():
+        _die(f"no _manifest.yaml in {root}")
+    text = mpath.read_text(encoding="utf-8")
+    if yaml is not None:
+        doc = yaml.safe_load(text)
+        if not isinstance(doc, dict) or "sets" not in doc:
+            _die(f"_manifest.yaml in {root} has no 'sets:' key")
+        sets = doc["sets"]
+        if not isinstance(sets, list) or not sets:
+            _die(f"_manifest.yaml in {root} has an empty 'sets:' list")
+        return [str(s) for s in sets]
+    # PyYAML absent: the manifest shape is fixed and simple, parse it by hand.
+    names = re.findall(r"^\s*-\s*(\S+)\s*$", text, re.MULTILINE)
+    if not names:
+        _die(f"could not parse 'sets:' from {mpath} (PyYAML unavailable)")
+    return names
+
+
+def _tier_from_sets(names: list[str]) -> str:
+    """Derive the single tier from the set basenames. Fail if mixed or empty."""
+    basenames = set()
+    for n in names:
+        basenames.add(n.rsplit("/", 1)[1] if "/" in n else n)
+    if not basenames:
+        _die("no sets in manifest; cannot derive a tier")
+    if len(basenames) != 1:
+        _die(
+            "cannot derive a single tier from the manifest; "
+            f"set basenames are {sorted(basenames)}"
+        )
+    return basenames.pop()
+
+
+def _round_context(run_id: str) -> tuple[Path, list[str], str]:
+    """Return (round_root, set_names, tier). Single source for every subcommand."""
+    root = OVERNIGHTS / run_id
+    if not root.is_dir():
+        _die(f"round not found: {root}")
+    names = _load_manifest_sets(root)
+    tier = _tier_from_sets(names)
+    return root, names, tier
+
+
+def _folder_for(set_name: str) -> str:
+    return set_name.rsplit("/", 1)[0] if "/" in set_name else set_name
+
+
+def _summary_name_for(set_name: str) -> str:
+    return f"{Path(_folder_for(set_name)).name}_summary.log"
 
 
 def cmd_verify_round(args) -> None:
-    root = _round_root(args.run_id)
+    root, names, tier = _round_context(args.run_id)
     top = ["_manifest.yaml", "_run_log.txt", "_summary.log"]
-    print(f"# Round {args.run_id}")
+    print(f"# Round {args.run_id}   (tier: {tier})")
     print()
     print("## Top-level files")
     for f in top:
@@ -89,47 +165,57 @@ def cmd_verify_round(args) -> None:
         print(f"  {f:24} {mark}")
     print()
     print("## Sets")
-    set_dirs = sorted(d for d in root.iterdir() if d.is_dir())
-    print(f"  count: {len(set_dirs)}")
+    print(f"  count (manifest): {len(names)}")
+    manifest_folders = sorted({_folder_for(n) for n in names})
+    on_disk = sorted(d.name for d in root.iterdir() if d.is_dir())
+    if on_disk != manifest_folders:
+        print("  WARNING: on-disk folders differ from manifest")
+        print(f"    manifest: {manifest_folders}")
+        print(f"    on-disk:  {on_disk}")
     print()
-    print(f"  {'set':32}  smoke.log  smoke.txt  summary.log")
-    for d in set_dirs:
+    log_col = f"{tier}.log"
+    txt_col = f"{tier}.txt"
+    print(f"  {'set':32}  {log_col:12}  {txt_col:12}  summary.log")
+    for name in names:
+        d = root / _folder_for(name)
         row = []
-        for f in SET_TRIAD:
-            p = d / f
-            row.append("ok " if p.is_file() else "MISS")
-        print(f"  {d.name:32}  {row[0]:9}  {row[1]:9}  {row[2]}")
+        for f in (log_col, txt_col, _summary_name_for(name)):
+            row.append("ok " if (d / f).is_file() else "MISS")
+        print(f"  {name:32}  {row[0]:12}  {row[1]:12}  {row[2]}")
 
 
 def cmd_exit_codes(args) -> None:
-    root = _round_root(args.run_id)
+    root, _names, _tier = _round_context(args.run_id)
     summary = root / "_summary.log"
     if not summary.is_file():
         _die(f"no _summary.log in {root}")
     text = summary.read_text(errors="replace")
-    rx = re.compile(r"(\S+)\s+.*exit=(\d+).*?(\d+)s?", re.IGNORECASE)
+    # _write_summaries in promptkit.py writes bare columns:
+    #     <set>   <exit>   <secs>   <status>
+    # Match: name, then an integer, then an integer, then whitespace.
+    rx = re.compile(r"^\s*(\S+)\s+(\d+)\s+(\d+)\s+", re.MULTILINE)
     print(f"# Exit codes - {args.run_id}")
     print()
     print(f"  {'set':32}  exit  secs")
     found = 0
     for line in text.splitlines():
-        m = rx.search(line)
+        m = rx.match(line)
         if m:
             found += 1
             print(f"  {m.group(1):32}  {m.group(2):>4}  {m.group(3):>4}")
     if not found:
-        print("  (no exit=N lines matched; dumping _summary.log raw)")
+        print("  (no exit rows matched; dumping _summary.log raw)")
         print()
         print(text)
 
 
 def cmd_signatures(args) -> None:
-    root = _round_root(args.run_id)
-    log = root / args.set / "smoke.log"
+    root, _names, tier = _round_context(args.run_id)
+    log = root / args.set / f"{tier}.log"
     if not log.is_file():
-        _die(f"no smoke.log in {root / args.set}")
+        _die(f"no {tier}.log in {root / args.set}")
     text = log.read_text(errors="replace")
-    print(f"# Signatures - {args.run_id}/{args.set}")
+    print(f"# Signatures - {args.run_id}/{args.set}   (tier: {tier})")
     print()
     print(f"  {'count':>5}  pattern")
     any_hit = False
@@ -144,12 +230,12 @@ def cmd_signatures(args) -> None:
 
 
 def cmd_classify(args) -> None:
-    root = _round_root(args.run_id)
-    log = root / args.set / "smoke.log"
+    root, _names, tier = _round_context(args.run_id)
+    log = root / args.set / f"{tier}.log"
     if not log.is_file():
-        _die(f"no smoke.log in {root / args.set}")
+        _die(f"no {tier}.log in {root / args.set}")
     lines = log.read_text(errors="replace").splitlines()
-    print(f"# Per-prompt header - {args.run_id}/{args.set}")
+    print(f"# Per-prompt header - {args.run_id}/{args.set}   (tier: {tier})")
     print()
     n = len(lines)
     i = 0

@@ -16,7 +16,9 @@ Do not log to the findings log from this window.
           upper bound. Future-dated invoices dated 2026-10-01 through
           2027-02-01 appear in a "last 30 days" window without
           qualification.
-- status: candidate, not reproduced outside batch, S0-S8 not yet walked
+- status: promoted to F-054 (closed-as-not-a-bug, latent-shape;
+          S0-S11 walked 2026-09-27)
+- resolution: see docs/audit/findings/F-054.md
 
 ---
 
@@ -55,7 +57,8 @@ Do not log to the findings log from this window.
 - related: F-010 (filtered count over the matched bucket). The same
           "suppliers with X" shape in payables_supplier sets
           `filter_source_when_nonempty: True`; here it does not.
-- status: candidate, not reproduced outside batch, S0-S8 not yet walked
+- status: promoted to F-053 (confirmed, S0-S11 walked 2026-09-27)
+- resolution: see docs/audit/findings/F-053.md
 
 
 ---
@@ -73,4 +76,30 @@ Do not log to the findings log from this window.
           fields + address.
 - related: F-001 (list_all flag on explicit list). F-001 adjacent.
 - status: promoted to F-052 (confirmed, S0-S11 walked 2026-09-27)
-- resolution: see findings/F-052.md
+- resolution: see docs/audit/findings/F-052.md
+
+
+<!-- BEGIN RESOLUTIONS -->
+
+- C-001 -> F-054 (promoted 2026-09-27, closed-as-not-a-bug latent)
+- C-002 -> observation (no F-NNN; attached to the exit-code mechanism)
+- C-003 -> F-053 (promoted 2026-09-27, confirmed)
+- C-004 -> F-052 (promoted 2026-09-27, closed-as-not-a-bug)
+
+<!-- END RESOLUTIONS -->
+
+
+## Corrections
+
+Appended 2026-09-28, on the generalization branch. Two historical
+slips, recorded not rewritten.
+
+- Earlier status lines read `S0-S8`. The standard was R + S0-S11
+  before this round closed; `S0-S8` predates R's addition and is
+  the wording of an earlier draft. The status lines above now
+  carry the current standard.
+- C-002's note cites `F-052` as explaining the exit-1 case. F-052
+  is the columns-list finding, unrelated. The mechanism that
+  explains the exit-1 sets is the `exit-code-on-final-refusal`
+  entry in `docs/audit/log_analysis/_plan.md`. C-002's resolution
+  line names it correctly; the note's reference is wrong.
