@@ -190,7 +190,7 @@ section so the Phase 2 24-row table stays as the audit-closure record.
 | F-052 | wrong-refusal (closed-as-not-a-bug) | — (stochastic parse; N=20 clean) | closed-as-not-a-bug | — | 2026-09-27 |
 | F-053 | wrong-data | `planner/registries.py`, `plan_builders.py`, `planner.py` | verified | #174 | 2026-09-28 |
 | F-054 | wrong-data (latent) | — (closed-as-not-a-bug) | closed-as-not-a-bug | — | 2026-09-27 |
-| F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | in-progress | #175 | 2026-09-28 |
+| F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | verified | #175 | 2026-09-28 |
 
 **Session log.** The window label for each fix is recorded in the
 fix file's header as `**Session:** 07_SPIRE_Phase2_BugFixing_NN`.
