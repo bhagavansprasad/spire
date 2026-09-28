@@ -79,8 +79,10 @@ bundles:
   - docs/audit/findings/F-053.md
   - docs/audit/findings/F-054.md
   - docs/audit/findings/F-055.md
+  - docs/audit/findings/F-056.md
   - docs/phase-2/fixes/F-053.md
   - docs/phase-2/fixes/F-055.md
+  - docs/phase-2/fixes/F-056.md
   - docs/audit/log_analysis/20260925_150333/_index.md
   - docs/audit/log_analysis/20260925_150333/_action_items.md
   - docs/audit/log_analysis/20260925_150333/_touched.md
@@ -487,6 +489,8 @@ bundles:
   # F-053 and F-055 added 2026-09-28 (window 23, PR #174/#175).
   - tests/test_f053_open_po_filter.py
   - tests/test_f055_days_conversion.py
+  # F-056 added 2026-09-28 (window 25).
+  - tests/test_f056_supplier_pos_buyers.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
