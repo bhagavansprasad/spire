@@ -13,7 +13,7 @@ plus everything referenced below.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `dc61e42`.
+**Branch:** `hardening-master` at `ec2fe14`.
 
 **Test suite:** 1243 passed, 1 skipped, 22 deselected (4m00s), measured
 2026-09-28 after F-055 merged.
@@ -97,6 +97,10 @@ conversion. N=20 sweep: 20/20 `{'months': 1}`, 0 refusals.
 
 ## Commits on `hardening-master`, window 23 (newest first)
 
+    ec2fe14  context_bundles: sync with source tree — fix files,
+             log-analysis session, F-053/F-055 tests
+    2465f72  fix files: session label 25_SPIRE_Fix_F053_F055
+    14b48e9  Phase 3 — workflow hardening + window 23 handoff (#176)
     dc61e42  Phase 3 — Fix F-055: days-based Invoice windows convert to
              whole months (#175)
     e948b3d  Phase 3 — Fix F-053: has_open_PO keeps only suppliers with
