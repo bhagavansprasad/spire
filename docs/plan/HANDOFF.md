@@ -1,4 +1,4 @@
-# SPIRE — Session Handoff, 2026-09-28 (window 23)
+# SPIRE — Session Handoff, 2026-09-28 (window 25)
 
 **This file supersedes the window-22 handoff.** Window 23 was a fix
 window: F-053 and F-055, both from the smoke-round log analysis, are
@@ -13,71 +13,79 @@ plus everything referenced below.
 
 ## Where we are
 
-**Branch:** `hardening-master` at `ec2fe14`.
+**Branch:** `hardening-master` at `3633c1e`.
 
-**Test suite:** 1243 passed, 1 skipped, 22 deselected (4m00s), measured
-2026-09-28 after F-055 merged.
+**Test suite:** 1266 passed, 1 skipped, 22 deselected (3m32s), measured
+2026-09-28 after F-056 and the S11 expansions merged.
 
 **Pod:** dev instance (MCP 4001 / API 4002 / UI 4003).
 
 **Ledger:**
 - FIX_PLAN §5 (Phase 2) — closed 24/24, unchanged.
 - FIX_PLAN §5.1 (Phase 3) — F-052 closed-as-not-a-bug, F-053
-  verified (#174), F-054 closed-as-not-a-bug, F-055 verified (#175).
+  verified (#174), F-054 closed-as-not-a-bug, F-055 verified (#175),
+  F-056 verified (#177).
 
 ---
 
-## What shipped in window 23
+## What shipped in window 25
 
-**F-053** (#174, `e948b3d`) — `has_open_PO` missing from
-`_FILTER_SOURCE_NONEMPTY_SUFFIX`; `suppliers with open purchase orders`
-listed suppliers with zero open POs. Three-file fix: the registry
-entry; a computed-args branch in `plan_builders.py` sending
-`status='OPEN'`; and a Block 3 re-fetch step in `planner.py` so the
-anchor prompt's `Buyer` include still chains. Golden
-`suppliers_with_open_pos.txt` updated — the golden captured the bug.
+**F-056** (#177, `0cf45ec`) — the anchor prompt
+`List US suppliers with open purchase orders, include the buyer`
+returned `Synthesized response: (none)` because the F-053 four-bucket
+plan shape had no local synthesizer builder; the LLM was asked to
+transcribe 183 records and hit its output-token cap (`out=7985`, two
+windows running). Fix: `_supplier_pos_buyers` detector and
+`build_suppliers_with_open_pos_and_buyers` builder in
+`synthesizer/p2p.py`, routed by a branch in `synthesize_response`. No
+LLM call on the path. 23 new tests. A pre-existing fixture collision in
+`tests/test_synthesizer.py` was also closed (rename of one bucket to
+break a `{source}_{suffix}` prefix that accidentally matched the new
+detector).
 
-**F-055** (#175, `dc61e42`) — `invoices in the last 7 days` refused
-every run because the model converted days to fractional months
-(`{'months': 0.23}`). The sysprompt (`b_invoice_date.sysprompt`) and
-its byte-equality mirror (`context_assembly.py`) teach a rounding-up
-conversion. N=20 sweep: 20/20 `{'months': 1}`, 0 refusals.
+**S11 expansions** (#178, `3633c1e`) — 18 sibling prompts added across
+six files, exercising the F-053 (presence-edge filter) and F-055
+(day-count conversion) classes. No code changes.
 
-**Process doc updates:**
-- `WORKING_STYLE.md` rules 2.1 / 2.2 — "one command at a time" splits
-  on uncertainty, not on count; obvious commands run together.
-- `FIX_PLAN.md` §8 / §11.1 / §12 — V0 written and committed first
-  (before any source file); test-first with a failing commit; V7 uses
-  `git checkout HEAD~1` not `git stash`; §12 gains two session-start
-  boxes.
+**Doc-drift sweep** (this window, PR pending) — §9.7 of the plan gains
+a Status note flagging §9.3.1's stale `_ASSEMBLED_PREAMBLE` reference.
+`source-tree.txt` deleted locally (gitignored, nothing to commit). The
+three other items on the previous window's doc-drift list dispositioned
+as no-action (see "Known doc-drift" below).
 
 ---
 
 ## What's not done
 
 - **Phase 3a — the prompt-coverage test design.** The A/B/C decision
-  from window 19 remains open. Not started.
-- **S11 expansions** from F-053 and F-055 — new prompts in
-  `supplier/exhaust`, `date_filters/verify`, `date_filters/exhaust`.
-  Recorded in each finding's S11 section.
-- **A new finding surfaced during F-053's V3.** The anchor prompt
-  `List US suppliers with open purchase orders, include the buyer`
-  returns `Synthesized response: (none)` — the synthesis output cap
-  is hit (`synthesize out≈7985`). Reproduces pre-fix and post-fix;
-  not caused by F-053. Not yet filed.
+  from window 19 remains open. The stale §9.3.1 reference is now
+  Status-noted (see §9.7). Not started.
+- **The display fallback for `synth_failed`.** F-056's fix closed the
+  anchor-prompt overrun with a local builder; the display path that
+  shows the raw `Synthesized response: (none)` marker for
+  `fields`-less intents was deferred as scaffolding for a case not
+  observed. Recorded in the F-056 fix file's Deviations section.
+- **A country-path total.** V1 of F-056 showed
+  `Examined 25 of an unknown number of suppliers`. The suppliers tool
+  honestly reports no total on the country-filtered path (client-side
+  filter caps the over-fetch; the pod-side `q=` carries only the
+  server clause). Not a defect, but a follow-up if the wording ever
+  matters — a second probe the current single-clause pattern does not
+  make.
 
 ---
 
 ## Next action
 
-1. **File the anchor-prompt synthesis overrun** as a new F-NNN. The
-   symptom signature (`synthesize out≈7985` → empty answer) matches
-   the "Suppliers with their addresses" bug that
-   `build_supplier_records` closed. Walk R + S0–S11.
-2. **Phase 3a** — the prompt-coverage test design; choose A/B/C, then
-   implement.
-3. **S11 expansions** — extend each capability's tier files per the
-   findings' S11 sections.
+1. **Phase 3a** — the prompt-coverage test design. Choose A/B/C (see
+   §9.7's Design note for what the three options are), then implement
+   the test. This is the only Phase 3 sub-phase still open.
+2. **Sweep the F-056 four-bucket shape across the prompt sets.** Only
+   the anchor prompt was tested for the shape. Any prompt combining a
+   `filter_source_when_nonempty` step, a downstream include whose edge
+   requires a refetch, and a parent-of-the-filter root would produce
+   the same shape. A sweep would surface the class before the next
+   bug report.
 
 ---
 
@@ -95,39 +103,45 @@ conversion. N=20 sweep: 20/20 `{'months': 1}`, 0 refusals.
 
 ---
 
-## Commits on `hardening-master`, window 23 (newest first)
+## Commits on `hardening-master`, window 25 (newest first)
 
+    3633c1e  S11 expansions: presence-edge filters (F-053) and
+             day-count conversion (F-055) (#178)
+    0cf45ec  F-056: local builder for the F-053 four-bucket synthesizer
+             shape (#177)
+    01da2ae  fix file: F-056 V0 (four-bucket local builder) — committed
+             on `hardening-master` before branching
+    55bb66d  audit: F-056 — anchor prompt overruns synthesize on the
+             F-053 four-bucket shape
+    b4c9d8c  handoff: branch SHA ec2fe14; add three newer commits
     ec2fe14  context_bundles: sync with source tree — fix files,
              log-analysis session, F-053/F-055 tests
-    2465f72  fix files: session label 25_SPIRE_Fix_F053_F055
-    14b48e9  Phase 3 — workflow hardening + window 23 handoff (#176)
-    dc61e42  Phase 3 — Fix F-055: days-based Invoice windows convert to
-             whole months (#175)
-    e948b3d  Phase 3 — Fix F-053: has_open_PO keeps only suppliers with
-             open POs (#174)
-    825ed37  context_bundles: add log_analysis.py, live findings,
-             smoke-round entries
 
 The individual branch commits (before the squash merges) are preserved
-on the (now-deleted) `Phase3-Fix-F-053` and `Phase3-Fix-F-055` branches
-in the reflog only.
+on the (now-deleted) `Phase3-Fix-F-056` and `Phase3-S11-expansions`
+branches in the reflog only.
 
 ---
 
 ## Known doc-drift, recorded not fixed
 
+Window 25 dispositioned all five items from the previous list.
+
 - **`docs/audit/findings-log.md`** and **`docs/fixes/evidence/F-0*.md`**
-  quote `scripts/prompts/...` paths. Append-only forensic records;
-  editing would rewrite history.
-- **Doc A §9.3.1** cites `_ASSEMBLED_PREAMBLE` for Phase 3a. That name
-  is the wrong surface for the field-coverage check.
-- **`source-tree.txt`** at repo root is stale and gitignored.
+  quote `scripts/prompts/...` paths. **No action** — append-only
+  forensic records; editing would rewrite history. `ls prompts/` shows
+  the current paths.
+- **Doc A §9.3.1** cites `_ASSEMBLED_PREAMBLE` for Phase 3a. **Fixed
+  as a Status note in §9.7** rather than a Design-section edit, per
+  the plan's "never edit a Design section" rule.
+- **`source-tree.txt`** at repo root was stale and gitignored.
+  **Deleted locally** (nothing to commit; gitignored).
 - **`docs/phase-2/fixes/`** is where Phase 3 fix files live, despite
-  the directory name. The fix-machinery document is FIX_PLAN; the
-  finding is Phase 3; the mechanism is Phase 2's.
-- **F-053's V3 flagged a behaviour change** — the answer is now a
-  plain supplier list without per-supplier counts, matching F-010's
-  sibling. Deliberate, recorded in the fix file.
+  the directory name. **No action** — the directory name is a label,
+  not a contract; which phase a fix belongs to is read from the fix
+  file's header. Renaming would move 30+ Phase 2 files.
+- **F-053's V3 flagged a behaviour change.** **Already recorded** in
+  the F-053 fix file and the finding's V5. No further action.
 
 ---
 

@@ -983,11 +983,34 @@ Each sub-phase has its own rollback. Phase 3e (deleting legacy tools) keeps the 
 
 ### 9.7 Phase 3 Status
 
-**Current status:** ⬜ Not started
+**Current status:** 🟡 In progress — Phase 3 has begun; F-052 through
+F-056 filed and closed (see FIX_PLAN §5.1), S11 expansions landed.
+Phase 3a (the coverage test) not yet started.
 
-**Evidence:**
+**Evidence:** Phase 3 findings ledger at `FIX_PLAN.md` §5.1. F-053
+(PR #174) and F-055 (PR #175) are Phase 2-numbered fixes that were
+actually Phase 3 work; F-056 (PR #177) likewise. Two S11 expansion
+PRs (#174 predecessor and #178) landed to seed coverage for the
+F-053 and F-055 classes.
 
 **Deviations from plan:**
+
+**Design note — §9.3.1's `_ASSEMBLED_PREAMBLE` reference is stale.**
+The Design section above (§9.3.1, frozen) sketches the Phase 3a
+coverage test as a grep against `_ASSEMBLED_PREAMBLE`. That literal
+is the right surface for entity-name coverage, but it is the wrong
+surface for filter and field coverage: filters are taught partly in
+the preamble and partly via the runtime KG menu appended by
+`_format_menu`, and fields live almost entirely in the runtime menu.
+The correct surface for the coverage test is therefore the *runtime
+system prompt* (`_ASSEMBLED_PREAMBLE + _format_menu(menu)`), or a
+narrower entity-only check on that surface with filter and field
+coverage deferred to Phase 3b's generator `--check` mode.
+The A/B/C decision this note flags was opened in window 19 and
+remains open; see `docs/plan/HANDOFF.md` for the current status.
+This Status note records the drift rather than editing the frozen
+Design section, per the plan's "never edit a Design section" rule
+(see "How to read this document").
 
 ---
 
