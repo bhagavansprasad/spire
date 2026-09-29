@@ -193,7 +193,7 @@ section so the Phase 2 24-row table stays as the audit-closure record.
 | F-055 | wrong-refusal | `context/payables/b_invoice_date.sysprompt`, `context_assembly.py` | verified | #175 | 2026-09-28 |
 | F-056 | missing-capability (synthesizer) | `synthesizer/p2p.py`, `synthesizer/synthesizer.py` | fixed | — | 2026-09-28 |
 | F-057 | tooling (startup ordering) | `spire.sh`, `src/spire/api/server.py` | verified | #180 | 2026-09-28 |
-| F-058 | wrong-data (period window) | `nl_parser/parser.py` (`_extract_period_bounds`) | fixed | — | 2026-09-29 |
+| F-058 | wrong-data (period window) | `nl_parser/parser.py` (`_extract_period_bounds`) | verified | #185 | 2026-09-29 |
 | F-059 | wrong-data (intermittent, closed) | — (pod transient; N=20 clean) | closed-as-not-a-bug | — | 2026-09-29 |
 
 **Session log.** The window label for each fix is recorded in the
