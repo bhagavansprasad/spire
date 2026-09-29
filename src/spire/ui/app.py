@@ -174,27 +174,44 @@ def _render_sidebar() -> None:
 
         st.divider()
 
-        # Connection status
+        # Connection status - two lines, each naming what is connected.
         status = _get_status()
-        if status and status.get("ok") and status.get("status_code") == 200:
+        api_ok = bool(
+            status and status.get("ok") and status.get("status_code") == 200
+        )
+        pipeline_ready = False
+        if api_ok:
+            pipeline_ready = bool(
+                (status.get("body") or {}).get("pipeline_ready")
+            )
+
+        st.markdown(
+            "<div style='font-size: 10px; color: #888; "
+            "text-transform: uppercase; letter-spacing: 0.08em; "
+            "margin-bottom: 4px;'>Connection</div>",
+            unsafe_allow_html=True,
+        )
+        for _label, _ok, _ok_txt in (
+            ("SPIRE API", api_ok, "Connected"),
+            ("Pipeline", pipeline_ready, "Ready"),
+        ):
+            _color = "#22c55e" if _ok else "#ef4444"
+            _text = _ok_txt if _ok else "Not " + _ok_txt.lower()
             st.markdown(
-                "<div style='font-size: 12px; padding: 2px 0;'>"
-                "<span style='color: #22c55e;'>&#9679;</span>&nbsp;"
-                "Connected</div>",
+                f"<div style='font-size: 12px; padding: 2px 0;'>"
+                f"<span style='color: {_color};'>&#9679;</span>&nbsp;"
+                f"<span style='color: #444;'>{_label}</span>"
+                f"<span style='color: #aaa;'> &middot; </span>"
+                f"<span style='color: #888;'>{_text}</span></div>",
                 unsafe_allow_html=True,
             )
-        else:
-            st.markdown(
-                "<div style='font-size: 12px; padding: 2px 0;'>"
-                "<span style='color: #ef4444;'>&#9679;</span>&nbsp;"
-                "Not connected</div>",
-                unsafe_allow_html=True,
-            )
-            if status and status.get("ok"):
-                body = status.get("body") or {}
-                if body.get("error"):
-                    st.caption(body["error"])
-            elif status:
+
+        if not api_ok and status:
+            if status.get("ok"):
+                _body = status.get("body") or {}
+                if _body.get("error"):
+                    st.caption(_body["error"])
+            else:
                 st.caption(status.get("error", ""))
 
         st.divider()
@@ -203,8 +220,18 @@ def _render_sidebar() -> None:
         # persona fields here (base_url, username, password, auth_type)
         # with an empty value meaning "use the default from
         # personas.yaml".
-        st.caption("Persona")
-        st.caption("Uses defaults from `personas.yaml`.")
+        st.markdown("#### Fusion Pod")
+        persona = (
+            (status.get("body") or {}).get("persona")
+            if status and status.get("ok")
+            else None
+        )
+        if persona:
+            st.markdown(f"**URL**  \n{persona.get('base_url', '')}")
+            st.markdown(f"**Username**  \n{persona.get('username', '')}")
+            st.markdown(f"**Password**  \n{persona.get('password_masked', '')}")
+        else:
+            st.caption("(not configured)")
 
 
 # ── Page ─────────────────────────────────────────────────────────────
