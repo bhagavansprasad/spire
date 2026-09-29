@@ -92,3 +92,11 @@ invoices in the last 30 days
 # ====================================================================
 invoices in the last 7 days
 invoices in the last 14 days
+
+# ====================================================================
+# J. Period-anchored (F-058)
+# ====================================================================
+top 5 suppliers by spend this year
+top 5 suppliers by spend this quarter
+top 5 suppliers by spend this month
+top 5 suppliers by spend last year
