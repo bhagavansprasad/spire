@@ -50,6 +50,7 @@ Capabilities that apply to more than one module and are not themselves modules. 
 | `fields_and_include` | Intents carrying both `fields` and `include` — the F-051 shape | 19 |
 | `modes` | Aggregation, comparison, count, open-invoices, balance — the mode flags on the intent | 17 (partial) |
 | `dipstick` | Depth-ordered triage: one prompt per pipeline depth | 00 |
+| `release_gate` | Cross-module release gate - 10 prompts spanning all four modules, one refusal, one cross-module join. Single file, not tiered. | release_gate/litmus |
 
 ---
 
@@ -76,9 +77,10 @@ prompts/
   scorer/                 parser_stress.txt  tool_selection.txt
   sme/                    testcases.txt
   retest/                 prompts.txt
+  release_gate/           litmus.txt
 ~~~
 
-Rule: every capability — module, combination, or cross-cutting feature — is a folder at prompts/ root, holding three tier files (`smoke.txt` / `verify.txt` / `exhaust.txt`). One level of folders only; one file at root, this tree's README. `refusals/` additionally holds `refusal_examples.txt`, the contract file enforced by `tests/test_nl_parser_capability.py`.
+Rule: every capability — module, combination, or cross-cutting feature — is a folder at prompts/ root, holding three tier files (`smoke.txt` / `verify.txt` / `exhaust.txt`). One level of folders only; one file at root, this tree's README. `refusals/` additionally holds `refusal_examples.txt`, the contract file enforced by `tests/test_nl_parser_capability.py`. `release_gate/` is the exception: a single-file cross-cutting set, not a capability tier - see section 3.
 
 ---
 
