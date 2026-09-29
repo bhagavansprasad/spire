@@ -28,6 +28,7 @@ from spire.api.models import (
     ErrorAnswer,
     ErrorDetail,
     Metadata,
+    PersonaInfo,
     PromptRequest,
     ResponseEnvelope,
     StageTiming,
@@ -35,6 +36,7 @@ from spire.api.models import (
 )
 from spire.api.translate import translate
 from spire.rendering.formatters import render_cli_stdout
+from spire.config import load_persona
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -58,6 +60,13 @@ def _uptime_s() -> int:
     return int((datetime.now(timezone.utc) - _STARTED_AT).total_seconds())
 
 
+def _mask_password(password: str) -> str:
+    """Display form: first 2, last 2, dots between."""
+    if not password or len(password) < 8:
+        return "\u2022" * 8
+    return password[:2] + "\u2022" * (len(password) - 4) + password[-2:]
+
+
 # ── Lifespan ─────────────────────────────────────────────────────────
 
 
@@ -74,6 +83,7 @@ async def _load_menu():
 async def lifespan(app: FastAPI):
     app.state.menu = None
     app.state.mcp = None
+    app.state.persona = None
     app.state.pipeline_ready = False
     app.state.pipeline_error = None
     app.state.lock = asyncio.Lock()
@@ -82,6 +92,20 @@ async def lifespan(app: FastAPI):
         app.state.menu = await _load_menu()
     except Exception as exc:                                # noqa: BLE001
         app.state.pipeline_error = f"menu load failed: {exc}"
+
+    try:
+        _persona = load_persona("default_dev")
+        _fusion = getattr(_persona, "fusion", None)
+        if _fusion is not None:
+            app.state.persona = PersonaInfo(
+                base_url=(getattr(_fusion, "base_url", "") or "").split("://", 1)[-1].split(".", 1)[0],
+                username=getattr(_fusion, "username", "") or "",
+                password_masked=_mask_password(
+                    getattr(_fusion, "password", "") or ""
+                ),
+            )
+    except Exception:                                       # noqa: BLE001
+        app.state.persona = None
 
     try:
         from fastmcp import Client
@@ -185,6 +209,7 @@ async def status(request: Request) -> JSONResponse:
                 getattr(request.app.state, "pipeline_error", None)
                 or "pipeline not initialised"
             ),
+            persona=getattr(request.app.state, "persona", None),
         )
         return JSONResponse(status_code=503, content=body.model_dump())
 
@@ -195,6 +220,7 @@ async def status(request: Request) -> JSONResponse:
         uptime_s=_uptime_s(),
         kg_version=None,
         pipeline_ready=True,
+        persona=getattr(request.app.state, "persona", None),
     )
     return JSONResponse(status_code=200, content=body.model_dump())
 

@@ -108,6 +108,12 @@ class ResponseEnvelope(BaseModel):
     metadata: Metadata
 
 
+class PersonaInfo(BaseModel):
+    base_url: str
+    username: str
+    password_masked: str
+
+
 class StatusResponse(BaseModel):
     ok: bool
     service: Literal["spire-api"] = "spire-api"
@@ -117,3 +123,5 @@ class StatusResponse(BaseModel):
     kg_version: str | None
     pipeline_ready: bool
     error: str | None = None
+    persona: PersonaInfo | None = None
+
