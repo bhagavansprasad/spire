@@ -415,6 +415,11 @@ Saved as `docs/phase-2/fixes/F-NNN.md` when a bug is started.
 
     <what a future session should look at>
 
+    ## S11 — Coverage expansion
+
+    Sibling prompts landed in this branch (paths, or "none"):
+      - prompts/<capability>/<tier>.txt
+
 ### 11.2 PR template
 
 Copied into the GitHub PR body when raising the PR. Not saved as a
@@ -436,6 +441,7 @@ separate file.
     - New regression test: tests/<file>::<test>
     - `pytest -q`: <pass count>
     - `--validate`: <pass count> (if V9)
+    - S11 prompts landed: <paths or n/a>
 
     ### Rollback
     `git revert <sha>`.

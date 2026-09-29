@@ -79,13 +79,13 @@ For the procedural checklist that accompanies this file, see
 9. **PR-based merges always.** No local `git merge` into a long-lived
    branch. Push the branch, open a PR, merge the PR.
 
-10. **Integration branch is `hardening-master`.** All phase branches
+10. **Integration branch is `hardening-master-v2`.** All phase branches
     spawn off it and merge back via PR. The runtime clone pulls from
-    `hardening-master`.
+    `hardening-master-v2`.
 
     **Nothing merges to `master` without explicit instruction from
     the user.** Not a PR, not a fast-forward, not a one-off doc fix.
-    The only merge target is `hardening-master`; the only merges are
+    The only merge target is `hardening-master-v2`; the only merges are
     PR branches into it. `master` stays where it was at the fork
     point until the user says otherwise — and the user's word on
     this is the only trigger.
@@ -370,7 +370,7 @@ exercise the same shape — existing or to-be-written — naming the tier
 each belongs to (smoke / verify / exhaust). This produces work for the
 prompt-set tree, not the findings log. It is the step that closes the
 gap between "we found this bug" and "we find its siblings before a
-user does."
+user does. Sibling prompts land in the fix's branch, in `prompts/<capability>/<tier>.txt`. A list in the fix file alone is not coverage; the next prompt-set sweep does not read fix files."
 
 **Nondeterminism claims need N≥20.** A claim that a prompt behaves
 differently across runs is not falsifiable from one observation or
