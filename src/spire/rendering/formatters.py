@@ -1615,7 +1615,7 @@ def render_cli_stdout(state: dict, menu) -> str:
             pass
         elif synth_failed:
             parts.append(
-                "Answer summary: (skipped - result too large to "
+                "Answer summary: (skipped — result too large to "
                 "summarize; showing the table only)"
             )
             parts.append("")
