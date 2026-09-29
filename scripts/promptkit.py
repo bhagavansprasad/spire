@@ -408,8 +408,8 @@ def _emit_run_graph_output(state, menu):
     from spire.nl_parser.capability import capability_message
     from spire.rendering.formatters import (
         _format_intent, _format_outputs, _format_plan,
-        _format_projected_table, _format_summary, _format_synthesized,
-        render_answer,
+        _format_summary,
+        render_cli_stdout,
     )
 
     _parser_log = get_logger("parser")
@@ -441,10 +441,14 @@ def _emit_run_graph_output(state, menu):
     _display = state.get("projected_outputs") or _outputs
     _block(_executor_log, _format_outputs(_display))
 
-    _fields = state["intent"].fields
-    _unresolved = state["intent"].unresolved_fields
-    _synth_failed = state.get("synth_failed")
-    render_answer(state, menu, answer)
+    # Emit through the same function the API hands to the UI, so
+    # the CLI and the UI match by construction rather than by
+    # convention. render_answer (still used by run_prompt_set and
+    # run_graph) composes the identical text via the same
+    # formatters; this route makes the shared text a property of
+    # a single function rather than of three callers who happen
+    # to agree.
+    answer(render_cli_stdout(state, menu))
 
     _summary_log.info("%s", _format_summary(state["plan"], _outputs,
                                             state.get("response")))
