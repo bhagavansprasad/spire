@@ -172,6 +172,24 @@ bundles:
   # Tooling that reads the sets.
   - scripts/run_prompt_set.py
   - src/spire/rendering/formatters.py
+  
+  smoke:
+  - prompts/modes/smoke.txt
+  - prompts/child_as_root/smoke.txt
+  - prompts/payables_procurement/smoke.txt
+  - prompts/fields_and_include/smoke.txt
+  - prompts/columns/smoke.txt
+  - prompts/date_filters/smoke.txt
+  - prompts/refusals/smoke.txt
+  - prompts/dipstick/smoke.txt
+  - prompts/receivables/smoke.txt
+  - prompts/payables/smoke.txt
+  - prompts/lifecycle/smoke.txt
+  - prompts/procurement_supplier/smoke.txt
+  - prompts/supplier/smoke.txt
+  - prompts/truncation/smoke.txt
+  - prompts/payables_supplier/smoke.txt
+  - prompts/procurement/smoke.txt
 
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora: []
