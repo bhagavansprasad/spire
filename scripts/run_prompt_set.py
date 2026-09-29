@@ -11,7 +11,7 @@ across every prompt in every set.
 --prompt-file takes SEVERAL paths, so a whole batch runs under one MCP
 connection and produces one grouped summary:
 
-    python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+    python scripts/run_prompt_set.py --prompt-file prompts/0*.txt
 
 This replaces the bash for-loop that used to wrap the script. The loop
 worked, but it opened a fresh connection per set and produced seven
@@ -53,8 +53,8 @@ Prerequisites (same as a manual run_plan.py run):
   - GEMINI_API_KEY set; KG reachable
 
 Usage:
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/03_ar.txt
-  python scripts/run_prompt_set.py --prompt-file scripts/prompts/0*.txt
+  python scripts/run_prompt_set.py --prompt-file prompts/03_ar.txt
+  python scripts/run_prompt_set.py --prompt-file prompts/0*.txt
   python scripts/run_prompt_set.py --prompt-file a.txt b.txt c.txt
   python scripts/run_prompt_set.py --prompts "List US suppliers" "Show PO 2144 and its lines"
   python scripts/run_prompt_set.py --all      # every prompt_set_*.txt in scripts/
@@ -82,15 +82,17 @@ from spire.graph.pipeline import GRAPH
 from spire.nl_parser.vocabulary import load_kg_menu
 from spire.nl_parser.capability import capability_message
 
-# Formatters live in display_formatters (run_plan.py is deprecated).
-from display_formatters import (
-    MCP_SERVER_URL,
+from spire.config import mcp_server_url
+
+# Formatters live in spire.rendering.formatters (run_plan.py is deprecated).
+from spire.rendering.formatters import (
     _format_intent,
     _format_outputs,
     _format_plan,
     _format_projected_table,
     _format_summary,
     _format_synthesized,
+    render_answer,
 )
 
 
@@ -199,39 +201,7 @@ async def _run_one(prompt: str, menu, client) -> str:
     _fields = state["intent"].fields
     _unresolved = state["intent"].unresolved_fields
     _synth_failed = state.get("synth_failed")
-    if _fields or _unresolved:
-        # Column query: summary on top (when it succeeded), table below.
-        # SUMMARY ONLY — not the typed record block. The table below
-        # prints the columns the user asked for; printing the records
-        # too repeats every value, and on an address query that is ~200
-        # lines of "address: ..." followed by the same data in the
-        # table.
-        # The table reads RAW outputs (it trims to the requested columns
-        # itself and flattens nested addresses).
-        #
-        # COL-03: when _fields is empty but _unresolved is not, EVERY
-        # requested column was unknown. There is no valid column to
-        # summarize, so skip the summary — the note carries the message.
-        _entity = state["intent"].target_entity
-        _available = menu.available_columns(_entity)
-        if not _fields:
-            pass  # no summary; the note below is the answer
-        elif _synth_failed:
-            answer(
-                "Answer summary: (skipped — result too large to summarize; "
-                "showing the table only)"
-            )
-            answer("")
-        else:
-            answer(_format_synthesized(state.get("response"), summary_only=True))
-            answer("")
-        answer(
-            _format_projected_table(
-                _outputs, _fields, _unresolved, _available, _entity
-            )
-        )
-    else:
-        answer(_format_synthesized(state.get("response")))
+    render_answer(state, menu, answer)
 
     _summary_log.info(
         "%s", _format_summary(state["plan"], _outputs, state.get("response"))
@@ -256,7 +226,7 @@ async def _run_all(sets: list[tuple[str, list[str]]]) -> int:
     print("(Requires the MCP server up, the pod reachable, and Gemini.)")
 
     # One connection for the whole batch.
-    async with Client(MCP_SERVER_URL) as client:
+    async with Client(mcp_server_url()) as client:
         for set_name, prompts in sets:
             header = "#" * 78
             print(
@@ -345,7 +315,7 @@ def main() -> int:
         metavar="FILE",
         help=(
             "One or more prompt files to run, in the order given. Shell "
-            "globs work: scripts/prompts/0*.txt"
+            "globs work: prompts/0*.txt"
         ),
     )
     parser.add_argument(

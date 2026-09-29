@@ -34,7 +34,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DISPLAY_PY = REPO_ROOT / "scripts" / "display_formatters.py"
+DISPLAY_PY = REPO_ROOT / "src" / "spire" / "rendering" / "formatters.py"
 
 
 # ── [A] Tool projection ──────────────────────────────────────────────
@@ -100,7 +100,7 @@ def check_record_fields() -> None:
 
 
 def check_display_columns() -> None:
-    print("[C] The display — scripts/display_formatters.py, the "
+    print("[C] The display — src/spire/rendering/formatters.py, the "
           "PurchaseOrderResponse branch\n")
 
     src = DISPLAY_PY.read_text(encoding="utf-8")
@@ -156,7 +156,7 @@ def synthetic_build_and_render() -> None:
         PurchaseOrderResponse,
         build_purchase_order_records,
     )
-    from scripts.display_formatters import _format_synthesized
+    from spire.rendering.formatters import _format_synthesized
 
     # One executor row, shaped like what get_purchase_order_by_id returns
     # for PO 701337 today (per four_bugs.md §2.1's curl).

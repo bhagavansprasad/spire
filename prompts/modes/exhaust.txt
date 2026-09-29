@@ -1,0 +1,164 @@
+# Spire prompt set — exhaust_modes. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every mode, every op, every phrasing variant.
+# Goal: find an op the parser misroutes or a flag it drops. ~70 prompts.
+#
+# COST: the aggregation prompts page the full PO or invoice collection
+# (~2 min each). Budget ~40-60 minutes for the file.
+#
+# HOW TO SCORE — read the INTENT line.
+
+# ====================================================================
+# A. Aggregation: by_supplier (invoice spend) x phrasings
+# ====================================================================
+top 10 suppliers by spend in 2022
+top 5 suppliers by spend in 2022
+top 10 suppliers by spend in 2023
+top 10 suppliers by spend in 2024
+which suppliers did we spend the most with in 2022
+which suppliers did we spend the most with in 2023
+total invoiced by supplier in 2022
+top 20 suppliers by spend in 2022
+top suppliers by invoiced amount last year
+highest suppliers by invoice spend
+
+# ====================================================================
+# B. Aggregation: po_value_by_supplier x phrasings
+# ====================================================================
+top 5 suppliers by purchase order value
+top suppliers by PO value
+top 3 suppliers by PO value
+top 10 suppliers by purchase order value
+top 10 suppliers by committed value
+biggest suppliers by ordered value
+which suppliers have the most committed
+which suppliers have the most ordered
+rank suppliers by purchase order value
+top suppliers by open PO value
+
+# ====================================================================
+# C. Aggregation: po_count_by_status
+# ====================================================================
+how many purchase orders are there and what are they worth
+break POs down by status
+PO status summary
+purchase order count by status
+how many POs by status
+show me PO status breakdown
+purchase orders grouped by status
+
+# ====================================================================
+# D. Aggregation: open_po_summary
+# ====================================================================
+how much have we committed in open purchase orders
+how much is committed in open POs
+total value of outstanding purchase orders
+what is our open PO commitment
+summarize open PO commitments
+total committed in open POs
+
+# ====================================================================
+# E. Aggregation: top_invoices_by_amount
+# ====================================================================
+top 10 invoices by amount
+largest invoices
+biggest invoices for supplier Lee Supplies
+top 5 invoices by amount
+top 20 invoices by amount
+biggest invoices
+largest invoices for supplier EIP Inc
+
+# ====================================================================
+# F. Aggregation: exposure_ranking
+# ====================================================================
+Rank top accounts by outstanding exposure
+top accounts by exposure
+which accounts have the most outstanding receivables
+top 10 accounts by outstanding exposure
+top accounts by outstanding receivables
+biggest accounts by exposure
+
+# ====================================================================
+# G. Aggregation: receipt_method_distribution
+# ====================================================================
+Show receipt method distribution for ABC Application Software
+receipts by method for customer ABC Application Software
+what payment methods do we receive
+show me receipt method breakdown
+receipt method breakdown for customer ABC Application Software
+how do customers pay us
+
+# ====================================================================
+# H. Compare ops x phrasings
+# ====================================================================
+How does invoiced compare to ordered for PO 162034?
+How does invoiced compare to ordered for Lee Supplies?
+Compare ordered vs invoiced for our top 3 suppliers
+invoiced vs ordered for our biggest suppliers
+are our biggest suppliers' orders getting invoiced
+was PO 162034 over-invoiced
+is Lee Supplies under-invoiced
+did we invoice more than we ordered on PO 162034
+
+# ====================================================================
+# I. Count mode x every rootable entity
+# ====================================================================
+count of suppliers
+count of invoices
+count of purchase orders
+count of credit memos
+count of customer accounts
+how many active suppliers are there
+how many US suppliers are there
+how many AR invoices are there
+
+# ====================================================================
+# J. Open_only + invoice_limit x phrasings
+# ====================================================================
+open invoices for ABC Corporation Americas
+show me the outstanding invoices for ABC Application Software
+unpaid invoices for ABC Corporation Worldwide
+top 5 open invoices for ABC Corporation Americas
+the 10 largest outstanding invoices for ABC Application Software
+top 3 open invoices for ABC Corporation Worldwide
+top 20 open invoices for ABC Application Software
+
+# ====================================================================
+# K. Balance_only x phrasings
+# ====================================================================
+Show me the account balance for ABC Application Software
+Show me the account balance for customer ABC Corporation Americas
+Show me the account balance for customer ABC Corporation Worldwide
+account activity summary for customer ABC Application Software
+what are ABC Application Software's total receivables
+
+# ====================================================================
+# L. Cross-column traps — SPEND vs PO VALUE
+# ====================================================================
+# -> by_supplier
+top 10 suppliers by spend in 2022
+top 5 suppliers by invoiced amount
+which suppliers did we spend the most with
+total invoiced by supplier
+# -> po_value_by_supplier
+top 5 suppliers by purchase order value
+which suppliers have committed the most
+which suppliers have ordered the most
+total committed by supplier
+
+# ====================================================================
+# M. Sibling guards — must stay on their op
+# ====================================================================
+how does invoiced compare to ordered for PO 162034
+was PO 162034 over-invoiced
+are our biggest suppliers' orders getting invoiced
+compare ordered vs invoiced for our top 3 suppliers
+
+# ====================================================================
+# N. Refusals — not an op
+# ====================================================================
+suppliers with net 30 payment terms
+show me contract renewals
+who should we stop buying from
+suppliers with the highest quality score

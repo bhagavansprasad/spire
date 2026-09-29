@@ -183,6 +183,7 @@ async def search_suppliers(
 
 @mcp.tool()
 async def search_invoices(
+    invoice_number: str | None = None,
     purchase_order: str | None = None,
     supplier_number: str | None = None,
     supplier_name: str | None = None,
@@ -206,6 +207,9 @@ async def search_invoices(
     invoice_date_after="2022-01-01" and invoice_date_before="2022-02-01".
 
     Args:
+        invoice_number: Exact InvoiceNumber, e.g. "LEE-01-1006-111" or
+            "INV-2024-001". A direct identifier lookup; accepts an
+            invoice number on its own without a supplier reference.
         purchase_order: Exact PurchaseOrderNumber, e.g. "162034". Returns
             the invoices raised against that PO. This is the PO NUMBER
             (OrderNumber), not POHeaderId.
@@ -224,6 +228,7 @@ async def search_invoices(
     async with FusionClient(_persona) as client:
         result = await _search_invoices(
             client,
+            invoice_number=invoice_number,
             purchase_order=purchase_order,
             supplier_number=supplier_number,
             supplier_name=supplier_name,
@@ -274,6 +279,8 @@ async def search_purchase_orders(
     status: str | None = None,
     created_before: str | None = None,
     created_since: str | None = None,
+    last_updated_before: str | None = None,
+    last_updated_after: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion purchase orders.
@@ -310,6 +317,8 @@ async def search_purchase_orders(
             status=status,
             created_before=created_before,
             created_since=created_since,
+            last_updated_before=last_updated_before,
+            last_updated_after=last_updated_after,
             limit=limit,
         )
         return result.to_dict()
@@ -318,7 +327,7 @@ async def search_purchase_orders(
 @mcp.tool()
 async def search_suppliers_by_site_bu(
     supplier_id: int,
-    business_unit: str,
+    business_unit: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Check whether one supplier has a site in a given business unit.
@@ -352,7 +361,7 @@ async def search_suppliers_by_site_bu(
 @mcp.tool()
 async def search_suppliers_by_classification(
     supplier_id: int,
-    classification: str,
+    classification: str | None = None,
     limit: int = 25,
 ) -> dict:
     """Check whether one supplier has a given business classification.
@@ -473,21 +482,34 @@ async def get_buyer(buyer_id: int) -> dict | None:
 
 
 @mcp.tool()
-async def get_purchase_order_by_id(po_header_id: int) -> dict | None:
-    """Fetch one purchase order by its POHeaderId.
+async def get_purchase_order_by_id(po_header_id: str | int) -> dict | None:
+    """Fetch one purchase order by its order number OR its POHeaderId.
 
     Use this to answer questions about a specific purchase order, e.g.
-    "what is PO 2144 about" or "show PO 2144". POHeaderId is the numeric
-    id of the PO. To also see the PO's line items, call
-    get_purchase_order_lines with the same id.
+    "what is PO 2144 about", "show PO 162034", or "what is purchase
+    order US164932 about". The number a user gives can be either an
+    OrderNumber (a string like "US164932" or "162034" — what is printed
+    on the PO) or a POHeaderId (a numeric internal id like 2144); the
+    underlying tool (tools/purchase_order_by_id.py) tries both and
+    resolves either. To also see the PO's line items, call
+    get_purchase_order_lines with the resolved POHeaderId.
+
+    F-006: the annotation was `int`, so an alpha-prefixed OrderNumber
+    failed Pydantic's int_parsing at the MCP schema boundary BEFORE the
+    tool body — which already resolves both identifier shapes — could
+    run. `str | int` makes the schema admit what the body already
+    handles. The resolver is unchanged; the fix is here, at the MCP
+    contract.
 
     Args:
-        po_header_id: The numeric POHeaderId of the purchase order.
+        po_header_id: The number the user gave — an OrderNumber string
+            (e.g. "US164932", "162034") or a POHeaderId int (e.g. 2144).
+            The arg name is historical; either identifier works.
 
     Returns:
         A dict of the PO header fields (OrderNumber, Supplier, Status,
         Buyer, Ordered, Total, TotalTax, PaymentTerms, ship-to/bill-to,
-        OrderDate, and more), or null if no PO with that id exists.
+        OrderDate, and more), or null if neither lookup finds a PO.
     """
     async with FusionClient(_persona) as client:
         return await _get_purchase_order_by_id(
@@ -728,7 +750,9 @@ async def list_receivables_credit_memos(limit: int = 25) -> dict:
 
 @mcp.tool()
 async def get_customer_account_by_name(
-    customer_name: str, limit: int = 25
+    customer_name: str | None = None,
+    account_number: str | None = None,
+    limit: int = 25,
 ) -> list[dict]:
     """Resolve a customer name to their receivables account(s).
 
@@ -747,7 +771,10 @@ async def get_customer_account_by_name(
     """
     async with FusionClient(_persona) as client:
         return await _get_customer_account_by_name(
-            client, customer_name=customer_name, limit=limit
+            client,
+            customer_name=customer_name,
+            account_number=account_number,
+            limit=limit,
         )
 
 

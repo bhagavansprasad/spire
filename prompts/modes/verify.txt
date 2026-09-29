@@ -1,0 +1,78 @@
+# Spire prompt set — verify_modes. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — the mode sections of 17_modes_and_columns plus
+# the aggregation ops. 40 prompts.
+#
+# SCOPE: every aggregate op the KG registries declare; the four mode
+# flags; the aggregation short-circuit vs the entity-list path.
+#
+# THE RISK: modes/ carries six files. All six load for every routed
+# parse. If a prompt routes differently after a mode-file change, one
+# sibling is over-matching.
+#
+# HOW TO SCORE — read the INTENT line, not the answer:
+#   - aggregate.op must be the right op for the question.
+#   - count_only / open_only / invoice_limit / balance_only must be set.
+#   - SPEND vs PO VALUE distinction: 'spend'/'invoiced' -> by_supplier;
+#     'purchase order value'/'committed'/'ordered' -> po_value_by_supplier.
+
+# — Count mode (4) —
+count of suppliers
+how many active suppliers are there
+how many US suppliers are there
+count of AR invoices
+
+# — Open invoices mode (4) —
+open invoices for ABC Corporation Americas
+show me the outstanding invoices for ABC Application Software
+unpaid invoices for ABC Corporation Worldwide
+open customer invoices for ABC Application Software
+
+# — Top-N open invoices mode (3) —
+top 5 open invoices for ABC Corporation Americas
+the 10 largest outstanding invoices for ABC Application Software
+top 3 open invoices for ABC Corporation Worldwide
+
+# — Balance mode (3) —
+Show me the account balance for ABC Application Software
+Show me the account balance for customer ABC Corporation Americas
+account activity summary for customer ABC Application Software
+
+# — Aggregation ops: PO value (6) —
+top 5 suppliers by purchase order value
+top suppliers by PO value
+top 10 suppliers by committed value
+biggest suppliers by ordered value
+which suppliers have the most committed
+rank suppliers by purchase order value
+
+# — Aggregation ops: PO count by status (4) —
+how many purchase orders are there and what are they worth
+break POs down by status
+PO status summary
+purchase orders grouped by status
+
+# — Aggregation ops: Open PO summary (4) —
+how much have we committed in open purchase orders
+how much is committed in open POs
+total value of outstanding purchase orders
+what is our open PO commitment
+
+# — Aggregation ops: invoice spend (4) —
+top 10 suppliers by spend in 2022
+top 5 suppliers by invoiced amount
+which suppliers did we spend the most with
+total invoiced by supplier
+
+# — Aggregation ops: top invoices / exposure / receipt method (4) —
+top 10 invoices by amount
+largest invoices
+Rank top accounts by outstanding exposure
+Show receipt method distribution for ABC Application Software
+
+# — Compare ops (4) —
+How does invoiced compare to ordered for PO 162034?
+How does invoiced compare to ordered for Lee Supplies?
+Compare ordered vs invoiced for our top 3 suppliers
+was PO 162034 over-invoiced

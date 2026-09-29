@@ -1,0 +1,29 @@
+# Spire prompt set — smoke_lifecycle. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the PO lifecycle filter work at all.
+# Five prompts, seconds. All MUST ANSWER; a refusal is a FAILURE, not a
+# feature request.
+#
+# SCOPE: the lifecycle_status filter on PurchaseOrder. The five delivery
+# prompts the module exists for.
+#
+# Anchors: PO 701337 = JGA, Open. 1235.00 ordered, 398.00 received,
+# 398.00 invoiced, paid UNKNOWN. Line 1 Open with 837.00 outstanding.
+# PO 162034 = Lee Supplies, Closed. 758.00 ordered, fully received and
+# invoiced, 830.01 paid. Carries an unexplained 72.01 over-invoice.
+
+# A.4 — status matrix (the delivery prompt).
+Has PO 701337 been fully received, fully invoiced, and fully paid?
+
+# A.7 — diagnostic.
+Why is PO 701337 still open?
+
+# A.2 — end-to-end summary.
+Give me an end-to-end summary of PO 701337 from supplier setup through payment.
+
+# A.10 — executive summary with risk.
+What is the risk rating on PO 701337 and why?
+
+# A.3 — per-module status breakdown.
+What is the supplier status, approval status, receipt status, invoice matching status and payment status of PO 701337?

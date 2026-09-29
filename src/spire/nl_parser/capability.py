@@ -302,7 +302,7 @@ _FILTER_GUIDANCE: dict[str, tuple[str, str]] = {
 # status or name instead".
 #
 # Every example below was RUN against the pod on 2026-07-31 and answered.
-# They are also in scripts/prompts/10_refusal_examples.txt, which
+# They are also in prompts/refusals/refusal_examples.txt, which
 # test_every_promised_example_is_verifiable enforces. Do not add an entry
 # here without adding it there and running it — an example that refuses is
 # worse than no example, because it is offered to someone who has just been
@@ -410,7 +410,14 @@ _NOT_A_ROOT_GUIDANCE: dict[str, tuple[str, str]] = {
     ),
     "ReceivablesInvoiceLine": (
         "Ask for the invoice and its lines together.",
-        "Show invoice lines for invoice 300000248096352",
+        # F-033: a refusal's Example is a PROMISE made to someone who
+        # has just been told no. The previous example was byte-identical
+        # to the prompt that triggers this very refusal, so following
+        # the advice landed the user straight back in the same refusal.
+        # This example is a DIFFERENT prompt that succeeds: it roots on
+        # the invoice (a valid target) by its queryable id, and is
+        # already in prompts/refusals/refusal_examples.txt.
+        "Get the AR invoice with CustomerTransactionId 300000248096352",
     ),
     "ReceivablesTaxLine": (
         "Ask for the invoice and its tax lines together.",
@@ -471,24 +478,18 @@ _OPERATION_EXAMPLES: dict[str, str] = {
     "CreditMemo": "credit memos for ABC Application Software",
     "CustomerAccount": "account balance for ABC Corporation Americas",
     "Address": "Suppliers with their addresses",
-    # A distinct key (set by the Site gate in intent_validation.py) so the
-    # site-listing refusal gets an address example, not the generic Supplier
-    # one. Its Solution lives in _OPERATION_SOLUTIONS below.
-    "SupplierSiteListing": "addresses for supplier 1252",
 }
 
 # Solution overrides for UNSUPPORTED_OPERATION, keyed on the same entity as
 # the examples. Most operation refusals (aggregations, comparisons) use the
 # generic _FALLBACK solution; a keyed entry here replaces it when the refusal
-# has a more specific route to offer. SupplierSiteListing points at the two
-# things that DO work — the BU filter and addresses — instead of the generic
-# "ask me for the records and do the rest your side".
-_OPERATION_SOLUTIONS: dict[str, str] = {
-    "SupplierSiteListing": (
-        "Ask for suppliers with a site in a named business unit, or for the "
-        "supplier's addresses."
-    ),
-}
+# has a more specific route to offer.
+#
+# F-043 (2026-09-19): the Site gate in intent_validation.py that produced
+# offending_entity='SupplierSiteListing' was deleted, so the only key this
+# dict ever held is gone. Kept as an empty dict so the lookup below stays a
+# no-op and any future override remains a one-line addition.
+_OPERATION_SOLUTIONS: dict[str, str] = {}
 
 # Fallback per flavor, used when there is no entity-specific entry.
 #
@@ -806,12 +807,17 @@ def _solution_and_example(refusal: Refusal, menu: KGMenu) -> tuple[str, str]:
     solution, example = _FALLBACK[flavor]
 
     # The operation Example/Solution maps are keyed by our OWN internal
-    # markers as well as real entities. SupplierSiteListing is one such
-    # marker (the Site gate sets it): a legitimate internal key, not a
-    # model-invented type, so it must NOT go through _known_entity, which
+    # markers as well as real entities. An internal marker is a legitimate
+    # key set by a specific gate in intent_validation.py — NOT a
+    # model-invented type — so it must NOT go through _known_entity, which
     # filters exactly for invented types and would drop it. Look these two
     # maps up against the raw offending_entity; the reason line above still
     # uses the filtered `entity`.
+    #
+    # F-043 (2026-09-19): both maps are currently empty. The only live
+    # marker they ever held was SupplierSiteListing, whose gate was
+    # removed when Site became a valid include. Kept in place — one line
+    # to reinstate if a future gate needs its own wording.
     op_key = refusal.offending_entity
     if flavor is RefusalFlavor.UNSUPPORTED_OPERATION and op_key in _OPERATION_EXAMPLES:
         example = _OPERATION_EXAMPLES[op_key]

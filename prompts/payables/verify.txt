@@ -1,0 +1,65 @@
+# Spire prompt set — payables/verify. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the payables module work across its normal
+# shapes. Minutes. Run before a merge. 28 prompts.
+#
+# SCOPE: Invoice and every entity-level filter on it, across its normal
+# phrasings.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line:
+#   - Intent target_entity Invoice with the expected filter.
+#   - 'supplier' value routes by digit-or-name: all-digit → supplier_number,
+#     else supplier_name.
+#   - Date bounds: absolute goes through verbatim, relative routes through
+#     the months helper and lands on invoice_date_before / _after.
+#
+# Anchors: supplier 1252 = Lee Supplies. Invoice numbers include
+# LEE-01-1006-111 (InvoiceId 489503). Invoice IDs are small integers.
+
+# — supplier by NUMBER (5) —
+show me invoices for supplier 1252
+find invoices for supplier 1252
+list invoices for supplier 1252
+which invoices belong to supplier 1252
+all invoices for supplier 1252
+
+# — supplier by NAME (5) —
+show me invoices for Lee Supplies
+find invoices for Lee Supplies
+list invoices for Lee Supplies
+which invoices belong to Lee Supplies
+all invoices for Lee Supplies
+
+# — purchase_order filter (3) —
+# The Invoice guard accepts a purchase_order filter as a valid root ref.
+# Invoice 162034inv is the anchor.
+which invoices were raised against PO 162034?
+invoices for PO 162034
+show me invoices for PO 162034
+
+# — invoice_number filter (3) —
+# A direct invoice number stands alone — no supplier needed.
+show details for invoice number LEE-01-1006-111
+find invoice LEE-01-1006-111
+look up invoice number LEE-01-1006-111
+
+# — absolute date (3) —
+invoices in 2023
+invoices in 2024
+invoices between Jan and Mar 2024
+
+# — relative date (3) —
+invoices older than 6 months
+invoices older than 1 year
+invoices in the last 6 months
+
+# — amount bound (3) —
+invoices over 10000 for supplier 1252
+invoices above 50000 for supplier 1252
+invoices between 1000 and 5000 for supplier 1252
+
+# — multi-filter combinations (3) —
+invoices for supplier 1252 over 100000 in 2023
+invoices for Lee Supplies in the last 6 months
+invoices for supplier 1252 between Jan and Mar 2024

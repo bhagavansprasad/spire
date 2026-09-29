@@ -65,6 +65,7 @@ _PROJECTED_FIELDS = [
     "CurrencyCode",
     "Description",
     "CreationDate",
+    "LastUpdateDate",
 ]
 
 
@@ -88,6 +89,8 @@ async def search_purchase_orders(
     status: str | None = None,
     created_before: str | None = None,
     created_since: str | None = None,
+    last_updated_before: str | None = None,
+    last_updated_after: str | None = None,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion purchase orders.
@@ -122,14 +125,41 @@ async def search_purchase_orders(
     # is an exact match and cheaper. Whichever bound loses the slot is
     # still applied client-side.
     server_clause: str | None = None
+    # F-045: the fetch's orderBy, set when the server clause is a date
+    # bound whose default physical scan does not start where the range
+    # starts. `CreationDate >= X` alone returned rows beginning
+    # 2024-07-01 on dabpqy 2026-09-24 (200-row window, no projection),
+    # so a 2023-only range came back empty even with the correct server
+    # clause. Pinning the order to CreationDate ascending starts the
+    # window at the range's lower edge.
+    server_order_by: str | None = None
     if supplier_id is not None:
         server_clause = f"SupplierId={supplier_id}"
     elif status:
         server_clause = f"StatusCode='{status}'"
-    elif created_before:
-        server_clause = f"CreationDate < '{created_before}'"
+    elif last_updated_before:
+        server_clause = f"LastUpdateDate < '{last_updated_before}'"
+    elif last_updated_after:
+        server_clause = f"LastUpdateDate >= '{last_updated_after}'"
+    # F-045: created_since beats created_before when BOTH are set.
+    #
+    # Only one clause reaches the server (the pod cannot AND-combine), and
+    # the fetch comes back unordered — the 200-row window lands wherever
+    # the collection starts. A `>= since` clause starts that window at
+    # the range's lower edge, so the sample sits inside the range. A
+    # `< before` clause starts it at the bottom of the collection, and
+    # for a recent range (e.g. "2023-01-01 to 2024-01-01") the sample
+    # lands entirely below it — the client-side filter then keeps
+    # nothing and the answer is 0 records over a range that holds
+    # thousands. Verified on dabpqy 2026-09-24: `CreationDate >=
+    # '2023-01-01'` returned totalResults 4546 starting 2023-01-11,
+    # while `CreationDate < '2024-01-01'` returned rows 2013-12-11 ->
+    # 2014-02-12 with zero 2023 rows in the first 200.
     elif created_since:
         server_clause = f"CreationDate >= '{created_since}'"
+        server_order_by = "CreationDate:asc"
+    elif created_before:
+        server_clause = f"CreationDate < '{created_before}'"
     elif supplier_name:
         server_clause = f"Supplier LIKE '%{supplier_name}%'"
 
@@ -141,6 +171,8 @@ async def search_purchase_orders(
             status,
             created_before,
             created_since,
+            last_updated_before,
+            last_updated_after,
         )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
@@ -148,6 +180,8 @@ async def search_purchase_orders(
     params: dict[str, str | int] = {"limit": fetch_limit}
     if server_clause:
         params["q"] = server_clause
+        if server_order_by:
+            params["orderBy"] = server_order_by
     else:
         # Unfiltered list ("list all POs") — the REC-2 sample path. Order
         # the page so the 25 rows are reproducible run-to-run; an unordered
@@ -174,6 +208,13 @@ async def search_purchase_orders(
         if created_before and created >= created_before:
             return False
         if created_since and created < created_since:
+            return False
+        # LastUpdateDate is an ISO timestamp like CreationDate; the
+        # same date-only string-prefix comparison applies.
+        updated = item.get("LastUpdateDate") or ""
+        if last_updated_before and updated >= last_updated_before:
+            return False
+        if last_updated_after and updated < last_updated_after:
             return False
         return True
 

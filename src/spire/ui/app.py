@@ -1,8 +1,21 @@
-"""Streamlit frontend for the SPIRE API (Doc B §5.1.6).
+"""Streamlit frontend for the SPIRE API.
 
-One page. Header with connection indicator, one input, one answer.
-Reads the JSON envelope from POST /prompt and renders whichever of the
-five kinds came back.
+ChatGPT-style single-frame layout:
+
+  - Sidebar (left): compact brand block (icon + name), connection
+    status, and a reserved persona section for a later change.
+  - Main column: the user's prompt in a chat bubble, the assistant's
+    answer in a monospace block below it, and the input pinned to the
+    bottom by Streamlit.
+
+ONE FRAME ONLY. The current prompt and its response live in a single
+slot on ``st.session_state``. The next submit replaces them. No list,
+no history, no persistence anywhere.
+
+The answer is displayed exactly as the CLI prints it: the API returns
+a ``kind="cli"`` envelope whose ``answer.text`` is
+``render_cli_stdout``'s output, and this file drops that string into
+``st.code(text, language=None)`` and touches nothing else.
 
 Run:      spire-ui
 Config:   SPIRE_API_URL (default http://localhost:8000)
@@ -10,16 +23,13 @@ Default:  binds 0.0.0.0:8888
 
 This module RENDERS ONLY. It is executed by Streamlit's runtime, which
 sets a ScriptRunContext before running the file. The console-script
-entry point lives in __main__.py, which launches Streamlit on this file.
-Do not add a main() here — the two execution contexts (imported by
-__main__.py vs executed as a Streamlit script) would otherwise collide.
+entry point lives in __main__.py, which launches Streamlit on this
+file. Do not add a main() here.
 """
 
 from __future__ import annotations
 
-import json
 import os
-from typing import Any
 
 import httpx
 import streamlit as st
@@ -49,81 +59,28 @@ def _post_prompt(prompt: str) -> dict:
     return r.json()
 
 
-# ── Cell flattening ──────────────────────────────────────────────────
-#
-# The dataframe cannot render nested lists/dicts — Streamlit shows them
-# as "[object Object]". The synthesizer's records nest buyers, lines,
-# schedules, contacts, addresses under each row. Flatten those to a
-# readable string before display.
-#
-# Two-step: try the pretty form first (join a "name-like" field), fall
-# back to compact JSON. Pretty is what a tester reads; JSON is what they
-# paste into a bug report when pretty loses information.
-#
-# Name-like keys in priority order. These are the display fields the
-# synthesizer's nested models actually carry:
-#   BuyerInfo.display_name       -> "Gee, May"
-#   ContactInfo.contact_name     -> "Kim, John"
-#   LineInfo.description         -> "Marketing Assistance"
-#   AddressInfo.formatted_address -> "US, 94043, CA, Mountain View"
-_NAME_KEYS = (
-    "display_name",
-    "contact_name",
-    "formatted_address",
-    "description",
-    "name",
-)
+def _post_prompt_safe(prompt: str) -> dict:
+    """Wrap _post_prompt so a request-level failure becomes an envelope
+    the renderer can display. A failed POST should look like an
+    assistant message, not a Streamlit traceback."""
+    try:
+        return _post_prompt(prompt)
+    except Exception as exc:                                # noqa: BLE001
+        return {
+            "kind": "error",
+            "answer": {
+                "text": f"Request to API failed: {exc}",
+                "error": {
+                    "stage": "invoke",
+                    "message": str(exc),
+                    "retryable": True,
+                },
+            },
+            "metadata": {},
+        }
 
 
-def _pretty_from_dict(d: dict) -> str | None:
-    """Return the first name-like field of a dict, or None."""
-    for key in _NAME_KEYS:
-        v = d.get(key)
-        if v:
-            return str(v)
-    return None
-
-
-def _flatten_cell(value: Any) -> Any:
-    """Return a scalar Streamlit can render. Lists/dicts become strings."""
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-
-    if isinstance(value, list):
-        if not value:
-            return ""
-        # Pretty: list of dicts each carrying a name-like field.
-        if all(isinstance(x, dict) for x in value):
-            names: list[str] = []
-            for item in value:
-                pretty = _pretty_from_dict(item)
-                if pretty is None:
-                    break
-                names.append(pretty)
-            else:
-                return ", ".join(names)
-        return json.dumps(value, separators=(",", ":"), default=str)
-
-    if isinstance(value, dict):
-        # A single dict — e.g. PurchaseOrderRecord.buyer, or lifecycle
-        # DFF. Try the name-like lookup first; fall back to JSON.
-        pretty = _pretty_from_dict(value)
-        if pretty is not None:
-            return pretty
-        return json.dumps(value, separators=(",", ":"), default=str)
-
-    return str(value)
-
-
-def _flatten_records(records: list[dict]) -> list[dict]:
-    """One pass over each row. Every cell becomes a scalar."""
-    return [
-        {k: _flatten_cell(v) for k, v in row.items()}
-        for row in records
-    ]
-
-
-# ── Renderers ────────────────────────────────────────────────────────
+# ── Rendering ────────────────────────────────────────────────────────
 
 
 def _render_metadata(meta: dict) -> None:
@@ -142,136 +99,190 @@ def _render_metadata(meta: dict) -> None:
             st.caption("Stage breakdown: not available for this run.")
 
         kv = meta.get("kg_version")
-        st.caption(f"KG version: {kv if kv else '(not tracked until Phase 3g)'}")
-
-
-def _render_text(answer: dict, meta: dict) -> None:
-    if answer.get("text"):
-        st.markdown(answer["text"])
-
-
-def _render_table(answer: dict, meta: dict) -> None:
-    if answer.get("truncated") and answer.get("truncation_note"):
-        st.warning(answer["truncation_note"])
-    if answer.get("text"):
-        st.markdown(answer["text"])
-    records = answer.get("records") or []
-    if records:
-        st.dataframe(
-            _flatten_records(records),
-            width="stretch",
-            hide_index=True,
+        st.caption(
+            f"KG version: {kv if kv else '(not tracked until Phase 3g)'}"
         )
+
+
+def _render_answer(env: dict) -> None:
+    """Render one response envelope.
+
+    The API produces ``kind="cli"`` by default. ``kind="error"`` still
+    appears if the pipeline fails before the CLI renderer runs. Any
+    other kind is a legacy envelope and falls through to a text
+    fallback; no path here reformats or parses the CLI text.
+    """
+    kind = env.get("kind", "error")
+    answer = env.get("answer") or {}
+    meta = env.get("metadata") or {}
+
+    if kind == "cli":
+        text = answer.get("text") or ""
+        if text.strip():
+            st.code(text, language=None)
+        else:
+            st.caption("(empty response)")
+    elif kind == "error":
+        err = answer.get("error") or {}
+        msg = err.get("message") or answer.get("text") or "Unknown error"
+        st.error(msg)
     else:
-        st.caption("(no records)")
+        # A shape the API no longer produces. Show whatever text came
+        # back, unmodified.
+        text = answer.get("text") or ""
+        if text:
+            st.code(text, language=None)
+        else:
+            st.caption(f"(unhandled kind: {kind})")
+
+    if meta:
+        _render_metadata(meta)
+
+    with st.expander("Raw response", expanded=False):
+        st.json(env)
 
 
-def _render_refusal(answer: dict, meta: dict) -> None:
-    detail = answer.get("refusal") or {}
-    st.warning(detail.get("reason") or "Refused.")
-    if detail.get("solution"):
-        st.info(detail["solution"])
-    if detail.get("example"):
-        st.code(detail["example"], language=None)
+# ── Sidebar ──────────────────────────────────────────────────────────
 
 
-def _render_partial(answer: dict, meta: dict) -> None:
-    st.warning("Partial result — some steps failed.")
-    if answer.get("text"):
-        st.markdown(answer["text"])
-    records = answer.get("records") or []
-    if records:
-        st.dataframe(
-            _flatten_records(records),
-            width="stretch",
-            hide_index=True,
+def _render_sidebar() -> None:
+    with st.sidebar:
+        # Brand block - compact. Icon is a PLACEHOLDER; the real Spire
+        # icon will replace the div below when it's ready. Two ways:
+        #
+        #   st.image("path/to/spire-icon.png", width=28)
+        #   st.logo("path/to/spire-icon.png")   # built-in sidebar logo
+        #
+        # The character &#9670; below is a blue filled diamond used as
+        # a visual placeholder, not a permanent choice.
+        st.markdown(
+            """
+            <div style="display: flex; align-items: center; gap: 12px;
+                        padding: 8px 0 12px 0;">
+              <div style="font-size: 28px; line-height: 1;
+                          color: #2563eb;">&#9670;</div>
+              <div>
+                <div style="font-size: 19px; font-weight: 600;
+                            letter-spacing: 0.02em;">SPIRE</div>
+                <div style="font-size: 12px; color: #888;
+                            margin-top: -1px;">Fusion NL query</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-    failed = answer.get("failed_steps") or []
-    if failed:
-        with st.expander("Failed steps"):
-            st.json(failed)
 
+        st.divider()
 
-def _render_error(answer: dict, meta: dict) -> None:
-    err = answer.get("error") or {}
-    stage = err.get("stage", "?")
-    message = err.get("message", answer.get("text") or "Unknown error")
-    st.error(f"{stage}: {message}")
-    if not err.get("retryable", True):
-        st.caption("This failure will not be fixed by retrying.")
+        # Connection status - two lines, each naming what is connected.
+        status = _get_status()
+        api_ok = bool(
+            status and status.get("ok") and status.get("status_code") == 200
+        )
+        pipeline_ready = False
+        if api_ok:
+            pipeline_ready = bool(
+                (status.get("body") or {}).get("pipeline_ready")
+            )
 
+        st.markdown(
+            "<div style='font-size: 10px; color: #888; "
+            "text-transform: uppercase; letter-spacing: 0.08em; "
+            "margin-bottom: 4px;'>Connection</div>",
+            unsafe_allow_html=True,
+        )
+        for _label, _ok, _ok_txt in (
+            ("SPIRE API", api_ok, "Connected"),
+            ("Pipeline", pipeline_ready, "Ready"),
+        ):
+            _color = "#22c55e" if _ok else "#ef4444"
+            _text = _ok_txt if _ok else "Not " + _ok_txt.lower()
+            st.markdown(
+                f"<div style='font-size: 12px; padding: 2px 0;'>"
+                f"<span style='color: {_color};'>&#9679;</span>&nbsp;"
+                f"<span style='color: #444;'>{_label}</span>"
+                f"<span style='color: #aaa;'> &middot; </span>"
+                f"<span style='color: #888;'>{_text}</span></div>",
+                unsafe_allow_html=True,
+            )
 
-_RENDERERS = {
-    "text": _render_text,
-    "table": _render_table,
-    "refusal": _render_refusal,
-    "partial": _render_partial,
-    "error": _render_error,
-}
+        if not api_ok and status:
+            if status.get("ok"):
+                _body = status.get("body") or {}
+                if _body.get("error"):
+                    st.caption(_body["error"])
+            else:
+                st.caption(status.get("error", ""))
+
+        st.divider()
+
+        # Persona block - RESERVED. A later change will add the four
+        # persona fields here (base_url, username, password, auth_type)
+        # with an empty value meaning "use the default from
+        # personas.yaml".
+        st.markdown("#### Fusion Pod")
+        persona = (
+            (status.get("body") or {}).get("persona")
+            if status and status.get("ok")
+            else None
+        )
+        if persona:
+            st.markdown(f"**URL**  \n{persona.get('base_url', '')}")
+            st.markdown(f"**Username**  \n{persona.get('username', '')}")
+            st.markdown(f"**Password**  \n{persona.get('password_masked', '')}")
+        else:
+            st.caption("(not configured)")
 
 
 # ── Page ─────────────────────────────────────────────────────────────
 
 
 def _page() -> None:
-    st.set_page_config(page_title="SPIRE", layout="wide")
+    st.set_page_config(
+        page_title="SPIRE",
+        page_icon="\U0001F537",     # blue diamond emoji, placeholder
+        layout="centered",
+        initial_sidebar_state="expanded",
+    )
 
-    # Zone 1 — header
-    col_title, col_status = st.columns([4, 1])
-    with col_title:
-        st.title("SPIRE")
-        st.caption("Natural-language query over Oracle Fusion Cloud")
-    with col_status:
-        status = _get_status()
-        if status and status.get("ok") and status.get("status_code") == 200:
-            st.success("Connected")
-        else:
-            st.error("Not connected")
-            if status and status.get("ok"):
-                body = status.get("body") or {}
-                if body.get("error"):
-                    st.caption(body["error"])
-            elif status:
-                st.caption(status.get("error", ""))
+    _render_sidebar()
 
-    st.divider()
+    # ONE frame only. The next submit replaces it. No list, no history.
+    if "frame" not in st.session_state:
+        st.session_state.frame = None
 
-    # Zone 2 — input
-    prompt = st.text_input("Ask a question", key="prompt_input")
-    submit = st.button("Submit", type="primary")
+    frame = st.session_state.frame
+    if frame is not None:
+        with st.chat_message("user"):
+            st.markdown(frame["prompt"])
 
-    # Zone 3 — answer
-    if submit and prompt.strip():
-        with st.spinner("Thinking…"):
-            try:
-                env = _post_prompt(prompt.strip())
-            except Exception as exc:                        # noqa: BLE001
-                st.error(f"Request to API failed: {exc}")
-                return
+        with st.chat_message("assistant"):
+            env = frame.get("env")
+            if env is None:
+                with st.spinner("Thinking\u2026"):
+                    env = _post_prompt_safe(frame["prompt"])
+                st.session_state.frame["env"] = env
+                st.rerun()
+            _render_answer(env)
+    else:
+        st.markdown(
+            "<div style='text-align: center; color: #999; "
+            "padding: 96px 0; font-size: 14px;'>"
+            "Ask a question to begin.</div>",
+            unsafe_allow_html=True,
+        )
 
-        kind = env.get("kind", "error")
-        answer = env.get("answer") or {}
-        meta = env.get("metadata") or {}
-
-        renderer = _RENDERERS.get(kind, _render_error)
-        renderer(answer, meta)
-
-        _render_metadata(meta)
-
-        with st.expander("Raw response", expanded=False):
-            st.json(env)
-    elif submit:
-        st.info("Type a question first.")
+    prompt = st.chat_input("Ask a question\u2026")
+    if prompt:
+        st.session_state.frame = {"prompt": prompt, "env": None}
+        st.rerun()
 
 
 # ── Auto-run under Streamlit ─────────────────────────────────────────
 #
 # Streamlit executes this file as a script and sets a ScriptRunContext
-# in the executing thread before running it. If that context exists, we
-# are under Streamlit and should render. If not, we are being imported
-# (by __main__.py, or by anything else) and must do nothing — the
-# entry point in __main__.py will launch Streamlit, which will re-enter
-# this module with the context set.
+# before running it. If that context exists, we render. If not, we are
+# being imported (by __main__.py) and must do nothing.
 
 from streamlit.runtime.scriptrunner import get_script_run_ctx  # noqa: E402
 

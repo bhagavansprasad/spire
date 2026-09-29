@@ -1,0 +1,23 @@
+# Spire prompt set — combinations/payables_supplier/smoke.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the payables↔supplier join work at all.
+# Two prompts, seconds. Both MUST ANSWER.
+#
+# SCOPE: the two directions of the join.
+#   1. Invoice rooted, supplier filter.
+#   2. Supplier rooted, invoice-side edge filter.
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices).
+#
+# HOW TO SCORE:
+#   Prompt 1: Intent target_entity Invoice, supplier filter = '1252'.
+#   Prompt 2: Intent target_entity Supplier, has_invoice_over_amount
+#             filter = 10000.
+
+# Direction 1 — Invoice root + supplier filter.
+Show me invoices for supplier 1252
+
+# Direction 2 — Supplier root + invoice-side edge filter.
+suppliers with invoice amount greater than 10000

@@ -1,0 +1,79 @@
+# promptkit overnight manifest — the prompt sets to generate + validate + run.
+#
+# Each name resolves to prompts/<name>.txt (for --generate) and
+# prompts/<name>.json (for --validate / --run). Comment a line out
+# to skip that set. Order is the run order.
+#
+# TIERS:
+#   smoke    — seconds per set. Run always.
+#   verify   — minutes per set. Run before a merge.
+#   exhaust  — minutes-to-hours per set. Overnight.
+#
+# Each set is a module (supplier/payables/procurement/receivables), a
+# combination (combinations/*), or a cross-cutting feature (flat files
+# at the prompts/ root, named <tier>_<feature>.txt).
+#
+# Ordering: smoke (fast triage), then verify, then corpus, then exhaust.
+# Comment out any tier to skip it.
+
+sets:
+  # ── smoke — seconds ─────────────────────────────────────────────
+  - dipstick/smoke
+  - supplier/smoke
+  - payables/smoke
+  - procurement/smoke
+  - receivables/smoke
+  - payables_supplier/smoke
+  - payables_procurement/smoke
+  - procurement_supplier/smoke
+  - columns/smoke
+  - refusals/smoke
+  - lifecycle/smoke
+  - child_as_root/smoke
+  - truncation/smoke
+  - date_filters/smoke
+  - fields_and_include/smoke
+  - modes/smoke
+
+  # ── verify — minutes ────────────────────────────────────────────
+  - dipstick/verify
+  - supplier/verify
+  - payables/verify
+  - procurement/verify
+  - receivables/verify
+  - payables_supplier/verify
+  - payables_procurement/verify
+  - procurement_supplier/verify
+  - columns/verify
+  - refusals/verify
+  - lifecycle/verify
+  - child_as_root/verify
+  - truncation/verify
+  - date_filters/verify
+  - fields_and_include/verify
+  - modes/verify
+
+  # ── corpus — external, verbatim, no tier ────────────────────────
+  - sme/testcases
+
+  # ── exhaust — overnight. Comment out for a faster pass. ─────────
+  - dipstick/exhaust
+  - supplier/exhaust
+  - payables/exhaust
+  - procurement/exhaust
+  - receivables/exhaust
+  - payables_supplier/exhaust
+  - payables_procurement/exhaust
+  - procurement_supplier/exhaust
+  - columns/exhaust
+  - refusals/exhaust
+  - lifecycle/exhaust
+  - child_as_root/exhaust
+  - truncation/exhaust
+  - date_filters/exhaust
+  - fields_and_include/exhaust
+  - modes/exhaust
+
+  # ── non-tier prompt files (window 20 parity sweep) ──
+  - retest/prompts
+  - refusals/refusal_examples

@@ -1,0 +1,119 @@
+# Spire prompt set — payables/exhaust. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation of the payables module we know.
+# Overnight. Goal: find a crash. 55 prompts.
+#
+# SCOPE: every Invoice filter and phrasing, the F-018 / F-046 / F-049 V1
+# reproducers verbatim, boundary cases.
+#
+# COST: each prompt is a live pod call. The date-bounded ones page
+# through /invoices filtered by InvoiceDate; a wide window returns 25
+# rows but the count query walks the full collection. Budget ~15-20
+# minutes for the file.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices).
+# Invoice number LEE-01-1006-111 (InvoiceId 489503, 2016-10-17, 11,138.34 USD).
+# Invoice 162034inv (raised against PO 162034, 830.01 USD, Lee Supplies).
+
+# ====================================================================
+# A. F-018 V1 reproducers, verbatim — invoice number as identifier
+# ====================================================================
+# Pre-fix: refused with "Invoice root has no supplier reference", then
+# offered 'give me the invoice number' — which the user had already done.
+# Post-fix: routes to Invoice with an invoice_number filter, returns the
+# single matching record.
+show details for invoice number LEE-01-1006-111
+the invoice numbered LEE-01-1006-111
+invoice no. LEE-01-1006-111
+invoice #LEE-01-1006-111
+find invoice LEE-01-1006-111
+look up invoice LEE-01-1006-111
+show me invoice number LEE-01-1006-111
+
+# ====================================================================
+# B. F-049 V1 reproducers, verbatim — created / raised absolute dates
+# ====================================================================
+# Pre-fix: refused with missing_identifier. Post-fix: routes to
+# invoice_date {to: ...} or {from: ...}.
+invoices created before 2024-01-01
+invoices created since January 2024
+invoices created after 2024-01-01
+invoices raised before 2024-01-01
+invoices raised since January 2024
+invoices raised after 2024-01-01
+invoices created before 2015
+invoices created since March 2024
+invoices raised before 2015
+invoices raised since March 2024
+
+# ====================================================================
+# C. F-046 — relative date filters, both directions
+# ====================================================================
+invoices older than 6 months
+invoices older than 12 months
+invoices older than 1 year
+invoices more than 12 months old
+invoices stale
+invoices in the last 30 days
+invoices in the last 6 months
+invoices in the last 12 months
+invoices from the last year
+invoices created in the last 12 months
+invoices within the past 30 days
+invoices within the past 6 months
+invoices in the last 7 days
+invoices in the last 14 days
+
+# ====================================================================
+# D. Absolute date phrasings
+# ====================================================================
+invoices in 2023
+invoices in 2024
+invoices between Jan and Mar 2024
+invoices in 2022
+invoices in 2021
+invoices in the year 2023
+
+# ====================================================================
+# E. Amount bounds
+# ====================================================================
+invoices over 10000 for supplier 1252
+invoices above 50000 for supplier 1252
+invoices over 100000 for supplier 1252
+invoices between 1000 and 5000 for supplier 1252
+invoices above 500000 for supplier 1252
+invoices over 1000000 for supplier 1252
+
+# ====================================================================
+# F. purchase_order filter phrasings
+# ====================================================================
+which invoices were raised against PO 162034?
+invoices for PO 162034
+show me invoices for PO 162034
+invoices raised against PO 162034
+invoices referencing this PO 162034
+show me invoices for purchase order 162034
+
+# ====================================================================
+# G. Supplier filter variants
+# ====================================================================
+invoices for supplier 1262
+invoices for supplier EIP Inc
+invoices for EIP Inc
+show me all invoices for supplier 1252
+which invoices are for EIP Inc
+list all invoices for supplier 1252
+
+# ====================================================================
+# H. Boundary
+# ====================================================================
+invoices for supplier 999999999
+invoices for supplier Nonexistent Supplier 12345
+invoices over 999999999999 for supplier 1252
+invoices in 2050
+invoices created before 1900
+invoices in the last 0 months
+invoices between 2024-12-31 and 2024-01-01

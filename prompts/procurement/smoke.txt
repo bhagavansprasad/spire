@@ -1,0 +1,38 @@
+# Spire prompt set — procurement/smoke. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the procurement module work at all.
+# Five prompts, seconds. Every prompt MUST ANSWER except the last.
+#
+# SCOPE: the procurement module. PurchaseOrder and its entity-level
+# filters (by_id, created_before, created_since,
+# updated_older_than_n_months, updated_in_last_n_months, supplier,
+# status, lifecycle_status); PurchaseOrder's children (PurchaseOrderLine,
+# POSchedule, PODistribution, Buyer via ASSIGNED_TO).
+#
+# RUN FIRST. If smoke fails, nothing below is worth reading.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: PO 2144 = OrderNumber 162352, EIP Inc, Closed, 2 lines,
+# 2 schedules, 2 distributions.
+
+# Depth 1 — by_id fetch, no children.
+What is purchase order 2144 about?
+
+# Depth 2 — by_id + a single child (lines). Exercises value-shape arg
+# routing on the iteration key.
+Show PO 2144 and its lines
+
+# Depth 3 — by_id + the deepest PO child. Multi-field iteration edge:
+# needs POHeaderId + POLineId + LineLocationId, all from the parent
+# schedule row.
+Show PO 2144 and its distributions
+
+# Depth 4 — absolute date bound satisfies the PO root requirement, so
+# no id is needed.
+Purchase orders created before 2015
+
+# Depth 5 — refusal path. Bare noun, no identifier. Must refuse with
+# missing_identifier, not guess a PO.
+purchase orders

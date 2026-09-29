@@ -36,7 +36,7 @@ from spire.synthesizer.p2p import (
     build_po_with_children,
     build_purchase_order_records,
 )
-from scripts.display_formatters import _format_synthesized
+from spire.rendering.formatters import _format_synthesized
 
 
 # ── Layer 1: tool projection ─────────────────────────────────────────

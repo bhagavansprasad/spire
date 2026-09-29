@@ -282,6 +282,60 @@ class ComparisonResponse(BaseModel):
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _filtered_bucket_pair(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """Return (source_bucket, matched_bucket) for a source+filtered pair.
+
+    An edge-traversal filter (has_classification, has_open_PO,
+    has_site_in_bu, has_invoice_over_amount, has_no_recent_invoices,
+    ...) runs as two steps: fetch the SOURCE rows, then keep the ones
+    that match, via filter_source_when_nonempty. The executor names
+    the matched bucket ``{source}_{suffix}`` — the source bucket's
+    name is a strict prefix followed by an underscore. Crucially, the
+    matched bucket carries SOURCE rows (the step's contract is to emit
+    the source items whose per-iteration call returned something), so
+    both buckets share the source entity's identifier field.
+
+    Both conditions matter. The name check alone would match
+    ``po`` + ``po_lines`` (a parent and a child — different entity
+    types with different id fields). The shared-key check alone would
+    match any two buckets of the same entity type that are NOT a
+    filtered pair. Requiring both is what makes the guess safe.
+
+    Returns None for any other shape, in the same conservative spirit
+    as p2p._filtered_supplier_list: a wrong guess here would route a
+    non-filtered count through the filtered branch and report a wrong
+    number, which is the class this helper exists to close.
+    """
+    if len(outputs) != 2:
+        return None
+    names = list(outputs.keys())
+    a, b = names
+    if b.startswith(a + "_"):
+        source, matched = a, b
+    elif a.startswith(b + "_"):
+        source, matched = b, a
+    else:
+        return None
+
+    src_rows = outputs[source]
+    mch_rows = outputs[matched]
+    if not src_rows or not isinstance(src_rows[0], dict):
+        return None
+    src_id_keys = {k for k in src_rows[0] if k.endswith("Id")}
+    if not src_id_keys:
+        return None
+    # The matched bucket may be EMPTY — a valid "0 matches" answer.
+    # Only require the id-key overlap when it has rows to check.
+    if mch_rows:
+        if not isinstance(mch_rows[0], dict):
+            return None
+        if not (src_id_keys & set(mch_rows[0].keys())):
+            return None
+    return source, matched
+
+
 def _build_count_response(
     outputs: dict[str, list[dict]],
     target_entity: str,
@@ -298,7 +352,66 @@ def _build_count_response(
       3. No truncation block: every matching record was returned, so the
          length of the single output bucket is the exact count.
     """
-    # The count query runs one fetch → one output bucket.
+    # F-010: a filtered count has two buckets, not one. The source
+    # bucket (e.g. "suppliers") is the sampled SOURCE the edge-traversal
+    # step iterated over; the matched bucket (e.g.
+    # "suppliers_has_classification") is what the filter actually kept.
+    # The count the user asked for is the size of the MATCHED bucket.
+    #
+    # Before this branch, the function read next(iter(outputs.values()))
+    # — the source bucket — and reported its total_available (the pod-wide
+    # count) as the filtered answer. "count of suppliers with
+    # classification Minority Owned" answered "There are 593 suppliers."
+    # over a filter that kept exactly 1. That is the wrong number stated
+    # with confidence, which is the failure class this count path exists
+    # to remove.
+    filtered = _filtered_bucket_pair(outputs)
+    if filtered is not None:
+        source_bucket, matched_bucket = filtered
+        matched_count = len(outputs[matched_bucket])
+        examined = len(outputs[source_bucket])
+
+        # Source total comes from the SOURCE bucket's truncation entry,
+        # which the executor populated for the sampled fetch.
+        source_total: int | None = None
+        if truncation_by_step:
+            source_entry = truncation_by_step.get(source_bucket) or {}
+            source_total = source_entry.get("total_available")
+
+        singular = target_entity.lower()
+        plural = singular + "s"
+        word = singular if matched_count == 1 else plural
+
+        if source_total is not None and source_total > examined:
+            # Source was capped: the matched count is of the examined
+            # sample, and the source total is CONTEXT, not the answer.
+            exact = False
+            summary = (
+                f"{matched_count} {word} match the filter "
+                f"(examined {examined} of {source_total:,})."
+            )
+        elif source_total is None and truncation_by_step:
+            # Source total unknown (composite filter cap). The matched
+            # count is exact only over what was examined.
+            exact = False
+            summary = (
+                f"{matched_count} {word} match the filter "
+                f"(the source fetch was capped; the true matching "
+                f"count may be higher)."
+            )
+        else:
+            # Source was complete: the matched set IS the answer.
+            exact = True
+            summary = f"{matched_count} {word} match the filter."
+
+        return CountResponse(
+            summary=summary,
+            entity=target_entity,
+            count=matched_count,
+            count_is_exact=exact,
+        )
+
+    # Unfiltered count: the query runs one fetch → one output bucket.
     bucket = next(iter(outputs.values()), [])
     examined = len(bucket)
 
@@ -356,6 +469,62 @@ def _direction_phrase(difference: float) -> str:
     return "fully invoiced (invoiced equals ordered)"
 
 
+# When at least this fraction of a supplier's invoices are NOT
+# PO-linked, an aggregate "ordered vs invoiced" difference describes a
+# document-matching gap rather than a billing gap. Measured 2026-09-23
+# on the pod's top three suppliers by PO value:
+#
+#     EIP Inc            3,207 of 3,284 unmatched (97.7%)
+#     Staffing Services  2,422 of 2,436 unmatched (99.4%)
+#     JGA                2,267 of 2,322 unmatched (97.6%)
+#
+# All three sit well above the threshold. Below it, the excluded set is
+# a minority of what was compared, and _direction_phrase's "under-
+# invoiced" wording is fair.
+MOST_UNMATCHED_RATIO = 0.75
+
+
+def _aggregate_difference_phrase(
+    difference: float, unmatched: int, total: int
+) -> str:
+    """Difference phrasing for the AGGREGATE comparison shapes.
+
+    Distinct from _direction_phrase, which serves the single-PO
+    comparison. There the excluded set is bounded: an invoice not
+    linked to PO 162034 is genuinely outside that one comparison, so
+    "under-invoiced" is a fair reading of the difference.
+
+    For a supplier-scoped or top-N comparison, the excluded set is
+    usually most of the supplier's invoices. In that regime,
+    "under-invoiced by 864M" asserts a billing state the arithmetic
+    does not establish: EIP was not invoiced less than ordered, EIP's
+    invoices simply do not carry a PO number to match against. So when
+    MOST_UNMATCHED_RATIO or more of the supplier's invoices are
+    unlinked, this reports what was compared, not what the supplier
+    did.
+
+    Difference is signed (invoiced minus ordered). With most invoices
+    unmatched, the sign is usually negative; the positive branch is
+    kept for the pathological case and worded consistently.
+
+    total == 0 (no invoices at all) falls through to
+    _direction_phrase, which handles the zero-difference case.
+    """
+    if total > 0 and unmatched / total >= MOST_UNMATCHED_RATIO:
+        if difference < 0:
+            return (
+                f"{abs(difference):,.2f} of ordered value has no "
+                f"PO-matched invoice"
+            )
+        if difference > 0:
+            return (
+                f"PO-matched invoiced exceeds ordered by "
+                f"{difference:,.2f}"
+            )
+        return "PO-matched invoiced equals ordered"
+    return _direction_phrase(difference)
+
+
 def _summarize_po_comparison(data: dict) -> str:
     if not data.get("found"):
         return (
@@ -393,10 +562,15 @@ def _summarize_supplier_comparison(data: dict) -> str:
     diff = data.get("total_difference", 0.0)
     po_count = data.get("po_count", 0)
     unmatched = data.get("unmatched_invoice_count", 0)
+    inv_count = data.get("invoice_count", 0)
+    # F-039: aggregate shapes use the ratio-aware phrase. Measured
+    # 2026-09-23 across the pod's top three suppliers: 97.7% / 99.4% /
+    # 97.6% of each supplier's invoices are non-PO. "Under-invoiced"
+    # over-claims a billing state in that regime.
     parts = [
         f"{data.get('supplier')}: across {po_count} purchase order(s), "
         f"ordered {ordered:,.2f} and PO-matched invoiced {invoiced:,.2f} — "
-        f"{_direction_phrase(diff)}."
+        f"{_aggregate_difference_phrase(diff, unmatched, inv_count)}."
     ]
     if unmatched:
         parts.append(
@@ -419,9 +593,13 @@ def _summarize_top_suppliers_comparison(data: dict) -> str:
         invoiced = s.get("total_invoiced", 0.0)
         diff = s.get("total_difference", 0.0)
         unmatched = s.get("unmatched_invoice_count", 0)
+        inv_count = s.get("invoice_count", 0)
+        # F-039: same ratio-aware phrase as the supplier-scoped shape;
+        # see _aggregate_difference_phrase for the measured thresholds.
         line = (
             f"- {s.get('supplier')}: ordered {ordered:,.2f}, PO-matched "
-            f"invoiced {invoiced:,.2f} — {_direction_phrase(diff)}"
+            f"invoiced {invoiced:,.2f} — "
+            f"{_aggregate_difference_phrase(diff, unmatched, inv_count)}"
         )
         if unmatched:
             line += f" ({unmatched:,} non-PO invoices excluded)"

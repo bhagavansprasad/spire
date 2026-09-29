@@ -12,13 +12,20 @@ default_dev:
     # username: "Toby.White"
     # password: "r@Bot5iG"
 
-    base_url: "https://eqjz.ds-fa.oraclepdemos.com"
-    username: "Leo.Hayes"
-    password: "tH?8Wucr"
+    # base_url: "https://eqjz.ds-fa.oraclepdemos.com"
+    # username: "Leo.Hayes"
+    # password: "tH?8Wucr"
 
     # base_url: "https://fa-esll-saasfademo1.ds-fa.oraclepdemos.com"
     # username: "Soren.Fox"
-    # password: "4h_flwiD"
+
+    # base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
+    # username: "Angus.Cooper"
+    # password: "jE*!bAz6"
+
+    base_url: "https://fa-euth-dev49-saasfademo1.ds-fa.oraclepdemos.com"
+    username: "Sean.Walker"
+    password: "tri2rA&r"
 
     auth_type: "basic"
 

@@ -35,7 +35,7 @@ import sys
 from fastmcp import Client
 
 from spire.graph.pipeline import GRAPH
-from spire.config import reset_usage, usage_report
+from spire.config import mcp_server_url, reset_usage, usage_report
 from spire.diagnostics import (
     add_diagnostic_arguments,
     answer,
@@ -46,14 +46,14 @@ from spire.diagnostics import (
 from spire.nl_parser.capability import capability_message
 from spire.nl_parser.vocabulary import load_kg_menu
 
-from display_formatters import (
-    MCP_SERVER_URL,
+from spire.rendering.formatters import (
     _format_intent,
     _format_outputs,
     _format_plan,
     _format_projected_table,
     _format_summary,
     _format_synthesized,
+    render_answer,
 )
 
 
@@ -82,7 +82,7 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
     reset_usage()
     menu = load_kg_menu()
 
-    async with Client(MCP_SERVER_URL) as client:
+    async with Client(mcp_server_url()) as client:
 
         async def _on_progress(progress, total, message=None):
             # Forward the tool's message as it stands. It used to be
@@ -168,39 +168,7 @@ async def _run(prompt: str, cache_mode: str | None, cache_slot: str | None) -> i
     _unresolved = state["intent"].unresolved_fields
     _synth_failed = state.get("synth_failed")
 
-    if _fields or _unresolved:
-        # Column query: summary on top (when it succeeded), table below.
-        # SUMMARY ONLY — not the typed record block. The table below
-        # prints the columns the user asked for; printing the records too
-        # repeats every value, and on an address query that is ~200 lines
-        # of "address: ..." followed by the same data in the table.
-        # The table trims to the requested columns itself and flattens any
-        # nested addresses, so it takes the RAW outputs (projected_outputs
-        # has already stripped the addresses key).
-        #
-        # COL-03: when _fields is empty but _unresolved is not, EVERY
-        # requested column was unknown. There is no valid column to
-        # summarize, so skip the summary — the note carries the message.
-        _entity = state["intent"].target_entity
-        _available = menu.available_columns(_entity)
-        if not _fields:
-            pass  # no summary; the note below is the answer
-        elif _synth_failed:
-            answer(
-                "Answer summary: (skipped — result too large to summarize; "
-                "showing the table only)"
-            )
-            answer("")
-        else:
-            answer(_format_synthesized(state.get("response"), summary_only=True))
-            answer("")
-        answer(
-            _format_projected_table(
-                _outputs, _fields, _unresolved, _available, _entity
-            )
-        )
-    else:
-        answer(_format_synthesized(state.get("response")))
+    render_answer(state, menu, answer)
 
     _summary_log.info(
         "%s", _format_summary(state["plan"], _outputs, state.get("response"))

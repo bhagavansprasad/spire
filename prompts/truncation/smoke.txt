@@ -1,0 +1,29 @@
+# Spire prompt set — smoke_truncation. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does truncation narration work at all. Four
+# prompts, seconds. All MUST ANSWER (except the negative).
+#
+# SCOPE: how the answer describes a TRUNCATED fetch — one that stopped
+# at a cap before examining every matching row.
+#
+# HOW TO SCORE — the row count proves nothing; the summary line does:
+#   - composite case: the Answer MUST contain "from an examined sample".
+#   - sibling case: MUST contain "Showing" and "of", MUST NOT contain
+#     "examined sample".
+#   - unfiltered case: Truncation note MUST end "N returned." and MUST
+#     NOT contain "for filtering".
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices).
+
+# F-012 — composite filter, total unknown. Sample sentence MUST fire.
+invoices for supplier 1252 over 10000
+
+# F-012 — sibling: non-composite; sample sentence MUST NOT fire.
+invoices for supplier 1252
+
+# F-036 — unfiltered fetch. Note MUST say "returned".
+Suppliers with their addresses
+
+# Negative — no supplier named. Refuses with missing_identifier.
+invoices

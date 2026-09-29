@@ -2,7 +2,7 @@
 The module-scoping router — classify a prompt to its Fusion module(s).
 
 Phase 2 of the prompt-to-intent framework
-(docs/features/prompt_to_intent_framework.md §2.1, D-router). The router is a
+(docs/design/FEATURES.md §2.1, D-router). The router is a
 layer AROUND ``parse``: it decides which module context to assemble, then calls
 the unchanged ``parse(prompt, system_prompt=scoped)``. This module holds
 both the classifier (``classify_modules``) and the wiring (``route_and_parse``).
@@ -35,6 +35,7 @@ optional ``llm``; tests inject a mock whose
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -199,6 +200,49 @@ def classify_modules(
 # system_prompt instead of building the full one).
 
 
+# --- deterministic corrections --------------------------------------------
+# The classifier is an LLM. It sometimes picks the wrong module when a prompt
+# names a CHILD entity: it matches the more prominent single-word noun
+# ("invoice" -> payables Invoice) and misses the multi-word child synonym
+# ("invoice lines" -> receivables ReceivablesInvoiceLine), even when both
+# appear in its menu. Prompt evidence (F-041, 2026-09-19): every AR
+# invoice-line/DFF/tax phrasing classified as 'payables', so the
+# receivables sysprompt blocks never loaded and the parser had no rule to
+# find.
+#
+# The correction below fires deterministically on the prompt text, adding
+# 'receivables' when the prompt asks for a child of an AR invoice. Same
+# pattern the parser already uses post-parse (strip_po_supplier_include,
+# correct_include_from_prompt, _is_explicit_po_list): deterministic code
+# that knows the shape and overrides the LLM when the LLM's choice is
+# wrong. It runs BEFORE assemble_subset, so the AR blocks load.
+
+_AR_INVOICE_CHILD_RE = re.compile(
+    r"\binvoice\b[^.]*?\b(line|lines|dff|flexfield|tax)\b"
+    r"|\b(line|lines|dff|flexfield|tax)\b[^.]*?\binvoice\b",
+    re.IGNORECASE,
+)
+
+
+def _correct_modules_for_ar_child(prompt: str, modules: list[str]) -> list[str]:
+    """F-041: ensure 'receivables' is loaded when the prompt asks for a
+    child of an AR invoice.
+
+    Triggers on "invoice ... line(s)/DFF/flexfield/tax" or the reverse order.
+    Adding 'receivables' lets the AR sysprompt blocks load, which is what
+    lets the parser root on the parent and include the child. Idempotent:
+    a prompt already classified to receivables passes through unchanged.
+    """
+    if "receivables" in modules:
+        return modules
+    if not _AR_INVOICE_CHILD_RE.search(prompt):
+        return modules
+    get_logger("parser").debug(
+        "Router: AR-child phrasing \u2192 adding 'receivables' to %s", modules
+    )
+    return modules + ["receivables"]
+
+
 def route_and_parse(
     prompt: str,
     llm: Any | None = None,
@@ -259,6 +303,16 @@ def route_and_parse(
         )
         return parse(prompt, llm=llm, menu=menu)  # system_prompt=None -> full
 
+    # F-041: deterministic correction after the LLM classifier.
+    modules = _correct_modules_for_ar_child(prompt, modules)
+
     get_logger("parser").debug("Router: modules=%s", modules)
     scoped = assemble_subset(modules, menu)
-    return parse(prompt, llm=llm, menu=menu, system_prompt=scoped)
+    result = parse(prompt, llm=llm, menu=menu, system_prompt=scoped)
+    # Surface the classified modules on the result so downstream
+    # consumers can read the SAME classification that scoped this
+    # parse, rather than re-running the classifier themselves.
+    # This is what lets promptkit drop its own standalone classify
+    # call (F-002).
+    result.modules = modules
+    return result

@@ -6,8 +6,7 @@ A parse produces exactly one of two outcomes:
 - a valid ``Intent`` the deterministic planner can consume, or
 - a ``Refusal`` describing why the prompt is out of scope.
 
-Design decisions this encodes (see
-docs/designs/feature_1_nl_parser_design.md):
+Design decisions this encodes:
 
 - Q3: out-of-scope prompts yield a STRUCTURED refusal naming the flavor and
   the raw facts. The user-facing capability wording is feature 8's job; this
@@ -175,6 +174,16 @@ class ParseResult:
 
     intent: Optional[Intent] = None
     refusal: Optional[Refusal] = None
+    # The classifier's module selection, when this ParseResult came
+    # through the router (route_and_parse). The router surfaces it
+    # here so downstream consumers — promptkit's diagnostic in
+    # particular — can read the SAME classification that scoped
+    # the parse, instead of re-running the classifier themselves
+    # (which was a second LLM call per promptkit --run). None when
+    # parse() was called directly without going through the router,
+    # or when the router fell back to a full-context parse after a
+    # ClassificationError.
+    modules: Optional[list[str]] = None
 
     def __post_init__(self) -> None:
         # Enforce the XOR invariant loudly. This is a developer-facing guard

@@ -1,7 +1,7 @@
 """Column queries print the summary and the TABLE — not the record block.
 
 THE BUG THESE PIN
-display_formatters' own docstring says the projected table goes
+formatters.py's own docstring says the projected table goes
 "instead of the typed per-entity block". The runners honoured that only
 by accident: the typed block was printed unconditionally, but on the
 query that made it hurt — "List active suppliers with supplier name,
@@ -22,7 +22,7 @@ A bug fix removed the failure that had been hiding a display rule.
 
 import pytest
 
-from scripts.display_formatters import _format_synthesized
+from spire.rendering.formatters import _format_synthesized
 from spire.synthesizer.synthesizer import (
     AddressInfo,
     SupplierRecord,
@@ -157,7 +157,7 @@ def test_lifecycle_not_found_display_asserts_nothing():
 # ─────────────────────────────────────────────────────────────────────
 
 
-from scripts.display_formatters import _is_quantity, _render_records
+from spire.rendering.formatters import _is_quantity, _render_records
 
 
 def test_many_records_render_as_a_table():

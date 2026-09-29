@@ -1,0 +1,31 @@
+# promptkit exhaust-tier manifest.
+#
+# Each name resolves to prompts/<name>.txt. Run order is list order.
+#
+# Run this tier alone:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/exhaust_sets.yaml
+#
+# Or run every tier in one batch via the full manifest:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
+#
+# Split of promptkit_sets.yaml: smoke=16, verify=17, exhaust=18.
+
+sets:
+  - dipstick/exhaust
+  - supplier/exhaust
+  - payables/exhaust
+  - procurement/exhaust
+  - receivables/exhaust
+  - payables_supplier/exhaust
+  - payables_procurement/exhaust
+  - procurement_supplier/exhaust
+  - columns/exhaust
+  - refusals/exhaust
+  - lifecycle/exhaust
+  - child_as_root/exhaust
+  - truncation/exhaust
+  - date_filters/exhaust
+  - fields_and_include/exhaust
+  - modes/exhaust
+  - retest/prompts
+  - refusals/refusal_examples

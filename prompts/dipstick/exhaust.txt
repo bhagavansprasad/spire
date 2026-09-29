@@ -1,0 +1,41 @@
+# Spire prompt set — exhaust_dipstick. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Every depth × every entity shape. Goal: find a depth
+# where an unusual entity breaks the pipeline. 20 prompts.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+
+# Depth 1 — count, every count-rootable entity.
+count of suppliers
+count of invoices
+count of purchase orders
+count of credit memos
+
+# Depth 2 — one entity-level filter, every filterable entity.
+active suppliers
+invoices for supplier 1252
+open purchase orders
+suppliers with a site in the US1 business unit
+
+# Depth 3 — by-id, every by-id-rootable entity.
+Show PO 2144
+Get the AR invoice with CustomerTransactionId 300000248096352
+addresses for supplier 1252
+
+# Depth 4 — child includes.
+Show PO 2144 and its lines
+Show PO 2144 and its schedules
+Show PO 2144 and its distributions
+Show the AR invoice with CustomerTransactionId 1002 and its tax lines
+
+# Depth 5 — customer account traversals.
+Show transactions for customer ABC Application Software
+show receipts for customer ABC Application Software
+show credit memos for customer ABC Application Software
+
+# Depth 6 — refusals, one per flavor.
+show me contract renewals
+suppliers with net 30 payment terms
+recent invoices
+show me purchase order line items

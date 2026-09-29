@@ -24,9 +24,9 @@ receivables:
   CustomerAccount
   CustomerTransaction
   ReceivablesInvoice (aka: AR invoice, AR invoices, receivables invoice, receivables invoices)
-  ReceivablesInvoiceLine
-  ReceivablesInvoiceTransactionDFF
-  ReceivablesTaxLine
+  ReceivablesInvoiceLine (aka: invoice line, invoice lines)
+  ReceivablesInvoiceTransactionDFF (aka: DFF, descriptive flexfield, flexfield, flexfields)
+  ReceivablesTaxLine (aka: tax breakdown, tax line, tax lines)
   StandardReceipt
 
 supplier:

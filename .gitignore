@@ -39,3 +39,13 @@ promptkit_overnight_*.log
 *:Zone.Identifier
 logs/
 .streamlit/
+.spire-dev.env
+isolation/
+source-tree.txt
+t_after*.txt
+trash/
+t_*.txt
+
+# Overnight prompt runs and their derivatives
+overnight/
+clean_*

@@ -42,7 +42,7 @@ from spire.diagnostics import get_logger
 
 # Re-exported so that every existing import of these names from
 # spire.synthesizer.synthesizer keeps working unchanged. Five test
-# modules and scripts/display_formatters.py import from this path; a
+# modules and spire.rendering.formatters import from this path; a
 # split that moved them would turn a refactor into a diff across the
 # test suite.
 from spire.synthesizer.constants import (  # noqa: F401
@@ -151,6 +151,12 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_suppliers_with_open_pos,
     _supplier_with_contacts,
     build_suppliers_with_contacts,
+    _supplier_with_sites,
+    build_suppliers_with_sites,
+    _supplier_with_classifications,
+    build_suppliers_with_classifications,
+    _supplier_pos_buyers,
+    build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
@@ -234,6 +240,103 @@ def _all_buckets_empty(outputs: dict[str, list[dict]]) -> bool:
     if not outputs:
         return True
     return all(not rows for rows in outputs.values())
+
+
+# F-007: AR-invoice children whose empty result deserves an acknowledgement.
+#
+# Each entry maps a child bucket the executor produces to the human
+# phrase naming it. Populated buckets render their own content — lines
+# and tax lines as indented sub-tables, DFF as a header field — so this
+# only fires on an empty-but-present bucket. That is the case where the
+# user asked and the answer would otherwise stay silent.
+_AR_INVOICE_CHILD_PHRASES: dict[str, str] = {
+    "receivables_invoice_lines": "line items",
+    "receivablestaxline": "tax lines",
+    "receivablesinvoicetransactiondff": "flexfield values",
+}
+
+
+def _empty_ar_invoice_child_notes(
+    children: dict[str, list[dict]],
+) -> list[str]:
+    """One sentence per requested AR-invoice child that returned no rows.
+
+    Presence of the bucket is the signal. The executor emits a bucket
+    for every step the plan ran, and the plan runs a step for every
+    child the parser put in the intent's include list. An empty bucket
+    therefore means the user asked and there were none; an ABSENT bucket
+    means the user never asked. Silence is only honest for the second
+    case.
+
+    Before this, both cases read identically: a prompt asking for tax
+    lines on an untaxed invoice got an answer that never mentioned tax,
+    and a prompt that never asked for tax got the same silence. The
+    user could not tell "no tax lines exist" from "I didn't look".
+    """
+    return [
+        f"This invoice has no {phrase}."
+        for bucket, phrase in _AR_INVOICE_CHILD_PHRASES.items()
+        if bucket in children and not children[bucket]
+    ]
+
+
+# F-015: buckets whose fetch was capped, for the empty-result path.
+#
+# The empty-bucket shortcut fires before truncation is consulted, so a
+# bucket that came back empty because the fetch hit a cap narrated as
+# "nothing exists" — indistinguishable from a genuinely empty source.
+# The reader is told "no receipts found" when the truth is "no receipts
+# found in the examined sample". This collects the capped steps so the
+# shortcut can say which one it is.
+def _truncated_steps(
+    truncation_by_step: dict[str, dict] | None,
+    metadata_by_step: dict[str, dict] | None,
+) -> list[tuple[str, dict]]:
+    """(output_name, entry) pairs for every step whose fetch was capped.
+
+    Reads both sources the executor produces: `truncation_by_step` for
+    the iterating and capped steps, `metadata_by_step` for the
+    non-iterating ones. A bucket present in both is taken once, from the
+    first source that carries `truncated=True` — the two agree in
+    practice, and disagreeing is a defect this function should not
+    invent a preference for.
+
+    Returns [] when nothing was capped, which is the honest answer for a
+    genuinely empty source and the branch the caller falls back to the
+    plain "No {label} found" wording on.
+    """
+    out: list[tuple[str, dict]] = []
+    seen: set[str] = set()
+    for source in (truncation_by_step, metadata_by_step):
+        for name, entry in (source or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("truncated") is not True:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            out.append((name, entry))
+    return out
+
+
+def _bucket_truncated(
+    bucket: str,
+    truncation_by_step: dict[str, dict] | None,
+    metadata_by_step: dict[str, dict] | None,
+) -> bool:
+    """True when THIS bucket's fetch was capped. F-012.
+
+    A single-bucket view of _truncated_steps: same sources, same
+    definition of capped (truncated is True), scoped to one output_name.
+    The plain-list branches pass the result to local_list_summary so a
+    capped fetch with no known total is narrated as a sample rather than
+    presented as the complete answer.
+    """
+    return any(
+        name == bucket
+        for name, _ in _truncated_steps(truncation_by_step, metadata_by_step)
+    )
 
 
 # Aggregation responses are selected by the SHAPE TAG the tool stamps on
@@ -332,8 +435,10 @@ def _local_truncation(
     produce, so existing readers and the 05/07/08 prompt-set baselines
     see the same shape. "total in source" is inherited and is loose on a
     filtered query — it reads as unfiltered when the fetch was scoped.
-    Left alone deliberately: changing it is a user-visible format change
-    and belongs with the counts-line work, not smuggled in here.
+    F-036 revised one word of that wording: "examined for filtering"
+    claimed a filter had run on a fetch that applied none, which is false
+    rather than merely loose. The verb is now "returned", true on both.
+    The remaining "total in source" looseness is still left alone.
 
     Returns:
         (total_available or None, notes list)
@@ -356,7 +461,7 @@ def _local_truncation(
         )
         notes.append(
             f"{bucket}: {total_text} total in source; "
-            f"{examined} examined for filtering."
+            f"{examined} returned."
         )
 
     return (
@@ -432,6 +537,52 @@ def synthesize_response(
     if _all_buckets_empty(outputs) and target_entity in SYNTHESIS_SCHEMAS:
         empty_schema = SYNTHESIS_SCHEMAS[target_entity]
         label = _ENTITY_LABEL.get(target_entity, "records")
+
+        # F-015: the empty-bucket shortcut used to fire before truncation
+        # was consulted. A bucket that came back empty because the fetch
+        # was capped narrated as "nothing exists" — indistinguishable to
+        # the reader from a genuinely empty source. The distinction
+        # matters: "no receipts found" is wrong when the truth is "no
+        # receipts found in the examined sample, and the sample was
+        # capped before examining all matching records".
+        #
+        # Local, no LLM. The signal already exists on the executor's
+        # truncation / metadata maps; this reads it and says so.
+        truncated = _truncated_steps(truncation_by_step, metadata_by_step)
+        if truncated:
+            notes: list[str] = []
+            for name, entry in truncated:
+                total = entry.get("total_available")
+                total_text = (
+                    f"{total:,}" if isinstance(total, int)
+                    else "an unknown number of"
+                )
+                notes.append(
+                    f"{name}: {total_text} total in source; the fetch was "
+                    f"capped before examining all of them, so the result "
+                    f"is a sample, not the whole."
+                )
+            # Name the source total in the summary only when the tool
+            # reported one. The standard_receipts tool returns
+            # total_available=None when its client-side site filter
+            # exceeded the overfetch cap, so the common case is unknown;
+            # say that plainly rather than inventing a figure.
+            first_total = truncated[0][1].get("total_available")
+            if isinstance(first_total, int):
+                summary = (
+                    f"No {label} found in the examined sample. The source "
+                    f"holds {first_total:,} record(s); the search was "
+                    f"capped before examining all of them, so more may "
+                    f"match the filter."
+                )
+            else:
+                summary = (
+                    f"No {label} found in the examined sample. The search "
+                    f"was capped before examining all matching records, so "
+                    f"more may exist beyond the examined window."
+                )
+            return empty_schema(summary=summary, truncation_notes=notes)
+
         return empty_schema(
             summary=f"No {label} found matching the criteria.",
             truncation_notes=[],
@@ -615,6 +766,9 @@ def synthesize_response(
                     displayed_fields=["Supplier", "SupplierNumber"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        supplier_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             suppliers=build_supplier_records(rows),
@@ -668,6 +822,59 @@ def synthesize_response(
             narrowing_tip=tip,
         )
 
+    # F-056: the F-053 four-bucket shape. The two-bucket detectors above
+    # already handle source + filtered; this handles source + filtered +
+    # refetched POs + buyers, which is what the anchor prompt's plan
+    # produces. Without this branch the four-bucket shape fell through to
+    # the LLM, which was asked to transcribe 183 records (25 suppliers +
+    # 17 filtered + 130 POs + 11 buyers) and hit its output-token cap --
+    # the "Synthesized response: (none)" fallback the user saw. Local
+    # build removes the LLM call entirely, so the overrun cannot occur.
+    supplier_pos_buyers = (
+        _supplier_pos_buyers(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_pos_buyers is not None:
+        source_bucket, supplier_bucket, po_bucket, buyer_bucket = (
+            supplier_pos_buyers
+        )
+        source_rows = outputs[source_bucket]
+        supplier_rows = outputs[supplier_bucket]
+        po_rows = outputs[po_bucket]
+        buyer_rows = outputs[buyer_bucket]
+        records = build_suppliers_with_open_pos_and_buyers(
+            supplier_rows, po_rows, buyer_rows
+        )
+        total_available, notes = _local_truncation(
+            source_bucket, source_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(source_rows)
+        shown = len(supplier_rows)
+        total_open = sum(r.open_po_count or 0 for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        po_word = (
+            "open purchase order" if total_open == 1 else "open purchase orders"
+        )
+        summary = (
+            f"Examined {examined} of {total_text} suppliers. "
+            f"Of those {examined}, {shown} have open purchase orders, "
+            f"with {total_open} {po_word} between them."
+        )
+        supplier_filters = _entity_level_filter_types().get("Supplier", set())
+        tip = build_narrowing_tip(
+            {ft for ft in supplier_filters if ft != "by_id"},
+            total_available,
+            entity_label="suppliers",
+        )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+            narrowing_tip=tip,
+        )
+
     # Suppliers with their contacts (join): no LLM.
     #
     # "contacts for Lee Supplies" (one supplier) and "contacts for suppliers
@@ -691,12 +898,6 @@ def synthesize_response(
         )
         examined = len(supplier_rows)
         total_contacts = sum(len(r.contacts) for r in records)
-        admin_names = [
-            c.contact_name
-            for r in records
-            for c in r.contacts
-            if c.is_administrative and c.contact_name
-        ]
         total_text = (
             f"{total_available:,}" if total_available is not None
             else "an unknown number of"
@@ -710,9 +911,94 @@ def synthesize_response(
                 f"These {examined} suppliers have {total_contacts} {contact_word} "
                 "between them."
             )
-        if admin_names:
-            label = "administrative contact" if len(admin_names) == 1 else "administrative contacts"
-            summary += f" {', '.join(admin_names)} — {label}."
+        # F-020: the administrative-contact list used to be comma-joined
+        # onto this summary — a 27-name run-on today (47 when the finding
+        # was recorded) that asserted `is_administrative=True` for each
+        # named contact, with no way for the reader to check the claim
+        # against the tables below. The flag itself is honest —
+        # build_suppliers_with_contacts reads it from the pod's
+        # AdministrativeContactFlag — but it was only ever shown HERE.
+        #
+        # It now rides on each contact row instead: formatters.py renders
+        # an "Admin" column when at least one contact in the response is
+        # flagged, so the property is visible where the reader can verify
+        # it. The summary states only what the counts line already
+        # states, and stops.
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+        )
+
+    # Suppliers with their sites (join): no LLM. F-043.
+    supplier_sites = (
+        _supplier_with_sites(outputs) if target_entity == "Supplier" else None
+    )
+    if supplier_sites is not None:
+        supplier_bucket, site_bucket = supplier_sites
+        supplier_rows = outputs[supplier_bucket]
+        site_rows = outputs[site_bucket]
+        records = build_suppliers_with_sites(supplier_rows, site_rows)
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_sites = sum(len(r.sites) for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        site_word = "site" if total_sites == 1 else "sites"
+        if examined == 1:
+            summary = f"{records[0].supplier_name} has {total_sites} {site_word}."
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_sites} {site_word} "
+                "between them."
+            )
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
+        )
+
+    # Suppliers with their classifications (join): no LLM. F-043.
+    supplier_classifications = (
+        _supplier_with_classifications(outputs)
+        if target_entity == "Supplier"
+        else None
+    )
+    if supplier_classifications is not None:
+        supplier_bucket, classification_bucket = supplier_classifications
+        supplier_rows = outputs[supplier_bucket]
+        classification_rows = outputs[classification_bucket]
+        records = build_suppliers_with_classifications(
+            supplier_rows, classification_rows
+        )
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_classifications = sum(len(r.classifications) for r in records)
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        c_word = (
+            "classification" if total_classifications == 1 else "classifications"
+        )
+        if examined == 1:
+            summary = (
+                f"{records[0].supplier_name} has "
+                f"{total_classifications} {c_word}."
+            )
+        else:
+            summary = (
+                f"Showing {examined} of {total_text} suppliers. "
+                f"These {examined} suppliers have {total_classifications} "
+                f"{c_word} between them."
+            )
         return SupplierResponse(
             summary=summary,
             suppliers=records,
@@ -756,6 +1042,9 @@ def synthesize_response(
                     displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        po_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             purchase_orders=build_purchase_order_records(rows),
@@ -797,6 +1086,9 @@ def synthesize_response(
                     ],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        invoice_bucket, truncation_by_step, metadata_by_step
+                    ),
                 )
             ),
             invoices=build_invoice_records(rows),
@@ -839,6 +1131,10 @@ def synthesize_response(
                     displayed_fields=["OrderNumber", "Status", "Supplier", "Buyer"],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        po_child_buckets["po"], truncation_by_step,
+                        metadata_by_step,
+                    ),
                 )
             ),
             purchase_orders=build_po_with_children(outputs, po_child_buckets),
@@ -895,6 +1191,9 @@ def synthesize_response(
                     ],
                     filtered_fields=filtered_fields,
                     total_available=total_available,
+                    truncated=_bucket_truncated(
+                        memo_bucket, truncation_by_step, metadata_by_step
+                    ),
                     # The table headers, so the summary names a column
                     # the way the column names itself one line below.
                     labels={
@@ -955,6 +1254,9 @@ def synthesize_response(
                             ],
                             filtered_fields=filtered_fields,
                             total_available=total_available,
+                            truncated=_bucket_truncated(
+                                parent, truncation_by_step, metadata_by_step
+                            ),
                             labels={
                                 "TransactionNumber": "Transaction",
                                 "EnteredAmount": "Amount",
@@ -964,6 +1266,11 @@ def synthesize_response(
                                 "InvoiceStatus": "Status",
                             },
                         )
+                        # F-007: acknowledge a requested child that came
+                        # back empty. Silent when nothing was asked (an
+                        # absent bucket), loud when the user asked and
+                        # there were none (a present, empty bucket).
+                        + _empty_ar_invoice_child_notes(children)
                     ),
                     receivables_invoices=build_receivables_invoice_records(
                         rows, children
@@ -1042,6 +1349,9 @@ def synthesize_response(
                             ],
                             filtered_fields=filtered_fields,
                             total_available=total_available,
+                            truncated=_bucket_truncated(
+                                parent, truncation_by_step, metadata_by_step
+                            ),
                             labels={
                                 "CustomerName": "Customer",
                                 "AccountNumber": "AccountNumber",
@@ -1087,6 +1397,9 @@ def synthesize_response(
                         ],
                         filtered_fields=filtered_fields,
                         total_available=total_available,
+                        truncated=_bucket_truncated(
+                            name, truncation_by_step, metadata_by_step
+                        ),
                         labels={
                             "ReceiptNumber": "Receipt",
                             "ReceiptDate": "Date",

@@ -1,0 +1,29 @@
+# promptkit smoke-tier manifest.
+#
+# Each name resolves to prompts/<name>.txt. Run order is list order.
+#
+# Run this tier alone:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/smoke_sets.yaml
+#
+# Or run every tier in one batch via the full manifest:
+#   python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
+#
+# Split of promptkit_sets.yaml: smoke=16, verify=17, exhaust=18.
+
+sets:
+  - dipstick/smoke
+  - supplier/smoke
+  - payables/smoke
+  - procurement/smoke
+  - receivables/smoke
+  - payables_supplier/smoke
+  - payables_procurement/smoke
+  - procurement_supplier/smoke
+  - columns/smoke
+  - refusals/smoke
+  - lifecycle/smoke
+  - child_as_root/smoke
+  - truncation/smoke
+  - date_filters/smoke
+  - fields_and_include/smoke
+  - modes/smoke

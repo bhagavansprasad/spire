@@ -35,6 +35,7 @@ from spire.planner.registries import (
     _COMPARISON_TOOLS,
     _FILTER_SOURCE_NAME_SUFFIX,
     _FILTER_SOURCE_NONEMPTY_SUFFIX,
+    _LIMIT_CAPABLE_TOOLS,
     _OUTPUT_NAME_BY_ENTITY,
     _TOOL_PRIMARY_ARG,
 )
@@ -273,8 +274,22 @@ def _resolve_arg_name(arg_name: str, raw_value: Any) -> str:
     return numeric_arg if str(raw_value).strip().isdigit() else name_arg
 
 
-def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> dict[str, Any]:
-    """Build tool_args for the entity fetcher."""
+def _build_entity_fetcher_args(
+    filters: list[dict[str, Any]],
+    entity: str,
+    reference_date: date | None = None,
+) -> dict[str, Any]:
+    """Build tool_args for the entity fetcher.
+
+    reference_date is threaded in for the two entity-level filters
+    whose value is a RELATIVE window (older_than_n_months,
+    created_in_last_n_months): the planner computes the ISO cutoff
+    via the same _compute_date_n_months_ago helper
+    has_no_recent_invoices uses, so tests can pin "today" without
+    monkeypatching datetime. Every other filter is unaffected.
+    """
+    if reference_date is None:
+        reference_date = date.today()
     args = {}
     for f in filters:
         ftype = f.get("type")
@@ -287,6 +302,36 @@ def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> di
         raw_value = f.get("value")
         arg_name = _resolve_arg_name(defn["tool_arg_name"], raw_value)
         arg_name_hi = defn.get("tool_arg_name_hi")
+
+        # F-011: relative PO-date window. Value is {"months": N};
+        # compute the ISO cutoff locally (never the LLM's job) and
+        # forward it under the tool arg the KG row names
+        # (created_before). Runs BEFORE the generic dict handler,
+        # which would otherwise read the wrong keys.
+        if ftype in (
+            "older_than_n_months",
+            "created_in_last_n_months",
+            "updated_older_than_n_months",
+            "updated_in_last_n_months",
+        ):
+            months = (
+                raw_value.get("months")
+                if isinstance(raw_value, dict) else raw_value
+            )
+            if (
+                not isinstance(months, int)
+                or isinstance(months, bool)
+                or months <= 0
+            ):
+                raise ValueError(
+                    f"{ftype} requires value="
+                    "{'months': <positive int>}; got "
+                    f"{raw_value!r}."
+                )
+            cutoff = _compute_date_n_months_ago(months, reference_date)
+            args[arg_name] = cutoff.isoformat()
+            continue
+
         if isinstance(raw_value, dict):
             low = raw_value.get("from", raw_value.get("min"))
             high = raw_value.get("to", raw_value.get("max"))
@@ -301,6 +346,35 @@ def _build_entity_fetcher_args(filters: list[dict[str, Any]], entity: str) -> di
         else:
             args[arg_name] = raw_value
     return args
+
+
+def _apply_list_limit(
+    tool_name: str,
+    tool_args: dict[str, Any],
+    list_limit: int | None,
+) -> None:
+    """F-016: inject `limit=N` into a list fetcher's tool_args in place.
+
+    No-op unless the tool accepts a limit AND the intent carries a cap.
+    The set of limit-capable tools lives in registries._LIMIT_CAPABLE_TOOLS
+    (the same file that holds _TOOL_PRIMARY_ARG) so a new list tool is
+    one row in each map and the two stay consistent.
+
+    A `limit` sent to a fetcher whose signature does not declare one
+    raises at the MCP boundary — FastMCP/Pydantic rejects the unknown
+    kwarg — so the set is the guard against a shape the parser does not
+    yet distinguish from the list case.
+
+    Mutates `tool_args` in place rather than returning a new dict. Called
+    once, from generate_plan's Block 1, immediately after the args are
+    built — before the address-expand flag and before the Step is
+    constructed — so the mutating contract is local and visible.
+    """
+    if list_limit is None:
+        return
+    if tool_name not in _LIMIT_CAPABLE_TOOLS:
+        return
+    tool_args["limit"] = list_limit
 
 
 def _filters_needing_edge_traversal(
@@ -471,6 +545,15 @@ def _build_iteration_args_with_computed(
                 f"got {filter_spec.get('value')!r}."
             )
         args["classification"] = cls
+        return args
+
+    if intent_filter_type == "has_open_PO":
+        # F-053. Presence flag: the parent is kept when the child
+        # call returns at least one open PO. The status filter rides
+        # as a server-side tool_arg (search_purchase_orders sends
+        # StatusCode='OPEN'), so an empty child result means genuinely
+        # no open POs, not "some POs, none matching a client filter".
+        args["status"] = "OPEN"
         return args
 
     # Other filter types with computed args would dispatch here.

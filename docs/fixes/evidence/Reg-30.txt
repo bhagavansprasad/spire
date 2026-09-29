@@ -1,0 +1,36 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=586 out=445 total=1031
+Router: modules=['payables', 'procurement', 'supplier']
+[llm] stage=parse in=9425 out=860 total=10285
+[cache] HIT   cached=9413  fresh=12  total_in=9425
+Intent:
+  target_entity: Supplier
+  compare: {'op': 'top_suppliers_invoiced_vs_ordered', 'po_number': None, 'supplier_name': None, 'top_n': 3, 'status': None}
+
+Plan:
+  Step 1: compare_top_suppliers_orders_to_invoices
+    tool_args:      {'top_n': 3}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    comparison
+
+Outputs:
+  comparison: 1 record(s)
+    [1] {'shape': 'top_suppliers_invoiced_vs_ordered', 'status': None, 'total_suppliers': 95, 'returned': 3, 'truncated': False, 'suppliers': [{'shape': 'supplier_invoiced_vs_ordered', 'found': True, 'ambiguous': False, 'supplier': 'EIP Inc', 'supplier_id': 300000047507499, 'supplier_number': '1262', 'po_count': 2015, 'invoice_count': 3284, 'total_ordered': 865287107.89, 'total_invoiced': 710712.3099999999, 'total_difference': -864576395.58, 'unmatched_invoice_count': 3207, 'returned': 5, 'truncated': False, 'rows': [{'order_number': 'SU616991', 'po_header_id': 646889, 'status': 'CLOSED', 'ordered': 4993021.0, 'invoiced': 0.0, 'difference': -4993021.0, 'invoice_count': 0}, {'order_number': 'SU616977', 'po_header_id': 642878, 'status': 'OPEN', 'ordered': 4823767.0, 'invoiced': 0.0, 'difference': -4823767.0, 'invoice_count': 0}, {'order_number': 'SU616794', 'po_header_id': 588870, 'status': 'CLOSED', 'ordered': 4666375.0, 'invoiced': 0.0, 'difference': -4666375.0, 'invoice_count': 0}, {'order_number': 'SU616956', 'po_header_id': 637876, 'status': 'CLOSED', 'ordered': 4654512.0, 'invoiced': 0.0, 'difference': -4654512.0, 'invoice_count': 0}, {'order_number': 'SU617137', 'po_header_id': 675875, 'status': 'CLOSED', 'ordered': 4574962.0, 'invoiced': 0.0, 'difference': -4574962.0, 'invoice_count': 0}]}, {'shape': 'supplier_invoiced_vs_ordered', 'found': True, 'ambiguous': False, 'supplier': 'Staffing Services', 'supplier_id': 300000047414571, 'supplier_number': '1253', 'po_count': 1596, 'invoice_count': 2436, 'total_ordered': 328053963.1, 'total_invoiced': 31312.91, 'total_difference': -328022650.19, 'unmatched_invoice_count': 2422, 'returned': 5, 'truncated': False, 'rows': [{'order_number': 'US165253', 'po_header_id': 654886, 'status': 'CLOSED', 'ordered': 2087095.0, 'invoiced': 0.0, 'difference': -2087095.0, 'invoice_count': 0}, {'order_number': 'US165375', 'po_header_id': 679886, 'status': 'CLOSED', 'ordered': 2087089.0, 'invoiced': 0.0, 'difference': -2087089.0, 'invoice_count': 0}, {'order_number': 'US165356', 'po_header_id': 675904, 'status': 'CLOSED', 'ordered': 2066614.0, 'invoiced': 0.0, 'difference': -2066614.0, 'invoice_count': 0}, {'order_number': 'US165256', 'po_header_id': 658869, 'status': 'CLOSED', 'ordered': 2066613.0, 'invoiced': 0.0, 'difference': -2066613.0, 'invoice_count': 0}, {'order_number': 'US165334', 'po_header_id': 671902, 'status': 'CLOSED', 'ordered': 2046168.0, 'invoiced': 0.0, 'difference': -2046168.0, 'invoice_count': 0}]}, {'shape': 'supplier_invoiced_vs_ordered', 'found': True, 'ambiguous': False, 'supplier': 'JGA', 'supplier_id': 300000047414635, 'supplier_number': '1254', 'po_count': 1545, 'invoice_count': 2322, 'total_ordered': 159598443.3600001, 'total_invoiced': 4566124.36, 'total_difference': -155032319.0, 'unmatched_invoice_count': 2267, 'returned': 5, 'truncated': False, 'rows': [{'order_number': '703794', 'po_header_id': 84046, 'status': 'OPEN', 'ordered': 1655500.0, 'invoiced': 0.0, 'difference': -1655500.0, 'invoice_count': 0}, {'order_number': '703795', 'po_header_id': 84047, 'status': 'OPEN', 'ordered': 1655500.0, 'invoiced': 0.0, 'difference': -1655500.0, 'invoice_count': 0}, {'order_number': '704372', 'po_header_id': 204820, 'status': 'OPEN', 'ordered': 1655500.0, 'invoiced': 0.0, 'difference': -1655500.0, 'invoice_count': 0}, {'order_number': '703793', 'po_header_id': 84045, 'status': 'OPEN', 'ordered': 1435000.0, 'invoiced': 0.0, 'difference': -1435000.0, 'invoice_count': 0}, {'order_number': '704373', 'po_header_id': 204821, 'status': 'OPEN', 'ordered': 830500.0, 'invoiced': 0.0, 'difference': -830500.0, 'invoice_count': 0}]}]}
+
+Answer:
+Invoiced vs ordered for the top 3 supplier(s) by PO value:
+- EIP Inc: ordered 865,287,107.89, PO-matched invoiced 710,712.31 — 864,576,395.58 of ordered value has no PO-matched invoice (3,207 non-PO invoices excluded).
+- Staffing Services: ordered 328,053,963.10, PO-matched invoiced 31,312.91 — 328,022,650.19 of ordered value has no PO-matched invoice (2,422 non-PO invoices excluded).
+- JGA: ordered 159,598,443.36, PO-matched invoiced 4,566,124.36 — 155,032,319.00 of ordered value has no PO-matched invoice (2,267 non-PO invoices excluded).
+Summary:
+  Steps planned:        1
+  Records returned:     1 (across all steps)
+  Final raw output:     1 record(s) under 'comparison'
+  Synthesized answer:   1 record(s)
+Token usage:
+  classify     in=    586  out=    445  total=   1031
+  parse        in=   9425  out=    860  total=  10285
+  TOTAL        in=  10011  out=   1305  total=  11316
+

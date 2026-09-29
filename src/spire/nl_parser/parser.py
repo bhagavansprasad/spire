@@ -5,7 +5,7 @@ This is the interpreter stage of the Design 3 pipeline:
 
     Prompt -> [parser: LLM] -> Intent -> planner -> executor -> synthesizer
 
-See docs/designs/feature_1_nl_parser_design.md. The parser is modeled on the
+The parser is modeled on the
 synthesizer: a single bounded LLM call with structured output, plus
 validation. It owns its KG access via the planner's synchronous path.
 
@@ -158,6 +158,188 @@ def _is_explicit_po_list(prompt: str) -> bool:
             return False
 
     return True
+
+
+def _is_all_digit_customer_value(value: Any) -> bool:
+    """True when a by_customer_name value is actually an account number.
+
+    F-019. The parser sometimes routes a bare account number into
+    by_customer_name; the resulting query (`q=CustomerName='25750'`)
+    returns zero rows, and the synthesizer narrates the empty bucket as
+    "no customer accounts found" — a silent false negative. A
+    digit-only string is an account number, not a customer name; the
+    post-parse correction below rewrites the filter type. Same class as
+    the F-018 invoice-number override: deterministic, post-LLM, no
+    prompt-text change.
+    """
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and value.strip().isdigit()
+    )
+
+
+_INVOICE_NUMBER_QUERY_RE = re.compile(
+    r"\binvoice\b(?:\s+(?:number|numbered|no\.?|#))?\s+"
+    r"([A-Za-z0-9][A-Za-z0-9_./-]{3,})",
+    re.IGNORECASE,
+)
+
+
+def _extract_invoice_number(prompt: str) -> str | None:
+    """Return the invoice number if the prompt names one directly, else None.
+
+    F-018. The sysprompt teaches the shape (b_invoices_for_supplier.sysprompt)
+    but the LLM has a strong prior against treating an alphanumeric token as
+    an identifier — measured 2026-09-23, the model refuses even when the rule
+    quotes the prompt verbatim. This is a deterministic, post-LLM helper of
+    the same class as _is_explicit_po_list: pure Python, runs after the
+    model, corrects the shape the model gets wrong.
+
+    Returns the token exactly as it appeared (trailing sentence punctuation
+    stripped). Returns None when the prompt names no direct invoice number.
+
+    The two guards keep the extraction from being too loose:
+
+      - The token must contain at least one digit. Excludes the "invoice
+        created before 2015" case (token would be "created").
+
+      - A pure-digit token is accepted only when the literal word "number"
+        (or "numbered" / "no." / "#") is present. Otherwise "invoice 162034"
+        is treated as ambiguous — the pod's PO and invoice id spaces overlap
+        in shape, and the model's own prior is the safer read on the bare
+        form.
+    """
+    m = _INVOICE_NUMBER_QUERY_RE.search(prompt)
+    if not m:
+        return None
+    token = m.group(1).rstrip(".,;:!?")
+    if len(token) < 4 or not any(c.isdigit() for c in token):
+        return None
+    has_number_word = bool(re.search(
+        r"\binvoice\s+(?:number|numbered|no\.?|#)", prompt, re.IGNORECASE
+    ))
+    has_non_digit = any(not c.isdigit() for c in token)
+    if not has_number_word and not has_non_digit:
+        return None
+    return token
+
+
+# F-027. A country COLUMN request ("supplier number and country") versus
+# a country FILTER value ("suppliers in US", "US suppliers"). The parser
+# emits two different wrong shapes on the column request — 16/20 with
+# include=['Address'] and country dropped from fields; 4/20 with no
+# include and country landing in unresolved_fields. The sysprompt rule
+# that teaches the shape lives under columns/, which the router never
+# loads (F-050). This correction makes the intent deterministic
+# regardless of which shape arrived: pure Python, runs after the LLM.
+# Same pattern as _extract_invoice_number (F-018) and
+# _is_all_digit_customer_value (F-019).
+_COUNTRY_COLUMN_RE = re.compile(r"\bcountr(?:y|ies)\b", re.IGNORECASE)
+
+
+def _has_country_column_phrasing(prompt: str, intent: Any) -> bool:
+    """True when the prompt requests a country COLUMN on a Supplier query.
+
+    Distinguishes a column request ("Supplier number and country",
+    "name, number, and country") from a filter value ("active suppliers
+    in US", "suppliers in the UK"): a filter carries a specific country
+    the parser routes to a `country` filter; a column request has the
+    word "country" with no value. The presence of a `country` filter on
+    the intent is the discriminator.
+
+    Scoped to Supplier targets — country on Supplier is a projection of
+    the child Address resource, and the correction only applies to that
+    shape. Other entities with a country projection (TaxpayerCountryCode)
+    are handled separately if at all.
+    """
+    if intent.target_entity != "Supplier":
+        return False
+    if any(f.get("type") == "country" for f in intent.filters):
+        return False
+    return bool(_COUNTRY_COLUMN_RE.search(prompt))
+
+
+# F-016: a plain-list row cap — "top 5 credit memos", "first 10
+# suppliers", "the 5 biggest invoices". The parser has no field to
+# record a cap (DraftIntent has no list_limit), and the LLM has a strong
+# prior against treating a bare integer as a cap on an otherwise ordinary
+# list question — measured 2026-09-23, the model emits a filter-less
+# intent and the "5" is lost. This is a deterministic, post-LLM extractor
+# of the same class as _is_explicit_po_list and _extract_invoice_number:
+# pure Python, runs after the model, corrects the shape the model drops.
+#
+# Two shapes, both anchored on a cap word so a bare integer is never a
+# cap (amounts, dates, and IDs are all bare integers in prompts — see
+# the two negative tests).
+#
+#   Leading:  "top 5 ..." / "first 10 ..." / "last 3 ..."
+#   Trailing: "... 5 biggest" / "... 10 largest" / "... 3 most recent"
+#
+# The upper bound is 200 because nothing we serve needs a larger plain-
+# list cap, and a larger number in a prompt is more likely to be a date,
+# an amount, or an ID than a row cap. Out-of-range values return None
+# rather than a bound integer.
+_LIST_CAP_LEADING_RE = re.compile(
+    r"\b(?:top|first|last)\s+(\d{1,4})\b",
+    re.IGNORECASE,
+)
+_LIST_CAP_TRAILING_RE = re.compile(
+    r"\b(\d{1,4})\s+"
+    r"(?:biggest|largest|smallest|oldest|newest|"
+    r"most\s+recent|least\s+recent)\b",
+    re.IGNORECASE,
+)
+
+# A time window uses the same words as a cap: "in the last 5 months",
+# "from the last 12 months". The LEADING regex would match "last 5" in
+# that phrasing and record 5 as a row cap on a prompt that never asked
+# for one. Suppressing the match when a unit word follows the integer
+# keeps the two shapes apart without a second regex pass.
+_TIME_UNIT_AFTER_INTEGER_RE = re.compile(
+    r"^\s*(?:months?|years?|weeks?|days?|hours?|minutes?)\b",
+    re.IGNORECASE,
+)
+
+_LIST_CAP_MAX = 200
+
+
+def _extract_list_cap(prompt: str) -> int | None:
+    """Return the plain-list row cap named in the prompt, or None.
+
+    F-016. Fires on "top N" / "first N" / "last N" (leading) and on
+    "N biggest" / "N largest" / "N most recent" (trailing). Returns None
+    when no cap is named, when N is outside 1..200, or when the leading
+    match is followed by a time unit ("last 5 months" is a window, not a
+    row cap).
+
+    Scoped by the caller to plain-list intents — a prompt carrying an
+    aggregate block, a compare block, or count_only is not routed here,
+    because those shapes have their own cap mechanism (aggregate.top_n)
+    or produce a single number (count_only).
+    """
+    text = prompt.strip()
+
+    # Leading shape first; suppressed when a time unit follows the N.
+    for m in _LIST_CAP_LEADING_RE.finditer(text):
+        n = int(m.group(1))
+        if not (1 <= n <= _LIST_CAP_MAX):
+            continue
+        tail = text[m.end():]
+        if _TIME_UNIT_AFTER_INTEGER_RE.match(tail):
+            continue
+        return n
+
+    # Trailing shape. No time-unit suppression: no phrasing pairs a
+    # size adjective with a time unit ("5 biggest months" is not
+    # something a prompt says), so the shape is unambiguous.
+    m = _LIST_CAP_TRAILING_RE.search(text)
+    if m is not None:
+        n = int(m.group(1))
+        if 1 <= n <= _LIST_CAP_MAX:
+            return n
+
+    return None
 
 
 def _is_empty_draft(parsed: Any) -> bool:
@@ -361,6 +543,29 @@ def parse(
 
     # --- Explicit unanswerable takes precedence over everything else ---
     if getattr(parsed, "unanswerable", False):
+        # F-018: an Invoice-shape refusal on a prompt that names an
+        # invoice number directly. The sysprompt teaches the shape; the
+        # LLM still refuses (measured 2026-09-23, the rule is quoted in
+        # the prompt and the model ignores it). Deterministic override,
+        # same class as _is_explicit_po_list. Fires ONLY when the refusal
+        # is about the Invoice entity AND the raw prompt contains a
+        # code-shaped token after "invoice".
+        if (
+            (getattr(parsed, "unanswerable_entity", None) or "")
+            .strip()
+            .lower() == "invoice"
+        ):
+            inv_number = _extract_invoice_number(prompt)
+            if inv_number is not None:
+                return ParseResult.ok(
+                    Intent(
+                        target_entity="Invoice",
+                        filters=[
+                            {"type": "invoice_number", "value": inv_number}
+                        ],
+                    )
+                )
+
         from spire.nl_parser.capability import derive_flavor
 
         kind = getattr(parsed, "unanswerable_kind", None)
@@ -431,6 +636,79 @@ def parse(
             detail=f"could not convert draft to intent: {exc}",
         )
 
+    # --- F-014: aggregate / compare intents carry no projected fields ---
+    #
+    # An aggregate or compare block names its own fixed projection — the
+    # aggregation tool has already produced the columns the response
+    # schema consumes (SupplierSpendRow.supplier_name, etc.), and the
+    # pipeline's `_project_outputs` would otherwise apply entity fields
+    # to the WRAPPER record. The wrapper's keys are `shape`,
+    # `date_from`, ... and `rows[]`; none of them is an entity column,
+    # so the requested fields render as em dashes beside an empty
+    # projection. Clearing `fields` here is the deterministic
+    # correction: the model emits fields alongside aggregate on the
+    # reproducer regardless of the sysprompt rule (same behaviour F-018
+    # records), so this must run after the LLM and cannot be a
+    # prompt-text change.
+    #
+    # Also covers the compare block, which exhibits the same shape: its
+    # wrapper carries `shape` and `suppliers[]`; projecting entity
+    # columns onto it is equally meaningless.
+    if intent.aggregate is not None or intent.compare is not None:
+        intent.fields = []
+
+    # --- F-016: plain-list row cap from the raw prompt ---
+    #
+    # The LLM has no slot for a "top N" cap on an ordinary list question
+    # (DraftIntent carries no list_limit), and its prior is against
+    # treating a bare integer as a cap — measured 2026-09-23, the model
+    # produces a filter-less intent and the "5" is lost. Extract it
+    # deterministically from the prompt, same class as
+    # _is_explicit_po_list / _extract_invoice_number / the all-digit
+    # CustomerAccount rewrite.
+    #
+    # Fires only on a PLAIN LIST intent: aggregate and compare carry their
+    # own cap (aggregate.top_n), count_only produces a single number, and
+    # a balance_only intent returns the account's own figures with no
+    # child fetch to cap. Setting list_limit on an intent the planner
+    # routes elsewhere is harmless — the injection only fires when the
+    # fetcher is one of _LIMIT_CAPABLE_TOOLS — but suppressing the
+    # extraction here keeps the diagnostic output clean and the
+    # post-parse intent minimal.
+    if (
+        intent.aggregate is None
+        and intent.compare is None
+        and not intent.count_only
+        and not intent.balance_only
+    ):
+        cap = _extract_list_cap(prompt)
+        if cap is not None:
+            intent.list_limit = cap
+
+    # --- Explicit PO list signal (#32 fault b) ---
+    #
+    # #32 fault (b) needs the parser to tell two intents apart that are
+    # byte-identical from the LLM's point of view — an explicit "list
+    # purchase orders" (a valid bounded sample-and-disclose, #23) and a
+    # PO query whose identifier the model dropped ("Is PO N complete?"
+    # losing the number). Both arrive as a filter-less PurchaseOrder
+    # intent, and the planner's guard refuses both unless intent.list_all
+    # is True. Only an explicit list should list; the dropped-identifier
+    # case must refuse, not dump 25 of ~17k unrelated POs.
+    #
+    # The signal is computed HERE, deterministically from the RAW PROMPT,
+    # AFTER the LLM and BEFORE KG validation — the same shape as the
+    # other post-parse corrections in this function
+    # (strip_po_supplier_include below, plus the three helpers imported
+    # from vocabulary). `_is_explicit_po_list` (defined above) is
+    # pure-Python and adds NO prompt/schema text, so it does not risk
+    # the parser prompt's token ceiling. Setting the flag on a non-PO
+    # intent is a no-op (the planner guard is scoped to PurchaseOrder);
+    # setting it on a PO intent that carries filters is also a no-op
+    # (the guard short-circuits on `intent.filters` first).
+    if intent.target_entity == "PurchaseOrder":
+        intent.list_all = _is_explicit_po_list(prompt)
+
     # --- Include correction (BUG-1) ---
     from spire.nl_parser.vocabulary import strip_po_supplier_include
 
@@ -438,6 +716,54 @@ def parse(
         intent.include = strip_po_supplier_include(
             intent.target_entity, intent.include, menu
         )
+
+    # --- F-018: Invoice identifier from the raw prompt ---
+    #
+    # The model reliably produces a filter-less Invoice intent for a
+    # prompt that names an invoice number directly ("show details for
+    # invoice number LEE-01-1006-111"), because it treats the alphanumeric
+    # token as an unknown entity reference rather than an identifier.
+    # Measured 2026-09-23 — the sysprompt rule is in the prompt and the
+    # model ignores it. Deterministic correction, same class as
+    # _is_explicit_po_list: pure Python, runs after the LLM, injects the
+    # filter the model dropped. Fires ONLY when target_entity is Invoice
+    # AND no identifier of any kind is present AND the prompt contains a
+    # code-shaped token after "invoice".
+    if intent.target_entity == "Invoice":
+        has_identifier = any(
+            f.get("type") in ("supplier", "purchase_order", "invoice_number")
+            for f in intent.filters
+        )
+        if not has_identifier:
+            inv_number = _extract_invoice_number(prompt)
+            if inv_number is not None:
+                intent.filters.append(
+                    {"type": "invoice_number", "value": inv_number}
+                )
+
+    # --- F-019: numeric CustomerAccount identifier ---
+    #
+    # A bare number after "account" is the account NUMBER, not a name.
+    # The parser sometimes routes it into by_customer_name anyway,
+    # producing a q=CustomerName='<digits>' query that returns zero rows;
+    # the empty-bucket shortcut then narrates "no customer accounts
+    # found." Rewrite the filter type so the tool takes the
+    # AccountNumber path. Fires ONLY when target_entity is CustomerAccount
+    # AND the value is a digit-only string, so genuine name queries are
+    # untouched.
+    if intent.target_entity == "CustomerAccount":
+        rewritten = []
+        for f in intent.filters:
+            if (
+                f.get("type") == "by_customer_name"
+                and _is_all_digit_customer_value(f.get("value"))
+            ):
+                rewritten.append(
+                    {"type": "by_account_number", "value": f["value"]}
+                )
+            else:
+                rewritten.append(f)
+        intent.filters = rewritten
 
     # --- KG validation ---
     #
@@ -455,6 +781,31 @@ def parse(
                 offending_entity=refusal.offending_entity,
                 offending_filters=refusal.offending_filters,
             )
+
+    # --- F-027: Supplier "country" column request ---
+    #
+    # Runs AFTER validate_intent on purpose. The field-split inside
+    # validate_intent drops a field satisfied by an active include (see
+    # F-017's include-catalogue branch), so `country` added before that
+    # check would be dropped from both fields and unresolved_fields and
+    # never reach the display. Adding it here — after KG validation, in
+    # the same class of post-parse correction as _extract_invoice_number
+    # and the all-digit CustomerAccount rewrite — means the field survives
+    # and the display renders it.
+    #
+    # Scoped to Supplier roots: "country" as a projectable column is an
+    # Address-include feature. The discriminator (no existing country
+    # filter + the bare word "country" in the prompt) keeps a genuine
+    # country FILTER request — "active suppliers in US" — untouched; the
+    # filter path is preserved verbatim.
+    if _has_country_column_phrasing(prompt, intent):
+        if "Address" not in intent.include:
+            intent.include.append("Address")
+        if not any(
+            str(f).lower() in ("country", "countrycode")
+            for f in intent.fields
+        ):
+            intent.fields.append("country")
 
     # --- Address-satisfied column cleanup ---
     #

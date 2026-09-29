@@ -32,9 +32,8 @@ rendered as:
     <contents>
     ```
 
-Bundle definitions live in `context_bundles.yaml` at the repo root. If that
-file is missing, the script falls back to built-in defaults (and writes
-the YAML out for you on first run, so you can edit it).
+Bundle definitions live in `context_bundles.yaml` at the repo root. The
+file is required; this tool has no in-code fallback.
 """
 
 from __future__ import annotations
@@ -100,85 +99,8 @@ FENCE_LANG = {
 # Default bundles. Each value is a list of include patterns (fnmatch-style,
 # relative to repo root). Directories expand to all files under them
 # (recursive). Specific files can be listed by path.
-DEFAULT_BUNDLES = {
-    # The most common case: starting a fresh session. Hand off doc + the
-    # README + the roadmap.
-    "handoff": [
-        "docs/spire_handoff_*.md",
-        "README.md",
-        "docs/designs/design3_v1_to_production_roadmap.md",
-    ],
-    # Core architecture: planner, executor, synthesizer, plus the entry
-    # scripts. Use when you want Claude to reason about the pipeline.
-    "core": [
-        "src/spire/planner/planner.py",
-        "src/spire/executor/executor.py",
-        "src/spire/synthesizer/synthesizer.py",
-        "scripts/run_plan.py",
-        "scripts/ask.py",
-    ],
-    # Per-component bundles: source + tests + the most-relevant doc.
-    "planner": [
-        "src/spire/planner/planner.py",
-        "tests/test_planner.py",
-        "docs/designs/phase_2_planner_design.md",
-    ],
-    "executor": [
-        "src/spire/executor/executor.py",
-        "tests/test_executor.py",
-    ],
-    "synthesizer": [
-        "src/spire/synthesizer/synthesizer.py",
-        "tests/test_synthesizer.py",
-    ],
-    # MCP server + tools.
-    "mcp": [
-        "src/spire/mcp_server/server.py",
-        "src/spire/mcp_server/tools",
-        "tests/test_buyer_tool.py",
-        "tests/test_suppliers_tool.py",
-        "tests/test_suppliers_by_country_tool.py",
-        "tests/test_purchase_orders_tool.py",
-        "tests/test_invoices_tool.py",
-    ],
-    # KG-related.
-    "kg": [
-        "src/spire/kg",
-        "tests/test_kg_loader.py",
-        "tests/test_kg_metadata.py",
-        "scripts/rebuild_kg.sh",
-        "docs/designs/kg_schema_v1.md",
-        "docs/designs/kg_evaluation_framework.md",
-    ],
-    # Demo prep: handoff + run scripts + how-to-run + measurement report.
-    "demo": [
-        "docs/spire_handoff_*.md",
-        "scripts/run_plan.py",
-        "scripts/ask.py",
-        "how-to-run-02.md",
-        "docs/design3_measurement_report.md",
-        "docs/design3_gap_analysis.md",
-    ],
-    # All docs, no source.
-    "docs": [
-        "docs",
-        "README.md",
-        "how-to-run-02.md",
-    ],
-    # All source, no tests, no docs.
-    "src": [
-        "src",
-        "scripts",
-    ],
-    # All tests.
-    "tests": [
-        "tests",
-    ],
-    # Everything (respects excludes).
-    "everything": [
-        ".",
-    ],
-}
+# Bundle definitions live in `context_bundles.yaml` at the repo root.
+# No in-code bundle fallback: the yaml is the single source of truth.
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +248,7 @@ def build_bundle(
     body = "".join(parts)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"context_{name}.md"
+    out_path = out_dir / f"{name}.md"
     out_path.write_text(body, encoding="utf-8")
 
     return BundleResult(
@@ -443,25 +365,31 @@ def print_line_report(
 
 def load_config(repo_root: Path) -> tuple[dict[str, list[str]], list[str]]:
     """
-    Load bundles and excludes from context_bundles.yaml if it exists,
-    else return defaults and write the defaults out for editing.
+    Load bundles and excludes from `context_bundles.yaml`.
+
+    The yaml file is required. There is no in-code bundle fallback:
+    a stale parallel definition would drift from the yaml and give a
+    reader a wrong map of the repo.
     """
     config_path = repo_root / "context_bundles.yaml"
 
-    if config_path.exists():
-        with config_path.open("r", encoding="utf-8") as f:
-            cfg = yaml.safe_load(f) or {}
-        bundles = cfg.get("bundles", DEFAULT_BUNDLES)
-        excludes = cfg.get("excludes", DEFAULT_EXCLUDES)
-        return bundles, excludes
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"Bundle definitions are required at {config_path}. "
+            f"This tool reads them from disk; it has no in-code fallback."
+        )
 
-    # Write defaults out so the user can edit them.
-    cfg = {"bundles": DEFAULT_BUNDLES, "excludes": DEFAULT_EXCLUDES}
-    with config_path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False)
-    print(f"[info] Wrote default config to {config_path} — edit as needed.")
+    with config_path.open("r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f) or {}
 
-    return DEFAULT_BUNDLES, DEFAULT_EXCLUDES
+    if "bundles" not in cfg:
+        raise ValueError(
+            f"{config_path} has no `bundles:` key; at least one is required."
+        )
+
+    bundles = cfg["bundles"]
+    excludes = cfg.get("excludes", DEFAULT_EXCLUDES)
+    return bundles, excludes
 
 
 # ---------------------------------------------------------------------------

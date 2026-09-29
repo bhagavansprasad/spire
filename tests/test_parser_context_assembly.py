@@ -11,7 +11,7 @@ byte-for-byte identical to the retained literal. The literal stays in
 the assembled ``_ASSEMBLED_PREAMBLE``. If any ``.sysprompt`` file, or the
 manifest, drifts from the literal, these tests fail.
 
-See docs/features/parser_context_modularization.md §4.1.
+See docs/design/FEATURES.md §4.1.
 """
 
 from __future__ import annotations

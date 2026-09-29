@@ -53,6 +53,7 @@ from spire.planner.lookup import (  # noqa: F401
     resolve_vocab,
 )
 from spire.planner.plan_builders import (  # noqa: F401
+    _apply_list_limit,
     _arg_name_for_tool,
     _build_aggregation_plan,
     _build_comparison_plan,
@@ -127,10 +128,18 @@ def generate_plan(
     # Invoice queries require a supplier reference. Without it the fetch
     # would pull every invoice on the pod. Refuse loudly instead.
     if intent.target_entity == "Invoice":
-        has_supplier = any(
-            f.get("type") in ("supplier", "purchase_order") for f in intent.filters
+        has_root_ref = any(
+            f.get("type") in (
+                "supplier",
+                "purchase_order",
+                "invoice_number",
+                "invoice_date",
+                "older_than_n_months",
+                "created_in_last_n_months",
+            )
+            for f in intent.filters
         )
-        if not has_supplier:
+        if not has_root_ref:
             # MISSING_IDENTIFIER: the record type is named but not scoped.
             # Structured raise -> plan_node -> state["refusal"] -> the same
             # readable shape a parser decline gets. Words come from
@@ -331,7 +340,18 @@ def generate_plan(
         )
     except KeyError:
         fetcher_tool = find_entity_tool(intent.target_entity, "none")
-    fetcher_args = _build_entity_fetcher_args(intent.filters, intent.target_entity)
+    fetcher_args = _build_entity_fetcher_args(
+        intent.filters, intent.target_entity, ref_date
+    )
+
+    # F-016: plain-list row cap ("top 5 credit memos"). Injected only for
+    # the fetchers whose signatures accept a `limit` arg (see
+    # registries._LIMIT_CAPABLE_TOOLS); a non-capable fetcher is a no-op
+    # rather than an error at the MCP boundary. Runs before the
+    # Address-expand flag below so a "top 5 suppliers with addresses"
+    # intent keeps both — the cap on the fetch and the addresses child
+    # expansion.
+    _apply_list_limit(fetcher_tool, fetcher_args, intent.list_limit)
 
     # Address include on a supplier-rooted query is satisfied by expanding
     # the addresses child on the supplier fetch itself (Path B), NOT by a
@@ -363,6 +383,16 @@ def generate_plan(
     root_entity = intent.target_entity
     root_output_name = plan[-1].output_name
     step_id += 1
+
+    # F-053: parent-keeping filters (filter_source_when_empty and
+    # filter_source_when_nonempty) do not advance previous_entity to
+    # the child — they keep the parent and filter it. If a later
+    # include chains from that child (Buyer lives on PurchaseOrder,
+    # not on Supplier), Block 3 must re-fetch the child rows for the
+    # surviving parents so the include has something to iterate.
+    # Track each parent-keeping filter's (spec, target) so Block 3
+    # can decide.
+    _parent_filter_steps: list[tuple[dict, str]] = []
 
     # ── Block 2: edge-traversal filters ───────────────────────────
     for filter_spec in _filters_needing_edge_traversal(intent.filters):
@@ -408,6 +438,9 @@ def generate_plan(
             )
             # Output is parent items, so previous_entity stays as parent.
             new_previous_entity = previous_entity
+            # F-053: remember the filter spec and its target so Block 3
+            # can re-fetch the child rows if an include needs them.
+            _parent_filter_steps.append((filter_spec, target_entity))
         else:
             tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
             client_filters = _resolve_client_filters(
@@ -452,6 +485,60 @@ def generate_plan(
         # binding anyway, so this would otherwise raise.
         if intent.target_entity == "Supplier" and include_entity == "Address":
             continue
+
+        # F-053: when a parent-keeping filter ran, previous_entity is
+        # still the parent (e.g. Supplier) but the include may chain
+        # from the filter's TARGET (Buyer lives on PurchaseOrder). If
+        # the direct chain fails and a re-fetch through one of the
+        # parent-keeping targets would work, insert the re-fetch step
+        # first and advance previous_entity to that target. The
+        # re-fetch reuses the parent-filter's args (so a server-side
+        # status filter is preserved), but omits the parent-keeping
+        # flag — it is a plain child-list fetch.
+        try:
+            find_edge(previous_entity, include_entity)
+            _need_refetch = False
+        except KeyError:
+            _need_refetch = True
+
+        if _need_refetch and _parent_filter_steps:
+            for _spec, _target in reversed(_parent_filter_steps):
+                if _target == previous_entity:
+                    continue
+                try:
+                    find_edge(_target, include_entity)
+                except KeyError:
+                    continue
+                try:
+                    _refetch_edge = find_edge(previous_entity, _target)
+                except KeyError:
+                    continue
+                _refetch_tool = find_edge_tool(_refetch_edge["edge_name"])
+                if _refetch_tool is None:
+                    continue
+                _refetch_args = _build_iteration_args_with_computed(
+                    _spec, _refetch_tool, ref_date
+                )
+                _refetch_output_name = _make_output_name(_target, None, [])
+                plan.append(
+                    Step(
+                        step_id=step_id,
+                        tool_name=_refetch_tool,
+                        tool_args=_refetch_args,
+                        iterate_over={
+                            "from_step": previous_output_name,
+                            "field": _refetch_edge["from_join_field"],
+                        },
+                        client_filters=[],
+                        output_name=_refetch_output_name,
+                        output_dedupe_by=None,
+                    )
+                )
+                previous_entity = _target
+                previous_output_name = _refetch_output_name
+                step_id += 1
+                break
+
         # An include is normally the CHILD of the include before it — a
         # grandchild chain, e.g. ReceivablesInvoice -> ReceivablesInvoiceLine
         # -> ReceivablesTaxLine — so the hop runs previous_entity ->

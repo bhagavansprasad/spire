@@ -1,0 +1,82 @@
+# Spire prompt set — receivables/verify. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the receivables module work across its
+# normal shapes. Minutes. Run before a merge. 35 prompts.
+#
+# SCOPE: AR invoices and their children; CustomerAccounts and their
+# children; the top-level CreditMemo list; the four mode flags
+# (count_only, open_only, invoice_limit, balance_only).
+#
+# HOW TO SCORE:
+#   - Intent target_entity is the ROOT, children appear in Intent.include.
+#   - balance_only / open_only / count_only / invoice_limit are the mode
+#     flags the parse sets.
+#   - The customer resolves to an AccountNumber; results must reflect
+#     the account's own data, not a pod-wide sample.
+#
+# Anchors: AR invoice CustomerTransactionId 300000248096352
+# (TransactionNumber 61765, ABC Corporation Americas, 1 line, no tax).
+# AR invoice CustomerTransactionId 1002 (TransactionNumber 5,
+# Business World, 4 lines, 8 tax rows, DFF context 'DOO').
+# Customer "ABC Application Software" = AccountNumber 26360.
+# Customer "ABC Corporation Americas" = AccountNumber 26370.
+# NOTE: three ABC entities on the pod. Application Software / Corporation
+# Americas / Corporation Worldwide are NOT interchangeable.
+
+# — AR invoice by id + children (6) —
+Show the AR invoice with CustomerTransactionId 300000248096352 and its lines
+Show the AR invoice with CustomerTransactionId 1002 and its lines
+Show the AR invoice with CustomerTransactionId 1002 and its tax lines
+Show the AR invoice with CustomerTransactionId 1002 and its DFF values
+Show the AR invoice with CustomerTransactionId 1002 and its tax lines and lines
+Show the AR invoice with CustomerTransactionId 1002
+
+# — CustomerAccount, transactions list (4) —
+Show me AR invoices for customer ABC Corporation Americas
+Show me customer ABC Application Software's invoices
+show transactions for customer ABC Application Software
+list transactions for customer ABC Application Software
+
+# — CustomerAccount, open_only (2) —
+Show me open invoices for customer ABC Corporation Americas
+open invoices for ABC Application Software
+
+# — CustomerAccount, open_only + invoice_limit (2) —
+Show me the top 5 open invoices for customer ABC Corporation Americas
+the 10 largest outstanding invoices for ABC Application Software
+
+# — CustomerAccount, receipts (3) —
+show receipts for customer ABC Application Software
+show me [customer]'s receipts
+what payments have we received from ABC Application Software
+
+# — CustomerAccount, credit memos (3) —
+show credit memos for customer ABC Application Software
+show me [name]'s credit memos
+what credit memos does customer ABC Application Software have
+
+# — CustomerAccount, receipt applications (3) —
+show receipt applications for customer ABC Application Software
+show me [name]'s receipt applications
+what invoices has ABC Application Software's cash been applied to
+
+# — CustomerAccount, balance_only (2) —
+Show me the account balance for customer ABC Application Software
+Show me the account balance for customer ABC Corporation Americas
+
+# — Top-level CreditMemo (3) —
+List recent credit memos
+What is the total value of credit memos?
+Show the 5 latest credit memos
+
+# — Aggregations (3) —
+Rank top accounts by outstanding exposure
+top accounts by outstanding receivables
+Show receipt method distribution for ABC Application Software
+
+# — StandardReceipt (4) —
+Show receipts for ABC Application Software at Santa Clara
+Show receipts for ABC Corporation Americas at Santa Clara
+receipts for customer ABC Application Software
+receipts at [site] for [customer]

@@ -1,0 +1,53 @@
+# Spire prompt set — combinations/procurement_supplier/verify.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the procurement↔supplier join work across
+# its normal shapes. Minutes. Run before a merge. 22 prompts.
+#
+# SCOPE: the has_open_PO edge filter and the PO-by-supplier filter;
+# 12_po_supplier_include's gradient (safe → dangerous).
+#
+# KG EVIDENCE (SURFACE.md §2): PurchaseOrder.supplier filter;
+# Supplier.has_open_PO; the HAS_PURCHASE_ORDER edge.
+#
+# HOW TO SCORE:
+#   - PO-by-supplier: the value routes digit-or-name. POs expose
+#     SupplierId (numeric), NOT SupplierNumber.
+#   - 'supplier details for PO X' must NOT add 'Supplier' to include —
+#     the supplier's name/number/site/contact ride on the PO header.
+#     Adding Supplier as an include triggers the BUG-1 strip.
+#
+# Anchors: PO 701337 = JGA, Open. PO 2144 = EIP Inc, Closed.
+
+# — has_open_PO edge filter (3) —
+suppliers with open purchase orders
+suppliers with open POs
+which suppliers have open POs
+
+# — PO-by-supplier filter (4) —
+purchase orders for supplier EIP Inc
+POs for supplier JGA
+which POs belong to supplier 1252
+list purchase orders for supplier EIP Inc
+
+# — 12_po_supplier_include gradient: safe end (5) —
+Show amounts for PO 701337.
+Show ordered, received, invoiced and paid amounts for PO 701337.
+PO 701337 status with the supplier.
+PO 701337 amounts and who the supplier is.
+What is the supplier name on PO 701337?
+
+# — 12_po_supplier_include gradient: middle (5) —
+Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.
+PO 701337 with supplier details.
+Show supplier details for PO 701337.
+Details of the supplier for PO 701337.
+Give me PO 701337 along with its supplier information.
+
+# — 12_po_supplier_include gradient: dangerous end (5) —
+PO 701337 with the full supplier record.
+PO 701337 including the supplier's address and classifications.
+Show PO 701337 and the supplier's business relationship and tax details.
+For PO 701337, pull the supplier's master data.
+List PO 701337 and join the supplier's site and contact records.

@@ -3,7 +3,7 @@
 Pydantic mirror of the planner's ``Intent`` dataclass, for the LLM's
 structured output.
 
-WHY A MIRROR (see docs/designs/feature_1_nl_parser_design.md, Q1):
+WHY A MIRROR:
 The planner's ``Intent`` is a plain dataclass with a loosely typed
 ``filters: list[dict]``. ``with_structured_output`` needs a Pydantic schema to
 lock the model onto, and the synthesizer already proves this pattern works.
@@ -87,7 +87,21 @@ class DraftAggregate(BaseModel):
             "RECEIPTS by ReceiptMethod with a count and total per method — "
             "'receipt method distribution', 'receipts by method', 'receipt "
             "method breakdown for customer X'; the customer scope rides as a "
-            "'by_customer_name' filter, NOT in this block)."
+            "'by_customer_name' filter, NOT in this block), "
+            "'po_value_by_supplier' (rank SUPPLIERS by PURCHASE ORDER "
+            "VALUE — what was ordered/committed, NOT billed; use for "
+            "'top 5 suppliers by purchase order value', 'which suppliers "
+            "have the most committed'; set status='OPEN' if the question "
+            "says open/outstanding POs; NO date range — PO dates are not "
+            "filterable), "
+            "'po_count_by_status' (purchase orders broken down BY STATUS "
+            "with a count and total value per status — 'how many purchase "
+            "orders are there and what are they worth'; takes no "
+            "parameters), "
+            "'open_po_summary' (the committed total across OPEN purchase "
+            "orders, with the count — 'how much have we committed in open "
+            "POs', 'total value of outstanding purchase orders'; takes no "
+            "parameters)."
         )
     )
     date_from: str = Field(
@@ -391,6 +405,16 @@ class DraftIntent(BaseModel):
             "true"            -> True   (JSON bool)
             "{\\"months\\":6}" -> {...}  (JSON object)
             "GB"              -> "GB"   (not JSON -> taken as the string "GB")
+
+        DOUBLE-ENCODED VALUES (F-044): the model intermittently emits a
+        JSON-encoded STRING whose content is the object text — the JSON
+        string `"{\\"min\\": 50000}"` rather than `{"min": 50000}`
+        itself. One ``json.loads`` yields the string
+        ``{"min": 50000}``, which the planner forwards unchanged to a
+        tool whose schema rejects it (crash). If the decoded value is
+        itself a string whose first character is ``{`` and whose
+        content parses as a JSON object, decode a second time. On
+        genuine string values the guard is false and nothing changes.
         The planner still validates values downstream, so leniency here costs
         nothing and removes a whole class of flaky failures.
         """
@@ -401,6 +425,46 @@ class DraftIntent(BaseModel):
             except (json.JSONDecodeError, TypeError):
                 # Not valid JSON — treat the raw text as a plain string value.
                 value = f.value_json
+            # F-044: the model intermittently double-encodes an OBJECT
+            # value — emitting the JSON-string `"{\\"min\\": 50000}"`
+            # instead of the object text `{"min": 50000}`. The first
+            # json.loads above then yields the STRING `{"min": 50000}`,
+            # which the planner forwards unchanged to a tool whose
+            # float-typed arg rejects it at Pydantic validation (crash).
+            # No filter on this codebase takes a string whose content is
+            # a JSON object, so if the decoded string itself parses as
+            # one, decode again. On genuine string values ("US", "50000",
+            # prose) the first-character test is false and the branch is
+            # skipped, and on strings that start with `{` but are not
+            # valid JSON the second decode raises and the original string
+            # is kept — same leniency as the outer try/except.
+            # F-044 / F-011c: loop the decode. The model has been
+            # observed to (a) double-encode (F-044), and (b) emit a
+            # backslash-escaped object text like `{\"months\":6}`
+            # instead of a valid object or a valid JSON string
+            # (F-011c, caught on the 15_po_relative_date_filters
+            # sweep). The loop peels layers until the value is not a
+            # string, or no further progress is made. Each pass
+            # tries the string as-is, then with `\"` un-escaped to
+            # `"` on the fallback path. Genuine strings ("US",
+            # "50000", prose) fail the first-character test and are
+            # left alone.
+            for _ in range(5):
+                if not (isinstance(value, str) and value[:1] == "{"):
+                    break
+                parsed = None
+                try:
+                    parsed = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                if not isinstance(parsed, dict):
+                    try:
+                        parsed = json.loads(value.replace('\\"', '"'))
+                    except (json.JSONDecodeError, TypeError):
+                        break
+                if not isinstance(parsed, dict):
+                    break
+                value = parsed
             decoded_filters.append({"type": f.type, "value": value})
 
         return Intent(

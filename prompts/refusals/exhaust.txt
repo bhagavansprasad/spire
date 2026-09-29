@@ -1,0 +1,112 @@
+# Spire prompt set — exhaust_refusals. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every flavor × every prompt shape. Goal: find a
+# refusal that names the wrong reason, offers a bad Example, or worse — a
+# silent near-miss answer instead of a refusal. ~60 prompts.
+#
+# Every promised Example from capability.py must ANSWER. Any that refuses
+# is a bug in capability.py, not in this file.
+#
+# HOW TO SCORE — read the refusals, not the tally.
+
+# ====================================================================
+# A. unknown_entity — record type not in the KG
+# ====================================================================
+show me contract renewals
+show me contracts
+list our agreements
+which contracts are expiring soon
+show me our employees
+list all customers
+show me product inventory
+list our fixed assets
+show me journal entries
+list all projects
+
+# ====================================================================
+# B. unsupported_filter — entity known, filter not declared
+# ====================================================================
+suppliers with net 30 payment terms
+suppliers with payment terms net 30
+suppliers with more than 50 employees
+suppliers with the highest quality score
+suppliers with the highest rating
+which suppliers have the best rating
+suppliers with credit rating AAA
+suppliers with risk score below 50
+suppliers with ISO 9001 certification
+suppliers with a headcount above 100
+
+# ====================================================================
+# C. unsupported_operation — operation not supported
+# ====================================================================
+who should we stop buying from
+which supplier should we fire
+what's our worst supplier
+rank suppliers by quality
+summarise receipt volume and value by month
+identify cash collection trends
+which contracts are up for renewal
+what is our total exposure to supplier risk
+
+# ====================================================================
+# D. missing_identifier — record type valid, no WHICH
+# ====================================================================
+recent invoices
+show invoices
+Get standardReceipts
+Get the most recent standard receipts
+list purchase orders
+show purchase order line items
+verify a newly created AR invoice
+Get tax lines for that invoice line
+Fetch descriptive flexfield (DFF) values for this invoice.
+Trace receipt applications for this account
+
+# ====================================================================
+# E. unparseable — too vague to pin to an entity
+# ====================================================================
+what's going on with our vendors
+who are our best suppliers
+tell me about our spending
+what is happening in procurement
+show me the important stuff
+give me a report
+
+# ====================================================================
+# F. Every promised Example, verbatim (must all ANSWER)
+# ====================================================================
+List active suppliers with supplier name, supplier number, and status
+Get supplier contacts for Lee Supplies
+Get tax lines for invoice 300000248096352
+Get the AR invoice with CustomerTransactionId 300000248096352
+Show PO 2144 and its buyer
+Show PO 2144 and its distributions
+Show PO 2144 and its lines
+Show PO 2144 and its schedules
+Show invoice lines for invoice 300000248096352
+Suppliers with their addresses
+What is the risk rating on PO 701337 and why?
+account balance for ABC Corporation Americas
+addresses for supplier 1252
+active suppliers in US
+credit memos for ABC Application Software
+invoices for Lee Supplies
+open invoices for ABC Corporation Americas
+receipts for ABC Application Software
+supplier sites for Lee Supplies
+suppliers with classification Minority Owned
+Show me invoices for EIP Inc with invoice number, amount, and date
+What is the total value of credit memos?
+Show me the account balance for customer ABC Application Software
+
+# ====================================================================
+# G. Positive controls — not refusals, must answer
+# ====================================================================
+Count of suppliers
+list suppliers
+show suppliers
+active suppliers
+suppliers with open purchase orders
+open purchase orders

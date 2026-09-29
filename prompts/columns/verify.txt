@@ -1,0 +1,54 @@
+# Spire prompt set — verify_columns. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does column projection work across its normal
+# shapes. 35 prompts, merging 04_columns (8), 07_alacarte (12), and
+# 11_column_vocabulary's baseline + normalization sections.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line:
+#   - does the Intent carry the right `fields` list?
+#   - does the printed table show EXACTLY those columns, in order?
+#   - are same-entity values populated (not em dashes)?
+#   - for the address / country prompts: does it NO LONGER crash, and
+#     does the Address column populate?
+#   - does aggregation stay on its own format (no table)?
+
+# — from 04_columns (8) —
+Show only supplier name and status for active suppliers
+Just the names of active suppliers
+Supplier number and country for active suppliers
+Supplier name, number, status and country for active suppliers
+Invoice number, amount, and date for supplier 1252
+Just the names of woman owned suppliers
+Order number and status for purchase orders created before 2015
+Show supplier name and credit rating for active suppliers
+
+# — from 07_alacarte (12) —
+Show me invoices for EIP Inc over 100000 with invoice number, amount, and date
+Show me invoices for EIP Inc over 100000 with invoice number, amount, date, supplier name, supplier number, and currency
+List active suppliers with supplier name, supplier number, and status
+Just the invoice numbers for supplier 1252
+List active suppliers with supplier name, supplier number, and address
+Show supplier 1252 with supplier name, number, and address
+List active suppliers
+Top 5 suppliers by invoice spend last year with supplier name and total
+Show PO 2144 and its lines
+Show supplier name and credit rating for active suppliers
+Show me invoices for EIP Inc with invoice number, PO number, and PO line number
+
+# — from 11_column_vocabulary: baseline + normalization (15) —
+List active suppliers with supplier name, supplier number, and status
+Show me invoices for EIP Inc with invoice number, amount, and date
+Order number and status for purchase orders created before 2015
+List active suppliers with supplier_name and supplier_number
+List active suppliers with SupplierName and SupplierNumber
+List active suppliers with Supplier, Status, SupplierNumber
+Show me invoices for EIP Inc with invoice-number and invoice-date
+List active suppliers with SUPPLIER NAME and STATUS
+Show me invoices for EIP Inc with invoice numbers and amounts
+Show only supplier name and status for active suppliers
+List active suppliers with supplier name and who details
+List active suppliers with supplier name and audit columns
+Show only supplier name and status for active suppliers, include 'created by'
+List active suppliers with supplier name and creation date
+List active suppliers with supplier name and date created

@@ -1,0 +1,30 @@
+# Spire prompt set — combinations/payables_supplier/verify.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — does the payables↔supplier join work across its
+# normal shapes. Minutes. Run before a merge.
+#
+# SCOPE: the payables_supplier combination. Queries that name BOTH an
+# Invoice-side capability and a Supplier-side identifier (or vice versa).
+# The three prompts below all ROOT ON INVOICE with a supplier filter —
+# they lived in the old 01_supplier.txt but never belonged there.
+#
+# KG EVIDENCE (SURFACE.md §2): Invoice.supplier filter;
+# Supplier.has_invoice_over_amount; Supplier.has_no_recent_invoices.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line:
+#   - Intent must show target_entity Invoice with a supplier filter whose
+#     value is the supplier reference as written.
+#   - All-digit value routes to supplier_number; anything else to
+#     supplier_name.
+#   - Row counts must be non-zero for the given supplier.
+#
+# Anchors: supplier 1252 = Lee Supplies (~1,329 invoices);
+# supplier "Lee Supplies" the NAME is AMBIGUOUS on this pod.
+
+# The supplier filter's tool_arg_name is a PLACEHOLDER: an all-digit
+# value routes to supplier_number, anything else to supplier_name.
+Show me invoices for supplier 1252
+Invoices for supplier 1252 over 100000
+Invoices for Lee Supplies in 2023

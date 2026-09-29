@@ -1,0 +1,17 @@
+# Spire prompt set — combinations/payables_procurement/smoke.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the payables↔procurement join work at all.
+# Two prompts, seconds. Both MUST ANSWER.
+#
+# SCOPE: the compare block and the purchase_order filter.
+#
+# Anchors: PO 162034 = Lee Supplies, Closed, has invoice 162034inv
+# (830.01 USD). The compare op reconciles the two sides.
+
+# Direction 1 — Invoice rooted by a purchase_order filter.
+Which invoices were raised against PO 162034?
+
+# Direction 2 — ordered vs invoiced for one PO (compare op).
+How does invoiced compare to ordered for PO 162034?

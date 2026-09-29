@@ -1,7 +1,7 @@
 """
 Synchronous KG vocabulary read for the NL parser.
 
-This is Q2, direction 1 (see docs/designs/feature_1_nl_parser_design.md): the
+This is Q2, direction 1: the
 parser reads the allowed vocabulary from the KG BEFORE the LLM call and embeds
 it in the prompt as the menu the model may order from.
 
@@ -371,11 +371,25 @@ _INCLUDE_OVERRIDE_WHEN_PRESENT: dict[str, str] = {
 # _INCLUDE_OVERRIDE_WHEN_PRESENT) to refuse honestly, not auto-included.
 _CHILD_INCLUDE_WHEN_PRESENT: dict[str, tuple[str, list[str]]] = {
     # Only children with a FORWARD "get children of parent" edge tool belong
-    # here — verified against kg_edge_tool. Site and Classification are
-    # EXCLUDED: their only tools are REVERSE (search_suppliers_by_site_bu /
-    # search_suppliers_by_classification, i.e. "find suppliers BY a site/class"),
-    # so there is no way to include a supplier's sites/classifications; adding
-    # them here would only produce a validator refusal.
+    # here — verified against kg_edge_tool. F-043 made Site and
+    # Classification forward-capable by making their existing tools'
+    # filter argument optional (no BU/classification -> return all), so
+    # both are included below. Multi-word triggers for these two, so the
+    # INCLUDE rule fires on "sites for supplier X" / "supplier X's sites"
+    # without also firing on the FILTER phrasing "suppliers with a site
+    # in business unit X" (which is handled by the has_site_in_bu filter
+    # path, not by an include).
+    "Site":                    ("Supplier",           ["sites for", "site for",
+                                                       "sites of", "'s sites",
+                                                       "supplier sites",
+                                                       "supplier site"]),
+    "Classification":          ("Supplier",           ["classifications for",
+                                                       "classification for",
+                                                       "classifications of",
+                                                       "'s classifications",
+                                                       "'s classification",
+                                                       "supplier classifications",
+                                                       "supplier classification"]),
     "Contact":                 ("Supplier",           ["contact", "contacts"]),
     "PurchaseOrderLine":       ("PurchaseOrder",      ["line", "lines"]),
     "POSchedule":              ("PurchaseOrder",      ["schedule", "schedules",

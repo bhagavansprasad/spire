@@ -162,6 +162,56 @@ class SupplierRecord(BaseModel):
         "(a 'contact' bucket in the data). Empty otherwise. Each "
         "supplier_contact_id must appear in the executor's output.",
     )
+    sites: list[SiteInfo] = Field(
+        default_factory=list,
+        description="This supplier's sites, when the query asked for them "
+        "(a 'site' bucket in the data). F-043.",
+    )
+    classifications: list[ClassificationInfo] = Field(
+        default_factory=list,
+        description="This supplier's business classifications, when the "
+        "query asked for them (a 'classification' bucket in the data). F-043.",
+    )
+
+
+class SiteInfo(BaseModel):
+    """One supplier site nested under a supplier. F-043.
+
+    supplier_site_id is validated against the executor's output after
+    synthesis — it MUST appear there."""
+
+    supplier_site_id: int = Field(
+        description="The site's SupplierSiteId (numeric key)."
+    )
+    supplier_site: str = Field(
+        default="", description="The site display name (e.g. 'EIP US1')."
+    )
+    procurement_bu: str = Field(
+        default="", description="ProcurementBU display string (e.g. 'US1 Business Unit')."
+    )
+    procurement_bu_id: int | None = Field(
+        default=None, description="ProcurementBUId (numeric), if present."
+    )
+
+
+class ClassificationInfo(BaseModel):
+    """One supplier business classification nested under a supplier. F-043."""
+
+    classification_id: int = Field(
+        description="The classification's ClassificationId (numeric key)."
+    )
+    classification: str = Field(
+        default="", description="Display name (e.g. 'Small Business')."
+    )
+    classification_code: str = Field(
+        default="", description="Code form (e.g. 'SMALL_BUSINESS')."
+    )
+    status: str = Field(
+        default="", description="Status ('CURRENT' / 'EXPIRED')."
+    )
+    certifying_agency: str = Field(
+        default="", description="Certifying agency (e.g. 'SBA')."
+    )
 
 
 class InvoiceRecord(BaseModel):
@@ -509,6 +559,123 @@ def build_suppliers_with_open_pos(
     return records
 
 
+def _supplier_pos_buyers(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str, str, str] | None:
+    """(source, filtered, po, buyer) for the F-053 four-bucket shape.
+
+    The F-053 plan for the anchor prompt produces FOUR output buckets:
+    the source supplier list (us_suppliers), the parent-filtered subset
+    (us_suppliers_has_open_PO), the refetched POs for the surviving
+    suppliers (open_pos), and the buyers looked up from those POs
+    (buyers). ``_supplier_with_open_pos`` handles the two-bucket subset
+    (a supplier list plus a PO list); this detector extends it to the
+    four-bucket case where the plan also produced a buyers bucket.
+
+    Bucket roles identified by CONTENT SIGNATURE, not by name:
+      - supplier buckets: rows carry ``SupplierId`` + ``Supplier``. A
+        two-supplier-bucket output is the F-053 shape; the two are a
+        source + filtered pair, and the pair is only accepted when one
+        name is ``{other}_{suffix}`` -- the naming convention the
+        executor uses for ``filter_source_when_nonempty`` steps.
+      - PO bucket: rows carry ``POHeaderId`` + ``SupplierId``.
+      - buyer bucket: rows carry ``PersonId`` + ``DisplayName``.
+
+    Returns None unless exactly one of each role is unambiguously
+    present. Returning None falls through to the LLM path, which is
+    correct for shapes this detector does not recognize -- including
+    the two-bucket subset that ``_supplier_with_open_pos`` already
+    handles upstream.
+    """
+    supplier_buckets: list[str] = []
+    po_bucket: str | None = None
+    buyer_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            continue
+        first = rows[0]
+        if "PersonId" in first and "DisplayName" in first:
+            if buyer_bucket is not None:
+                return None
+            buyer_bucket = name
+        elif "POHeaderId" in first and "SupplierId" in first:
+            if po_bucket is not None:
+                return None
+            po_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_buckets.append(name)
+    if len(supplier_buckets) != 2 or po_bucket is None or buyer_bucket is None:
+        return None
+    a, b = supplier_buckets
+    if b.startswith(a + "_"):
+        return a, b, po_bucket, buyer_bucket
+    if a.startswith(b + "_"):
+        return b, a, po_bucket, buyer_bucket
+    return None
+
+
+def build_suppliers_with_open_pos_and_buyers(
+    supplier_rows: list[dict],
+    po_rows: list[dict],
+    buyer_rows: list[dict],
+) -> list[SupplierRecord]:
+    """Supplier rows + PO rows + buyer rows -> SupplierRecords.
+
+    The F-056 sibling of ``build_suppliers_with_open_pos``. The F-053
+    four-bucket plan fetches buyers as a separate bucket keyed on the
+    POs' ``BuyerId``, so the display name comes from the buyer record
+    rather than from a stitched ``Buyer`` column on each PO row.
+
+    Fallback order for ``display_name``:
+      1. ``buyer_rows[PersonId].DisplayName`` -- the authoritative
+         source, since Step 4 of the F-053 plan fetched it.
+      2. ``po["Buyer"]`` -- present on this pod's /purchaseOrders
+         projection as a convenience; used when the buyer bucket
+         lacks the id.
+      3. Empty string.
+
+    The record still validates against ``valid["person_ids"]`` because
+    ``person_id`` comes from the PO row's ``BuyerId``, which the id
+    harvest already collects.
+    """
+    buyers_by_id: dict[int, dict] = {
+        b["PersonId"]: b
+        for b in buyer_rows
+        if isinstance(b, dict) and b.get("PersonId") is not None
+    }
+    by_supplier: dict[int, list[dict]] = {}
+    for po in po_rows:
+        sid = po.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(po)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        buyers: list[BuyerInfo] = []
+        seen: set = set()
+        for po in group:
+            bid = po.get("BuyerId")
+            if bid is None or bid in seen:
+                continue
+            seen.add(bid)
+            b = buyers_by_id.get(bid) or {}
+            display = b.get("DisplayName") or po.get("Buyer") or ""
+            buyers.append(BuyerInfo(person_id=bid, display_name=display))
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                open_po_count=len(group),
+                buyers=buyers,
+            )
+        )
+    return records
+
+
 def _supplier_with_contacts(
     outputs: dict[str, list[dict]],
 ) -> tuple[str, str] | None:
@@ -587,6 +754,127 @@ def build_suppliers_with_contacts(
                 supplier_number=str(row.get("SupplierNumber") or ""),
                 supplier_name=row.get("Supplier") or "",
                 contacts=contacts,
+            )
+        )
+    return records
+
+
+def _supplier_with_sites(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, site_bucket) for the "suppliers + sites" join. F-043.
+
+    Two buckets: a supplier list (rows with SupplierId and Supplier) and a
+    site list (rows with SupplierSiteId). Site rows carry their parent
+    SupplierId (stamped by the supplier_sites tool), so they can be grouped
+    back to their supplier here instead of by the LLM.
+    """
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    site_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "SupplierSiteId" in first:
+            site_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or site_bucket is None:
+        return None
+    return supplier_bucket, site_bucket
+
+
+def build_suppliers_with_sites(
+    supplier_rows: list[dict], site_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + site rows -> SupplierRecords with nested sites. F-043."""
+    by_supplier: dict[int, list[dict]] = {}
+    for s in site_rows:
+        sid = s.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(s)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        sites = [
+            SiteInfo(
+                supplier_site_id=s.get("SupplierSiteId") or 0,
+                supplier_site=s.get("SupplierSite") or "",
+                procurement_bu=s.get("ProcurementBU") or "",
+                procurement_bu_id=s.get("ProcurementBUId"),
+            )
+            for s in group
+        ]
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                sites=sites,
+            )
+        )
+    return records
+
+
+def _supplier_with_classifications(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, str] | None:
+    """(supplier_bucket, classification_bucket) for "suppliers + classifications".
+    F-043."""
+    if len(outputs) != 2:
+        return None
+    supplier_bucket: str | None = None
+    classification_bucket: str | None = None
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "ClassificationId" in first:
+            classification_bucket = name
+        elif "SupplierId" in first and "Supplier" in first:
+            supplier_bucket = name
+    if supplier_bucket is None or classification_bucket is None:
+        return None
+    return supplier_bucket, classification_bucket
+
+
+def build_suppliers_with_classifications(
+    supplier_rows: list[dict], classification_rows: list[dict]
+) -> list[SupplierRecord]:
+    """Supplier rows + classification rows -> SupplierRecords with nested
+    classifications. F-043."""
+    by_supplier: dict[int, list[dict]] = {}
+    for c in classification_rows:
+        sid = c.get("SupplierId")
+        if sid is None:
+            continue
+        by_supplier.setdefault(sid, []).append(c)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+        group = by_supplier.get(sid, [])
+        classifications = [
+            ClassificationInfo(
+                classification_id=c.get("ClassificationId") or 0,
+                classification=c.get("Classification") or "",
+                classification_code=c.get("ClassificationCode") or "",
+                status=c.get("Status") or "",
+                certifying_agency=c.get("CertifyingAgency") or "",
+            )
+            for c in group
+        ]
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                classifications=classifications,
             )
         )
     return records

@@ -1,0 +1,42 @@
+# Spire prompt set — verify_fields_and_include.
+# Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — the 15 prompts from 19_fields_and_include.txt.
+#
+# SCOPE: the fields + include shape across every entity that has a child.
+#
+# THE BRANCH IN PLAY (from F-051):
+#   fields only    ->  summary_only=True,  projected table      (F-020)
+#   fields+include ->  summary_only=not include                 (F-051)
+#   include only   ->  else branch, full render
+#   neither        ->  else branch, full render
+#
+# HOW TO SCORE — read the INTENT line:
+#   1. Does the Intent carry BOTH `fields` and `include`? If `include`
+#      is missing, the prompt is not exercising the fix.
+#   2. If both present, ANSWER must contain the child content.
+#   3. Siblings (B/C/D) must be UNCHANGED from before the fix.
+
+# — A. F-051 reproducer + analogues (10) —
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its lines
+Show the AR invoice with CustomerTransactionId 1002 with transaction number and its tax lines
+Show PO 2144 with order number and its lines
+Show PO 2144 with order number and its schedules
+Show PO 2144 with order number and its distributions
+Show supplier EIP Inc with supplier number and its contacts
+Show supplier EIP Inc with supplier number and its sites
+Show customer ABC Application Software with account number and its transactions
+Show customer ABC Application Software with account number and its receipts
+
+# — B. F-020 regression guard (2) —
+List active suppliers with supplier name and status
+Show me invoices for EIP Inc with invoice number and amount
+
+# — C. Include only (2) —
+Show PO 2144 and its lines
+Get tax lines for invoice 1002
+
+# — D. Plain (1) —
+List active suppliers

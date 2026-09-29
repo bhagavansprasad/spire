@@ -1,0 +1,35 @@
+# Spire prompt set — smoke_dipstick. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Depth-ordered triage: one prompt per pipeline depth. Six
+# prompts, seconds. The FIRST failure tells you the depth at which the
+# pipeline breaks, so later failures can be attributed correctly.
+#
+# RUN THIS FIRST in any batch. If depth 1 or 2 fails, nothing below is
+# worth reading.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line. run_prompt_set
+# has previously reported prompts as running cleanly while being wrongly
+# REFUSED.
+#
+# Anchors: supplier 1252 = Lee Supplies. PO 2144 = EIP Inc, 2 lines.
+# Customer ABC Corporation Americas = AccountNumber 26370.
+
+# Depth 1 — count path, no children, no filters.
+#   If this fails: pod connection, credentials, or parser.
+Count of suppliers
+
+# Depth 2 — one entity-level filter. The real dipstick.
+Get list of active suppliers
+
+# Depth 3 — by-id resolution + one child fetch.
+Addresses for supplier 1252
+
+# Depth 4 — PO root + traversal + synthesizer.
+Show PO 2144 and its lines
+
+# Depth 5 — AR root + customer-name resolution + synthesizer.
+Show me AR invoices for customer ABC Corporation Americas
+
+# Depth 6 — refusal path. Must refuse cleanly, not guess.
+Show me contract renewals due next quarter

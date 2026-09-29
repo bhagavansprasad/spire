@@ -2,8 +2,7 @@
 KG validation of a draft Intent — Q2 direction 2 (checkpoint 3).
 
 After the LLM produces a draft Intent, the parser validates it BACK against
-the KG menu and rejects anything out of scope, producing a typed Refusal
-(see docs/designs/feature_1_nl_parser_design.md, Q3).
+the KG menu and rejects anything out of scope, producing a typed Refusal.
 
 VALIDATION ORDER (decision B1):
 The target entity is a FIRST-FAIL GATE; filters are COLLECTED all-at-once
@@ -114,7 +113,15 @@ from spire.planner.planner import Intent
 # gate below (for its specific user-facing message, keyed in capability.py),
 # so this set is really just Classification today. Kept as a set so a
 # future reverse-tool entity is one line, not a new branch.
-_NON_INCLUDABLE_ENTITIES = frozenset({"Site", "Classification"})
+# F-043: Site and Classification were reverse-only — the pod could list
+# a supplier's sites/classifications, but SPIRE's only tools for them ran
+# the OTHER direction (find suppliers BY a site/classification), so a
+# Site or Classification include had no forward fetch and refused. The
+# reverse tools now accept their filter as optional, serving both
+# directions on the same edge, so both entities are includable. Kept as
+# an empty frozenset so the check below stays a no-op if a future
+# reverse-only entity is added.
+_NON_INCLUDABLE_ENTITIES: frozenset[str] = frozenset()
 
 
 def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
@@ -205,17 +212,6 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
     # Site is checked unconditionally — it is a hardcoded string test and
     # does not consult edge data, so the "menu has no edges" precondition
     # below does not apply to it.
-    if "Site" in intent.include:
-        # Preserved verbatim so capability.py's SupplierSiteListing
-        # Solution/Example keep working. The general loop below would
-        # not catch Site (HAS_SITE exists from Supplier to Site), so
-        # this specific gate is load-bearing for that refusal's wording.
-        return Refusal(
-            flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
-            detail="Supplier sites aren't available as a standalone listing.",
-            offending_entity="SupplierSiteListing",
-        )
-
     # The general include gate requires the menu to declare edges. When it
     # does not (hand-built minimal fixtures, or any caller that constructs
     # KGMenu by hand without edges), the gate cannot validate and declines
@@ -307,15 +303,40 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
         # fields in the split, so no false "not available" note is emitted
         # for a field the answer actually shows (see
         # _FIELDS_SATISFIED_BY_INCLUDE).
+        # Two sources feed "this field is satisfied by an active
+        # include":
+        #
+        #   (a) the curated _FIELDS_SATISFIED_BY_INCLUDE map, for
+        #       reader-facing synonyms that do NOT correspond to a
+        #       column on the include's KG catalog (Address's "city",
+        #       "state", "addresses" — see the map's docstring).
+        #   (b) the KG field catalog of every entity in intent.include.
+        #       This is what lets a CHILD field (e.g. PurchaseOrderLine's
+        #       "Description") resolve against its own entity instead of
+        #       being classified against the target's catalog and wrongly
+        #       reported unavailable. F-017.
+        #
+        # The TARGET's own catalog is checked FIRST for each column, so
+        # a field present on both the target and an include (OrderNumber
+        # is a column on PurchaseOrder AND on PurchaseOrderLine) stays
+        # in `fields` for the target's projection, rather than being
+        # short-circuited by the include branch.
         satisfied_by_include: set[str] = set()
         for inc in intent.include:
             satisfied_by_include |= _FIELDS_SATISFIED_BY_INCLUDE.get(inc, set())
+            for inc_col in menu.entity_columns.get(inc, []):
+                satisfied_by_include.add(inc_col.lower())
         known: list[str] = []
         unresolved: list[str] = []
         for col in intent.fields:
-            if col.lower() in satisfied_by_include:
+            if menu.is_known_field(entity, col):
+                known.append(col)
+            elif col.lower() in satisfied_by_include:
+                # Satisfied by the include; not an unresolved miss and
+                # not a target-catalog column either.
                 continue
-            (known if menu.is_known_field(entity, col) else unresolved).append(col)
+            else:
+                unresolved.append(col)
         intent.fields = known
         intent.unresolved_fields = unresolved
 
@@ -335,4 +356,14 @@ def validate_intent(intent: Intent, menu: KGMenu) -> Optional[Refusal]:
 # change how the parser maps the phrasing to the include).
 _FIELDS_SATISFIED_BY_INCLUDE: dict[str, set[str]] = {
     "Address": {"address", "addresses", "country", "city", "state"},
+    # F-041 residual: DFF columns live on the included DFF child, not
+    # on ReceivablesInvoice. Without this entry the field-split moves
+    # them to unresolved_fields and the display prints a false
+    # "column not available" note over data the pipeline already
+    # fetched. Same pattern as the Address entry above.
+    "ReceivablesInvoiceTransactionDFF": {
+        "__flex_context",
+        "__flex_context_displayvalue",
+        "customertrxid",
+    },
 }

@@ -221,7 +221,34 @@ _FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
     "has_invoice_over_amount": "has_invoice_over_amount",
     "has_site_in_bu": "has_site_in_bu",
     "has_classification": "has_classification",
+    "has_open_PO": "has_open_PO",
 }
+
+
+# F-016: entity-level fetchers whose MCP wrapper signatures accept a
+# `limit` argument. The planner injects `intent.list_limit` into
+# tool_args for these tools ONLY — a `limit` sent to a fetcher that does
+# not declare one raises at the MCP boundary (FastMCP/Pydantic rejects
+# the unknown kwarg), so the set is the guard against a shape the
+# parser does not yet distinguish from the list case.
+#
+# Kept here beside _TOOL_PRIMARY_ARG (the other map keyed by MCP tool
+# name) so a new list tool needs its row in both — no divergence
+# between "this tool takes a primary arg" and "this tool takes a limit".
+#
+# get_purchase_order_by_id, get_purchase_order_lifecycle_status,
+# get_buyer, and the child/edge tools are NOT here: they either take no
+# limit, or take a limit whose semantics are bounded by the parent
+# (child fetches cap per parent, which is a different question from a
+# user-facing "top N rows").
+_LIMIT_CAPABLE_TOOLS: frozenset[str] = frozenset({
+    "search_suppliers",
+    "search_invoices",
+    "search_addresses",
+    "search_purchase_orders",
+    "list_receivables_credit_memos",
+    "search_standard_receipts",
+})
 
 
 # W1 (refusal quality): a worked example per entity, used when an intent

@@ -70,6 +70,14 @@ class GraphState(TypedDict, total=False):
     cache_mode: Optional[str]
     cache_slot: Optional[str]
 
+    # The classifier's module selection, written by parse_node
+    # from the ParseResult the router returns. None when the
+    # router did not run (a direct parse() call) or when the
+    # router fell back to a full-context parse after a
+    # ClassificationError. Read by promptkit for its diagnostic
+    # line; the pipeline itself does not consume it.
+    _modules_got: Optional[list[str]]
+
     intent: Optional[Any]
     refusal: Optional[Any]
     plan: Optional[Any]
@@ -94,9 +102,23 @@ class GraphState(TypedDict, total=False):
 
 def parse_node(state: GraphState) -> dict:
     result = parse_prompt(state["prompt"], menu=state["menu"])
+    # Surface the classifier's module selection (route_and_parse
+    # stashes it on the ParseResult). Downstream consumers —
+    # promptkit's diagnostic in particular — read this from the
+    # state instead of re-running the classifier for themselves.
+    #
+    # getattr, not attribute access: the graph's own unit tests
+    # exercise parse_node with minimal test doubles (_ParseOK /
+    # _ParseRefused) that carry is_refusal / intent / refusal but
+    # not .modules. parse_node only needs "something shaped like
+    # a ParseResult"; requiring the exact class would couple a
+    # leaf node to the router's return type for no benefit.
+    out: dict = {"_modules_got": getattr(result, "modules", None)}
     if result.is_refusal:
-        return {"refusal": result.refusal}
-    return {"intent": result.intent}
+        out["refusal"] = result.refusal
+    else:
+        out["intent"] = result.intent
+    return out
 
 
 def plan_node(state: GraphState) -> dict:
@@ -141,6 +163,23 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
     wanted = list(fields)
     projected: dict = {}
     for name, records in outputs.items():
+        # F-014 defence: a bucket whose first record carries a `shape`
+        # key is a tool-computed wrapper (aggregation, comparison,
+        # lifecycle), not an entity list. Its keys are the wrapper's
+        # (`shape`, `rows`, `date_from`, ...); none is an entity column,
+        # so applying `fields` would trim to `{}` and fall back to the
+        # original — or, worse, leave a wrapper whose requested columns
+        # do not exist on it and render em dashes. The tool has already
+        # projected its `rows[]`; skip.
+        #
+        # The parser-side correction in F-014 clears `intent.fields` on
+        # aggregate and compare intents before this ever runs, so this
+        # is the net: a shape-wrapper bucket must survive a projection
+        # attempt even if `fields` arrives populated.
+        first = records[0] if records else None
+        if isinstance(first, dict) and "shape" in first:
+            projected[name] = list(records)
+            continue
         new_records = []
         for rec in records:
             if not isinstance(rec, dict):

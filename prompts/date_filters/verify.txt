@@ -1,0 +1,94 @@
+# Spire prompt set — verify_date_filters. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: verify. Correct — every date filter the KG declares, across every
+# direction. 40 prompts, merging 15_po_relative_date_filters (23),
+# 16_date_filter_cluster's date blocks, 18_invoice_created_dates (12).
+#
+# HOW TO SCORE — the Intent line is the answer:
+#   - PO CreationDate absolute: created_before / created_since.
+#   - PO CreationDate relative: older_than_n_months / created_in_last_n_months.
+#   - PO LastUpdateDate relative: updated_older_than_n_months /
+#     updated_in_last_n_months.
+#   - Invoice absolute: invoice_date.
+#   - Invoice relative: older_than_n_months / created_in_last_n_months.
+#   - Refused prompt: Reason must name the right cause.
+
+# ====================================================================
+# A. PO — CreationDate absolute (4)
+# ====================================================================
+purchase orders created before 2024-01-01
+purchase orders created before 2015
+purchase orders created since March 2024
+purchase orders between Jan and Mar 2025
+
+# ====================================================================
+# B. PO — CreationDate relative, OLDER direction (7)
+# ====================================================================
+purchase orders older than 6 months
+purchase orders older than 12 months
+purchase orders older than 1 year
+purchase orders older than 2 years
+stale purchase orders
+aged purchase orders
+purchase orders that are more than 6 months old
+
+# ====================================================================
+# C. PO — CreationDate relative, RECENT direction (4)
+# ====================================================================
+purchase orders in the last 12 months
+purchase orders in the last 6 months
+purchase orders from the last year
+purchase orders created in the last 7 days
+
+# ====================================================================
+# D. PO — LastUpdateDate OLDER (F-047, 4)
+# ====================================================================
+purchase orders not touched in the last year
+purchase orders not touched in the last 6 months
+purchase orders not updated in the last 12 months
+purchase orders last modified more than 6 months ago
+
+# ====================================================================
+# E. PO — LastUpdateDate RECENT (F-047, 3)
+# ====================================================================
+purchase orders updated in the last 3 months
+purchase orders with activity in the last year
+purchase orders updated in the last 30 days
+
+# ====================================================================
+# F. PO — Vague adjectives default (F-048, 6)
+# ====================================================================
+recent purchase orders
+new purchase orders
+latest POs
+fresh POs
+the most recent POs
+recently created POs
+
+# ====================================================================
+# G. Invoice — absolute (F-046, F-049, 8)
+# ====================================================================
+invoices in 2024
+invoices in 2023
+invoices between Jan and Mar 2024
+invoices created before 2024-01-01
+invoices created since January 2024
+invoices created after 2024-01-01
+invoices raised before 2024-01-01
+invoices raised since January 2024
+
+# ====================================================================
+# H. Invoice — relative (F-046, 5)
+# ====================================================================
+invoices older than 6 months
+invoices older than 1 year
+invoices more than 12 months old
+invoices stale
+invoices in the last 30 days
+
+# ====================================================================
+# I. Day-count conversion (F-055)
+# ====================================================================
+invoices in the last 7 days
+invoices in the last 14 days

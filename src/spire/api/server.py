@@ -24,15 +24,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from spire.api.models import (
+    CLIAnswer,
     ErrorAnswer,
     ErrorDetail,
     Metadata,
+    PersonaInfo,
     PromptRequest,
     ResponseEnvelope,
     StageTiming,
     StatusResponse,
 )
 from spire.api.translate import translate
+from spire.rendering.formatters import render_cli_stdout
+from spire.config import load_persona
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -56,6 +60,13 @@ def _uptime_s() -> int:
     return int((datetime.now(timezone.utc) - _STARTED_AT).total_seconds())
 
 
+def _mask_password(password: str) -> str:
+    """Display form: first 2, last 2, dots between."""
+    if not password or len(password) < 8:
+        return "\u2022" * 8
+    return password[:2] + "\u2022" * (len(password) - 4) + password[-2:]
+
+
 # ── Lifespan ─────────────────────────────────────────────────────────
 
 
@@ -72,6 +83,7 @@ async def _load_menu():
 async def lifespan(app: FastAPI):
     app.state.menu = None
     app.state.mcp = None
+    app.state.persona = None
     app.state.pipeline_ready = False
     app.state.pipeline_error = None
     app.state.lock = asyncio.Lock()
@@ -80,6 +92,20 @@ async def lifespan(app: FastAPI):
         app.state.menu = await _load_menu()
     except Exception as exc:                                # noqa: BLE001
         app.state.pipeline_error = f"menu load failed: {exc}"
+
+    try:
+        _persona = load_persona("default_dev")
+        _fusion = getattr(_persona, "fusion", None)
+        if _fusion is not None:
+            app.state.persona = PersonaInfo(
+                base_url=(getattr(_fusion, "base_url", "") or "").split("://", 1)[-1].split(".", 1)[0],
+                username=getattr(_fusion, "username", "") or "",
+                password_masked=_mask_password(
+                    getattr(_fusion, "password", "") or ""
+                ),
+            )
+    except Exception:                                       # noqa: BLE001
+        app.state.persona = None
 
     try:
         from fastmcp import Client
@@ -183,6 +209,7 @@ async def status(request: Request) -> JSONResponse:
                 getattr(request.app.state, "pipeline_error", None)
                 or "pipeline not initialised"
             ),
+            persona=getattr(request.app.state, "persona", None),
         )
         return JSONResponse(status_code=503, content=body.model_dump())
 
@@ -193,6 +220,7 @@ async def status(request: Request) -> JSONResponse:
         uptime_s=_uptime_s(),
         kg_version=None,
         pipeline_ready=True,
+        persona=getattr(request.app.state, "persona", None),
     )
     return JSONResponse(status_code=200, content=body.model_dump())
 
@@ -255,10 +283,25 @@ async def prompt(req: PromptRequest, request: Request) -> JSONResponse:
         return JSONResponse(status_code=500, content=env.model_dump())
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
-    envelope = translate(final_state, request_id, stages, latency_ms)
+    # UI contract: show the CLI's stdout verbatim. render_cli_stdout
+    # is the shared renderer promptkit.py also emits through, so
+    # the two cannot drift.
+    cli_text = render_cli_stdout(final_state, request.app.state.menu)
 
-    http_status = 500 if envelope.kind == "error" else 200
-    return JSONResponse(status_code=http_status, content=envelope.model_dump())
+    envelope = ResponseEnvelope(
+        request_id=request_id,
+        kind="cli",
+        answer=CLIAnswer(text=cli_text),
+        metadata=Metadata(
+            latency_ms=latency_ms,
+            llm_calls=0,
+            tokens_in=0,
+            tokens_out=0,
+            kg_version=None,
+            stages=stages,
+        ),
+    )
+    return JSONResponse(status_code=200, content=envelope.model_dump())
 
 
 # ── Entry point ──────────────────────────────────────────────────────

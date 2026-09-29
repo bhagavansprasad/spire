@@ -118,7 +118,7 @@ async def test_kg_entity_module_mapping():
 
     Children take the module of the endpoint they hang off (a PO line is
     procurement, a tax line is receivables). See
-    docs/features/parser_context_modularization.md §4.3.
+    docs/design/FEATURES.md §4.3.
     """
     expected = {
         # payables
@@ -345,10 +345,10 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_entity_field": 210,
         "kg_edge": 17,
         "kg_pattern": 3,
-        "kg_vocabulary": 120,
+        "kg_vocabulary": 129,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 10,
-        "kg_entity_filter": 26,
+        "kg_entity_tool": 11,
+        "kg_entity_filter": 34,
         "kg_edge_tool": 16,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted

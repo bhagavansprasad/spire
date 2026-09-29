@@ -39,7 +39,7 @@ def test_build_system_prompt_with_kg_content():
 def test_build_system_prompt_base_mentions_kg_pointer():
     """The base prompt itself must mention the KG so the LLM knows to attend
     to it when present. This is the 'lightly revised' decision documented in
-    docs/designs/agent_kg_integration.md §6."""
+    the agent/KG integration design."""
     assert "Knowledge Graph" in SYSTEM_PROMPT_BASE
 
 

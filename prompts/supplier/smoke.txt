@@ -1,0 +1,43 @@
+# Spire prompt set — supplier/smoke. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: smoke. Alive — does the supplier module work at all.
+# Six prompts, seconds. Every prompt MUST ANSWER; a refusal here is a
+# failure, except the deliberate one at the bottom.
+#
+# SCOPE: the supplier module. Supplier and its entity-level filters
+# (status, country, business relationship, name fragment, created date,
+# count); Supplier's children (Address, Site, Classification, Contact).
+#
+# RUN FIRST. If smoke fails, nothing below is worth reading.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line. The tally has
+# previously reported "ran cleanly" while prompts were being wrongly
+# REFUSED.
+#
+# Anchors: supplier 1252 = Lee Supplies (US, ACTIVE, 25 addresses).
+# Supplier 1262 = EIP Inc (10 contacts). ~450 suppliers total.
+
+# Depth 1 — count path. Supplier root, count_only, no filters.
+# If this fails: pod connection, credentials, or parser.
+Count of suppliers
+
+# Depth 2 — one entity-level filter. The real dipstick: this is the
+# layer that regressed once already.
+Get list of active suppliers
+
+# Depth 3 — by-id resolution + one child fetch. Exercises value-shape
+# arg routing (all-digit -> supplier_number, else supplier_name).
+# Lee Supplies = SupplierNumber 1252, 25 addresses.
+Addresses for supplier 1252
+
+# Depth 4 — nested child via expand=addresses on the supplier fetch.
+# Path B: satisfied by expand=addresses, NOT by a separate Address step.
+Suppliers with their addresses
+
+# Depth 5 — contacts child. EIP Inc = SupplierNumber 1262, 10 contacts.
+Show supplier EIP Inc and its contacts
+
+# Depth 6 — refusal path. Must refuse cleanly, not guess.
+# A silent plausible answer here is worse than an error.
+show me contract renewals due next quarter

@@ -1,0 +1,127 @@
+# Spire prompt set — supplier/exhaust. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every variation we know about the supplier
+# module. Overnight. The goal is to make Spire fail; a clean run means
+# the prompts are not exhaustive enough yet.
+#
+# SCOPE: every supplier_site_bu value (10), every
+# supplier_classification value (9), the three remaining supplier edge
+# filters, by-supplier aggregations, the F-008 / F-010 / F-020 V1
+# reproducers verbatim, boundary cases, additional paraphrases.
+#
+# COST: the edge filters make one child call per supplier (~25-450
+# calls each). The aggregations page a full year of invoices per call
+# (~2 min each). Budget ~40 minutes for the whole file.
+#
+# HOW TO SCORE — read the ANSWERS, not the summary line.
+#
+# Anchors: supplier 1252 = Lee Supplies (US, ACTIVE, 25 addresses).
+# Supplier 1262 = EIP Inc (10 contacts). ~450 suppliers total.
+# F-008's reproducer is supplier 1272 (Consolidated Supplies), whose
+# Minority Owned classification carries Status="EXPIRED" on this pod.
+
+# ====================================================================
+# A. Every supplier_site_bu value (10)
+# ====================================================================
+suppliers with a site in the US1 business unit
+suppliers with a site in the UK business unit
+suppliers with a site in the France business unit
+suppliers with a site in the Germany business unit
+suppliers with a site in the Italy business unit
+suppliers with a site in the China business unit
+suppliers with a site in the Japan business unit
+suppliers with a site in the India business unit
+suppliers with a site in the Sweden business unit
+suppliers with a site in the Healthcare US business unit
+
+# ====================================================================
+# B. Every supplier_classification value (9)
+# ====================================================================
+suppliers that are Small Business
+suppliers that are Woman Owned
+suppliers that are Minority Owned
+suppliers that are Veteran Owned
+suppliers that are Hub Zone
+suppliers with ISO 14001 certification
+suppliers with General Liability Insurance
+suppliers with Workers' Compensation Insurance
+suppliers with Kbis
+
+# ====================================================================
+# C. Remaining supplier edge filters
+# ====================================================================
+# has_invoice_over_amount — keeps suppliers with at least one qualifying invoice.
+suppliers with invoice amount greater than 10000
+suppliers who invoiced more than 50000
+suppliers with an invoice over 10000
+
+# has_open_PO — keeps suppliers with at least one open PO.
+suppliers with open purchase orders
+suppliers with open POs
+
+# has_no_recent_invoices — negation by absence.
+suppliers with no invoices in the last 6 months
+suppliers with no invoices in the last 12 months
+vendors who haven't invoiced us in a year
+
+# ====================================================================
+# D. By-supplier aggregations with date ranges
+# ====================================================================
+# These root on Invoice but produce Supplier rankings — the by_supplier op.
+Top 5 suppliers by spend in 2022
+Top 10 suppliers by spend in 2022
+Top 10 suppliers by spend in 2023
+Top 10 suppliers by spend in 2024
+Which suppliers did we spend the most with in 2022
+Which suppliers did we spend the most with in 2023
+total invoiced by supplier in 2022
+Top 20 suppliers by spend in 2022
+
+# ====================================================================
+# E. F-008 / F-010 / F-020 V1 reproducers, verbatim
+# ====================================================================
+# F-008: expired supplier classifications must not match.
+# Supplier 1272 carries Minority Owned with Status="EXPIRED"; the
+# pre-fix pipeline matched it. Post-fix the answer is 0 of N examined.
+suppliers with classification Minority Owned
+
+# F-010: filtered count must use the matched bucket, not the source total.
+# Pre-fix returned the pod-wide supplier count.
+count of suppliers with classification Minority Owned
+
+# F-020: the supplier-contacts run-on. Pre-fix produced a 47-name
+# comma-joined sentence before the tables. Post-fix the summary ends at
+# the count line and each contact carries its own Admin marker.
+Get Supplier contacts
+
+# ====================================================================
+# F. Boundary cases
+# ====================================================================
+suppliers with classification Nonexistent Classification
+suppliers with a site in Nonexistent Business Unit
+suppliers named Nonexistent Supplier Name 12345
+addresses for supplier 999999999
+suppliers created after 2050-01-01
+suppliers created between 2050-01-01 and 2050-12-31
+suppliers in XX
+active suppliers in XX
+suppliers with no invoices in the last 0 months
+suppliers with invoice amount greater than 999999999999
+
+# ====================================================================
+# G. Additional paraphrases
+# ====================================================================
+suppliers in Australia
+suppliers in Canada
+which suppliers are inactive
+active suppliers in the UK
+suppliers named Lee Supplies
+suppliers called Dell Inc
+list all suppliers created in 2024
+suppliers that are not active
+count of inactive suppliers
+how many suppliers are inactive
+suppliers with the Small Business classification
+suppliers certified as ISO 14001
+suppliers with a site in the Healthcare US Business Unit

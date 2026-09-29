@@ -1,0 +1,94 @@
+# Spire prompt set — exhaust_lifecycle. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: exhaust. Stress — every lifecycle phrasing variant. Goal: find a
+# phrasing that misroutes. ~55 prompts.
+#
+# Anchors: PO 701337 = JGA, Open. PO 162034 = Lee Supplies, Closed.
+
+# ====================================================================
+# A. A.4 status matrix × paraphrases
+# ====================================================================
+Has PO 701337 been fully received, fully invoiced, and fully paid?
+Is PO 701337 fully received?
+Is PO 701337 fully invoiced?
+Has PO 701337 been paid?
+Has PO 162034 been fully received, fully invoiced, and fully paid?
+Is PO 162034 fully received?
+Is PO 162034 fully invoiced?
+Has PO 162034 been paid?
+Is PO 162034 complete?
+Is PO 701337 complete?
+Show ordered, received, invoiced and paid amounts for PO 701337.
+Show ordered, received, invoiced and paid amounts for PO 701337 with supplier details.
+What are the four amounts on PO 701337?
+PO 162034 — ordered, received, invoiced, paid.
+
+# ====================================================================
+# B. A.7 diagnostic × paraphrases
+# ====================================================================
+Why is PO 701337 still open?
+What is blocking PO 701337?
+Who owns the next action on PO 701337?
+Why has PO 701337 not been paid?
+What is holding up PO 701337?
+Why hasn't PO 701337 been fully received?
+Is anything blocking PO 162034?
+What's the status of PO 701337?
+What's going on with PO 701337?
+
+# ====================================================================
+# C. A.2 end-to-end summary × paraphrases
+# ====================================================================
+Give me an end-to-end summary of PO 701337 from supplier setup through payment.
+Summarise PO 701337.
+Summarise PO 701337 and identify the current lifecycle stage.
+Summarise PO 701337 and identify the responsible team.
+Trace PO 162034 from supplier setup through to payment.
+Trace PO 162034 from supplier setup through to payment and tell me the current stage.
+Executive summary for PO 701337.
+Executive summary for PO 162034 — value, delivery, invoice and payment status, risk, and what to do next.
+
+# ====================================================================
+# D. A.10 risk & recommended action × paraphrases
+# ====================================================================
+What is the risk rating on PO 701337 and why?
+What is the risk rating on PO 701337?
+What is the risk on PO 162034?
+How risky is PO 701337?
+Why is PO 701337 rated the way it is?
+What should be done about PO 701337?
+What's the recommended action on PO 701337?
+Give me an executive summary of PO 701337 including risk and recommended action.
+
+# ====================================================================
+# E. A.3 per-module status × paraphrases
+# ====================================================================
+What is the supplier status, approval status, receipt status, invoice matching status and payment status of PO 701337?
+What is the supplier status on PO 701337?
+What is the approval status on PO 701337?
+What is the receipt status on PO 701337?
+What is the invoice matching status on PO 701337?
+What is the payment status on PO 701337?
+For PO 162034, show the supplier status, invoice approval status and payment status, plus any unresolved exceptions.
+
+# ====================================================================
+# F. Negative and edge cases
+# ====================================================================
+Has PO 999999999 been fully received, fully invoiced, and fully paid?
+Has PO DOES-NOT-EXIST been paid?
+Have all purchase orders been fully received and paid?
+Compare the lifecycle of PO 701337 and PO 162034.
+Is PO 0 complete?
+Is PO -1 complete?
+
+# ====================================================================
+# G. Must-not-regress neighbours
+# ====================================================================
+Show PO 162034 and its lines.
+Show the invoices raised against PO 162034.
+Open POs for supplier JGA.
+Which suppliers have open purchase orders?
+Purchase orders created before 2015.
+Show PO 2144 and its distributions.
+What is purchase order 2144 about?

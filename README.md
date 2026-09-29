@@ -200,55 +200,90 @@ Every response has the same shape:
   Both are clients of the pipeline, not part of it — the pipeline behaves
   identically whether it is driven by the CLI, the API, or the UI.
 
-- **promptkit** (`scripts/promptkit.py`): one tool to run a single prompt, run
-  a whole prompt set end to end, or validate that prompts still route to the
-  right module and tool. See [`how-to-run.md`](how-to-run.md) §5.
+- **promptkit** (`scripts/promptkit.py`): one tool to run Spire prompts end to
+  end — a single prompt, a file of prompts, or a whole manifest of prompt sets
+  under a per-set timeout. See [`docs/prompt-sets/SURFACE.md`](docs/prompt-sets/SURFACE.md)
+  for the set inventory and examples.
 
 ---
 
 ## Working with prompt sets
 
-`promptkit` has three modes — **generate** a corpus from plain prompts,
-**validate** that a corpus still routes correctly, and **run** prompts end to
-end against the pod. JSON is the single corpus format.
+`promptkit` runs prompts end to end against the pod — through the full
+pipeline, from router to synthesizer. Three ways to feed it: one or more
+prompt strings, one or more prompt files, or one or more manifest files. All
+three are under `--run`, and only one of the three per invocation.
 
 ```bash
-# 1. GENERATE — turn a plain-text prompt list into a JSON corpus.
-#    Each prompt is run through the router; the chosen module + tool are
-#    recorded. The result is a DRAFT — a human curates the module/tool values,
-#    because the classifier is non-deterministic (see docs/ findings).
-python scripts/promptkit.py --generate scripts/prompts/08_lifecycle.txt
+# ONE PROMPT — the full pipeline, answer to stdout
+python scripts/promptkit.py --run --prompt "List all suppliers in India"
 
-# 2. VALIDATE — check a corpus still routes as recorded (no execution).
-#    Pass/fail is decided by the TOOL; a module-set mismatch on a tool-correct
-#    prompt is a non-failing "OK*" warning, listed under MODULE WARNINGS.
-python scripts/promptkit.py --validate scripts/prompts/08_lifecycle.json
-python scripts/promptkit.py --validate scripts/prompts/*.json        # all sets
+# MULTIPLE PROMPTS — space-separated, each run in turn
+python scripts/promptkit.py --run --prompt \
+    "Suppliers with their addresses" \
+    "active suppliers in US"
 
-# 3. RUN — execute end to end against the live pod (full pipeline → answer).
-python scripts/promptkit.py --run scripts/prompts/08_lifecycle.json  # a whole set
-python scripts/promptkit.py --run --prompt "List all suppliers in India"  # one ad-hoc prompt
+# A FILE OF PROMPTS — one prompt per line; '#'/blank skipped
+python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+
+# MULTIPLE PROMPT FILES — files run in order, prompts in line order
+python scripts/promptkit.py --run --prompt-file \
+    prompts/dipstick/smoke.txt \
+    prompts/supplier/smoke.txt
+
+# A MANIFEST — a YAML 'sets:' list; each set is its own subprocess with a
+# per-set timeout, so one hung set cannot stop the batch
+python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
+
+# MULTIPLE MANIFESTS — each gets a <stem>/ subfolder under --outdir
+python scripts/promptkit.py --run --manifest \
+    scripts/manifests/promptkit_sets.yaml \
+    smoke.yaml \
+    --outdir results/tonight
 ```
 
-**Diagnostics** (with `--run` only) show inside the pipeline. The committed
-defaults in `pyproject.toml` (`[tool.spire.diagnostics]`) apply; override per
-run with any of `--show-parser` (Intent + the routing decision),
-`--show-planner` (the Plan / tool), `--show-raw-output`, `--show-synthesizer`,
-`--show-tokens`, `--show-timings`, or `--show-all` — and `--no-show-*` to
-silence one.
+A **prompt file** is plain text, one prompt per line. A **manifest** is a
+YAML file with a top-level `sets:` list of set names; each name resolves to
+`<prompts-dir>/<name>.txt` (default `prompts/`). Comment a line out
+to skip a set. `scripts/manifests/promptkit_sets.yaml` is the committed manifest.
+
+**Manifest output.** Each set writes its own file; the run also writes a log
+and a summary. Default outdir is `promptkit_<YYYYMMDD_HHMMSS>/` in the cwd,
+or `--outdir` if given:
+
+```
+promptkit_20260922_165958/
+    00_dipstick.txt      per-set stdout, one file per set
+    01_supplier.txt
+    ...
+    _run_log.txt         start/end/exit/duration, one line per set
+    _summary.txt         a compact table
+```
+
+`--timeout` (default `3600` seconds) applies per set. `--prompts-dir` changes
+where set names resolve. A single manifest writes flat into `--outdir`;
+multiple manifests each get a `<stem>/` subfolder so set names can't collide
+between them.
+
+**Diagnostics** show inside the pipeline. The committed defaults in
+`pyproject.toml` (`[tool.spire.diagnostics]`) apply; override per run with any
+of `--show-parser` (Intent + the routing decision), `--show-planner` (the Plan
+/ tool), `--show-raw-output`, `--show-synthesizer`, `--show-tokens`,
+`--show-timings`, or `--show-all` — and `--no-show-*` to silence one. In
+manifest mode the flags are forwarded to each child run, so they land on every
+set.
 
 ```bash
 # ad-hoc run with every stage visible
 python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
 
-# a corpus run, but silence token accounting
-python scripts/promptkit.py --run scripts/prompts/01_supplier.json --no-show-tokens
+# a manifest run, but silence token accounting on every set
+python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml \
+    --no-show-tokens
 ```
 
-The typical loop for a new or changed prompt set is **generate → curate the
-JSON → validate → run**. The curation step is manual and load-bearing: a fresh
-`--generate` records whatever the classifier emitted that run, so the draft
-must be reviewed before it becomes the routing baseline.
+The prompt-set inventory, known-good baselines, and guidance on reading
+results are in [`docs/prompt-sets/SURFACE.md`](docs/prompt-sets/SURFACE.md).
 
 ---
 
