@@ -86,6 +86,7 @@ _parser_log = get_logger("parser")
 
 
 import re
+from datetime import date
 
 # #32 fault (b): the signal that tells an explicit "list purchase orders"
 # request (a valid bounded sample-and-disclose, #23) apart from a PO query
@@ -340,6 +341,74 @@ def _extract_list_cap(prompt: str) -> int | None:
             return n
 
     return None
+
+
+# F-058. A period-anchored phrase names a CALENDAR boundary ("this year",
+# "last quarter"). A rolling window ("in the last 6 months") names a
+# DISTANCE FROM TODAY and belongs to F-046/F-048/F-055 — the same
+# RELATIVE OLDER / RELATIVE RECENT distinction those rules draw. The
+# pattern matches the four period phrases only; the rolling shapes are
+# left for their own rules.
+_PERIOD_ANCHORED_RE = re.compile(
+    r"\b(this|last)\s+(year|quarter|month)\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_period_bounds(prompt: str) -> tuple[str, str] | None:
+    """F-058. Calendar bounds for a period-anchored phrase, or None.
+
+    Fires on `this year` / `last year` / `this quarter` / `this month`.
+    Returns (date_from, date_to) as ISO date strings, half-open like
+    every other date range in the pipeline: date_from inclusive,
+    date_to exclusive. `this year` on 2026-09-29 produces
+    ("2026-01-01", "2027-01-01").
+
+    The op guard lives at the call site, not here — this stays a pure
+    text-to-bounds function so it can be unit-tested without building
+    an Intent.
+
+    Same class as _extract_invoice_number / _extract_list_cap /
+    _has_country_column_phrasing: pure Python, runs after the LLM,
+    overrides the shape the model gets wrong.
+    """
+    m = _PERIOD_ANCHORED_RE.search(prompt)
+    if m is None:
+        return None
+    which, unit = m.group(1).lower(), m.group(2).lower()
+    today = date.today()
+
+    if unit == "year":
+        year = today.year if which == "this" else today.year - 1
+        return f"{year}-01-01", f"{year + 1}-01-01"
+
+    if unit == "quarter":
+        # Quarter index 0..3 (Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec).
+        q = (today.month - 1) // 3
+        year = today.year
+        if which == "last":
+            q -= 1
+            if q < 0:
+                q = 3
+                year -= 1
+        start_month = q * 3 + 1
+        end_year = year if start_month + 3 <= 12 else year + 1
+        end_month = (start_month + 2) % 12 + 1
+        return (
+            f"{year}-{start_month:02d}-01",
+            f"{end_year}-{end_month:02d}-01",
+        )
+
+    # month
+    year, month = today.year, today.month
+    if which == "last":
+        month -= 1
+        if month < 1:
+            month = 12
+            year -= 1
+    if month == 12:
+        return f"{year}-12-01", f"{year + 1}-01-01"
+    return f"{year}-{month:02d}-01", f"{year}-{month + 1:02d}-01"
 
 
 def _is_empty_draft(parsed: Any) -> bool:
@@ -656,6 +725,34 @@ def parse(
     # columns onto it is equally meaningless.
     if intent.aggregate is not None or intent.compare is not None:
         intent.fields = []
+
+    # --- F-058: period-anchored phrases on the by_supplier aggregate ---
+    #
+    # The sysprompt's by_supplier rule asks the model to compute ISO
+    # bounds itself, and it names no period-anchored phrasing. The model
+    # also has no reliable "today" — the endpoints reference says so
+    # directly ("the LLM does NOT have a reliable sense of 'today'").
+    # F-058's reproduction shows three runs producing three different
+    # values (None, '2025-01-01', and once the correct year), which is
+    # what guessing looks like. This correction reads the raw prompt and
+    # sets the window from date.today().
+    #
+    # Scope: only `by_supplier` accepts a date range per
+    # _AGGREGATION_PARAMS. The other aggregate ops (po_value_by_supplier,
+    # po_count_by_status, open_po_summary, exposure_ranking,
+    # receipt_method_distribution, top_invoices_by_amount) take no dates
+    # and are untouched.
+    #
+    # Same class as the other post-parse corrections in this function:
+    # pure Python, runs after the LLM, overrides the shape the model
+    # gets wrong.
+    if (
+        intent.aggregate is not None
+        and intent.aggregate.get("op") == "by_supplier"
+    ):
+        bounds = _extract_period_bounds(prompt)
+        if bounds is not None:
+            intent.aggregate["date_from"], intent.aggregate["date_to"] = bounds
 
     # --- F-016: plain-list row cap from the raw prompt ---
     #
