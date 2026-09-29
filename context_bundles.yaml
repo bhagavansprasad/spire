@@ -30,9 +30,11 @@ bundles:
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
   - docs/reference/spire_fusion_endpoints_reference.md
+  - docs/reference/data/spire_tools_modules.xlsx
   - tests/spire_sme_validation_checklist.md
   - docs/design/FEATURES.md
   - spire.sh
+  - spire-functions.sh
   - SPIRE-PORTS.env
   - docs/design/diagrams/01_kg_as_mcp_tool.puml
   - docs/design/diagrams/02_kg_as_preLLM.puml
@@ -80,6 +82,7 @@ bundles:
   - docs/audit/findings/F-054.md
   - docs/audit/findings/F-055.md
   - docs/audit/findings/F-056.md
+  - docs/audit/findings/F-057.md
   - docs/phase-2/fixes/F-053.md
   - docs/phase-2/fixes/F-055.md
   - docs/phase-2/fixes/F-056.md
@@ -522,6 +525,8 @@ excludes:
 - context_out
 - context_out/*
 - docs/archive/*
+- docs/audit/archive
+- docs/audit/archive/*
 - archive
 - isolation
 - isolation/*
