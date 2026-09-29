@@ -6,17 +6,21 @@
 **Invocation:** python scripts/promptkit.py --run --prompt "<p>" --show-planner
 **Total:** 6m18s
 
+Table is in current file order (prompts/release_gate/litmus.txt). The file
+was reordered after the run so the slow prompt sits last-but-one; wall-clocks
+are per-prompt and order-independent.
+
 | # | Prompt | Module / depth | Wall | Class |
 |---|---|---|---|---|
 | 1 | Count of suppliers | supplier / count | 17s | pass |
-| 2 | Show PO 2144 and its lines | procurement / by_id + child | 16s | pass |
-| 3 | Which suppliers have open purchase orders? | procurement_supplier / cross-module | 178s | pass (watchlist) |
+| 2 | Suppliers with their addresses | supplier / expand=addresses | 14s | pass |
+| 3 | Show PO 2144 and its lines | procurement / by_id + child | 16s | pass |
 | 4 | Top 5 suppliers by spend this year | payables_supplier / aggregate | 58s | pass |
 | 5 | Show me invoices for supplier 1252 | payables / supplier-number filter | 24s | pass |
 | 6 | invoices for supplier 1252 over 10000 | payables / composite over-fetch | 15s | pass |
-| 7 | Suppliers with their addresses | supplier / expand=addresses | 14s | pass |
-| 8 | Get the AR invoice with CustomerTransactionId 300000248096352 | receivables / by_id header | 18s | pass |
-| 9 | Show me AR invoices for customer ABC Corporation Americas | receivables / CustomerAccount traversal | 23s | pass |
+| 7 | Get the AR invoice with CustomerTransactionId 300000248096352 | receivables / by_id header | 18s | pass |
+| 8 | Show me AR invoices for customer ABC Corporation Americas | receivables / CustomerAccount traversal | 23s | pass |
+| 9 | Which suppliers have open purchase orders? | procurement_supplier / cross-module | 178s | pass (watchlist) |
 | 10 | show me contract renewals due next quarter | refusals | 15s | pass (refusal) |
 
 ## Notes
@@ -27,11 +31,15 @@ all report 6576 as the source total in the same session, consistent with a
 stable pod at a new value rather than renewed nondeterminism. Not confirmed
 at N=20; the F-059 re-open clause governs.
 
-**Prompt 3 - watchlist.** The answer reports "Examined 25 of 6,576
-suppliers. Of those 25, 17 match the filter." The count is scoped to the
-sample, not stated as a total. The truncation block confirms: "suppliers:
+**Prompt 9 - slow, and a watchlist.** Baseline wall-clock 178s. A UI run
+on 2026-09-29 reported the prompt exceeding three minutes and reading
+~6,625 records - slightly above the 6,576 source total reported elsewhere,
+worth a look if it recurs. The answer is sample-scoped: "Examined 25 of
+6,576 suppliers. Of those 25, 17 match the filter." The count is scoped to
+the sample, not stated as a total. Truncation block confirms: "suppliers:
 6576 total in source; 25 returned." Honest narration, but 17 is a lower
-bound. This is one of the delivery message's quick-try prompts.
+bound. This is one of the delivery message's quick-try prompts, so the
+prompt's cost is recipient-visible.
 
 ## Re-baselining
 
