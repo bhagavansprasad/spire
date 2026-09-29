@@ -1,0 +1,10 @@
+# promptkit release-gate manifest.
+#
+# One set. Run before every release.
+#   python scripts/promptkit.py --run --manifest scripts/manifests/release_gate.yaml
+#
+# Coexists with smoke_sets.yaml, verify_sets.yaml, exhaust_sets.yaml,
+# promptkit_sets.yaml. Does not touch them.
+
+sets:
+  - release_gate/litmus
