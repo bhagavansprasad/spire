@@ -71,6 +71,7 @@ pids_on_port() {
   elif command -v lsof >/dev/null 2>&1; then
     lsof -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null
   fi
+  return 0
 }
 
 # Does the given PID look like one of ours? Used only to avoid killing
@@ -97,7 +98,7 @@ ports_for_mode() {
       echo "$SPIRE_DEV_MCP_PORT|MCP"
       echo "$SPIRE_DEV_API_PORT|API"
       echo "$SPIRE_DEV_UI_PORT|UI" ;;
-    runtime)
+    production|runtime)
       echo "$SPIRE_RUNTIME_MCP_PORT|MCP"
       echo "$SPIRE_RUNTIME_API_PORT|API"
       echo "$SPIRE_RUNTIME_UI_PORT|UI" ;;
@@ -122,25 +123,25 @@ read_pidfile_into() {
 
 usage() {
   cat >&2 <<EOF
-Usage: ./spire.sh [--dev | --runtime] [--status | --stop | --tail | --mcp-only]
+Usage: ./spire.sh [--start | --stop | --status | --restart] [dev | production]
 
-  (no args)     show this help
-  (no action)   start the current mode's services in the background
-  --status      show the current mode's ports and holder PIDs
-  --stop        stop the current mode's services (only that mode)
-  --tail        start, then tail the UI log
-  --mcp-only    start ONLY the MCP server (foreground, --reload)
+  --start [target]     start services in the background (default: dev)
+  --stop  [target]     stop services (default: dev)
+  --restart [target]   stop, then start (default: dev)
+  --status [target]    show ports and holder PIDs (default: both)
 
-  --dev         override the current mode to dev
-  --runtime     override the current mode to runtime
-  --help, -h    show this help
+  dev                  default target
+  production           the production deployment
 
-The current mode is \$SPIRE_MODE, set by spire() / spirer() in ~/.bashrc.
-If it is not set, run 'spire' or 'spirer' first, or pass --dev / --runtime.
+  --tail               (with --start) tail the UI log
+  --mcp-only           (with --start) MCP only, foreground, --reload
+  --help, -h           show this help
 
-Ports:
-  dev      MCP ${SPIRE_DEV_MCP_PORT}  API ${SPIRE_DEV_API_PORT}  UI ${SPIRE_DEV_UI_PORT}
-  runtime  MCP ${SPIRE_RUNTIME_MCP_PORT}  API ${SPIRE_RUNTIME_API_PORT}  UI ${SPIRE_RUNTIME_UI_PORT}
+  (no args)            show this help
+
+Ports (from SPIRE-PORTS.env):
+  dev         MCP ${SPIRE_DEV_MCP_PORT}  API ${SPIRE_DEV_API_PORT}  UI ${SPIRE_DEV_UI_PORT}
+  production  MCP ${SPIRE_RUNTIME_MCP_PORT}  API ${SPIRE_RUNTIME_API_PORT}  UI ${SPIRE_RUNTIME_UI_PORT}
 EOF
 }
 
@@ -151,35 +152,37 @@ if [ "$#" -eq 0 ]; then
   exit 0
 fi
 
-MODE="${SPIRE_MODE:-}"
 ACTION=""
+TARGET=""
 TAIL_UI=0
 MCP_ONLY=0
 for arg in "$@"; do
   case "$arg" in
-    --dev)      MODE="dev" ;;
-    --runtime)  MODE="runtime" ;;
-    --status)   ACTION="status" ;;
+    --start)    ACTION="start" ;;
     --stop)     ACTION="stop" ;;
+    --status)   ACTION="status" ;;
+    --restart)  ACTION="restart" ;;
     --tail)     TAIL_UI=1 ;;
     --mcp-only) MCP_ONLY=1 ;;
     --help|-h)  usage; exit 0 ;;
+    dev|production) TARGET="$arg" ;;
     *) echo "Unknown argument: $arg" >&2; usage; exit 2 ;;
   esac
 done
 
-if [ -z "$MODE" ]; then
-  echo "spire.sh: \$SPIRE_MODE is not set and no --dev / --runtime was given." >&2
-  echo "          Run 'spire' or 'spirer' first, or pass --dev / --runtime." >&2
-  echo >&2
-  usage
-  exit 2
+# No action given -> start (same as the old no-action behaviour).
+if [ -z "$ACTION" ]; then
+  ACTION="start"
 fi
 
-if [ "$MODE" != "dev" ] && [ "$MODE" != "runtime" ]; then
-  echo "spire.sh: \$SPIRE_MODE has invalid value '$MODE' (want 'dev' or 'runtime')." >&2
-  exit 2
+# Default target: dev, for start / stop / restart. --status with no
+# target means "show both", and is handled at dispatch.
+if [ -z "$TARGET" ] && [ "$ACTION" != "status" ]; then
+  TARGET="dev"
 fi
+
+# Downstream code reads $MODE; keep the name and feed it the target.
+MODE="$TARGET"
 
 PIDFILE="$LOG_DIR/spire-$MODE.pid"
 
@@ -293,7 +296,19 @@ show_status() {
 
 case "$ACTION" in
   stop)   stop_mode   "$MODE"; exit 0 ;;
-  status) show_status "$MODE"; exit 0 ;;
+  restart)
+    stop_mode "$MODE"
+    sleep 2
+    ;;
+  status)
+    if [ -z "$MODE" ]; then
+      show_status "dev"
+      echo
+      show_status "production"
+    else
+      show_status "$MODE"
+    fi
+    exit 0 ;;
 esac
 
 # ── Start ─────────────────────────────────────────────────────────────
@@ -332,7 +347,7 @@ _preflight_pidfile() {
   for pid in "$pf_mcp" "$pf_api" "$pf_ui"; do
     if pid_alive "$pid" && is_our_process "$pid"; then
       echo "spire.sh: PID $pid from $PIDFILE is still alive and ours." >&2
-      echo "          run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
+      echo "          run './spire.sh --stop $MODE' first, or './spire.sh --status'." >&2
       return 1
     fi
   done
@@ -364,7 +379,7 @@ if [ "$MCP_ONLY" = "1" ]; then
 fi
 
 if ! _preflight_ports "$check_ports"; then
-  echo "spire.sh: run './spire.sh --$MODE --stop' first, or './spire.sh --status'." >&2
+  echo "spire.sh: run './spire.sh --stop $MODE' first, or './spire.sh --status'." >&2
   exit 1
 fi
 
