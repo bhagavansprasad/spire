@@ -1,0 +1,47 @@
+# Spire prompt set - release_gate/litmus. Read by scripts/run_prompt_set.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: release gate. Not a capability tier - see docs/prompts/SURFACE.md, section 3.
+# Ten prompts. Roughly six to eight minutes end to end, dominated by one
+# slow prompt near the end. Run before every release.
+#
+# CONTRACT:
+#   Nine prompts MUST ANSWER. The last prompt MUST REFUSE.
+#   A clean refusal on the last prompt is a PASS, not a failure.
+#   A crash, an empty answer, or a fabricated answer is a FAIL.
+#
+# SCOPE: all four modules (supplier, payables, procurement, receivables),
+# two cross-module joins (procurement_supplier, payables_supplier), and one
+# out-of-scope refusal.
+#
+# ORDERING: fast prompts first, slow prompt last-but-one, refusal last.
+# The slow prompt carries a SLOW marker; run it after the fast set when
+# wall-clock matters.
+#
+# WALL-CLOCK BASELINE (2026-09-29, pod fa-euth-dev49): see baseline.md.
+
+# --- supplier ---
+Count of suppliers
+Suppliers with their addresses
+
+# --- procurement ---
+Show PO 2144 and its lines
+
+# --- cross-module ---
+Top 5 suppliers by spend this year
+
+# --- payables ---
+Show me invoices for supplier 1252
+invoices for supplier 1252 over 10000
+
+# --- receivables ---
+Get the AR invoice with CustomerTransactionId 300000248096352
+Show me AR invoices for customer ABC Corporation Americas
+
+# --- cross-module, SLOW ---
+# SLOW: three to four minutes. This walks ~6,600 suppliers looking for
+# open POs. It is the last answering prompt; run the fast set first.
+Which suppliers have open purchase orders?
+
+# --- refusal (MUST REFUSE) ---
+show me contract renewals due next quarter
