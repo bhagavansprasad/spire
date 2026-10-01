@@ -1,69 +1,74 @@
-# SPIRE — Session Handoff, 2026-10-01 (window 28, SQL overlay POC opened)
+# SPIRE — Session Handoff, 2026-10-01 (window 29, bundle reorg)
 
-**Scope of this handoff.** Window 28 opened the **SQL Overlay POC** —
-a deterministic projection of the Plan into Fusion-DB SQL, printed
-alongside the existing pipeline answer. Phase 0 (POC doc, scope,
-branch) landed. Phase 1 (data gathering — Fusion DB schema for the
-Supplier module) is the next action. The window also reconciled the
-shell env vars with the persona (both now on `fa-euth-dev49`), and
-settled two design questions: no LLM in SQL emission, and no
-REST-vs-DB data comparison in this POC.
+**Scope of this handoff.** Window 29 reorganised the context-bundle
+configuration: `plan` was split into three bundles by intent — plan
+(current state), reference (lookup material), history (the record).
+Added a bundle-manifest tripwire that fails the suite when a tracked
+file is not in any bundle. No code changed; the SQL Overlay POC
+remains at phase 1 (data gathering for the Fusion DB schema).
 
 **Read this first.** Then `docs/plan/WORKING_STYLE.md` (R + S0–S11,
-rules 15.1/15.2/15.3), then `docs/fixes/FIXES.md` (the playbook), then
-`docs/design/SQL_OVERLAY_POC.md` (the POC's own doc).
+rules 15.1/15.2/15.3), then `docs/design/SQL_OVERLAY_POC.md` (the POC's
+own doc).
 
 ---
 
 ## Where we are
 
-**Integration branch:** `hardening-master-v2`.
-**Tip:** `db40182` — smoke bundle added (window 28).
+**Integration branch:** `hardening-master-v2`. Tip `db40182` (smoke
+bundle added).
 
-**Current working branch:** `poc/sql-overlay` — one commit above
-`hardening-master-v2`, holding `docs/design/SQL_OVERLAY_POC.md`
-(phase 0). Pushed to origin, no PR yet. PR opens when the POC
-completes.
+**Current working branch:** `poc/sql-overlay` — cut from
+`hardening-master-v2` at `db40182`. Six commits, pushed, no PR yet.
+Phase 0 of the POC done; phase 1 pending.
 
 **Master:** `36cc3b8`. Frozen.
 
 **Pod:** `fa-euth-dev49` (persona `default_dev` in `personas.yaml`).
-The shell `IKS_FUSION_*` env vars now agree with the persona; both
-were reconciled this window. They are separate paths and can drift —
-see Rules below.
+Shell `IKS_FUSION_*` env vars reconciled with the persona in window 28;
+both now on the same pod.
 
-**Test suite:** 1279 passed, 1 skipped, 22 deselected.
-
-**Local-only convention:** `trash/` at repo root is gitignored. All
-rule-15.1 captures live there.
+**Test suite:** 1279 passed, 1 skipped, 22 deselected. Plus 2 new
+bundle-manifest tests.
 
 ---
 
-## What window 28 did
+## What window 29 did
 
-1. **Environment reconciliation.** Shell env was on `dabpqy` /
-   `Angus.Cooper` while the persona was on `fa-euth-dev49` /
-   `Sean.Walker`. The 401s that looked like pod trouble were the shell
-   credential. Both now on `fa-euth-dev49`. The pipeline was never
-   affected — it reads the persona, not the env vars.
+**Bundle config catch-up.** `context_bundles.yaml` was missing six
+entries: the F-058 and F-059 findings, the F-058 fix file, the SQL POC
+doc (root and plan), and the F-058 test. All were added in window 27 or
+28 by windows that did not update the config. This is the same class of
+drift the phase-1 audit documents for the KG — a hand-maintained
+registry of the "what exists" fact.
 
-2. **SQL capability question answered.** SPIRE today emits Fusion
-   REST, not SQL. The plan's §1 states SQL is the original target and
-   the current build is the platform being built toward it. No SQL
-   exists in code yet.
+**Bundle-manifest tripwire.** `tests/test_bundle_manifest.py` — two
+tests, both directions:
 
-3. **SQL emission design settled.** Deterministic projection of the
-   Plan. **No LLM in SQL emission.** The model's job ends at the
-   Intent; the Plan is a KG lookup; the SQL is the Plan in a different
-   syntax. Anything else would reintroduce the failure class SPIRE was
-   built to eliminate (LLM guessing joins and columns).
+  1. Every tracked file not excluded (or allowlisted) is in some bundle.
+  2. Every path named by a bundle exists in the working tree.
 
-4. **SQL Overlay POC opened.** `docs/design/SQL_OVERLAY_POC.md`
-   committed to `poc/sql-overlay` (phase 0). Scope: Supplier module
-   only, print-only, no execution, no REST-vs-DB comparison. Three
-   overlay tables (`kg_sql_entity`, `kg_sql_field`, `kg_sql_filter`)
-   seeded from the real Fusion schema, plus a deterministic emitter and
-   a `--show-sql` flag on `promptkit.py`.
+`git ls-files` is the authoritative tree, so gitignored scratch
+(`trash/`, `context_out/`) is not flagged. Allowlist is deliberately
+small: `LICENSE`, plus `__init__.py` markers by pattern.
+
+**Bundle reorg — plan split three ways.** The `plan` bundle had grown
+to ~40 files and 133k tokens, most of it the accumulated history of
+every past fix. Split by intent:
+
+| bundle | purpose | files | tokens |
+|---|---|---|---|
+| `plan` | current state; read every session | 7 | 31k |
+| `reference` | lookup material; grep, do not read whole | 3 | 102k |
+| `history` | the record; never loaded first | 55 | 331k |
+
+The rule, stated in the yaml itself:
+
+  current state       -> plan       (always loaded)
+  lookup material     -> reference  (loaded on demand)
+  record of past work -> history    (never loaded first)
+
+`WORKING_STYLE.md` stays in `plan` — read every session.
 
 ---
 
@@ -74,20 +79,17 @@ DB schema for the Supplier module. Needed from the user:
 
 - Table names and joins for the five REST entities (Supplier, Address,
   Site, Classification, Contact).
-- Column mappings for ~15 fields a WHERE or SELECT would name
-  (`SupplierId`, `SupplierNumber`, `Supplier`, `Status`,
-  `BusinessRelationship`, `TaxpayerCountryCode`, `CreatedBy`,
-  `CreationDate`, `LastUpdatedBy`, `LastUpdateDate`, plus child PKs and
-  FKs).
+- Column mappings for ~15 fields a WHERE or SELECT would name.
 - One worked REST call and its DB SQL equivalent.
 
-Any of the three, in any order. Item 1 is enough to start phase 2.
+Any of the three, in any order. Item 1 is enough to start phase 2 (KG
+<-> Fusion mapping).
 
 **F-056 — three sources disagree.** Fix file
 `docs/phase-2/fixes/F-056.md` reads `in-progress`; finding reads
-`fixed`; FIX_PLAN §5.1 row reads `fixed | — | 2026-09-28`, no PR
-number. The next session should check whether the fix is on
-`hardening-master-v2` and either open the PR or flip the row.
+`fixed`; FIX_PLAN §5.1 row reads `fixed | — | 2026-09-28`, no PR.
+Next session should check whether the fix is on `hardening-master-v2`
+and either open the PR or flip the row.
 
 **F-059's S11 additions are not landed.** Three prompt files
 (`prompts/dipstick/verify.txt`, `prompts/supplier/verify.txt`,
@@ -95,15 +97,22 @@ number. The next session should check whether the fix is on
 No fix to ride — small standalone branch.
 
 **The release-gate litmus test.** A 10-prompt set spanning the four
-modules, run before every delivery message. Not started as a POC; a
-branch named `feat/release-gate-litmus` exists — worth checking whether
-it already carries work. The morning delivery message that started
-window 26 needs reframing once the litmus set is proven.
-
+modules, run before every delivery message. Not started. A branch
+`feat/release-gate-litmus` exists — worth checking whether it already
+carries work.
 
 **Runtime clone.** `~/pocs/spire-runtime` still tracks
 `hardening-master` (v1, retired). Deliberate update to
-`hardening-master-v2` pending; not performed this window.
+`hardening-master-v2` pending; not performed.
+
+**Doc B model residual.** Three files sit in `history` that were the
+skeleton of the old Doc A / Doc B two-document model:
+`docs/plan/Doc_B_Index.md`, `docs/plan/Phase_02_Correctness.md`,
+`docs/plan/TEMPLATE_Session_Entry.md`. Current practice uses
+findings (`docs/audit/findings/`) and fix files
+(`docs/phase-2/fixes/`) instead. `WORKING_STYLE.md` §13 still names
+the Doc B model — a future edit reconciles the two or removes the
+section.
 
 ---
 
@@ -115,10 +124,8 @@ window 26 needs reframing once the litmus set is proven.
    `docs/design/SQL_OVERLAY_POC.md` §Phases.
 2. **F-056 reconciliation.** Cheap; starts the window cleanly while
    the schema arrives.
-3. **F-059 S11 additions.** Small standalone branch; the rule added in
-   #184 says they land with the finding, but F-059 has no fix to ride.
-4. **Litmus test.** If the SQL POC is on hold, the litmus set is the
-   other pending deliverable. Check `feat/release-gate-litmus` first.
+3. **F-059 S11 additions.** Small standalone branch.
+4. **Litmus test.** Check `feat/release-gate-litmus` first.
 
 ---
 
@@ -139,13 +146,13 @@ window 26 needs reframing once the litmus set is proven.
 - **S11 prompts land with the finding or the fix, not just listed in
   the fix file (the rule added in #184).**
 - **Shell `IKS_FUSION_*` env vars are a separate path from the persona.**
-  They can drift and 401 while the pipeline is fine — this cost two
-  turns in window 27. Confirm both point at the same pod before
-  trusting a curl that verifies a pipeline result.
-- **Intermittent shapes need N>=20 before classification.** F-059 was
-  filed on N=5 and closed on N=20. The threshold is not optional.
+  They can drift and 401 while the pipeline is fine.
+- **Intermittent shapes need N>=20 before classification.**
 - **No LLM in SQL emission.** The Plan is a KG lookup; the SQL is the
-  Plan. The model's job ends at the Intent.
+  Plan.
+- **Bundle rule for future splits:** current state -> plan; lookup
+  material -> reference; record of past work -> history. The
+  bundle-manifest tripwire enforces existence, not categorisation.
 
 ---
 
