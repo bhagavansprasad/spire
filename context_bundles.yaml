@@ -29,6 +29,7 @@ bundles:
   - docs/fixes/FIX_PLAN.md
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
+  - docs/design/SQL_OVERLAY_POC.md
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/reference/data/spire_tools_modules.xlsx
   - tests/spire_sme_validation_checklist.md
@@ -72,6 +73,7 @@ bundles:
   - docs/audit/golden/suppliers_with_open_pos.txt
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/design/ARCHITECTURE.md
+  - docs/design/SQL_OVERLAY_POC.md
   - docs/audit/log_analysis/_plan.md
   - docs/audit/log_analysis/_generalization_plan.md
   - docs/audit/log_analysis/20260925_150333/RUN.md
@@ -83,9 +85,12 @@ bundles:
   - docs/audit/findings/F-055.md
   - docs/audit/findings/F-056.md
   - docs/audit/findings/F-057.md
+  - docs/audit/findings/F-058.md
+  - docs/audit/findings/F-059.md
   - docs/phase-2/fixes/F-053.md
   - docs/phase-2/fixes/F-055.md
   - docs/phase-2/fixes/F-056.md
+  - docs/phase-2/fixes/F-058.md
   - docs/audit/log_analysis/20260925_150333/_index.md
   - docs/audit/log_analysis/20260925_150333/_action_items.md
   - docs/audit/log_analysis/20260925_150333/_touched.md
@@ -512,6 +517,7 @@ bundles:
   - tests/test_f055_days_conversion.py
   # F-056 added 2026-09-28 (window 25).
   - tests/test_f056_supplier_pos_buyers.py
+  - tests/test_f058_period_bounds.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
