@@ -4,28 +4,9 @@ default_dev:
     # username: "mskrishna.om@gmail.com"
     # password: "S#2c*5MB"
 
-    # base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
-    # username: "Archie.Wood"
-    # password: "?MR#$sA4"
-
-    # base_url: "https://fa-euth-dev29-saasfademo1.ds-fa.oraclepdemos.com"
-    # username: "Toby.White"
-    # password: "r@Bot5iG"
-
-    # base_url: "https://eqjz.ds-fa.oraclepdemos.com"
-    # username: "Leo.Hayes"
-    # password: "tH?8Wucr"
-
-    # base_url: "https://fa-esll-saasfademo1.ds-fa.oraclepdemos.com"
-    # username: "Soren.Fox"
-
-    # base_url: "https://dabpqy.ds-fa.oraclepdemos.com"
-    # username: "Angus.Cooper"
-    # password: "jE*!bAz6"
-
-    base_url: "https://fa-euth-dev49-saasfademo1.ds-fa.oraclepdemos.com"
-    username: "Sean.Walker"
-    password: "tri2rA&r"
+    base_url: "https://fa-euth-dev20-saasfademo1.ds-fa.oraclepdemos.com"
+    username: "Alistair.Wood"
+    password: "qVSfH#84"
 
     auth_type: "basic"
 
