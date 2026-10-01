@@ -18,7 +18,7 @@ rules 15.1/15.2/15.3), then `docs/fixes/FIXES.md` (the playbook), then
 ## Where we are
 
 **Integration branch:** `hardening-master-v2`.
-**Tip:** `93b6ae6` — window-27 reconcile (PR #186).
+**Tip:** `db40182` — smoke bundle added (window 28).
 
 **Current working branch:** `poc/sql-overlay` — one commit above
 `hardening-master-v2`, holding `docs/design/SQL_OVERLAY_POC.md`
@@ -100,11 +100,6 @@ branch named `feat/release-gate-litmus` exists — worth checking whether
 it already carries work. The morning delivery message that started
 window 26 needs reframing once the litmus set is proven.
 
-**`context_bundles.yaml` `smoke:` bundle.** A block was drafted for a
-`smoke:` bundle (16 prompt files). The question of whether it was
-already indented under `bundles:` was raised and not resolved. If the
-bundle does not yet build (`python build_context.py --list | grep
-smoke`), the block needs indenting two spaces under `bundles:`.
 
 **Runtime clone.** `~/pocs/spire-runtime` still tracks
 `hardening-master` (v1, retired). Deliberate update to
