@@ -492,22 +492,40 @@ async def _run_async(prompts: list[str]) -> int:
     show_header = len(prompts) > 1
     failed = 0
 
-    async with Client(mcp_server_url()) as client:
-        for prompt in prompts:
-            # Reset the token accumulator per prompt so each prompt's
-            # usage_report() (printed inside _emit_run_graph_output) reflects
-            # only that prompt.
-            reset_usage()
-            if show_header:
-                print(f"\n{'='*72}")
-                print(f"PROMPT: {prompt}")
-                print('='*72)
-            state = await _run_one(prompt, menu, client)
-            _emit_run_graph_output(state, menu)
-            # A refusal (parser or planner) is a valid outcome — only a real
-            # pipeline error or execution failure counts against the run.
-            if state.get("error") and not state.get("plan_refusal"):
-                failed += 1
+    url = mcp_server_url()
+    try:
+        async with Client(url) as client:
+            for prompt in prompts:
+                # Reset the token accumulator per prompt so each prompt's
+                # usage_report() (printed inside _emit_run_graph_output)
+                # reflects only that prompt.
+                reset_usage()
+                if show_header:
+                    print(f"\n{'='*72}")
+                    print(f"PROMPT: {prompt}")
+                    print('='*72)
+                state = await _run_one(prompt, menu, client)
+                _emit_run_graph_output(state, menu)
+                # A refusal (parser or planner) is a valid outcome — only a
+                # real pipeline error or execution failure counts against
+                # the run.
+                if state.get("error") and not state.get("plan_refusal"):
+                    failed += 1
+    except RuntimeError as exc:
+        # The fastmcp Client raises RuntimeError with a long library
+        # traceback when the MCP server is unreachable. The final line
+        # ("Client failed to connect: All connection attempts failed")
+        # names neither the URL nor the cause, and everything above it is
+        # httpx/mcp/exceptiongroup internals. Replace it with the two
+        # lines that answer the two questions a reader has.
+        if "All connection attempts failed" in str(exc):
+            print(f"Cannot reach the MCP server at {url}.", file=sys.stderr)
+            print(
+                "Start it first: 'spired' (dev) or './spire.sh --dev'.",
+                file=sys.stderr,
+            )
+            return 1
+        raise
 
     return 0 if failed == 0 else 1
 
