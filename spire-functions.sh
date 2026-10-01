@@ -44,7 +44,7 @@ function spirep(){
     source "$SPIRE_PROD_VENV" 2>/dev/null || true
     cd "$SPIRE_PROD_ROOT" || return
     source SPIRE-PORTS.env
-    export SPIRE_MCP_URL="http://127.0.0.1:${SPIRE_RUNTIME_MCP_PORT}/mcp/"
-    export SPIRE_API_URL="http://127.0.0.1:${SPIRE_RUNTIME_API_PORT}"
-    echo "spire prod: MCP ${SPIRE_RUNTIME_MCP_PORT}  API ${SPIRE_RUNTIME_API_PORT}  UI ${SPIRE_RUNTIME_UI_PORT}"
+    export SPIRE_MCP_URL="http://127.0.0.1:${SPIRE_PRODUCTION_MCP_PORT}/mcp/"
+    export SPIRE_API_URL="http://127.0.0.1:${SPIRE_PRODUCTION_API_PORT}"
+    echo "spire prod: MCP ${SPIRE_PRODUCTION_MCP_PORT}  API ${SPIRE_PRODUCTION_API_PORT}  UI ${SPIRE_PRODUCTION_UI_PORT}"
 }

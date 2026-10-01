@@ -99,9 +99,9 @@ ports_for_mode() {
       echo "$SPIRE_DEV_API_PORT|API"
       echo "$SPIRE_DEV_UI_PORT|UI" ;;
     production|runtime)
-      echo "$SPIRE_RUNTIME_MCP_PORT|MCP"
-      echo "$SPIRE_RUNTIME_API_PORT|API"
-      echo "$SPIRE_RUNTIME_UI_PORT|UI" ;;
+      echo "$SPIRE_PRODUCTION_MCP_PORT|MCP"
+      echo "$SPIRE_PRODUCTION_API_PORT|API"
+      echo "$SPIRE_PRODUCTION_UI_PORT|UI" ;;
   esac
 }
 
@@ -141,7 +141,7 @@ Usage: ./spire.sh [--start | --stop | --status | --restart] [dev | production]
 
 Ports (from SPIRE-PORTS.env):
   dev         MCP ${SPIRE_DEV_MCP_PORT}  API ${SPIRE_DEV_API_PORT}  UI ${SPIRE_DEV_UI_PORT}
-  production  MCP ${SPIRE_RUNTIME_MCP_PORT}  API ${SPIRE_RUNTIME_API_PORT}  UI ${SPIRE_RUNTIME_UI_PORT}
+  production  MCP ${SPIRE_PRODUCTION_MCP_PORT}  API ${SPIRE_PRODUCTION_API_PORT}  UI ${SPIRE_PRODUCTION_UI_PORT}
 EOF
 }
 
@@ -366,9 +366,9 @@ if [ "$MODE" = "dev" ]; then
   API_PORT="$SPIRE_DEV_API_PORT"
   UI_PORT="$SPIRE_DEV_UI_PORT"
 else
-  MCP_PORT="$SPIRE_RUNTIME_MCP_PORT"
-  API_PORT="$SPIRE_RUNTIME_API_PORT"
-  UI_PORT="$SPIRE_RUNTIME_UI_PORT"
+  MCP_PORT="$SPIRE_PRODUCTION_MCP_PORT"
+  API_PORT="$SPIRE_PRODUCTION_API_PORT"
+  UI_PORT="$SPIRE_PRODUCTION_UI_PORT"
 fi
 
 # Pre-flight — ports must be free, and the pidfile must not name a live
