@@ -82,7 +82,7 @@ The POC is proven if:
 
 | # | phase | status |
 |---|---|---|
-| 0 | Pre-work (this doc, branch) | in progress |
+| 0 | Pre-work (this doc, branch) | done |
 | 1 | Data gathering — Fusion DB schema, Supplier module | pending |
 | 2 | Investigation — KG <-> Fusion mapping, gap list | pending |
 | 3 | Overlay build — schema, seed, loader, tripwire test | pending |
