@@ -13,8 +13,6 @@ Commands below are marked:
 
 🔵 **ONE-TIME**
 ```bash
-
-
 source ~/venv/spire/bin/activate
 pip install -r requirements.txt
 pip install -e .
@@ -40,7 +38,7 @@ default_dev:
   oracle:
     dsn: "localhost:1521/FREEPDB1"
     username: "spire"
-    password: "<db-pass>"
+    password: "jnjnuh"
 ```
 
 > ⚠️ **`personas.yaml` is the single source for all pod and DB
@@ -50,19 +48,91 @@ default_dev:
 > nothing else changed. It is gitignored, so nobody else's copy updates
 > with yours.
 
-**Create the Oracle DB user:**
+### Oracle Database container
 
-🔵 **ONE-TIME**
+🔵 **ONE-TIME** — pull the image:
+
 ```bash
-docker exec -i oracle26ai_db sqlplus sys/Abcd1234@localhost:1521/FREEPDB1 as sysdba <<'EOF'
-CREATE USER spire IDENTIFIED BY "<db-pass>";
+docker pull container-registry.oracle.com/database/free:latest
+```
+
+🔵 **ONE-TIME** — create the host data directory:
+
+```bash
+mkdir -p /home/bhagavan/oracle_oradata
+```
+
+🔵 **ONE-TIME** — create and start the Oracle DB container:
+
+```bash
+docker run -d \
+  --name oracle26ai_db_bhagavan \
+  --restart unless-stopped \
+  -p 1521:1521 \
+  -e ORACLE_PWD='Abcd1234' \
+  -v /home/bhagavan/oracle_oradata:/opt/oracle/oradata \
+  container-registry.oracle.com/database/free:latest
+```
+
+> `ORACLE_PWD` is the `SYS` / `SYSTEM` password for the container DB — it is
+> **not** the `spire` application password.  
+> The database and the default PDB `FREEPDB1` are created automatically on
+> first startup. First startup can take several minutes.  
+> Because of `--restart unless-stopped`, the container **auto-starts on boot**.
+> You do **not** need to start it manually each time. Only run
+> `docker start oracle26ai_db_bhagavan` if you previously stopped it by hand
+> (a manual `docker stop` overrides `unless-stopped` until you start it again).
+
+Confirm the container is up and healthy before creating the `spire` user:
+
+```bash
+docker ps
+docker inspect --format='{{.State.Health.Status}}' oracle26ai_db_bhagavan
+```
+
+Wait until the status is `healthy`. You can also follow the logs:
+
+```bash
+docker logs -f oracle26ai_db_bhagavan
+```
+
+Look for:
+
+```text
+DATABASE IS READY TO USE!
+```
+
+🔵 **ONE-TIME** — create the `spire` DB user in `FREEPDB1`:
+
+```bash
+docker exec -i oracle26ai_db_bhagavan sqlplus sys/Abcd1234@localhost:1521/FREEPDB1 as sysdba <<'EOF'
+CREATE USER spire IDENTIFIED BY "jnjnuh";
 GRANT CONNECT, RESOURCE, CREATE VIEW, UNLIMITED TABLESPACE TO spire;
 EXIT;
 EOF
 ```
 
-> Use `sys ... as sysdba`, not `pdbadmin` (`ORA-01031` on this image).
+Verify the new user can connect:
+
+```bash
+docker exec -it oracle26ai_db_bhagavan sqlplus spire/jnjnuh@localhost:1521/FREEPDB1
+```
+
+> Use `sys ... as sysdba`, not `pdbadmin` (`ORA-01031` on this image).  
 > `IDENTIFIED BY` must match `oracle.password` in `personas.yaml`.
+
+> If you need to recreate the database from scratch, stop and remove the
+> container, clear the host data directory, then run the `docker run` command
+> again:
+>
+> ```bash
+> docker stop oracle26ai_db_bhagavan
+> docker rm oracle26ai_db_bhagavan
+> sudo rm -rf /home/bhagavan/oracle_oradata/*
+> # then re-run the docker run command above
+> ```
+>
+> This is destructive — all existing DB data will be lost.
 
 ---
 
