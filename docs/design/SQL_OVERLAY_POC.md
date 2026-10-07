@@ -3,7 +3,7 @@
 **Date:** 2026-10-01
 **Branch:** `poc/sql-overlay`
 **Base:** `hardening-master-v2`
-**State:** phases 3-6 done (overlay, emitter, --show-sql, acceptance); phase 7 pending
+**State:** phases 3-7 done; PR #189 open against hardening-master-v2
 
 ## V0 - What this POC proves
 
@@ -89,7 +89,7 @@ The POC is proven if:
 | 4 | Emitter build — one function per shape, unit tests | done |
 | 5 | Display — `--show-sql` flag | done |
 | 6 | Acceptance run — five prompts, five captures | done |
-| 7 | Handoff — extension guide, POC-2 sketch | pending |
+| 7 | Handoff — extension guide, POC-2 sketch | done |
 
 ## Data received (phase 1)
 
@@ -330,6 +330,21 @@ not known at emit time. That is the honest shape.
 **Byte-identical reruns.** `emit_sql` is a pure function of `(plan, overlay)`;
 two runs of the same prompt produce byte-identical SQL. This is the
 POC's determinism claim, checked by `tests/test_sql_emitter.py::test_determinism`.
+
+## Phase 7 — Handoff
+
+**Status:** done, 2026-10-07.
+
+Two artifacts for whoever picks this up next:
+
+- **`docs/design/sql_overlay/EXTENDING.md`** — how to add a filter, a
+  literal, an entity, an assumption; where things live; what not to
+  touch. The document a maintainer reads first when a new predicate is
+  needed.
+- **`docs/design/sql_overlay/POC2_SKETCH.md`** — the seven questions
+  POC-1 left open, with what POC-2 would do, why, and what it needs.
+  Restated as a scope boundary: POC-2 extends POC-1, it does not
+  change it.
 
 ## Deviations from any prior plan
 

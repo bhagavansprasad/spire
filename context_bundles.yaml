@@ -30,6 +30,8 @@ bundles:
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
   - docs/design/SQL_OVERLAY_POC.md
+  - docs/design/sql_overlay/EXTENDING.md
+  - docs/design/sql_overlay/POC2_SKETCH.md
   - docs/design/sql_overlay/supplier_schema.csv
   - docs/design/sql_overlay/acceptance/01.sql
   - docs/design/sql_overlay/acceptance/02.sql
