@@ -4,9 +4,9 @@ default_dev:
     # username: "mskrishna.om@gmail.com"
     # password: "S#2c*5MB"
 
-    base_url: "https://fa-euth-dev20-saasfademo1.ds-fa.oraclepdemos.com"
-    username: "Alistair.Wood"
-    password: "qVSfH#84"
+    base_url: 'https://fa-etaj-saasfademo1.ds-fa.oraclepdemos.com'
+    username: 'Rosie.Williams'
+    password: 'H867j#HM'    
 
     auth_type: "basic"
 
