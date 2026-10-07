@@ -33,10 +33,10 @@ from langgraph.graph import END, StateGraph
 
 from spire.executor.executor import execute_plan
 from spire.nl_parser.router import route_and_parse as parse_prompt
+from spire.nl_parser.prompt_intent_cache import get_intent, save_intent
 from spire.planner.planner import generate_plan
 from spire.nl_parser.result import RefusalError
 from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
-
 
 class GraphState(TypedDict, total=False):
     """State threaded through the graph.
@@ -101,6 +101,17 @@ class GraphState(TypedDict, total=False):
 
 
 def parse_node(state: GraphState) -> dict:
+    print("[PARSE_NODE] START")
+    cached_intent = get_intent(state["prompt"])
+    print("[PARSE_NODE] CACHE CHECK DONE")
+
+    if cached_intent is not None:
+        print("[PARSE_NODE] CACHE HIT - RETURNING")
+        return {
+            "_modules_got": None,
+            "intent": cached_intent,
+        }
+    print("[PARSE_NODE] CACHE MISS - CALLING PARSER")
     result = parse_prompt(state["prompt"], menu=state["menu"])
     # Surface the classifier's module selection (route_and_parse
     # stashes it on the ParseResult). Downstream consumers —
@@ -117,6 +128,7 @@ def parse_node(state: GraphState) -> dict:
     if result.is_refusal:
         out["refusal"] = result.refusal
     else:
+        save_intent(state["prompt"], result.intent)
         out["intent"] = result.intent
     return out
 
