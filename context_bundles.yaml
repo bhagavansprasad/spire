@@ -30,6 +30,14 @@ bundles:
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
   - docs/design/SQL_OVERLAY_POC.md
+  - docs/design/sql_overlay/supplier_schema.csv
+  - docs/design/sql_overlay/acceptance/01.sql
+  - docs/design/sql_overlay/acceptance/02.sql
+  - docs/design/sql_overlay/acceptance/03.sql
+  - docs/design/sql_overlay/acceptance/04.sql
+  - docs/design/sql_overlay/acceptance/05.sql
+  - docs/design/sql_overlay/acceptance/plans_2026-10-07.txt
+  - docs/design/sql_overlay/acceptance/run_2026-10-07.log
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/reference/data/spire_tools_modules.xlsx
   - tests/spire_sme_validation_checklist.md
@@ -186,6 +194,8 @@ bundles:
   - prompts/refusals/refusal_examples.txt
   # External corpus — verbatim, no tier.
   - prompts/sme/testcases.txt
+  - prompts/release_gate/baseline.md
+  - prompts/release_gate/litmus.txt
   # Scorer corpus — different format, different runner.
   - prompts/scorer/parser_stress.txt
   - prompts/scorer/tool_selection.txt
@@ -256,6 +266,7 @@ bundles:
   # promptkit — the current test tooling (supersedes run_overnight/overnight_sets)
   - scripts/promptkit.py
   - scripts/manifests/promptkit_sets.yaml
+  - scripts/manifests/release_gate.yaml
   - scripts/manifests/smoke_sets.yaml
   - scripts/manifests/verify_sets.yaml
   - scripts/manifests/exhaust_sets.yaml
@@ -285,6 +296,7 @@ bundles:
   - src/spire/fusion/client.py
   - src/spire/graph/pipeline.py
   - src/spire/kg/loader.py
+  - src/spire/kg/sql_overlay.py
   - src/spire/agent/lg_utility.py
   - src/spire/agent/prompts.py
   - src/spire/agent/runner.py
@@ -422,6 +434,7 @@ bundles:
   - src/spire/synthesizer/response_validation.py
   - src/spire/synthesizer/lifecycle.py
   - src/spire/rendering/formatters.py
+  - src/spire/rendering/sql_emitter.py
   - src/spire/graph/pipeline.py
   - tests/test_synthesizer_aggregation.py
   - tests/test_synthesizer_supplier_records.py
@@ -537,6 +550,7 @@ bundles:
   # Window 28: bundle-manifest tripwire (checks this very file).
   - tests/test_bundle_manifest.py
   - tests/test_f058_period_bounds.py
+  - tests/test_sql_emitter.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
@@ -565,6 +579,7 @@ excludes:
 - '*.svg'
 - '*.png'
 - '*.pdf'
+- '*.docx'
 - context_out
 - context_out/*
 - docs/archive/*
