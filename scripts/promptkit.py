@@ -401,9 +401,13 @@ def _stage_report(prompt, exp_module, exp_tool, state: dict) -> dict:
     return rpt
 
 
-def _emit_run_graph_output(state, menu):
+def _emit_run_graph_output(state, menu, emit_sql: bool = False):
     """Emit the end-to-end answer + gated diagnostics exactly as run_graph.py,
-    using the same loggers/answer(). Honors pyproject.toml + --show-*."""
+    using the same loggers/answer(). Honors pyproject.toml + --show-*.
+
+    When emit_sql is True and the Plan is present, print the Fusion-DB SQL
+    projection of the Plan after the plan block. Print only; no execution.
+    """
     from spire.diagnostics import answer, get_logger
     from spire.nl_parser.capability import capability_message
     from spire.rendering.formatters import (
@@ -437,6 +441,10 @@ def _emit_run_graph_output(state, menu):
 
     _block(_parser_log, _format_intent(state["intent"]))
     _block(_planner_log, _format_plan(state["plan"]))
+
+    if emit_sql:
+        _emit_sql_block(state["plan"])
+
     _outputs = state.get("outputs") or {}
     _display = state.get("projected_outputs") or _outputs
     _block(_executor_log, _format_outputs(_display))
@@ -453,6 +461,32 @@ def _emit_run_graph_output(state, menu):
     _summary_log.info("%s", _format_summary(state["plan"], _outputs,
                                             state.get("response")))
     _block(_tokens_log, usage_report())
+
+
+def _emit_sql_block(plan):
+    """Print the Fusion-DB SQL projection of the Plan.
+
+    Print-only: no SQL is executed, no DB connection is opened. The
+    emitter is a pure function of (plan, overlay); see
+    src/spire/rendering/sql_emitter.py and docs/design/SQL_OVERLAY_POC.md.
+    """
+    try:
+        from spire.rendering.sql_emitter import emit_sql as _emit_sql
+    except Exception as exc:  # noqa: BLE001
+        print(f"[show-sql] emitter unavailable: {exc}", file=sys.stderr)
+        return
+    if not plan:
+        print("\n--- SQL projection (empty plan) ---\n")
+        return
+    statements = _emit_sql(plan)
+    print()
+    print("--- SQL projection ---")
+    for i, stmt in enumerate(statements, start=1):
+        if len(statements) > 1:
+            print(f"\n[statement {i} of {len(statements)}]")
+        print(stmt)
+    print("--- end SQL projection ---")
+    print()
 
 
 async def _run_one(prompt, menu, client):
@@ -485,7 +519,7 @@ def _print_stage_breakdown(rpt):
     print(f"    -> {verdict}")
 
 
-async def _run_async(prompts: list[str]) -> int:
+async def _run_async(prompts: list[str], emit_sql: bool = False) -> int:
     from fastmcp import Client
 
     menu = load_kg_menu()
@@ -503,7 +537,7 @@ async def _run_async(prompts: list[str]) -> int:
                 print(f"PROMPT: {prompt}")
                 print('='*72)
             state = await _run_one(prompt, menu, client)
-            _emit_run_graph_output(state, menu)
+            _emit_run_graph_output(state, menu, emit_sql=emit_sql)
             # A refusal (parser or planner) is a valid outcome — only a real
             # pipeline error or execution failure counts against the run.
             if state.get("error") and not state.get("plan_refusal"):
@@ -512,8 +546,8 @@ async def _run_async(prompts: list[str]) -> int:
     return 0 if failed == 0 else 1
 
 
-def do_run(prompts: list[str]) -> int:
-    return asyncio.run(_run_async(prompts))
+def do_run(prompts: list[str], emit_sql: bool = False) -> int:
+    return asyncio.run(_run_async(prompts, emit_sql=emit_sql))
 
 
 # ==========================================================================
@@ -762,6 +796,13 @@ def main() -> int:
                     help=("with --manifest: per-set timeout seconds "
                           f"(default {DEFAULT_SET_TIMEOUT})"))
 
+    ap.add_argument(
+        "--show-sql", dest="emit_sql", action="store_true",
+        help=("print the Fusion-DB SQL projection of the Plan alongside "
+              "existing output. Print only - no SQL is executed. See "
+              "docs/design/SQL_OVERLAY_POC.md."),
+    )
+
     from spire.diagnostics import add_diagnostic_arguments
     add_diagnostic_arguments(ap)
 
@@ -804,7 +845,7 @@ def main() -> int:
         return 2
 
     if args.prompt is not None:
-        return do_run(args.prompt)
+        return do_run(args.prompt, emit_sql=args.emit_sql)
 
     # --prompt-file: concatenate every file's prompts, in order.
     prompts: list[str] = []
@@ -818,7 +859,7 @@ def main() -> int:
             return 2
         prompts.extend(got)
 
-    return do_run(prompts)
+    return do_run(prompts, emit_sql=args.emit_sql)
 
 
 if __name__ == "__main__":

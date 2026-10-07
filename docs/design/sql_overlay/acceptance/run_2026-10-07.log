@@ -1,0 +1,474 @@
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=99 total=677
+Router: modules=['supplier']
+[llm] stage=parse in=5751 out=315 total=6066
+[cache] HIT   cached=5747  fresh=4  total_in=5751
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+
+
+========================================================================
+PROMPT: List active suppliers
+========================================================================
+
+--- SQL projection ---
+SELECT P.VENDOR_ID,
+       P.SEGMENT1,
+       HP.PARTY_NAME,
+       P.ENABLED_FLAG
+FROM POZ_SUPPLIERS P
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID
+WHERE P.ENABLED_FLAG = 'Y';
+
+-- ASSUMPTION [status_maps_to_enabled_flag]: Supplier ACTIVE/INACTIVE maps to POZ_SUPPLIERS.ENABLED_FLAG ('Y'/'N'). Confirmed by Oracle PO Prism Q24 (2026-10-07). OQ-1.
+-- ASSUMPTION [party_type_not_filtered]: POZ_SUPPLIERS.PARTY_ID is assumed to point at an organization row only; no HZ_PARTIES.PARTY_TYPE predicate is emitted. OQ-3, unverified.
+--- end SQL projection ---
+
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber
+  -------------------------------------------+-----------------+---------------
+  Lee Supplies                               | 300000047414503 | 1252          
+  JGA                                        | 300000047414635 | 1254          
+  US Gas and Electric                        | 300000047507113 | 1256          
+  Allied Manufacturing                       | 300000047572113 | 1265          
+  Midtown Computer Supplies                  | 300000047572163 | 1266          
+  Consolidated Supplies                      | 300000047837244 | 1272          
+  Progressive Corp                           | 300000049521222 | 1274          
+  Masson Inc                                 | 300000051065858 | 1277          
+  RSM                                        | 300000051066029 | 1278          
+  Utilitaire Inc                             | 300000051066302 | 1281          
+  Shangduo Inc                               | 300000075469541 | 1289          
+  Nihon Communications                       | 300000101110596 | 1301          
+  Ente Idrocarburi                           | 300000115609124 | 1306          
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308          
+  Medtronic                                  | 300000116498267 | 1322          
+  Siemens Medical Solutions                  | 300000116498411 | 1324          
+  Cardinal Health                            | 300000116498478 | 1325          
+  Lagring Systems                            | 300000116707121 | 1327          
+  Servicios Reunidos, SL                     | 300000131904822 | 1336          
+  Misson Corp                                | 300000131933370 | 1339          
+  BD Medical                                 | 300000133943993 | 1342          
+  Staffing Services                          | 300000047414571 | 1253          
+  Dell Inc.                                  | 300000047414679 | 1255          
+  Howell Engineering Inc.                    | 300000047507170 | 1257          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     99  total=    677
+  parse        in=   5751  out=    315  total=   6066
+  TOTAL        in=   6329  out=    414  total=   6743
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=579 out=93 total=672
+Router: modules=['supplier']
+[llm] stage=parse in=5752 out=292 total=6044
+[cache] HIT   cached=5747  fresh=5  total_in=5752
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'status', 'value': 'active'}
+    - {'type': 'country', 'value': 'US'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'status': 'ACTIVE', 'country': 'US'}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, MatchedCountry
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Active suppliers in US
+========================================================================
+
+--- SQL projection ---
+SELECT P.VENDOR_ID,
+       P.SEGMENT1,
+       HP.PARTY_NAME,
+       P.ENABLED_FLAG
+FROM POZ_SUPPLIERS P
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID
+LEFT JOIN HZ_PARTY_SITES PS ON PS.PARTY_ID = P.PARTY_ID
+LEFT JOIN HZ_LOCATIONS L ON L.LOCATION_ID = PS.LOCATION_ID
+WHERE P.ENABLED_FLAG = 'Y'
+  AND L.COUNTRY = 'US';
+
+-- ASSUMPTION [status_maps_to_enabled_flag]: Supplier ACTIVE/INACTIVE maps to POZ_SUPPLIERS.ENABLED_FLAG ('Y'/'N'). Confirmed by Oracle PO Prism Q24 (2026-10-07). OQ-1.
+-- ASSUMPTION [address_join_for_country]: Supplier country lives on the child address, not the supplier row. The join is POZ_SUPPLIERS.PARTY_ID -> HZ_PARTY_SITES.PARTY_ID -> HZ_LOCATIONS.LOCATION_ID. OQ-3 covers PARTY_TYPE, not this.
+-- ASSUMPTION [party_type_not_filtered]: POZ_SUPPLIERS.PARTY_ID is assumed to point at an organization row only; no HZ_PARTIES.PARTY_TYPE predicate is emitted. OQ-3, unverified.
+--- end SQL projection ---
+
+Answer:
+Showing 25 suppliers from an examined sample; the true matching count is not known.
+All 25 have Status ACTIVE.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  US Gas and Electric              | 300000047507113 | 1256          
+  Allied Manufacturing             | 300000047572113 | 1265          
+  Midtown Computer Supplies        | 300000047572163 | 1266          
+  Medtronic                        | 300000116498267 | 1322          
+  Siemens Medical Solutions        | 300000116498411 | 1324          
+  Cardinal Health                  | 300000116498478 | 1325          
+  Lagring Systems                  | 300000116707121 | 1327          
+  BD Medical                       | 300000133943993 | 1342          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  GE                               | 300000047507387 | 1261          
+  EIP Inc                          | 300000047507499 | 1262          
+  Building Management              | 300000047572371 | 1270          
+  Eiffage                          | 300000051066172 | 1279          
+  Mela Spa                         | 300000115699616 | 1314          
+  Office Depot                     | 300000047507596 | 1264          
+  InterUS1                         | 300000055053882 | 1284          
+  ABC Consulting                   | 300000075039541 | 1288          
+  Fisher Scientific                | 300000116498193 | 1321          
+  Baxter Healthcare                | 300000116498330 | 1323          
+
+Truncation:
+  - suppliers: unknown total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    579  out=     93  total=    672
+  parse        in=   5752  out=    292  total=   6044
+  TOTAL        in=   6331  out=    385  total=   6716
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=580 out=69 total=649
+Router: modules=['supplier']
+[llm] stage=parse in=5753 out=446 total=6199
+[cache] HIT   cached=5747  fresh=6  total_in=5753
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  include: ['Address']
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {'include_addresses': True}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +5 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy, addresses
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Suppliers with their addresses
+========================================================================
+
+--- SQL projection ---
+SELECT P.VENDOR_ID,
+       P.SEGMENT1,
+       HP.PARTY_NAME,
+       P.ENABLED_FLAG
+FROM POZ_SUPPLIERS P
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID
+LEFT JOIN HZ_PARTY_SITES PS ON PS.PARTY_ID = P.PARTY_ID
+LEFT JOIN HZ_LOCATIONS L ON L.LOCATION_ID = PS.LOCATION_ID;
+
+-- ASSUMPTION [address_join_for_country]: Supplier country lives on the child address, not the supplier row. The join is POZ_SUPPLIERS.PARTY_ID -> HZ_PARTY_SITES.PARTY_ID -> HZ_LOCATIONS.LOCATION_ID. OQ-3 covers PARTY_TYPE, not this.
+-- ASSUMPTION [party_type_not_filtered]: POZ_SUPPLIERS.PARTY_ID is assumed to point at an organization row only; no HZ_PARTIES.PARTY_TYPE predicate is emitted. OQ-3, unverified.
+--- end SQL projection ---
+
+Answer:
+Showing 25 of 1,832 suppliers.
+
+Suppliers:
+  Supplier                                   | SupplierId      | SupplierNumber | Address                                                                                                   
+  -------------------------------------------+-----------------+----------------+-----------------------------------------------------------------------------------------------------------
+  Lee Supplies                               | 300000047414503 | 1252           | 6302 England St,HOUSTON, TX 77021 Harris (+24 more)                                                       
+  JGA                                        | 300000047414635 | 1254           | 6500 Metropolis Dr,AUSTIN, TX 78744 Travis (+24 more)                                                     
+  US Gas and Electric                        | 300000047507113 | 1256           | 123 Main Street,NEW YORK, NY 10001 New York (+3 more)                                                     
+  Allied Manufacturing                       | 300000047572113 | 1265           | 401 9 Ave SW,CALGARY ALBERTA  T2P 3C5,CANADA (+1 more)                                                    
+  Midtown Computer Supplies                  | 300000047572163 | 1266           | 168 Ultimate Dr,RICHMOND HILL ONTARIO  L4S 8M8,CANADA (+24 more)                                          
+  Consolidated Supplies                      | 300000047837244 | 1272           | 53 Crossgate,DURHAM,County Durham,DH1 4PR,UNITED KINGDOM (+1 more)                                        
+  Progressive Corp                           | 300000049521222 | 1274           | Kidderminster Industrial Estate,Spennells Valley Road,KIDDERMINSTER,Worcestershire,DY10 1XS,UNITED KINGDOM
+  Masson Inc                                 | 300000051065858 | 1277           | 5 Avenue du Général de Gaulle,60300 SENLIS,FRANCE                                                         
+  RSM                                        | 300000051066029 | 1278           | 28 Rue Alfred Kastler,76130 MONT-SAINT-AIGNAN,FRANCE                                                      
+  Utilitaire Inc                             | 300000051066302 | 1281           | 2045 Broad Street,REGINA SASKTATCHEWAN  S4P 3T7,CANADA (+1 more)                                          
+  Shangduo Inc                               | 300000075469541 | 1289           | CHINA,325604  ZHEJIANG,Wenzhou,Zhiguang Industrial Zone                                                   
+  Nihon Communications                       | 300000101110596 | 1301           | JAPAN,272-0127,Chiba,Ichikawa-shi,Shiohama,1-2-3                                                          
+  Ente Idrocarburi                           | 300000115609124 | 1306           | Corso Buenos Aires,MILANO, MILANO,20121,ITALY                                                             
+  Distributori Automatici Roma Miglior Caffe | 300000115609204 | 1307           | Via Francesco Marucelli,CASAPE, ROMA,00010,ITALY                                                          
+  Inde Elettrodomestici Spa                  | 300000115699140 | 1308           | Viale Aristide Merloni n. 47,FABRIANO, ANCONA,60044,ITALY                                                 
+  Medtronic                                  | 300000116498267 | 1322           | 99 Hereford Street,BRAMPTON ONTARIO  L6Y 0R3,CANADA (+1 more)                                             
+  Siemens Medical Solutions                  | 300000116498411 | 1324           | Houtsingel 21	,2719 EA ZOETERMEER,NETHERLANDS (+1 more)                                                   
+  Cardinal Health                            | 300000116498478 | 1325           | 2105 S Lakeside Dr,WAUKEGAN, IL 60085 (+3 more)                                                           
+  Lagring Systems                            | 300000116707121 | 1327           | 3811 Lyons Ave,HOUSTON, TX 77020 Harris (+3 more)                                                         
+  Servicios Reunidos, SL                     | 300000131904822 | 1336           | Gran Via de les Corts Catalanes, 25,08015 BARCELONA,SPAIN                                                 
+  Misson Corp                                | 300000131933370 | 1339           | 92 Rue Claude Decaen,75012 PARIS,FRANCE                                                                   
+  BD Medical                                 | 300000133943993 | 1342           | 1 Becton Drive,FRANKLIN LAKES, NJ 07417 (+1 more)                                                         
+  Staffing Services                          | 300000047414571 | 1253           | 1740 Broadway,DENVER, CO 80274 Denver (+13 more)                                                          
+  Dell Inc.                                  | 300000047414679 | 1255           | 109 S HARRIS ST,ROUND ROCK, TX 78664 WILLIAMSON (+24 more)                                                
+  Howell Engineering Inc.                    | 300000047507170 | 1257           | 196 Rue Notre Dame,KEDGWICK NEW BRUNSWICK  E8B 0A4,CANADA (+1 more)                                       
+
+Truncation:
+  - suppliers: 1832 total in source; 25 returned.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    580  out=     69  total=    649
+  parse        in=   5753  out=    446  total=   6199
+  TOTAL        in=   6333  out=    515  total=   6848
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=585 out=96 total=681
+Router: modules=['supplier']
+[llm] stage=parse in=5758 out=322 total=6080
+[cache] HIT   cached=5747  fresh=11  total_in=5758
+[debug] shape = None
+Intent:
+  target_entity: Supplier
+  filters:
+    - {'type': 'has_site_in_bu', 'value': 'US1 Business Unit'}
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+  Step 2: search_suppliers_by_site_bu
+    tool_args:      {'supplier_id': '$iteration_value', 'business_unit': 'US1 Business Unit'}
+    iterate_over:   {'from_step': 'suppliers', 'field': 'SupplierId'}
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers_has_site_in_bu
+    filter_source_when_nonempty: True
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+  suppliers_has_site_in_bu: 19 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047414571, 'SupplierNumber': '1253', 'Supplier': 'Staffing Services', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047414679, 'SupplierNumber': '1255', 'Supplier': 'Dell Inc.', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (14 more)
+
+
+========================================================================
+PROMPT: Suppliers with a site in US1 Business Unit
+========================================================================
+
+--- SQL projection ---
+
+[statement 1 of 2]
+SELECT P.VENDOR_ID,
+       P.SEGMENT1,
+       HP.PARTY_NAME,
+       P.ENABLED_FLAG
+FROM POZ_SUPPLIERS P
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID;
+
+-- ASSUMPTION [party_type_not_filtered]: POZ_SUPPLIERS.PARTY_ID is assumed to point at an organization row only; no HZ_PARTIES.PARTY_TYPE predicate is emitted. OQ-3, unverified.
+
+[statement 2 of 2]
+-- Step 2: search_suppliers_by_site_bu (keep parents where this returns rows)
+SELECT S.VENDOR_SITE_ID,
+       S.VENDOR_SITE_CODE,
+       S.PRC_BU_ID
+FROM POZ_SUPPLIER_SITES_ALL_M S
+WHERE S.PRC_BU_ID = 300000046987012
+  AND S.VENDOR_ID = :supplier_id;
+
+-- ASSUMPTION [bu_literal_from_overlay]: Business-unit name resolves to a numeric BU_ID from kg_sql_literal. Resolution happens upstream of the emitter (Resolution A). If the pod changes, the literals are reseeded. OQ-4.
+--- end SQL projection ---
+
+Answer:
+Examined 25 of 1,832 suppliers. Of those 25, 19 match the filter.
+
+Suppliers:
+  Supplier                         | SupplierId      | SupplierNumber
+  ---------------------------------+-----------------+---------------
+  Lee Supplies                     | 300000047414503 | 1252          
+  JGA                              | 300000047414635 | 1254          
+  US Gas and Electric              | 300000047507113 | 1256          
+  Staffing Services                | 300000047414571 | 1253          
+  Dell Inc.                        | 300000047414679 | 1255          
+  InterChina                       | 300000087887113 | 1298          
+  Howell Engineering Inc.          | 300000047507170 | 1257          
+  United Parcel Service            | 300000047507225 | 1258          
+  American Telephone and Telegraph | 300000047507272 | 1259          
+  Staples                          | 300000047507340 | 1260          
+  Building Management              | 300000047572371 | 1270          
+  GE                               | 300000047507387 | 1261          
+  Northwest Electronic Supply      | 300000047572257 | 1268          
+  Office Depot                     | 300000047507596 | 1264          
+  Metal Works                      | 300000047572210 | 1267          
+  Prouty Supply House              | 300000047572304 | 1269          
+  Advanced Corp                    | 300000047507546 | 1263          
+  EIP Inc                          | 300000047507499 | 1262          
+  Allied Manufacturing             | 300000047572113 | 1265          
+
+Truncation:
+  - suppliers: 1832 total in source; 25 returned.
+
+─── Tip ───
+Reading all 1,832 suppliers is slow. Narrow with a filter: business relationship, country, creation date, name, status.
+
+Summary:
+  Steps planned:        2
+  Records returned:     44 (across all steps)
+  Final raw output:     19 record(s) under 'suppliers_has_site_in_bu'
+  Synthesized answer:   19 record(s)
+Token usage:
+  classify     in=    585  out=     96  total=    681
+  parse        in=   5758  out=    322  total=   6080
+  TOTAL        in=   6343  out=    418  total=   6761
+
+[llm] provider=gemini model=gemini-3.5-flash
+[llm] stage=classify in=578 out=70 total=648
+Router: modules=['supplier']
+[llm] stage=parse in=5751 out=482 total=6233
+[cache] HIT   cached=5747  fresh=4  total_in=5751
+Intent:
+  target_entity: Supplier
+  count_only: True
+
+Plan:
+  Step 1: search_suppliers
+    tool_args:      {}
+    iterate_over:   (none — runs once)
+    client_filters: (none)
+    dedupe_by:      (none)
+    output_name:    suppliers
+
+Outputs:
+  suppliers: 25 record(s)
+    [1] {'SupplierId': 300000047414503, 'SupplierNumber': '1252', 'Supplier': 'Lee Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [2] {'SupplierId': 300000047414635, 'SupplierNumber': '1254', 'Supplier': 'JGA', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [3] {'SupplierId': 300000047507113, 'SupplierNumber': '1256', 'Supplier': 'US Gas and Electric', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [4] {'SupplierId': 300000047572113, 'SupplierNumber': '1265', 'Supplier': 'Allied Manufacturing', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': None}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    [5] {'SupplierId': 300000047572163, 'SupplierNumber': '1266', 'Supplier': 'Midtown Computer Supplies', 'Status': 'ACTIVE', 'BusinessRelationship': 'Spend Authorized', 'TaxpayerCountryCode': 'US'}
+        ... +4 more field(s): CreatedBy, CreationDate, LastUpdateDate, LastUpdatedBy
+    ... (20 more)
+
+
+========================================================================
+PROMPT: Count of suppliers
+========================================================================
+
+--- SQL projection ---
+SELECT P.VENDOR_ID,
+       P.SEGMENT1,
+       HP.PARTY_NAME,
+       P.ENABLED_FLAG
+FROM POZ_SUPPLIERS P
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID;
+
+-- ASSUMPTION [party_type_not_filtered]: POZ_SUPPLIERS.PARTY_ID is assumed to point at an organization row only; no HZ_PARTIES.PARTY_TYPE predicate is emitted. OQ-3, unverified.
+--- end SQL projection ---
+
+Answer:
+There are 1832 suppliers.
+Summary:
+  Steps planned:        1
+  Records returned:     25 (across all steps)
+  Final raw output:     25 record(s) under 'suppliers'
+  Synthesized answer:   25 record(s)
+Token usage:
+  classify     in=    578  out=     70  total=    648
+  parse        in=   5751  out=    482  total=   6233
+  TOTAL        in=   6329  out=    552  total=   6881
+
