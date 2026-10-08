@@ -401,12 +401,13 @@ def _stage_report(prompt, exp_module, exp_tool, state: dict) -> dict:
     return rpt
 
 
-def _emit_run_graph_output(state, menu, emit_sql: bool = False):
+def _emit_run_graph_output(state, menu):
     """Emit the end-to-end answer + gated diagnostics exactly as run_graph.py,
     using the same loggers/answer(). Honors pyproject.toml + --show-*.
 
-    When emit_sql is True and the Plan is present, print the Fusion-DB SQL
-    projection of the Plan after the plan block. Print only; no execution.
+    The SQL projection block rides the ``spire.sql`` diagnostic; enable
+    it with ``--show-sql`` (or the file / env layers). Print only, no
+    execution.
     """
     from spire.diagnostics import answer, get_logger
     from spire.nl_parser.capability import capability_message
@@ -421,6 +422,7 @@ def _emit_run_graph_output(state, menu, emit_sql: bool = False):
     _executor_log = get_logger("executor")
     _tokens_log = get_logger("tokens")
     _summary_log = get_logger("summary")
+    _sql_log = get_logger("sql")
 
     def _block(log, text):
         log.debug("%s\n", text)
@@ -441,9 +443,7 @@ def _emit_run_graph_output(state, menu, emit_sql: bool = False):
 
     _block(_parser_log, _format_intent(state["intent"]))
     _block(_planner_log, _format_plan(state["plan"]))
-
-    if emit_sql:
-        _emit_sql_block(state["plan"])
+    _block(_sql_log, _format_sql(state["plan"]))
 
     _outputs = state.get("outputs") or {}
     _display = state.get("projected_outputs") or _outputs
@@ -463,30 +463,29 @@ def _emit_run_graph_output(state, menu, emit_sql: bool = False):
     _block(_tokens_log, usage_report())
 
 
-def _emit_sql_block(plan):
-    """Print the Fusion-DB SQL projection of the Plan.
+def _format_sql(plan):
+    """Format the Fusion-DB SQL projection of a Plan as a text block.
 
     Print-only: no SQL is executed, no DB connection is opened. The
     emitter is a pure function of (plan, overlay); see
     src/spire/rendering/sql_emitter.py and docs/design/SQL_OVERLAY_POC.md.
+
+    Returns a string; the caller passes it to ``_block(_sql_log, ...)``
+    which is a no-op when the ``spire.sql`` diagnostic is off.
     """
     try:
         from spire.rendering.sql_emitter import emit_sql as _emit_sql
     except Exception as exc:  # noqa: BLE001
-        print(f"[show-sql] emitter unavailable: {exc}", file=sys.stderr)
-        return
+        return f"[show-sql] emitter unavailable: {exc}"
     if not plan:
-        print("\n--- SQL projection (empty plan) ---\n")
-        return
+        return "SQL projection: (empty plan)"
     statements = _emit_sql(plan)
-    print()
-    print("--- SQL projection ---")
+    parts = ["SQL projection:"]
     for i, stmt in enumerate(statements, start=1):
         if len(statements) > 1:
-            print(f"\n[statement {i} of {len(statements)}]")
-        print(stmt)
-    print("--- end SQL projection ---")
-    print()
+            parts.append(f"\n[statement {i} of {len(statements)}]")
+        parts.append(stmt)
+    return "\n".join(parts)
 
 
 async def _run_one(prompt, menu, client):
@@ -519,7 +518,7 @@ def _print_stage_breakdown(rpt):
     print(f"    -> {verdict}")
 
 
-async def _run_async(prompts: list[str], emit_sql: bool = False) -> int:
+async def _run_async(prompts: list[str]) -> int:
     from fastmcp import Client
 
     menu = load_kg_menu()
@@ -537,7 +536,7 @@ async def _run_async(prompts: list[str], emit_sql: bool = False) -> int:
                 print(f"PROMPT: {prompt}")
                 print('='*72)
             state = await _run_one(prompt, menu, client)
-            _emit_run_graph_output(state, menu, emit_sql=emit_sql)
+            _emit_run_graph_output(state, menu)
             # A refusal (parser or planner) is a valid outcome — only a real
             # pipeline error or execution failure counts against the run.
             if state.get("error") and not state.get("plan_refusal"):
@@ -546,8 +545,8 @@ async def _run_async(prompts: list[str], emit_sql: bool = False) -> int:
     return 0 if failed == 0 else 1
 
 
-def do_run(prompts: list[str], emit_sql: bool = False) -> int:
-    return asyncio.run(_run_async(prompts, emit_sql=emit_sql))
+def do_run(prompts: list[str]) -> int:
+    return asyncio.run(_run_async(prompts))
 
 
 # ==========================================================================
@@ -796,13 +795,6 @@ def main() -> int:
                     help=("with --manifest: per-set timeout seconds "
                           f"(default {DEFAULT_SET_TIMEOUT})"))
 
-    ap.add_argument(
-        "--show-sql", dest="emit_sql", action="store_true",
-        help=("print the Fusion-DB SQL projection of the Plan alongside "
-              "existing output. Print only - no SQL is executed. See "
-              "docs/design/SQL_OVERLAY_POC.md."),
-    )
-
     from spire.diagnostics import add_diagnostic_arguments
     add_diagnostic_arguments(ap)
 
@@ -845,7 +837,7 @@ def main() -> int:
         return 2
 
     if args.prompt is not None:
-        return do_run(args.prompt, emit_sql=args.emit_sql)
+        return do_run(args.prompt)
 
     # --prompt-file: concatenate every file's prompts, in order.
     prompts: list[str] = []
@@ -859,7 +851,7 @@ def main() -> int:
             return 2
         prompts.extend(got)
 
-    return do_run(prompts, emit_sql=args.emit_sql)
+    return do_run(prompts)
 
 
 if __name__ == "__main__":
