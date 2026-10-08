@@ -1,10 +1,10 @@
-# SPIRE — SQL Overlay POC, window-31 handoff
+# SPIRE — SQL Overlay POC, window-32 handoff
 
-**Date:** 2026-10-07
-**Branch:** `poc/sql-overlay`, tip `3538263`, in sync with `origin/poc/sql-overlay`
-**Parent:** `hardening-master-v2` at `db40182`
-**Phase:** all phases (1-7) done; PR #189 open; waiting on review
-**Predecessor:** the window-30 handoff, replaced by this document
+**Date:** 2026-10-08
+**Branch:** SQL-overlay work complete; all branches merged.
+**master tip:** `3c4b208` (PR #191 merged 2026-10-08T11:32Z)
+**hardening-master-v2 tip:** `7d2a97f` (in sync with master)
+**Predecessor:** the window-31 handoff, replaced by this document
 
 ## What this POC is
 
@@ -15,56 +15,74 @@ Address, Site, Classification, Contact. Print only, no execution.
 
 Scope document: `docs/design/SQL_OVERLAY_POC.md`.
 
-## What this window did
+## What landed this window
 
-1. Confirmed decisions 1–4 from the window-30 handoff.
-2. Stripped `EXTN_ATTRIBUTE_*` from the schema CSV (3,293 → 1,420 rows).
-3. Renamed and moved the schema to `docs/design/sql_overlay/supplier_schema.csv`.
-4. Wrote the phase-2 section: entity → Fusion mapping, join paths,
-   gap list, Resolution A, open questions.
-5. Ran the five acceptance prompts through the pipeline with `--show-planner`,
-   captured the plans.
-6. Investigated the OQs with Oracle's own PO Prism query collection:
-   - OQ-1 closed (`ENABLED_FLAG = 'Y'`; Q24)
-   - OQ-4 closed by curl (`US1 Business Unit = 300000046987012`)
-   - OQ-5 decided (schema prefix omitted)
-   - Decision 3 flipped to primary-BU form (`PRC_BU_ID`; Q26/Q30)
-   - OQ-2 flagged with Oracle's own comment in Q16
-   - OQ-3 still open, carried as assumption
-7. Built the overlay as Python dataclasses (`src/spire/kg/sql_overlay.py`).
-8. Built the emitter (`src/spire/rendering/sql_emitter.py`).
-9. Added `--show-sql` to `scripts/promptkit.py`.
-10. Ran the acceptance suite; captured five `.sql` files + the full run log.
-11. Wrote phase 7: `EXTENDING.md`, `POC2_SKETCH.md`.
-12. Fixed the manifest test: bundled every tracked file the branch added.
+Three PRs merged end to end:
+
+| PR | Title | Merged into | Merge commit |
+|---|---|---|---|
+| #189 | SQL Overlay POC (supplier module) | hardening-master-v2 | a8e83e7 |
+| #190 | SQL projection as a first-class diagnostic | hardening-master-v2 | a076ded |
+| #191 | promote: hardening-master-v2 → master | master | 3c4b208 |
+
+After #191, `hardening-master-v2` was merged from `master` (`7d2a97f`)
+to bring the two in sync. Both branches now sit at the same content.
+
+Branches deleted after merge: `poc/sql-overlay`,
+`feat/show-sql-diagnostic`, `promote/hardening-master-to-master`.
+History is reachable through the merge commits.
+
+## What changed since window 31
+
+1. **SQL projection became a first-class diagnostic.** `show_sql` is
+   now a registered flag in `src/spire/diagnostics.py` (logger
+   `spire.sql`). It honours the file / env / CLI / `--show-all` layers
+   uniformly, and `--manifest` batch mode forwards it automatically.
+   The bespoke `dest='emit_sql'` argument is gone.
+
+2. **`show_all` semantics changed: override, not default.** When
+   `show_all = true`, every gated flag becomes true regardless of any
+   explicit value in any layer. `--show-all --no-show-planner` no
+   longer means "everything except the planner"; it means everything.
+   To run a subset, set `show_all = false` and name the flags.
+
+3. **`prompts/sample_prompts.txt` added** — a cross-module smoke set.
+   Not part of the SQL overlay POC.
+
+4. **`personas.yaml` credentials rotated on master** (`47907f8`).
+   Task 1.1 of the main plan (untrack + gitignore) is still pending.
+
+5. **Schema CSV renamed and stripped.**
+   `docs/design/poc_schema.csv` → `docs/design/sql_overlay/supplier_schema.csv`,
+   3,293 → 1,420 rows.
 
 ## Repository state
 
 | Path | What |
 |---|---|
-| `docs/design/SQL_OVERLAY_POC.md` | Scope doc; 8 phases, all done |
+| `docs/design/SQL_OVERLAY_POC.md` | POC-1 scope doc; all seven phases done |
 | `docs/design/sql_overlay/supplier_schema.csv` | 12 tables, 1,420 rows |
 | `docs/design/sql_overlay/acceptance/` | Five `.sql` captures + run log + plans |
 | `docs/design/sql_overlay/EXTENDING.md` | Maintainer guide |
 | `docs/design/sql_overlay/POC2_SKETCH.md` | Seven follow-up questions |
-| `src/spire/kg/sql_overlay.py` | Overlay as dataclasses |
+| `src/spire/kg/sql_overlay.py` | Overlay as Python dataclasses |
 | `src/spire/rendering/sql_emitter.py` | `emit_sql(plan, overlay)` |
+| `src/spire/diagnostics.py` | `show_sql` flag registered; `spire.sql` logger |
+| `scripts/promptkit.py` | `--show-sql` via the diagnostics layer |
 | `tests/test_sql_emitter.py` | 9 tests |
+| `tests/test_diagnostics.py` | 65 tests (GATED set now 7 flags) |
 | `docs/reference/sql/` | Four Oracle SQL collections (PO, Cash, PA) |
-
-## Commits on the branch
-
-```
-3538263  poc/sql-overlay: phase 7 — extension guide, POC-2 sketch
-5b64797  poc/sql-overlay: bundle the overlay files
-f33e000  poc/sql-overlay: phases 2-6
-```
 
 ## Test status
 
-- `pytest -q` → **1290 passed, 1 skipped, 22 deselected** in 222s.
-- `pytest tests/test_sql_emitter.py -q` → **9 passed**.
-- `pytest tests/test_bundle_manifest.py -q` → **2 passed**.
+- `pytest -q` → 1290 passed, 1 skipped, 22 deselected (last full run
+  before the diagnostic change).
+- `pytest tests/test_sql_emitter.py -q` → 9 passed.
+- `pytest tests/test_diagnostics.py -q` → 65 passed.
+- `pytest tests/test_bundle_manifest.py -q` → 2 passed.
+
+Note: the full suite has not been re-run after the diagnostic merge.
+A fresh window should re-run `pytest -q` before starting POC-2.
 
 ## What is NOT in this branch
 
@@ -77,7 +95,8 @@ f33e000  poc/sql-overlay: phases 2-6
 
 - **OQ-2** — `POZ_SUPPLIER_CONTACTS.PARTY_SITE_ID` vs `ORG_PARTY_SITE_ID`.
   Emitted SQL uses `PARTY_SITE_ID` with an `-- ASSUMPTION:` comment.
-  Oracle's own PO Prism Q16 carries a comment flagging the same ambiguity.
+  Oracle's own PO Prism Q16 carries a comment flagging the same
+  ambiguity.
 - **OQ-3** — whether `HZ_PARTIES.PARTY_TYPE` needs a predicate. Emitter
   emits none, flags the assumption.
 
@@ -86,19 +105,28 @@ Both deferred to POC-2. See `POC2_SKETCH.md`.
 ## Deviations from the scope doc
 
 - **Overlay as Python, not six Oracle tables.** Content matches what the
-  six `kg_sql_*` tables would hold; storage differs. Migration is a POC-2
-  item. Recorded in the scope doc's Deviations section.
-- **Decision 3 flipped.** Primary-BU form (`PRC_BU_ID`), not assignments
-  form. Oracle's own Q26/Q30 use this form.
+  six `kg_sql_*` tables would hold; storage differs. Migration is a
+  POC-2 item. Recorded in the scope doc's Deviations section.
+- **Decision 3 flipped.** Primary-BU form (`PRC_BU_ID`), not the
+  assignments form. Oracle's own Q26/Q30 use this form.
 
 ## Next window agenda (in order)
 
-1. **Review PR #189.** It is `poc/sql-overlay` → `hardening-master-v2`.
-2. If approved, merge. Do not merge to `master`.
-3. If changes requested, apply on the branch; PR auto-updates.
-4. If the reviewer wants the overlay as Oracle tables before merge, that
-   is a re-scope. It is not in the current PR.
-5. When merged, decide whether to start POC-2 (`POC2_SKETCH.md`).
+POC-2 starts from `master` at `3c4b208`.
+
+1. **Create `poc/sql-overlay-2` from `master`.**
+2. **Confirm DB access first.** The POC so far is print-only; no query
+   has run. Before any plan is proposed, confirm what exists — SQL*Plus,
+   python-oracledb, a read-only account, or nothing — and whether the
+   Fusion DB is reachable from this environment.
+3. **If DB access exists**, start POC-2 item 1 of `POC2_SKETCH.md`:
+   validate the emitted SQL against the real Fusion DB.
+4. **If DB access does not exist**, item 1 is blocked. Pick a different
+   POC-2 item — sketch items 2 (close OQ-2/OQ-3 by schema read), 3
+   (views vs base tables), or 5 (migrate overlay to Oracle tables) do
+   not require a live DB.
+5. **Do not merge to `master` without the user's explicit word** (rule
+   10). PR into `hardening-master-v2`.
 
 ## Rules that shaped this work
 
@@ -114,8 +142,9 @@ Both deferred to POC-2. See `POC2_SKETCH.md`.
 ## What to share with the new window
 
 - **This handoff** — the single anchor.
-- **`plan` bundle** from `context_bundles.yaml` — current-state docs,
-  WORKING_STYLE, FIX_PLAN, ARCHITECTURE, FEATURES, SQL_OVERLAY_POC.
-- **`reference` bundle** — the endpoints reference.
-- **The branch** `poc/sql-overlay` on origin, or a fresh clone with
-  `git checkout poc/sql-overlay`.
+- **`docs/design/sql_overlay/POC2_SKETCH.md`** — the working document.
+- **`docs/design/SQL_OVERLAY_POC.md`** — the POC-1 scope doc.
+- **`docs/design/sql_overlay/EXTENDING.md`** — maintainer guide.
+- **`context_bundles.yaml`** — bundle definitions.
+- Repo state — fresh clone of `master`, or the output of
+  `git branch` / `git status` / `git log --oneline -5`.

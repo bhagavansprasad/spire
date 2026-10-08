@@ -3,7 +3,7 @@
 **Date:** 2026-10-01
 **Branch:** `poc/sql-overlay`
 **Base:** `hardening-master-v2`
-**State:** phases 3-7 done; PR #189 open against hardening-master-v2
+**State:** complete. All seven phases done. PR #189 merged. SQL projection is now a first-class diagnostic (PR #190). Everything promoted to master via PR #191 at 3c4b208.
 
 ## V0 - What this POC proves
 
