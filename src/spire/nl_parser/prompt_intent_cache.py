@@ -1,6 +1,9 @@
 import json
+from datetime import datetime
+
 import oracledb
 
+from spire.config import PROMPT_CACHE_DURATION
 from spire.planner.models import Intent
 
 
@@ -17,13 +20,65 @@ def get_conn():
     )
 
 
+def get_cache_duration() -> int:
+    """
+    Convert PROMPT_CACHE_DURATION from config into seconds.
+
+    Supported values:
+        "30s" -> 30 seconds
+        "2d"  -> 172800 seconds
+        "0"   -> cache forever
+        "-1"  -> cache disabled
+    """
+
+    value = PROMPT_CACHE_DURATION.strip().lower()
+
+    # Cache disabled
+    if value == "-1":
+        return -1
+
+    # Cache forever
+    if value == "0":
+        return 0
+
+    units = {
+        "s": 1,
+        "m": 60,
+        "h": 60 * 60,
+        "d": 24 * 60 * 60,
+    }
+
+    unit = value[-1]
+
+    if unit not in units:
+        raise ValueError(
+            f"Invalid PROMPT_CACHE_DURATION: {PROMPT_CACHE_DURATION}. "
+            f"Use values like 30s, 2d, 1h, 0, or -1."
+        )
+
+    try:
+        amount = int(value[:-1])
+    except ValueError:
+        raise ValueError(
+            f"Invalid PROMPT_CACHE_DURATION: {PROMPT_CACHE_DURATION}. "
+            f"Use values like 30s, 2d, 1h, 0, or -1."
+        )
+
+    if amount <= 0:
+        raise ValueError(
+            f"Invalid PROMPT_CACHE_DURATION: {PROMPT_CACHE_DURATION}"
+        )
+
+    return amount * units[unit]
+
+
 def get_intent(prompt: str) -> Intent | None:
     """
-    Look for the prompt in PROMPT_CACHE.
+    Look up an Intent for a prompt.
 
     Returns:
-        Intent -> cache HIT
-        None   -> cache MISS
+        Intent -> valid cache hit
+        None   -> cache miss or expired entry
     """
 
     conn = get_conn()
@@ -32,7 +87,7 @@ def get_intent(prompt: str) -> Intent | None:
     try:
         cur.execute(
             """
-            SELECT INTENT
+            SELECT INTENT, CREATED_AT, DURATION
             FROM PROMPT_CACHE
             WHERE PROMPT = :p
             """,
@@ -42,15 +97,38 @@ def get_intent(prompt: str) -> Intent | None:
         row = cur.fetchone()
 
         if row is None:
-            print("[CACHE] MISS")
+            print("(local)[cache] MISS")
             return None
 
-        intent_json = row[0]
+        intent_json, created_at, duration = row
 
-        data = json.loads(intent_json) #converts the json string to a dictionary
+        # DURATION = NULL means cache forever.
+        if duration is not None:
+            now = datetime.now()
+            age = (now - created_at).total_seconds()
 
-        intent = Intent(**data) # ** means take the dict keys and  pass them as keyword arguments
-        print("[CACHE] HIT")
+            #print(f"[CACHE] AGE = {age:.2f}s")
+            #print(f"[CACHE] DURATION = {duration}s")
+
+            if age > duration:
+                #print("[CACHE] EXPIRED")
+
+                cur.execute(
+                    """
+                    DELETE FROM PROMPT_CACHE
+                    WHERE PROMPT = :p
+                    """,
+                    p=prompt,
+                )
+
+                conn.commit()
+
+                return None
+
+        intent_data = json.loads(intent_json)
+        intent = Intent(**intent_data)
+
+        print("(local)[cache] HIT")
 
         return intent
 
@@ -59,9 +137,17 @@ def get_intent(prompt: str) -> Intent | None:
         conn.close()
 
 
-def save_intent(prompt: str, intent: Intent) -> None:
+def save_intent(
+    prompt: str,
+    intent: Intent,
+    duration: int | None,
+) -> None:
     """
-    Store a prompt and its Intent in PROMPT_CACHE.
+    Save a successful Intent in the cache.
+
+    duration:
+        integer -> expiration in seconds
+        None    -> cache forever
     """
 
     conn = get_conn()
@@ -69,20 +155,34 @@ def save_intent(prompt: str, intent: Intent) -> None:
 
     try:
         intent_json = json.dumps(intent.__dict__)
+        created_at = datetime.now()
 
         cur.execute(
             """
-            INSERT INTO PROMPT_CACHE (PROMPT, INTENT)
-            VALUES (:p, :i)
+            INSERT INTO PROMPT_CACHE (
+                PROMPT,
+                INTENT,
+                CREATED_AT,
+                DURATION
+            )
+            VALUES (
+                :p,
+                :i,
+                :created_at,
+                :d
+            )
             """,
             p=prompt,
             i=intent_json,
+            created_at=created_at,
+            d=duration,
         )
 
         conn.commit()
 
-        print("[CACHE] SAVED")
+        #print("[CACHE] SAVED")
 
     finally:
         cur.close()
         conn.close()
+        
