@@ -6,7 +6,7 @@ default_dev:
 
     base_url: 'https://fa-etaj-saasfademo1.ds-fa.oraclepdemos.com'
     username: 'Rosie.Williams'
-    password: 'H867j#HM'
+    password: 'H867j#HM'    
 
     auth_type: "basic"
 

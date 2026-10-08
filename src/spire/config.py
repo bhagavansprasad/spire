@@ -72,35 +72,108 @@ OPENAI_MODEL = "gpt-5"
 # ─────────────────────────────────────────────────────────────────────
 # MCP server URL (single source of truth)
 #
-# The URL is composed by the shell — spire() / spirer() in ~/.bashrc
-# source SPIRE-PORTS.env and export SPIRE_MCP_URL — and read here. The
-# port number lives in ONE place: SPIRE-PORTS.env. This module
-# deliberately has NO fallback: a missing env var means the shell
-# function was not run, and the correct answer is to say so, not to
-# guess a port. The other two Python locations that once held a
-# hardcoded 3333 (rendering/formatters.py, agent/runner.py) now call
-# this function.
+# The port number lives in ONE place: SPIRE-PORTS.env. The shell
+# functions spired() (dev) / spirep() (production) source that file and
+# export SPIRE_MCP_URL; that is the intended path and it is checked
+# first.
+#
+# When the env var is unset — a fresh clone without the shell functions
+# installed — this module reads SPIRE-PORTS.env directly and assembles
+# the URL from the same source the shell would have used. The port
+# number is still in ONE place; no constant, no duplicate.
+#
+# SPIRE_MCP_MODE picks which set of ports to use: 'dev' (default, the
+# 4001 set) or 'production' (the 3001 set). The shell functions imply
+# the mode; this fallback needs it named explicitly. Any other value
+# raises — a typo should not silently pick the wrong port set.
+#
+# The other two Python locations that once held a hardcoded 3333
+# (rendering/formatters.py, agent/runner.py) now call this function.
 # ─────────────────────────────────────────────────────────────────────
 
-def mcp_server_url() -> str:
-    """Return the MCP server URL from the environment.
+_PORTS_FILE = Path(__file__).resolve().parents[2] / "SPIRE-PORTS.env"
 
-    Raises RuntimeError if SPIRE_MCP_URL is unset, naming the shell
-    functions that set it. No fallback: SPIRE-PORTS.env is the single
-    source of the port number, and a default here would duplicate it.
+
+def _read_ports_file() -> dict[str, str]:
+    """Parse SPIRE-PORTS.env into a KEY -> value dict.
+
+    Empty dict if the file is absent or unreadable. Comments (#) and
+    blank lines are skipped; a line without '=' is ignored. Values may
+    be quoted; quotes are stripped.
+
+    Same file the shell functions source. Reading it here is not a
+    duplicate — it is the same source, read a second way.
+    """
+    if not _PORTS_FILE.is_file():
+        return {}
+    try:
+        raw = _PORTS_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    ports: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        ports[key.strip()] = value.strip().strip('"').strip("'")
+    return ports
+
+
+def _mcp_mode() -> str:
+    """The mode the file-read fallback should use.
+
+    'dev' by default; SPIRE_MCP_MODE overrides. Accepts 'dev' or
+    'production'; any other value raises — a typo should not silently
+    pick the wrong port set.
+    """
+    mode = _os.environ.get("SPIRE_MCP_MODE", "dev").strip().lower()
+    if mode not in ("dev", "production"):
+        raise RuntimeError(
+            f"SPIRE_MCP_MODE must be 'dev' or 'production'; got {mode!r}."
+        )
+    return mode
+
+
+def mcp_server_url() -> str:
+    """Return the MCP server URL.
+
+    Three paths, one source of truth:
+
+    1. ``SPIRE_MCP_URL`` env var, set by the shell functions after
+       sourcing SPIRE-PORTS.env. The intended path; checked first.
+    2. ``SPIRE-PORTS.env`` read directly from the repo root, for a
+       fresh clone without the shell functions installed. The mode
+       comes from ``SPIRE_MCP_MODE`` (default 'dev').
+    3. Neither present — raise, naming both paths.
 
     A function rather than an import-time constant so that importing
     this module (e.g. during pytest collection) does not require the
-    env var to be present — only calling the function does.
+    env var or the file to be present — only calling the function does.
     """
     url = _os.environ.get("SPIRE_MCP_URL")
-    if not url:
+    if url:
+        return url
+
+    ports = _read_ports_file()
+    if ports:
+        mode = _mcp_mode()
+        key = f"SPIRE_{mode.upper()}_MCP_PORT"
+        port = ports.get(key)
+        if port:
+            # Trailing slash matches what the shell functions export.
+            return f"http://127.0.0.1:{port}/mcp/"
         raise RuntimeError(
-            "SPIRE_MCP_URL is not set. Run 'spire' (dev) or 'spirer' "
-            "(runtime) first — those shell functions source "
-            "SPIRE-PORTS.env and export this variable."
+            f"SPIRE-PORTS.env is present at {_PORTS_FILE} but has no "
+            f"{key}. Add the key, or export SPIRE_MCP_URL directly."
         )
-    return url
+
+    raise RuntimeError(
+        "SPIRE_MCP_URL is not set and SPIRE-PORTS.env was not found at "
+        f"{_PORTS_FILE}. Run 'spired' (dev) or 'spirep' (production) to "
+        "source the ports file, or copy SPIRE-PORTS.env into the repo "
+        "root."
+    )
 
 def build_llm(temperature: float = GEMINI_TEMPERATURE):
     """Return a LangChain chat model for the configured provider.
