@@ -29,10 +29,14 @@ testpaths = ["tests"]
 # applies to everyone; override per machine with SPIRE_SHOW_PLANNER=1,
 # or for a single run with --show-planner / --no-show-planner.
 #
-# Set ONLY the keys you want to change. A key written here counts as
-# explicitly set, which is what makes "--show-all --no-show-planner"
-# mean "everything except the planner" — so spelling every key out would
-# leave show_all with nothing to switch on.
+# show_all is an OVERRIDE, not a default. When show_all = true, every
+# gated flag becomes true regardless of any other value in this file,
+# in the environment, or on the command line. An explicit "false" is
+# ignored.
+#
+# To run a subset, set show_all = false and name the flags you want.
+# "Set show_all = true and then switch one flag off" is not supported;
+# use the subset form instead.
 #
 # The section may be deleted entirely; absent means all off. An
 # unrecognised key is an error naming the key, not a silent no-op.
@@ -43,4 +47,5 @@ testpaths = ["tests"]
 # show_synthesizer = true
 # show_tokens = true
 # show_timings = true
+# show_sql = true
 show_all = true
