@@ -196,6 +196,7 @@ bundles:
   - prompts/refusals/refusal_examples.txt
   # External corpus — verbatim, no tier.
   - prompts/sme/testcases.txt
+  - prompts/sample_prompts.txt
   - prompts/release_gate/baseline.md
   - prompts/release_gate/litmus.txt
   # Scorer corpus — different format, different runner.
