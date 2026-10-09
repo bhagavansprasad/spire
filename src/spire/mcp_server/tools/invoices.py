@@ -24,8 +24,20 @@ Filters supported:
   clause, so a lone invoice_date_before with no other filter over-fetches
   up to `limit` unfiltered and may miss older records beyond the fetch
   window. Pair it with invoice_date_after for a bounded range.
+- unpaid: When True, restrict to invoices not yet fully paid. Server
+  clause PaidStatus='Unpaid' plus a second single-clause call for
+  PaidStatus='Partially paid' (composite q= is unreliable here).
+  See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.2.
+- overdue: When True, restrict to Unpaid invoices whose DueDate is
+  before today. Server clause PaidStatus='Unpaid'; the DueDate test
+  runs client-side. Partially paid rows are outside this reading —
+  see §4.3.
+- pending: When True, restrict to ApprovalStatus='Required' — the
+  default reading of "pending" in AP. See §4.1.
 - limit: max records returned after client-side filtering (default 25)
 """
+
+from datetime import date
 
 from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.tool_result import ToolResult
@@ -42,6 +54,7 @@ _PROJECTED_FIELDS = [
     "InvoiceId",
     "InvoiceNumber",
     "InvoiceDate",
+    "DueDate",
     "InvoiceAmount",
     "InvoiceCurrency",
     "Supplier",
@@ -79,6 +92,9 @@ async def search_invoices(
     invoice_date_before: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
+    unpaid: bool = False,
+    overdue: bool = False,
+    pending: bool = False,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion invoices.
@@ -96,6 +112,11 @@ async def search_invoices(
             e.g. Jan 2022 -> after="2022-01-01", before="2022-02-01".
         amount_min: Lower bound on InvoiceAmount (inclusive). Client-side.
         amount_max: Upper bound on InvoiceAmount (inclusive). Client-side.
+        unpaid: When True, restrict to invoices not yet fully paid.
+            See the module docstring for the two-call mechanism.
+        overdue: When True, restrict to Unpaid invoices whose DueDate
+            is before today.
+        pending: When True, restrict to ApprovalStatus='Required'.
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -119,6 +140,14 @@ async def search_invoices(
         server_clause = f"SupplierNumber='{supplier_number}'"
     elif supplier_name:
         server_clause = f"Supplier LIKE '%{supplier_name}%'"
+    elif overdue:
+        # Compound predicate: server clause is PaidStatus='Unpaid',
+        # the DueDate < today test runs client-side below.
+        server_clause = "PaidStatus='Unpaid'"
+    elif unpaid:
+        server_clause = "PaidStatus='Unpaid'"
+    elif pending:
+        server_clause = "ApprovalStatus='Required'"
     elif invoice_date_after:
         server_clause = f"InvoiceDate >= '{invoice_date_after}'"
 
@@ -134,6 +163,9 @@ async def search_invoices(
             invoice_date_before,
             amount_min is not None,
             amount_max is not None,
+            unpaid,
+            overdue,
+            pending,
         )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
@@ -143,7 +175,20 @@ async def search_invoices(
         params["q"] = server_clause
 
     response = await client.get(INVOICES_PATH, params=params)
-    items = response.get("items", [])
+    items = list(response.get("items", []))
+
+    # 'unpaid' means 'not fully settled', which includes the pod's
+    # 'Partially paid' rows. Composite q= is unreliable on this pod,
+    # so the two statuses ride as two single-clause calls and are
+    # merged. Only when 'unpaid' is set on its own — 'overdue'
+    # deliberately excludes partials (see module docstring).
+    if unpaid and not overdue:
+        partial_params = dict(params)
+        partial_params["q"] = "PaidStatus='Partially paid'"
+        partial_response = await client.get(
+            INVOICES_PATH, params=partial_params
+        )
+        items.extend(partial_response.get("items", []))
 
     # Apply remaining filters in Python.
     def matches(item: dict) -> bool:
@@ -166,6 +211,10 @@ async def search_invoices(
             if amount_min is not None and amt < amount_min:
                 return False
             if amount_max is not None and amt > amount_max:
+                return False
+        if overdue:
+            due = item.get("DueDate") or ""
+            if due >= date.today().isoformat():
                 return False
         return True
 
