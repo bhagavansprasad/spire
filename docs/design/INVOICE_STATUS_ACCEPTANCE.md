@@ -256,10 +256,14 @@ the AP path — that is a separate, already-documented gap.
   of rows.** The criterion says "verdict plus ranked list"; a future
   prompt set may want a different definition.
 - **Whether a `payables/b_invoice_status.sysprompt` block is needed.**
-  The `po_status` precedent needed none — the filter-type menu is
-  generated from `kg_entity_filter` — but "likely" is not "verified,"
-  and a next window should test the three new filter types against
-  the parser before adding a block.
+  **RESOLVED in window 35: yes, it was.** The `po_status` precedent
+  did not need one because "open" and "closed" are pure value
+  lookups — the term maps to a code with no default to supply.
+  "Pending for a long time" does need a default (the 90-day
+  threshold the prompt does not name), and the LLM will not invent
+  one. The block `payables/b_invoice_status.sysprompt` was added to
+  teach the default, plus a guard so adjectives like "requiring
+  attention" are not read as pending signals.
 - **The pod discrepancy itself** (HANDOFF §6). Settled for this window
   only: the live pod is `fa-euth-dev20`, not the reference doc's
   `fa-esll-dev37` nor the persona's `fa-etaj`.

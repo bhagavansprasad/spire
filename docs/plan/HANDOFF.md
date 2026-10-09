@@ -1,43 +1,36 @@
-# SPIRE — Invoice status investigation, window-34 handoff
+# SPIRE — window-35 handoff
 
-**Window type:** investigation only. No code was changed, no branch was
-created, no KG row was added, no prompt set was run.
-**Purpose:** understand why Spire refuses five ordinary AP-invoice
-questions, and gather the facts a design would need.
-**Predecessor:** the window-33 handoff (SQL Overlay POC). Its content
-lives on in `docs/design/SQL_OVERLAY_POC.md` and
-`docs/design/sql_overlay/*`; this document supersedes it as the
+**Window type:** implementation. Eight commits + one merge landed on the
+round-one integration branch `hardening-master-v3`. No new F-NNN was
+filed; two residuals are recorded below as follow-ups, not as findings.
+**Predecessor:** the window-34 handoff (Invoice status investigation).
+Its findings live on in `docs/design/INVOICE_STATUS_ACCEPTANCE.md` and the
+endpoints reference's 2026-10-09 rows; this document supersedes it as the
 current anchor.
-**master tip:** `f2bb6a1` (unchanged from window 33)
-**Successor:** the next window's handoff. Nothing was filed this
-window — no F-NNN, no FIX_PLAN row, no code changed.
+**Branch arrangement:**
+- `master` is **frozen at `00a5176`** for the duration of round one.
+- `hardening-master-v3` is the **round-one integration branch**. Feature
+  branches fork from it and PR into it.
+- When round one completes, `hardening-master-v3` merges to `master`
+  once, via PR.
+**master tip:** `00a5176` (unchanged since before this window opened)
+**hardening-master-v3 tip:** `2494911` (merge of PR #192)
+**Successor:** the next window's handoff.
 
 ---
 
-## 0. The rule that frames everything below
+## 0. The rule that framed this window
 
-The user framed the rule during this window, in these terms:
-
-> If a Fusion SME — given this prompt and read access to Fusion — could
-> produce an answer, then the prompt is answerable and Spire must be
-> able to answer it. A refusal on an answerable prompt is a DEFECT in
-> Spire. It is never a valid narrowing of scope, never a coverage gap,
-> never an observation, never "the user asked the wrong thing."
-
-This is the frame the new window should carry. **Applied this window** — `docs/plan/WORKING_STYLE.md` now carries
-**Rule 28** (the SME test) and a one-line gloss at S1 ("in-scope"
-means an SME could answer it).
-
-The rule's purpose is to stop the pattern of the last several windows,
-where a refusal on an SME-answerable prompt was classified as a
-"coverage note" rather than a defect. Coverage IS capability. Calling it
-a note softens a defect into a neutral fact.
+WORKING_STYLE.md **Rule 28** (the SME test). If a Fusion SME could answer
+a prompt with read access to Fusion, Spire must answer it; a refusal is a
+defect. This window began from that frame and ended with all five of the
+prompts in window-34 HANDOFF §1 answering.
 
 ---
 
-## 1. The problem
+## 1. The Rule 28 defect and its fix
 
-Five prompts:
+The five prompts (window-34 HANDOFF §1, unchanged):
 
 1. Which invoices are yet to be paid?
 2. Which supplier invoices are currently outstanding?
@@ -45,574 +38,213 @@ Five prompts:
 4. Are any supplier invoices overdue and requiring attention?
 5. Which invoices have been pending for a long time?
 
-All five refused. Every one is an ordinary finance question a Fusion
-SME could answer in minutes.
+Window 34 recorded all five refusing. Window 35 made all five answer:
 
-**Reproduction log:** `run_20261008_223735.log` (pasted in this window).
-Two refusal shapes appeared:
-
-| # | Prompt | Refusal | Router modules |
-|---|---|---|---|
-| 1 | Which invoices are yet to be paid? | `missing_identifier` | `['payables']` |
-| 2 | Which supplier invoices are currently outstanding? | `unsupported_filter` | `['payables','supplier']` |
-| 3 | Which invoices are still unpaid? | `missing_identifier` | `['payables']` |
-| 4 | Are any supplier invoices overdue and requiring attention? | `unsupported_filter` | `['payables','supplier']` |
-| 5 | Which invoices have been pending for a long time? | `unsupported_filter` | `['payables']` |
-
-Prompts 2 and 3 are the same shape ("supplier invoices, unpaid") but
-refused differently, because the router classified them differently. This
-is worth noting but was not investigated further.
-
----
-
-## 2. Investigation 1 — the code
-
-Five bundles were read: `parser_context`, `parser_planner`,
-`graph_kg`, `synthesizer`, and (partially) `mcp_server_tools`. The
-finding is that the gap is not one layer deep — it is four, and all four
-have to move for a payables invoice-status filter to work end to end.
-
-### 2.1 Layer 1 — Parser vocabulary (`src/spire/nl_parser/context/`)
-
-The payables `.sysprompt` blocks define these Invoice filters:
-
-- `b_invoice_amount.sysprompt` → `invoice_amount`
-- `b_invoice_date.sysprompt` → `invoice_date`, `older_than_n_months`,
-  `created_in_last_n_months`
-- `b_invoices_for_po.sysprompt` → `purchase_order`
-- `b_invoices_for_supplier.sysprompt` → `supplier`, `invoice_number`
-- `b_no_recent_invoices.sysprompt` → `has_no_recent_invoices` (supplier-side)
-
-**No status filter.** No `b_invoice_status.sysprompt` exists. The word
-"unpaid" appears only once in the payables blocks, and then in the AR
-context (see 2.1.1).
-
-### 2.1.1 The AR/AP collision (important)
-
-`modes/m_open_invoices.sysprompt` defines `open_only=true` — but its
-text is explicitly scoped to AR:
-
-> "If a **customer-invoices** question (the CustomerAccount +
-> by_customer_name + CustomerTransaction shape above) asks for only the
-> OPEN, OUTSTANDING, or UNPAID invoices — e.g. 'open invoices for
-> [name]' — set open_only=true."
-
-The `by_customer_name` filter is described as **REQUIRED**. There is no
-AP equivalent. This is why prompt 2 refused as `unsupported_filter` and
-prompt 3 refused as `missing_identifier`: prompt 2 named "supplier",
-prompt 3 didn't, and the model's route through the sysprompts diverged.
-
-### 2.2 Layer 2 — MCP tool (`src/spire/mcp_server/tools/invoices.py`)
-
-`search_invoices` accepts:
-
-```
-invoice_number, purchase_order, supplier_number, supplier_name,
-invoice_date_after, invoice_date_before, amount_min, amount_max, limit
-```
-
-**No status parameter.** Even if the parser emitted one, the tool would
-reject the kwarg at the Pydantic boundary.
-
-Note: `PaidStatus`, `ApprovalStatus` are in `_PROJECTED_FIELDS` (the
-data IS fetched). They are simply not filterable. **`DueDate` is NOT
-in `_PROJECTED_FIELDS`** — the tool has no way to return it today,
-which means any client-side "overdue" filter is impossible inside the
-tool without adding the field.
-
-### 2.3 Layer 3 — KG filter registry (`scripts/sql/kg_schema.sql`)
-
-`kg_entity_filter` has 34 rows. Seven are Invoice filters:
-`invoice_date`, `older_than_n_months`, `created_in_last_n_months`,
-`invoice_amount`, `supplier`, `purchase_order`, `invoice_number`.
-
-**No invoice-status row.** The KG has no concept of payment status as
-a filter dimension.
-
-### 2.4 Layer 4 — Synthesizer schema and display
-
-- `InvoiceRecord` in `src/spire/synthesizer/p2p.py` declares:
-  `invoice_id, invoice_number, invoice_date, invoice_amount,
-  invoice_currency, supplier_name, supplier_number`. **No `paid_status`,
-  no `due_date`.**
-- The InvoiceResponse branch in `src/spire/rendering/formatters.py`
-  renders columns: Invoice, InvoiceId, Amount, Currency, Date, Supplier.
-  **No status column, no due-date column.**
-
-### 2.5 The two refusal paths, confirmed from code
-
-**`missing_identifier`** comes from `generate_plan` in
-`src/spire/planner/planner.py`. It has a guard: a filterless Invoice
-intent raises `RefusalError(MISSING_IDENTIFIER)`. The wording comes from
-`_IDENTIFIER_GUIDANCE["Invoice"]` in `capability.py`:
-*"Name the supplier, or give me the invoice number."*
-
-**`unsupported_filter`** comes from `validate_intent` Step 3 in
-`src/spire/nl_parser/intent_validation.py`. It collects every filter type
-the KG does not know and refuses with UNSUPPORTED_FILTER. The wording
-comes from `_FILTER_GUIDANCE["Invoice"]`:
-*"Narrow by supplier or date instead."*
-
-Both are correct given the vocabulary. Neither names the actual gap.
-
-### 2.6 Code conclusion
-
-The concept "invoice payment status" does not exist anywhere in the
-chain. The parser has no word, the tool has no parameter, the KG has no
-row, the schema has no field, the display has no column. Fixing the
-first layer in isolation exposes the next, then the next. Every one is
-small; every one is required.
-
----
-
-## 3. Investigation 2 — the live pod data
-
-All `curl` commands below were run in this window. **The pod they hit was
-`fa-euth-dev20-saasfademo1.ds-fa.oraclepdemos.com`**, which is NOT the
-same pod named in the persona file (`fa-etaj-saasfademo1`). See Section
-6 for why this matters.
-
-### 3.1 All raw evidence files on disk
-
-```
-t_invoices_status_sample.txt    5 invoices, first page
-t_invoices_unpaid_count.txt     q=PaidStatus='Unpaid'
-t_invoice_full_row.txt          1 full invoice, all ~100 fields
-t_partially_paid.txt            q=PaidStatus='Partially Paid'  (0)
-t_unpaid_and_supplier.txt       composite q=  (0)
-t_invoice_total.txt             no clause
-t_paid_count.txt                q=PaidStatus='Paid'
-t_approval_notreq.txt           q=ApprovalStatus='Not required'
-t_duedate_before.txt            q=DueDate<'2025-01-01'
-t_approval_pending.txt          q=ApprovalStatus='Pending'      (0)
-t_approval_approved.txt         q=ApprovalStatus='Approved'     (0)
-t_paidstatus_onhold.txt         q=PaidStatus='On Hold'          (0)
-t_invoice_status_batch.txt      500 invoices, no clause  (biased)
-t_unpaid_batch.txt              500 invoices, q='Unpaid', desc
-t_paid_recent_batch.txt         500 invoices, q='Paid', desc
-t_required_recent.txt           500 invoices, q='Required', desc
-t_allstate_recent.txt           500 invoices, no clause, desc
-t_repo_status_search.txt        grep of docs/prompts/tests
-t_ref_status_context.txt        endpoints reference — status hits
-t_fixes_status.txt              FIXES.md — status hits
-t_prompts_status.txt            prompts/ — status hits
-```
-
-All paths are repo-root relative.
-
-### 3.2 Headline counts (this pod)
-
-| Query | Count |
-|---|---|
-| Total invoices (no filter) | **53,198** |
-| `PaidStatus='Paid'` | 43,637 |
-| `PaidStatus='Unpaid'` | **9,552** |
-| `PaidStatus='Partially paid'` | 9 |
-| `ApprovalStatus='Not required'` | 44,673 |
-| `DueDate<'2025-01-01'` | 48,598 |
-
-**Paid + Unpaid = 53,189. Total = 53,198. Nine unaccounted.** These
-are rows where `PaidStatus` is neither; likely null or blank. Two probes
-(`'Partially Paid'` with capital P, `'On Hold'`) returned 0. A 500-row
-batch found exactly 9 rows of `'Partially paid'` (lowercase p). So the
-9 are `Partially paid`, and casing matters (see 3.4).
-
-### 3.3 Field-value enumeration (the discovery that matters most)
-
-Five state fields live on the invoice header, not one. A 500-row
-newest-first sample gave:
-
-| Field | Values observed (count in 500) |
-|---|---|
-| **`PaidStatus`** | `Paid` 208, `Unpaid` 283, `Partially paid` 9 |
-| **`ApprovalStatus`** | `Not required` 425, `Required` 64, `Manually approved` 7, `Workflow approved` 2, `Initiated` 2 |
-| **`InvoiceStatus`** | `Completed` 298, `Pending control check` 127, `Pending approval` 24, `Canceled` 18, `Available` 12, `Policy violations` 11, `Fully applied` 7, `Permanent prepayment` 3 |
-| **`ValidationStatus`** | `Validated` 322, `Not validated` 127, `Canceled` 18, `Available` 12, `Needs revalidation` 11, `Fully applied` 7, `Permanent prepayment` 3 |
-| **`FundsStatus`** | null 476, `Reserved` 9, `Not required` 8, `Reserved with warning` 4, `Not attempted` 2, `Not applicable` 1 |
-
-**"Pending" is not one word on this pod — it is at least five.**
-`InvoiceStatus='Pending control check'` (127),
-`InvoiceStatus='Pending approval'` (24),
-`ApprovalStatus='Required'` (64, unauthorised but not yet started),
-`ApprovalStatus='Initiated'` (2, in motion), and `PaidStatus='Unpaid'`
-(283, cleared but not paid). An SME listening to "pending invoices"
-picks one of these by context.
-
-### 3.4 Case sensitivity
-
-Fusion `q=` matches exactly on the display string. `'Partially Paid'`
-returns 0; `'Partially paid'` returns 9. The parser will need the exact
-strings, not a normalized form.
-
-### 3.5 Composite q= — confirmed failing again
-
-`q=PaidStatus='Unpaid' AND SupplierNumber='1255'` returned **0** — even
-though supplier 1255 (Dell) provably has unpaid invoices (InvoiceId
-744103 was returned earlier by a single-clause query). This is the
-third independent confirmation of the single-clause quirk already
-documented in the endpoints reference.
-
-**Design consequence:** any compound filter (e.g. "unpaid AND
-overdue") must send ONE clause to the pod and filter the rest
-client-side.
-
-### 3.6 "Long time" — a live backlog, not a demo artifact
-
-500 newest `ApprovalStatus='Required'` invoices, by age:
-
-| Age | Count |
-|---|---|
-| < 30 days | 9 |
-| 30–90 days | 115 |
-| 90–180 days | 220 |
-| > 180 days | **156** |
-
-**376 of 500 are over 90 days old.** This is not 2012 demo data. This is
-a live backlog of stuck approvals. Whatever "pending for a long time"
-means, this is the population it would draw from.
-
-### 3.7 Overdue is a compound predicate, not a value
-
-The pod has `PaidStatus` and it has `DueDate`. It has **no `overdue`
-field and no `overdue` query clause.** An SME computes "overdue" as
-`PaidStatus != 'Paid' AND DueDate < today`. That is a shape of filter
-Spire has no representation for — it is not a name to add.
-
-### 3.8 DueDate is a real second dimension
-
-Full invoice row shows both `InvoiceDate` and `DueDate` present. Sampled:
-
-- Unpaid batch: `DueDate == InvoiceDate` on **213/500**
-- Required batch: `DueDate == InvoiceDate` on **82/500**
-
-So for roughly half of invoices the due date is the invoice date, for
-the other half it is genuinely later. "Overdue" (`DueDate < today`) and
-"old" (`InvoiceDate < cutoff`) are different questions.
-
-### 3.9 Full field list — worth keeping
-
-One row, all fields (from `t_invoice_full_row.txt`):
-AccountCodingStatus, AccountingDate, AccountingStatus, AmountPaid,
-ApplyAfterDate, ApprovalStatus, BankAccount, BankChargeBearer,
-BaseAmount, BudgetDate, BusinessUnit, CanceledBy, CanceledDate,
-CanceledFlag, ControlAmount, ConversionDate, ConversionRate,
-ConversionRateType, CreatedBy, CreationDate, DeliveryChannel,
-DeliveryChannelCode, Description, DigitalPaymentAccount,
-DocumentCategory, DocumentFiscalClassificationCodePath, DocumentName,
-DocumentSequence, DueDate, Exception, ExceptionCode,
-ExternalBankAccountId, FirstPartyTaxRegistrationId,
-FirstPartyTaxRegistrationNumber, FundsStatus, GoodsReceivedDate,
-ImageDocumentNumber, InvoiceAmount, InvoiceCurrency, InvoiceDate,
-InvoiceGroup, InvoiceId, InvoiceNumber, InvoiceReceivedDate,
-InvoiceSource, InvoiceSourceCode, InvoiceStatus, InvoiceStatusCode,
-InvoiceType, LastUpdateDate, LastUpdateLogin, LastUpdatedBy,
-LegalEntity, LegalEntityIdentifier, LiabilityDistribution, PaidStatus,
-Party, PartySite, PayAloneFlag, PayGroup, PaymentCurrency,
-PaymentMethod, PaymentMethodCode, PaymentReason, PaymentReasonCode,
-PaymentReasonComments, PaymentTerms, ProcurementBU, ProductTable,
-PurchaseOrderNumber, ReferenceKeyFive, ReferenceKeyFour,
-ReferenceKeyOne, ReferenceKeyThree, ReferenceKeyTwo,
-RemittanceMessageOne, RemittanceMessageThree, RemittanceMessageTwo,
-Requester, RequesterId, RoutingAttribute1..5, SettlementPriority,
-Stream, StreamDefinitionCode, StreamDetailId, Supplier, SupplierIBAN,
-SupplierNumber, SupplierSite, SupplierTaxRegistrationNumber,
-TaxationCountry, TermsDate, UniqueRemittanceIdentifier,
-UniqueRemittanceIdentifierCheckDigit, ValidationStatus, VoucherNumber.
-
-Three of these are new discoveries relative to what `search_invoices`
-projects today: `AmountPaid`, `InvoiceStatus`, `InvoiceStatusCode`.
-Any of them could be what "pending" means.
-
----
-
-## 4. Investigation 3 — the repo docs and prompt corpus
-
-### 4.1 The endpoints reference already prescribes the pattern
-
-`docs/reference/spire_fusion_endpoints_reference.md` line 321, dated
-2026-05-20:
-
-> "If you ever build invoice-status vocabulary in the KG, mirror the
-> existing `po_status` pattern but map to these display strings
-> (`"unpaid"` → `"Unpaid"`)."
-
-This is the house directive. It is unambiguously prescriptive: use
-`kg_vocabulary`, mirror `po_status`, map to display strings. It names
-the exact example.
-
-Three other endpoints-reference facts that constrain a design:
-
-- Line 1583 (2026-07-29): **`AmountPaid` is on the header, and it is the
-  only usable paid figure.** Summing `InvoiceAmount` gated on
-  `PaidStatus == "Paid"` silently drops partial payments.
-- Line 325: composite `q=` workaround already prescribed — one clause
-  to the pod, rest client-side.
-- Line 1812 (2026-08-02): **`/invoices` ordering is NOT stable.**
-  Byte-diffing the same eight prompts twice, minutes apart, gave
-  entirely different rows. Any paginated fetch on this collection MUST
-  specify `orderBy`, or two runs of the same query return different
-  answers with no error either time.
-
-### 4.2 SURFACE.md — no prior position
-
-`docs/prompts/SURFACE.md` (the capability inventory) was read in full.
-
-- The `payables` module declares exactly one entity, one rootable
-  target: `Invoice`.
-- Combinations table names exactly three cross-module capabilities.
-  None concerns invoice status.
-- §8 ("Unmapped — capabilities the KG declares with no prompt coverage
-  today") lists four candidates. AP invoice status is not one — it is
-  not declared at all.
-- §10.2 (the payables tier plan) lists what its prompt files *should*
-  cover: supplier number, name, amount bound, date bound, refusal,
-  projection, `purchase_order`, `invoice_number`. **No status filter
-  anywhere in the plan.**
-
-### 4.3 refusals/exhaust.txt — no blessing
-
-`prompts/refusals/exhaust.txt` (the refusal contract file) was read in
-full. It lists what Spire is *supposed* to refuse. Five flavor sections
-(`unknown_entity`, `unsupported_filter`, `unsupported_operation`,
-`missing_identifier`, `unparseable`).
-
-**"Which invoices are yet to be paid" is not in this contract file.**
-The refusals seen in this window were emergent, not designed.
-
-### 4.4 The prompts corpus — a collision, not a gap
-
-A `grep` across all of `prompts/` for the four terms found:
-
-- **"unpaid" and "outstanding" appear only as AR prompts, always with a
-  named customer.** e.g. `unpaid invoices for ABC Corporation
-  Worldwide`, `outstanding invoices for ABC Application Software`.
-  These map today to `CustomerAccount + by_customer_name +
-  CustomerTransaction + open_only`, and they work.
-- **"pending" appears only in PO prompts.** `purchase orders pending
-  approval`, `purchase orders pending signature`, `suppliers that have
-  pending POs`. Not one invoice prompt says "pending".
-- **`prompts/payables/` produced zero hits.** The AP prompt files do not
-  exercise these words at all.
-
-**The corpus has taught Spire to read "unpaid"/"outstanding" as AR,
-customer-scoped, and "pending" as PO-scoped. It has never taught the
-AP-invoice reading.** Same English words, settled meaning elsewhere,
-no seat for the AP sense.
-
-### 4.5 The one piece of prior art
-
-`prompts/retest/prompts.txt` line ~85 references a past run where a
-prompt returned *"only 2 columns (SupplierNumber, PaidStatus)"*, and
-under it sits an actual prompt:
-
-> `For Lee Supplies, show invoice number, invoice date, invoice amount, and payment status for their invoices.`
-
-**AP-invoice, supplier-scoped, asks for payment status — and works**
-because it asks for `PaidStatus` as a *projected column*, not as a
-*filter*. `PaidStatus` has been surfaced to users before. It has never
-been used to narrow a query.
-
-### 4.6 FIXES.md — no F-NNN touches this
-
-Seventeen hits, all `(pending)` PR markers or an unrelated aggregation
-test. Nothing in the fixes log has ever addressed invoice status.
-
----
-
-## 5. The consolidated finding
-
-**The gap is a vocabulary gap, not a scale gap.**
-
-You hypothesized, at the start of the investigation, that "all unpaid"
-would require a loop over every vendor, whereas a single-vendor query
-would not. The pod disproves this: **`q=PaidStatus='Unpaid'` returns
-9,552 invoices across all vendors in one call.** No loop, no per-vendor
-scan. Every dimension the SME would use is filterable server-side, one
-clause each:
-
-| Dimension | Clause | Returns |
+| # | Intent emitted | Rows on `fa-euth-dev20` |
 |---|---|---|
-| Unpaid | `q=PaidStatus='Unpaid'` | 9,552 |
-| Paid | `q=PaidStatus='Paid'` | 43,637 |
-| Overdue (bare) | `q=DueDate<'2025-01-01'` | 48,598 |
-| Approval state | `q=ApprovalStatus='Not required'` | 44,673 |
+| 1 | `unpaid` | 9,563 |
+| 2 | `unpaid` | 9,563 |
+| 3 | `unpaid` | 9,563 |
+| 4 | `overdue` | 9,503 |
+| 5 | `pending` + `older_than_n_months={months:3}` | 6,789 |
 
-Composite clauses fail (single-clause rule). Every compound filter
-("unpaid AND overdue") is one clause to the pod plus client-side
-filtering on a small result set. That is a design pattern the reference
-already prescribes.
+**Zero refusals.**
 
-**Why the five prompts fail, in one sentence:** the words "unpaid",
-"outstanding", "overdue", "pending" have no representation as AP-invoice
-*filters* anywhere in Spire's chain. They are taught as AR concepts
-(`open_only`) and PO concepts (`po_status`). The AP reading was never
-entered. This is why the same English word routes to a working answer
-for customers and to a refusal for suppliers.
-
-**The pattern is already prescribed.** Endpoints reference line 321
-names the shape: `kg_vocabulary`, mirror `po_status`, map to display
-strings. The design does not have to invent a pattern.
+The acceptance criterion — what a correct answer to each prompt must say —
+lives in `docs/design/INVOICE_STATUS_ACCEPTANCE.md`.
 
 ---
 
-## 6. The pod discrepancy — MUST be resolved before the next window's data work
+## 2. What the fix required, layer by layer
 
-**Every measurement in this investigation came from
-`fa-euth-dev20-saasfademo1.ds-fa.oraclepdemos.com`.**
+Window 34's §2 named four layers; each one moved.
 
-The persona file and `.bashrc` read earlier in the session both said
-`fa-etaj-saasfademo1.ds-fa.oraclepdemos.com`.
+**Layer 1 — Parser vocabulary.** Three new filter types appear in the
+parser's menu: `unpaid`, `overdue`, `pending`. They ride on the existing
+`kg_entity_filter` mechanism; the parser's menu is generated from that
+table, so no dedicated sysprompt block was needed for the filter *types*
+themselves. A new block **was** needed to teach defaults — see Layer 4.
 
-The endpoints reference itself, line 44, says the "active pod" for that
-document is **`fa-esll-dev37`**. Three different pods are named across
-the repo and the environment.
+**Layer 2 — MCP tool.** `search_invoices` gained three boolean args
+(`unpaid`, `overdue`, `pending`) and `DueDate` was added to its
+`_PROJECTED_FIELDS`. Compound-filter paths (`unpaid + supplier`, `overdue`,
+`pending + date`) page the server clause to exhaustion via the shared
+`page_all` helper. `matches()` now checks `PaidStatus` and `ApprovalStatus`
+client-side — the earlier version leaked Paid rows into `unpaid` answers
+when a supplier clause took the server slot.
 
-Total invoice count here is **53,198**. The repo's aggregation comments
-cite **48,931**. Different pod, different count.
+**Layer 3 — KG registry.** Three `kg_entity_filter` rows
+(`Invoice/unpaid`, `Invoice/overdue`, `Invoice/pending`). No `kg_vocabulary`
+kind was added — the term IS the filter type, and a vocab kind would have
+meant editing the CHECK constraint in `scripts/sql/kg_schema.sql` plus the
+four count-tracking sites the KG test names.
 
-**This does not invalidate the REST-surface findings.** The values
-(`'Paid'`, `'Unpaid'`, `'Partially paid'`, etc.) and the single-clause
-quirk are product behavior, not pod-specific data — they will be the
-same on every pod. But every concrete count in this document is
-pod-specific and cannot be reconciled against repo numbers until the
-pod question is settled.
+**Layer 4 — Parser context.** New block
+`src/spire/nl_parser/context/payables/b_invoice_status.sysprompt`, added to
+the manifest and (by the Phase 1 byte-equality invariant) mirrored into
+`_SYSTEM_PROMPT_PREAMBLE`. It teaches:
 
-**Next window action:** establish which pod is live before running any
-new query that compares to a repo figure. One command settles it:
+- "pending" / "pending approval" -> `pending` alone.
+- "pending for a long time" with no explicit N -> `pending` +
+  `older_than_n_months={months:3}` (the default).
+- "pending for over N months/days/weeks/years" -> `pending` +
+  `older_than_n_months={months:N}`.
+- "pending in the last N months" -> `pending` +
+  `created_in_last_n_months={months:N}`.
+- **A guard**: adjectives like "requiring attention", "urgent", "needing
+  review" are NOT pending signals. This guard is load-bearing: without it
+  the model added `pending` to prompt 4 ("overdue and requiring
+  attention"), narrowing the answer silently.
+
+The block count moved from 49 to 50; `_EXPECTED_BLOCK_COUNT` in
+`tests/test_parser_context_assembly.py` moved with it.
+
+**Layer 5 — Display.** No change. `DueDate` now reaches the projection, but
+the formatter still renders Invoice / InvoiceId / Amount / Currency / Date
+/ Supplier; the due-date column is available for a future prompt that asks
+for it.
+
+---
+
+## 3. Where the changes live
+
+Branch `feat/invoice-status-filters`, merged to `hardening-master-v3` as
+PR #192 (merge commit `2494911`):
 
 ```
-curl -s -u "$IKS_FUSION_USERNAME:$IKS_FUSION_PASSWORD" \
-  "$IKS_FUSION_BASE_URL/fscmRestApi/resources/11.13.18.05/invoices?limit=1&totalResults=true" \
-  | python -m json.tool | grep -E 'totalResults'
+d2b8fa1 docs: register acceptance doc + invoice-status block in context bundles
+00dac8c mcp(invoices): fix unpaid/overdue client filters; honest compound totals
+712d82a nl_parser: narrow 'pending' triggers — adjectives are not approval signals
+eaadc1c mcp(invoices): honest totals for unpaid (union) and overdue (unknown)
+ba6a955 nl_parser: teach invoice-status defaults (pending for a long time)
+a76eeec planner: accept unpaid/overdue/pending as Invoice roots
+2a54747 test(invoices): add cases for unpaid/overdue/pending + DueDate projection
+90158b2 mcp(invoices): add unpaid/overdue/pending filters + DueDate projection
+e9846fb kg: register invoice_status filters (unpaid, overdue, pending)
 ```
 
-53,198 → `fa-euth-dev20`. 48,931 → `fa-esll-dev37` or one of the
-persona alternates.
+Files changed:
+- `scripts/sql/kg_schema.sql` — three rows, banner 34->37
+- `scripts/print_kg.py`, `tests/test_kg_metadata.py` — count moves 34->37
+- `src/spire/mcp_server/tools/invoices.py` — the tool
+- `src/spire/mcp_server/server.py` — the MCP wrapper
+- `src/spire/planner/planner.py` — the Invoice root guard
+- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — new block
+- `src/spire/nl_parser/context/order.manifest` — the new block, 49->50
+- `src/spire/nl_parser/context_assembly.py` — the literal mirrored, block count
+- `tests/test_parser_context_assembly.py` — block count 49->50
+- `tests/test_invoices_tool.py`, `tests/test_planner.py` — new cases
+- `context_bundles.yaml` — acceptance doc into `plan`, block into `parser_context`
 
 ---
 
-## 7. Open design questions — the next window's starting point
+## 4. Costs and disclosures the next window should know
 
-The investigation answered "is this answerable?" (yes) and "is the
-pattern known?" (yes). It did not answer these four:
+**Paged-fetch cost.** Compound-filter queries now page the server clause to
+exhaustion. On `fa-euth-dev20` this means:
 
-### 7.1 Which status field does each word map to?
+- `overdue` alone: ~9,503 rows, ~20 pages, ~3-4 minutes.
+- `pending + older_than_n_months`: ~6,789 rows, ~14 pages, ~3-4 minutes.
+- `unpaid + supplier`: ~1,300 rows, 3 pages, seconds.
 
-The pod has five state fields. Every user word ("unpaid", "pending",
-"overdue") maps to one or more of them. The mapping is a product
-decision, not a data fact.
+This is not a bug — an SME would take the same time to count 9,503 overdue
+invoices — but it is a new UX cost on two of the five prompts. A future
+window may want ">= N, exact count unavailable" as an alternative when a
+caller would rather have a fast approximate answer. Not chosen here.
 
-| Word | Candidate mappings |
-|---|---|
-| unpaid | `PaidStatus='Unpaid'` (9,552) — or `PaidStatus IN ('Unpaid','Partially paid')` (9,561) |
-| outstanding | Same as unpaid? Or its own concept? |
-| overdue | Compound: `PaidStatus != 'Paid' AND DueDate < today`. Not a value. |
-| pending | Any of: `ApprovalStatus='Required'`, `ApprovalStatus='Initiated'`, `InvoiceStatus='Pending approval'`, `InvoiceStatus='Pending control check'`, `PaidStatus='Unpaid'` — five readings |
+**Pod drift.** `unpaid` moved 9,551 -> 9,563 -> 9,564 -> 9,565 -> 9,563 across
+sweeps in this window (~10s between calls). The pod's data moves; the
+number is honest, not a defect. Do not read the variance as an
+inconsistency.
 
-### 7.2 Does "unpaid" include partially paid?
+**Truncation footer wording.** "N total in source" is the filtered total,
+not the source total. Cosmetic; recorded as a follow-up, not filed.
 
-Nine rows on this pod. Small, but the endpoints reference already
-warned that summing by `PaidStatus='Paid'` silently drops partials
-(line 1583). The same warning applies here in reverse — treating
-"unpaid" as only `'Unpaid'` silently drops partials.
+**Prompt 4's narration.** The response is a plain table, not the verdict +
+ranked list that `INVOICE_STATUS_ACCEPTANCE.md` §2.4 asks for. The query
+answers (the Rule 28 bar), but the narration does not yet meet §2.4's
+shape. Deferred.
 
-### 7.3 How does "overdue" get expressed?
-
-Not a filter name. A filter shape: one clause to the pod
-(`PaidStatus='Unpaid'`), then `DueDate < today` client-side. Spire's
-chain has no representation for this shape today. Does it need one? Or
-does the parser get taught a synthetic filter type that the planner
-translates?
-
-### 7.4 What is "a long time"?
-
-No threshold exists in the user's prompt. Options:
-
-- A default the chain supplies. 90 days is defensible (376/500 in the
-  Required batch are over 90 days old).
-- A value the user must state. `pending for more than 90 days`.
-- A clarification the chain asks for. This is what the SME does.
-
-None was decided.
+**The two residual items above are not filed as F-NNNs.** The disposition
+from this window: findings get filed when a fix window picks them up. A
+future window that wants to work on either should file it as part of
+picking it up.
 
 ---
 
-## 8. What was NOT investigated
+## 5. What this window did NOT do
 
-- **The `po_status` pattern itself.** Read as a form (vocabulary kind,
-  display strings), never read as a precedent for how a new vocab kind
-  is registered, tested, or wired into the parser. The next window
-  should read `po_status` before designing `invoice_status`, because
-  whatever we build should look like it.
-- **`modes/m_open_invoices.sysprompt` and the AR `open_only` path.**
-  This is the closest existing analogue — a "show me unpaid things"
-  filter that works on the AR side. Reading how it was built is the
-  single highest-value next step.
-- **Any comparison against an SME's actual answer.** We confirmed Spire
-  cannot answer; we did not confirm what the SME's answer would look
-  like for each of the five prompts. That is worth capturing before
-  design, because it becomes the acceptance criterion.
-- **The `pytest -q` baseline** (which was green at 1290 passed) was
-  captured but never used — this window made no code changes, so no
-  regression check was needed.
-- **POC-2.** The SQL overlay work was paused when this thread opened.
-  The `all_tables` DB-reachability check for `localhost:1521/FREEPDB1`
-  was never run. If POC-2 resumes in the next window, that check is
-  still the gate.
+- **`paid` and `partially paid` filter rows.** Not named by any prompt.
+  Deferred.
+- **A block rule for "overdue" as a keyword.** §4.3's compound predicate is
+  documented in `b_invoice_status.sysprompt`, but the block does not carry
+  a dedicated "past due" / "behind on payment" rule. In practice the model
+  routes it correctly (see §1's table). If a future phrasing refuses, the
+  block is where the rule would go.
+- **Fixing the "Show me the details of a supplier invoice" refusal.**
+  Confirmed in this window as a legitimate refusal (Rule 28 does not apply;
+  the prompt names no set). Not a defect.
+- **The `open_only` / AR path.** Untouched. The KG row that said the flag
+  was "unused" is stale — window 35's investigation found it wired. A
+  future KG tidy-up should correct that row.
+- **POC-2.** Still paused. The `all_tables` DB-reachability check for
+  `localhost:1521/FREEPDB1` was never run.
 
 ---
 
-## 9. Suggested next steps for the new window
+## 6. Next window's picks
 
-In order:
+In order of what a resuming window would most likely want:
 
-1. **Resolve the pod.** One curl, one grep (Section 6). Cheap, and every
-   comparison downstream depends on it.
-2. **Read `modes/m_open_invoices.sysprompt` and the AR `open_only` code
-   path.** This is the existing pattern for "show unpaid things." What
-   Spire builds for AP should look like what already works for AR.
-3. **Read the `po_status` vocabulary rows and their parser wiring.**
-   Endpoints reference line 321 said mirror `po_status`; read it first.
-4. **Capture the SME's answer to each of the five prompts.** Not by
-   asking an SME — by writing, in one paragraph per prompt, what the
-   correct answer would say. That becomes the acceptance criterion.
-5. **Only then** answer the four open design questions in Section 7.
-6. **Add Rule 28 to `WORKING_STYLE.md`** (and the S1 gloss) if the new
-   window agrees with the framing in Section 0. Both edits were
-   discussed and drafted but not made.
-
----
-
-## 10. Files and prior reading
-
-**This investigation's raw evidence:** all `t_*.txt` files in the repo
-root (Section 3.1), plus `run_20261008_223735.log` in the repo root or
-wherever it was placed by the caller.
-
-**Bundles read this window:**
-`parser_context`, `parser_planner`, `graph_kg`, `synthesizer`,
-`mcp_server_tools` (partial).
-
-**Key code paths to revisit:**
-- `src/spire/nl_parser/context/payables/*.sysprompt`
-- `src/spire/nl_parser/context/modes/m_open_invoices.sysprompt`
-- `src/spire/mcp_server/tools/invoices.py` (`search_invoices`)
-- `src/spire/planner/planner.py` (Invoice guard)
-- `src/spire/nl_parser/intent_validation.py` (Step 3)
-- `src/spire/nl_parser/capability.py` (`_FILTER_GUIDANCE`,
-  `_IDENTIFIER_GUIDANCE`)
-- `src/spire/synthesizer/p2p.py` (`InvoiceRecord`)
-- `src/spire/rendering/formatters.py` (InvoiceResponse branch)
-- `scripts/sql/kg_schema.sql` (`kg_entity_filter`, `kg_vocabulary`)
-
-**Key docs to revisit:**
-- `docs/reference/spire_fusion_endpoints_reference.md` (esp. lines
-  44, 321, 325, 1583, 1812)
-- `docs/prompts/SURFACE.md` (esp. §§2, 8, 10.2)
-- `prompts/refusals/exhaust.txt`
-- `prompts/retest/prompts.txt` (line ~85, the prior art)
-- `docs/plan/WORKING_STYLE.md` (pending Rule 28)
+1. **The HANDOFF update itself.** This document is what a next window
+   reads to know where it is. If it says the wrong thing, everything
+   downstream is wrong. Check it against `git log hardening-master-v3`
+   before starting new work.
+2. **The two residuals (§4)** — decide whether to file them or leave them
+   noted. If filing, they belong in `docs/fixes/FIXES.md` +
+   `docs/fixes/FIX_PLAN.md`.
+3. **The next prompt from round-one testing.** If the SME has found more
+   prompts that refuse or return wrong data, those are the priority.
+4. **The narration-quality work** for prompt 4's §2.4 shape — a
+   synthesizer-side change, not a Rule 28 defect, but it is what the
+   acceptance doc asks for.
+5. **`DueDate` as a column.** The tool projects it now; the KG's `Invoice`
+   field list does not carry it. A query like "show me the due dates for
+   Lee Supplies' invoices" would name it in `fields` and the KG field-split
+   would report it unresolved. One `kg_entity_field` row fixes it.
 
 ---
 
-*End of handoff.*
+## 7. Files and prior reading
+
+**Anchor docs:**
+- `docs/design/INVOICE_STATUS_ACCEPTANCE.md` — the acceptance criterion and
+  design shape for the five prompts. This window's authority on what is in
+  scope.
+- `docs/plan/WORKING_STYLE.md` — Rule 28 is the frame; Rule 15.3 is how
+  every edit in this window was delivered.
+
+**Evidence files (untracked, repo root):**
+- `t_invoice_status_sweep.txt`, `t_invoice_status_sweep_final.txt`,
+  `t_invoice_status_sweep_final2.txt` — the three sweeps.
+- `t_pr192_gate.txt` — the ten-suite merge gate.
+- `t_prompt4_rerun.txt` — the individual prompt-4 verification after the
+  `pending`-trigger guard landed.
+- `t_kg_rebuild.txt`, `t_kg_invoice_filters.txt`, `t_pod_check.txt` — the
+  rebuild evidence.
+- `prompts_ws35.txt` — the five prompts as a file.
+
+**Key code paths, for the next window:**
+- `src/spire/mcp_server/tools/invoices.py` — the tool; `search_invoices`,
+  `matches()`, the paged-fetch branch.
+- `src/spire/planner/planner.py` — the Invoice root guard (top of
+  `generate_plan`).
+- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — the
+  new block.
+- `src/spire/nl_parser/context_assembly.py` — the retained literal; block
+  count.
+- `scripts/sql/kg_schema.sql` — the three new `kg_entity_filter` rows.
+
+---
+
+*End of window-35 handoff.*
