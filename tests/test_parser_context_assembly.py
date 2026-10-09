@@ -31,7 +31,7 @@ _MANIFEST = _CONTEXT_DIR / "order.manifest"
 
 # The carve is fixed at 48 blocks for Phase 1 (design §4). A change to this
 # number is a deliberate re-carve and must update this expectation too.
-_EXPECTED_BLOCK_COUNT = 49
+_EXPECTED_BLOCK_COUNT = 50
 
 # Subdirectories of context/ that hold .sysprompt files which are NOT carve
 # blocks and are deliberately absent from order.manifest. Phase 2's router adds
