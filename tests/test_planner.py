@@ -1775,3 +1775,48 @@ def test_generate_plan_receipt_method_distribution_unscoped_is_pod_wide() -> Non
     assert len(plan) == 1
     assert plan[0].tool_name == "aggregate_standard_receipts_by_method"
     assert "customer_name" not in plan[0].tool_args
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Window 35: invoice-status roots
+#
+# unpaid / overdue / pending are now Invoice entity-level filters — each
+# one narrows below the full 53,198-row collection, so each is a valid
+# root reference on its own. Before this they refused as
+# missing_identifier (no supplier, no invoice number, no date bound).
+# See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4 and §5.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_invoice_unpaid_is_a_valid_root() -> None:
+    """unpaid satisfies the Invoice root guard without a supplier."""
+    intent = Intent(
+        target_entity="Invoice",
+        filters=[{"type": "unpaid", "value": True}],
+    )
+    plan = generate_plan(intent)
+    assert len(plan) == 1
+    assert plan[0].tool_name == "search_invoices"
+    assert plan[0].tool_args.get("unpaid") is True
+
+
+def test_invoice_overdue_is_a_valid_root() -> None:
+    intent = Intent(
+        target_entity="Invoice",
+        filters=[{"type": "overdue", "value": True}],
+    )
+    plan = generate_plan(intent)
+    assert len(plan) == 1
+    assert plan[0].tool_name == "search_invoices"
+    assert plan[0].tool_args.get("overdue") is True
+
+
+def test_invoice_pending_is_a_valid_root() -> None:
+    intent = Intent(
+        target_entity="Invoice",
+        filters=[{"type": "pending", "value": True}],
+    )
+    plan = generate_plan(intent)
+    assert len(plan) == 1
+    assert plan[0].tool_name == "search_invoices"
+    assert plan[0].tool_args.get("pending") is True
