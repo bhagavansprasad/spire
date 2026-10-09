@@ -33,7 +33,10 @@ from langgraph.graph import END, StateGraph
 
 from spire.executor.executor import execute_plan
 from spire.nl_parser.router import route_and_parse as parse_prompt
-from spire.nl_parser.prompt_intent_cache import get_intent, save_intent,get_cache_duration
+#redis cache
+from spire.nl_parser.redis_prompt_intent_cache import get_intent, save_intent
+#oracle
+#from spire.nl_parser.prompt_intent_cache import get_intent, save_intent,get_cache_duration
 from spire.planner.planner import generate_plan
 from spire.nl_parser.result import RefusalError
 from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
@@ -98,55 +101,86 @@ class GraphState(TypedDict, total=False):
 
 
 # ── Nodes ─────────────────────────────────────────────────────────────
-
-
+# REDIS CACHE
 def parse_node(state: GraphState) -> dict:
-    #print("[PARSE_NODE] START")
+    cached_intent = get_intent(state["prompt"])
 
-    duration = get_cache_duration()
-    if duration != -1:
-        cached_intent = get_intent(state["prompt"])
-        #print("[PARSE_NODE] CACHE CHECK DONE")
-
-        if cached_intent is not None:
-            #print("[PARSE_NODE] CACHE HIT - RETURNING")
-            return {
-                "_modules_got": None,
-                "intent": cached_intent,
-            }
-    # else:
-    #     print("[PARSE_NODE] CACHE DISABLED")
-
-    # print("[PARSE_NODE] CACHE MISS - CALLING PARSER")
+    if cached_intent is not None:
+        return {
+            "_modules_got": None,
+            "intent": cached_intent,
+        }
 
     result = parse_prompt(
         state["prompt"],
         menu=state["menu"],
     )
 
-    # Surface the classifier's module selection.
     out: dict = {
         "_modules_got": getattr(result, "modules", None)
     }
 
     if result.is_refusal:
         out["refusal"] = result.refusal
-
     else:
-        
-        if duration != -1:
-            # duration == 0 means cache forever.
-            cache_duration = None if duration == 0 else duration
-
-            save_intent(
-                state["prompt"],
-                result.intent,
-                cache_duration,
-            )
+        save_intent(
+            state["prompt"],
+            result.intent,
+            duration=172800,  # 2 days
+        )
 
         out["intent"] = result.intent
 
     return out
+
+#  NORMALL
+# def parse_node(state: GraphState) -> dict:
+#     #print("[PARSE_NODE] START")
+
+#     duration = get_cache_duration()
+#     if duration != -1:
+#         cached_intent = get_intent(state["prompt"])
+#         #print("[PARSE_NODE] CACHE CHECK DONE")
+
+#         if cached_intent is not None:
+#             #print("[PARSE_NODE] CACHE HIT - RETURNING")
+#             return {
+#                 "_modules_got": None,
+#                 "intent": cached_intent,
+#             }
+#     # else:
+#     #     print("[PARSE_NODE] CACHE DISABLED")
+
+#     # print("[PARSE_NODE] CACHE MISS - CALLING PARSER")
+
+#     result = parse_prompt(
+#         state["prompt"],
+#         menu=state["menu"],
+#     )
+
+#     # Surface the classifier's module selection.
+#     out: dict = {
+#         "_modules_got": getattr(result, "modules", None)
+#     }
+
+#     if result.is_refusal:
+#         out["refusal"] = result.refusal
+
+#     else:
+        
+#         if duration != -1:
+#             # duration == 0 means cache forever.
+#             cache_duration = None if duration == 0 else duration
+
+#             save_intent(
+#                 state["prompt"],
+#                 result.intent,
+#                 cache_duration,
+#             )
+
+#         out["intent"] = result.intent
+
+#     return out
 
 def plan_node(state: GraphState) -> dict:
     try:
