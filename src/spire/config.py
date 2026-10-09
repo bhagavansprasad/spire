@@ -97,7 +97,6 @@ _PORTS_FILE = Path(__file__).resolve().parents[2] / "SPIRE-PORTS.env"
 # Prompt cache configuration
 
 PROMPT_CACHE_DURATION = "2d"
-REDIS_CACHE_DURATION = "30s"
 
 def _read_ports_file() -> dict[str, str]:
     """Parse SPIRE-PORTS.env into a KEY -> value dict.
