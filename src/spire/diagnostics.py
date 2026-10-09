@@ -9,9 +9,10 @@ strip out. That is what UX-05 protects and what the REST interface in
 API-01 will need; every rule below follows from it.
 
 Diagnostics travel over the standard-library ``logging`` hierarchy, one
-logger per pipeline component under the ``spire.`` root. Six flags
-(OBS-01) switch six loggers between DEBUG and WARNING. Since these
-loggers only ever emit at DEBUG, WARNING means silence.
+logger per pipeline component under the ``spire.`` root. Seven flags
+switch seven loggers between DEBUG and WARNING — six named by OBS-01,
+plus ``show_sql`` added for the SQL Overlay POC. Since these loggers
+only ever emit at DEBUG, WARNING means silence.
 
 Two loggers are never gated. ``spire.progress`` and ``spire.summary``
 sit at INFO permanently: a ~16 second run needs progress feedback, and
@@ -86,7 +87,7 @@ from pydantic_settings import (
 
 ROOT_LOGGER = "spire"
 
-# The six OBS-01 flags and the logger each one controls.
+# The OBS-01 flags and the logger each one controls, plus `show_sql`.
 #
 # `tokens` and `timings` are cross-cutting rather than component-owned:
 # any part of the pipeline emits them, so they get their own logger
@@ -96,6 +97,12 @@ ROOT_LOGGER = "spire"
 # The `[llm] provider=... model=...` line from config.build_llm() rides
 # on `spire.tokens`: when you switch token reporting on, which model
 # produced those numbers is exactly the context you want beside them.
+#
+# `show_sql` is the SQL Overlay POC's projection of the Plan — one
+# deterministic Fusion-DB SQL string per Plan step, print-only. It sits
+# in this registry rather than as a bespoke flag so the standard
+# precedence chain (file / env / CLI / --show-all) applies to it like
+# every other diagnostic. See docs/design/SQL_OVERLAY_POC.md.
 FLAG_TO_LOGGER: dict[str, str] = {
     "show_parser": "spire.parser",
     "show_planner": "spire.planner",
@@ -103,6 +110,7 @@ FLAG_TO_LOGGER: dict[str, str] = {
     "show_synthesizer": "spire.synthesizer",
     "show_tokens": "spire.tokens",
     "show_timings": "spire.timings",
+    "show_sql": "spire.sql",
 }
 
 # Never gated, on at INFO for every run. Deliberately loggers rather
@@ -190,7 +198,7 @@ class PyprojectSettingsSource(PydanticBaseSettingsSource):
 
 
 class DiagnosticFlags(BaseSettings):
-    """The six OBS-01 verbosity flags, plus the ``show_all`` convenience.
+    """The diagnostic verbosity flags, plus the ``show_all`` convenience.
 
     Every one defaults to off. Those defaults are UX-05: an invocation
     that sets nothing prints the answer on stdout, progress and summary
@@ -220,8 +228,9 @@ class DiagnosticFlags(BaseSettings):
     show_synthesizer: bool = False
     show_tokens: bool = False
     show_timings: bool = False
+    show_sql: bool = False
 
-    # Turns the six above on. Settable in every layer, like any other
+    # Turns every flag above on. Settable in every layer, like any other
     # flag: a switch that worked on the command line but not in the
     # file would be a surprise needing a footnote, and would need
     # special-casing in each layer to enforce.
@@ -251,7 +260,7 @@ class DiagnosticFlags(BaseSettings):
         )
 
 
-# The six gated flags, without the convenience switch. Derived rather
+# The gated flags, without the convenience switch. Derived rather
 # than written out again, so it cannot drift from FLAG_TO_LOGGER.
 _GATED_FLAGS: tuple[str, ...] = tuple(FLAG_TO_LOGGER)
 
@@ -264,6 +273,7 @@ _FLAG_HELP: dict[str, str] = {
     "show_synthesizer": "response object prior to rendering",
     "show_tokens": "per-call and end-of-run token counts",
     "show_timings": "per-stage latency",
+    "show_sql": "deterministic Fusion-DB SQL projection of the plan",
 }
 
 
@@ -306,18 +316,23 @@ def validate_env_flag_names(environ: dict[str, str] | None = None) -> None:
 
 
 def _expand_show_all(flags: DiagnosticFlags) -> DiagnosticFlags:
-    """Apply ``show_all`` to any flag not set explicitly.
+    """Force every gated flag on when ``show_all`` is true.
 
-    Only to flags nobody named, which is what makes
-    ``--show-all --no-show-planner`` behave the way it reads: everything
-    on, except the planner. ``model_fields_set`` records which fields a
-    source actually supplied, as opposed to which took their default.
+    ``show_all`` is an OVERRIDE, not a default. If it is true, every
+    gated flag becomes true regardless of any explicit value in the
+    file, the environment, or the command line. An explicit
+    ``show_parser = false`` alongside ``show_all = true`` is therefore
+    ignored — the override wins.
+
+    The cost of that model: ``--show-all --no-show-planner`` no longer
+    means "everything except the planner"; it means "everything". Set
+    ``show_all = false`` and name the flags you want if a subset is
+    needed.
     """
     if not flags.show_all:
         return flags
-    explicit = flags.model_fields_set
-    updates = {name: True for name in _GATED_FLAGS if name not in explicit}
-    return flags.model_copy(update=updates) if updates else flags
+    updates = {name: True for name in _GATED_FLAGS}
+    return flags.model_copy(update=updates)
 
 
 def load_flags(**overrides: bool) -> DiagnosticFlags:

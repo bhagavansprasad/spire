@@ -79,16 +79,18 @@ For the procedural checklist that accompanies this file, see
 9. **PR-based merges always.** No local `git merge` into a long-lived
    branch. Push the branch, open a PR, merge the PR.
 
-10. **Integration branch is `hardening-master-v2`.** All phase branches
-    spawn off it and merge back via PR. The runtime clone pulls from
-    `hardening-master-v2`.
+10. **Integration branch is `master`.** All phase branches spawn off it
+    and merge back via PR. The runtime clone pulls from `master`.
 
-    **Nothing merges to `master` without explicit instruction from
-    the user.** Not a PR, not a fast-forward, not a one-off doc fix.
-    The only merge target is `hardening-master-v2`; the only merges are
-    PR branches into it. `master` stays where it was at the fork
-    point until the user says otherwise — and the user's word on
-    this is the only trigger.
+    No local merges into `master`; every change arrives via a PR. Do
+    not `git merge` a feature branch into `master` locally and push;
+    open the PR and merge it there.
+
+    (Until 2026-10-08 the integration branch was `hardening-master-v2`,
+    with `master` frozen at the fork point. That arrangement was
+    retired on 2026-10-08 when the SQL Overlay POC promoted to
+    `master` (PR #191, merge commit `3c4b208`). `hardening-master-v2`
+    is now a historical branch, left in place, not used for new work.)
 11. **Branch naming: `Phase{N}-{Descriptive}`.** Examples:
     `Phase1-Audit-and-Baseline`, `Phase2-Correctness-Fixes`. Not
     `phase-1`.

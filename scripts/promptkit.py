@@ -405,7 +405,12 @@ def _stage_report(prompt, exp_module, exp_tool, state: dict) -> dict:
 
 def _emit_run_graph_output(state, menu):
     """Emit the end-to-end answer + gated diagnostics exactly as run_graph.py,
-    using the same loggers/answer(). Honors pyproject.toml + --show-*."""
+    using the same loggers/answer(). Honors pyproject.toml + --show-*.
+
+    The SQL projection block rides the ``spire.sql`` diagnostic; enable
+    it with ``--show-sql`` (or the file / env layers). Print only, no
+    execution.
+    """
     from spire.diagnostics import answer, get_logger
     from spire.nl_parser.capability import capability_message
     from spire.rendering.formatters import (
@@ -419,6 +424,7 @@ def _emit_run_graph_output(state, menu):
     _executor_log = get_logger("executor")
     _tokens_log = get_logger("tokens")
     _summary_log = get_logger("summary")
+    _sql_log = get_logger("sql")
 
     def _block(log, text):
         log.debug("%s\n", text)
@@ -439,6 +445,8 @@ def _emit_run_graph_output(state, menu):
 
     _block(_parser_log, _format_intent(state["intent"]))
     _block(_planner_log, _format_plan(state["plan"]))
+    _block(_sql_log, _format_sql(state["plan"]))
+
     _outputs = state.get("outputs") or {}
     _display = state.get("projected_outputs") or _outputs
     _block(_executor_log, _format_outputs(_display))
@@ -455,6 +463,31 @@ def _emit_run_graph_output(state, menu):
     _summary_log.info("%s", _format_summary(state["plan"], _outputs,
                                             state.get("response")))
     _block(_tokens_log, usage_report())
+
+
+def _format_sql(plan):
+    """Format the Fusion-DB SQL projection of a Plan as a text block.
+
+    Print-only: no SQL is executed, no DB connection is opened. The
+    emitter is a pure function of (plan, overlay); see
+    src/spire/rendering/sql_emitter.py and docs/design/SQL_OVERLAY_POC.md.
+
+    Returns a string; the caller passes it to ``_block(_sql_log, ...)``
+    which is a no-op when the ``spire.sql`` diagnostic is off.
+    """
+    try:
+        from spire.rendering.sql_emitter import emit_sql as _emit_sql
+    except Exception as exc:  # noqa: BLE001
+        return f"[show-sql] emitter unavailable: {exc}"
+    if not plan:
+        return "SQL projection: (empty plan)"
+    statements = _emit_sql(plan)
+    parts = ["SQL projection:"]
+    for i, stmt in enumerate(statements, start=1):
+        if len(statements) > 1:
+            parts.append(f"\n[statement {i} of {len(statements)}]")
+        parts.append(stmt)
+    return "\n".join(parts)
 
 
 async def _run_one(prompt, menu, client):

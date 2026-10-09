@@ -138,13 +138,14 @@ def test_every_flag_defaults_to_off():
         assert getattr(flags, flag_name) is False, flag_name
 
 
-def test_the_six_obs01_flags_are_present_plus_show_all():
-    """OBS-01 names six. Two more were proposed and rejected — progress
-    and summary are always required, so neither is gated.
+def test_the_gated_flags_plus_show_all():
+    """OBS-01 names six; ``show_sql`` was added for the SQL Overlay POC.
+    Progress and summary were proposed and rejected — both are always
+    required, so neither is gated.
 
     ``show_all`` is the convenience switch OBS-01 permits. Guards
-    against a seventh *gated* flag appearing without the decision in the
-    status doc's register being revisited.
+    against another gated flag appearing without the decision being
+    revisited.
     """
     assert GATED == {
         "show_parser",
@@ -153,6 +154,7 @@ def test_the_six_obs01_flags_are_present_plus_show_all():
         "show_synthesizer",
         "show_tokens",
         "show_timings",
+        "show_sql",
     }
     assert set(DiagnosticFlags.model_fields) == GATED | {"show_all"}
 
@@ -390,19 +392,12 @@ def test_show_all_from_the_file(monkeypatch, tmp_path):
     for flag_name in GATED:
         assert getattr(flags, flag_name) is True, flag_name
 
-def test_show_all_in_the_file_does_nothing_when_every_key_is_spelled_out(
-    monkeypatch, tmp_path
-):
-    """A key written in the file counts as explicitly set.
+def test_show_all_overrides_explicit_false_in_the_file(monkeypatch, tmp_path):
+    """``show_all`` is an override, not a default.
 
-    That is what makes ``--show-all --no-show-planner`` mean "everything
-    except the planner" — so a file listing every key leaves show_all
-    with nothing to fill in. Correct, but surprising enough that the
-    committed pyproject.toml template was rewritten to comment its keys
-    out rather than set them all to false.
-
-    Pinned because the behaviour is deliberate and someone reading
-    _expand_show_all in isolation would be tempted to "fix" it.
+    A flag written false alongside ``show_all = true`` is overridden
+    to true. Set ``show_all = false`` and name the flags you want if
+    a subset is needed.
     """
     _write_pyproject(
         monkeypatch,
@@ -410,48 +405,37 @@ def test_show_all_in_the_file_does_nothing_when_every_key_is_spelled_out(
         DIAGNOSTICS_SECTION
         + "show_parser = false\n"
         + "show_planner = false\n"
-        + "show_tokens = true\n"
         + "show_all = true\n",
     )
     flags = load_flags()
 
-    assert flags.show_tokens is True
-    assert flags.show_parser is False
-    assert flags.show_planner is False
-
-
-def test_show_all_fills_only_the_keys_the_file_omits(monkeypatch, tmp_path):
-    _write_pyproject(
-        monkeypatch,
-        tmp_path,
-        DIAGNOSTICS_SECTION + "show_planner = false\nshow_all = true\n",
-    )
-    flags = load_flags()
-
-    assert flags.show_planner is False
     assert flags.show_parser is True
+    assert flags.show_planner is True
     assert flags.show_tokens is True
 
-def test_show_all_respects_an_explicit_negative():
-    """``--show-all --no-show-planner`` reads as "everything but the
-    planner", and behaves that way."""
+
+def test_show_all_overrides_an_explicit_negative_on_the_command_line():
+    """``--show-all`` wins over ``--no-show-X``.
+
+    The cost of override semantics: ``--show-all --no-show-planner``
+    no longer means "everything except the planner". It means
+    "everything". Use ``show_all = false`` and name the flags you want
+    if a subset is needed.
+    """
     flags = flags_from_args(_parse(["--show-all", "--no-show-planner"]))
 
-    assert flags.show_planner is False
+    assert flags.show_planner is True
     assert flags.show_parser is True
     assert flags.show_tokens is True
 
 
-def test_show_all_in_the_file_is_overridable_on_the_command_line(
-    monkeypatch, tmp_path
-):
-    _write_pyproject(
-        monkeypatch, tmp_path, DIAGNOSTICS_SECTION + "show_all = true\n"
-    )
-    flags = flags_from_args(_parse(["--no-show-raw-output"]))
+def test_show_all_overrides_an_env_layer_false(monkeypatch):
+    """Same override, environment layer."""
+    monkeypatch.setenv("SPIRE_SHOW_PLANNER", "0")
+    monkeypatch.setenv("SPIRE_SHOW_ALL", "1")
+    flags = load_flags()
 
-    assert flags.show_raw_output is False
-    assert flags.show_parser is True
+    assert flags.show_planner is True
 
 
 def test_show_all_is_order_independent():

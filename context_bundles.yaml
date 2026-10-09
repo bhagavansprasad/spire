@@ -29,6 +29,17 @@ bundles:
   - docs/fixes/FIX_PLAN.md
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
+  - docs/design/SQL_OVERLAY_POC.md
+  - docs/design/sql_overlay/EXTENDING.md
+  - docs/design/sql_overlay/POC2_SKETCH.md
+  - docs/design/sql_overlay/supplier_schema.csv
+  - docs/design/sql_overlay/acceptance/01.sql
+  - docs/design/sql_overlay/acceptance/02.sql
+  - docs/design/sql_overlay/acceptance/03.sql
+  - docs/design/sql_overlay/acceptance/04.sql
+  - docs/design/sql_overlay/acceptance/05.sql
+  - docs/design/sql_overlay/acceptance/plans_2026-10-07.txt
+  - docs/design/sql_overlay/acceptance/run_2026-10-07.log
   - docs/reference/spire_fusion_endpoints_reference.md
   - docs/reference/data/spire_tools_modules.xlsx
   - tests/spire_sme_validation_checklist.md
@@ -46,36 +57,40 @@ bundles:
   # ── the master plan + its append-only status log ──
   # This bundle is exactly what a new window needs to resume work.
   plan:
+  # Current state only. A resuming window reads this to know where it
+  # is and what to do next. Reference material (the master plan, the
+  # playbook, the endpoints reference) lives in `reference` and is
+  # loaded on demand — not read start to finish.
+  - docs/plan/HANDOFF.md
+  - docs/plan/WORKING_STYLE.md
+  - docs/plan/SESSION_STARTUP_CHECKLIST.md
+  - docs/fixes/FIX_PLAN.md
+  - docs/design/ARCHITECTURE.md
+  - docs/design/FEATURES.md
+  - docs/design/SQL_OVERLAY_POC.md
+
+  # ── reference material — consulted, not read through ──
+  # Loaded when a specific phase design, endpoint quirk, or fix
+  # procedure is being looked up. Grep, do not read whole.
+  reference:
+  - docs/plan/PLAN.md
+  - docs/fixes/FIXES.md
+  - docs/reference/spire_fusion_endpoints_reference.md
+
+  # ── the historical record ──
+  # Past sessions, findings, fixes, evidence, log-analysis runs.
+  # Never loaded as a first bundle; requested only when a specific
+  # record is being consulted. Rule for the split: does a resuming
+  # window need this to know where it is and what to do next? Yes
+  # -> plan. No -> history.
+  history:
   - docs/plan/Doc_B_Index.md
   - docs/plan/Phase_01_Audit_and_Baseline.md
   - docs/plan/Phase_02_Correctness.md
   - docs/plan/Phase_04_Structure.md
-  - docs/plan/PLAN.md
   - docs/plan/TEMPLATE_Session_Entry.md
-  - docs/plan/WORKING_STYLE.md
-  - docs/plan/SESSION_STARTUP_CHECKLIST.md
-  - docs/plan/HANDOFF.md
   - docs/audit/phase-1-audit.md
-  - docs/fixes/FIXES.md
   - docs/prompts/SURFACE.md
-  - docs/fixes/FIX_PLAN.md
-  - docs/fixes/evidence/F-003.txt
-  - docs/fixes/evidence/F-045.txt
-  - docs/fixes/evidence/Reg-30.txt
-  - docs/fixes/evidence/F-012-F036-F044.txt
-  - docs/fixes/evidence/F-044.txt
-  - docs/fixes/evidence/F-046-F047-F048.txt
-  - docs/fixes/evidence/F-049.txt
-  - docs/fixes/evidence/F-051.txt
-  - docs/audit/golden/count_suppliers.txt
-  - docs/audit/golden/po_2144_and_lines.txt
-  - docs/audit/golden/suppliers_with_open_pos.txt
-  - docs/reference/spire_fusion_endpoints_reference.md
-  - docs/design/ARCHITECTURE.md
-  - docs/audit/log_analysis/_plan.md
-  - docs/audit/log_analysis/_generalization_plan.md
-  - docs/audit/log_analysis/20260925_150333/RUN.md
-  - docs/audit/log_analysis/20260925_150333/_candidates.md
   - docs/audit/findings/README.md
   - docs/audit/findings/F-052.md
   - docs/audit/findings/F-053.md
@@ -83,9 +98,27 @@ bundles:
   - docs/audit/findings/F-055.md
   - docs/audit/findings/F-056.md
   - docs/audit/findings/F-057.md
+  - docs/audit/findings/F-058.md
+  - docs/audit/findings/F-059.md
   - docs/phase-2/fixes/F-053.md
   - docs/phase-2/fixes/F-055.md
   - docs/phase-2/fixes/F-056.md
+  - docs/phase-2/fixes/F-058.md
+  - docs/fixes/evidence/F-003.txt
+  - docs/fixes/evidence/F-012-F036-F044.txt
+  - docs/fixes/evidence/F-044.txt
+  - docs/fixes/evidence/F-045.txt
+  - docs/fixes/evidence/F-046-F047-F048.txt
+  - docs/fixes/evidence/F-049.txt
+  - docs/fixes/evidence/F-051.txt
+  - docs/fixes/evidence/Reg-30.txt
+  - docs/audit/golden/count_suppliers.txt
+  - docs/audit/golden/po_2144_and_lines.txt
+  - docs/audit/golden/suppliers_with_open_pos.txt
+  - docs/audit/log_analysis/_plan.md
+  - docs/audit/log_analysis/_generalization_plan.md
+  - docs/audit/log_analysis/20260925_150333/RUN.md
+  - docs/audit/log_analysis/20260925_150333/_candidates.md
   - docs/audit/log_analysis/20260925_150333/_index.md
   - docs/audit/log_analysis/20260925_150333/_action_items.md
   - docs/audit/log_analysis/20260925_150333/_touched.md
@@ -106,7 +139,6 @@ bundles:
   - docs/audit/log_analysis/20260925_150333/refusals.md
   - docs/audit/log_analysis/20260925_150333/supplier.md
   - docs/audit/log_analysis/20260925_150333/truncation.md
-  - docs/design/FEATURES.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
   - prompts/supplier/smoke.txt
@@ -164,6 +196,9 @@ bundles:
   - prompts/refusals/refusal_examples.txt
   # External corpus — verbatim, no tier.
   - prompts/sme/testcases.txt
+  - prompts/sample_prompts.txt
+  - prompts/release_gate/baseline.md
+  - prompts/release_gate/litmus.txt
   # Scorer corpus — different format, different runner.
   - prompts/scorer/parser_stress.txt
   - prompts/scorer/tool_selection.txt
@@ -234,6 +269,7 @@ bundles:
   # promptkit — the current test tooling (supersedes run_overnight/overnight_sets)
   - scripts/promptkit.py
   - scripts/manifests/promptkit_sets.yaml
+  - scripts/manifests/release_gate.yaml
   - scripts/manifests/smoke_sets.yaml
   - scripts/manifests/verify_sets.yaml
   - scripts/manifests/exhaust_sets.yaml
@@ -263,6 +299,7 @@ bundles:
   - src/spire/fusion/client.py
   - src/spire/graph/pipeline.py
   - src/spire/kg/loader.py
+  - src/spire/kg/sql_overlay.py
   - src/spire/agent/lg_utility.py
   - src/spire/agent/prompts.py
   - src/spire/agent/runner.py
@@ -400,6 +437,7 @@ bundles:
   - src/spire/synthesizer/response_validation.py
   - src/spire/synthesizer/lifecycle.py
   - src/spire/rendering/formatters.py
+  - src/spire/rendering/sql_emitter.py
   - src/spire/graph/pipeline.py
   - tests/test_synthesizer_aggregation.py
   - tests/test_synthesizer_supplier_records.py
@@ -512,6 +550,10 @@ bundles:
   - tests/test_f055_days_conversion.py
   # F-056 added 2026-09-28 (window 25).
   - tests/test_f056_supplier_pos_buyers.py
+  # Window 28: bundle-manifest tripwire (checks this very file).
+  - tests/test_bundle_manifest.py
+  - tests/test_f058_period_bounds.py
+  - tests/test_sql_emitter.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
@@ -540,6 +582,7 @@ excludes:
 - '*.svg'
 - '*.png'
 - '*.pdf'
+- '*.docx'
 - context_out
 - context_out/*
 - docs/archive/*
