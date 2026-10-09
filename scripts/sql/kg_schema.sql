@@ -1526,6 +1526,19 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Resolve a customer account by exact AccountNumber via q=AccountNumber=''...''. Confirmed queryable on this endpoint (2026-09-23: q=AccountNumber=''25750'' returns AccountId 300000047368542, CustomerName ABC Corporation Worldwide). The numeric sibling of by_customer_name: a bare account number is an identifier, not a name, and must resolve here.'
 );
 
-PROMPT Seeded kg_entity_filter (34 rows).
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'unpaid', 'entity_level', 'unpaid', NULL, NULL, NULL, NULL, NULL, 'server_q', 'PaidStatus', 'equals',
+  'Invoices not yet fully paid. Server clause: q=PaidStatus=''Unpaid''. The tool also keeps ''Partially paid'' client-side over an over-fetch, so the answer covers both spellings of "not settled". See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.2.'
+);
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'overdue', 'entity_level', 'overdue', NULL, NULL, NULL, NULL, NULL, 'server_q', 'PaidStatus', 'equals',
+  'Invoices past their due date and not yet paid. Compound predicate: server clause q=PaidStatus=''Unpaid'' plus a client-side DueDate < today test inside the tool. No Overdue field exists on the pod. See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.3.'
+);
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'Invoice', 'pending', 'entity_level', 'pending', NULL, NULL, NULL, NULL, NULL, 'server_q', 'ApprovalStatus', 'equals',
+  'Invoices pending approval, the default reading of "pending" in AP. Server clause q=ApprovalStatus=''Required''. The answer must disclose the reading and name the alternative (pending control check, pending payment). See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.1.'
+);
+
+PROMPT Seeded kg_entity_filter (37 rows).
 
 -- ============================================================
