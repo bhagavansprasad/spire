@@ -304,17 +304,79 @@ async def test_search_invoices_unpaid_total_includes_partials():
 
 
 @pytest.mark.asyncio
-async def test_search_invoices_overdue_reports_unknown_total_not_wrong_number():
-    """'overdue' must not report the full Unpaid count as its total.
+async def test_search_invoices_overdue_reports_honest_total():
+    """'overdue' reports the true intersection count, not a
+    plausible-looking wrong number.
 
-    overdue is a strict subset of Unpaid (an extra DueDate < today
-    test). Without a full scan the intersection count is unknowable, so
-    the tool reports total_available=None. Guards the wrong-number
-    narration the sweep surfaced.
+    overdue = PaidStatus != 'Paid' AND DueDate < today. The previous
+    version reported the server-clause count (PaidStatus='Unpaid') as
+    the overdue total, which overstated it. The paged fetch counts the
+    full intersection, so the total is a real integer — and every
+    returned row is non-Paid and past due.
     """
     persona = load_persona("default_dev")
     async with FusionClient(persona) as client:
         result = await search_invoices(client, overdue=True, limit=5)
     assert isinstance(result, ToolResult)
-    assert result.total_available is None
-    assert result.truncated is True
+    assert result.total_available is not None
+    assert result.total_available >= len(result.items)
+    for item in result.items:
+        assert item["PaidStatus"] != "Paid"
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_unpaid_with_supplier_filters_correctly():
+    """unpaid + supplier_number must filter by BOTH.
+
+    Before the fix, the supplier clause took the single server slot and
+    matches() never checked PaidStatus, so Paid invoices for that supplier
+    leaked into the 'unpaid' answer. Wrong rows returned, not just a
+    wrong count.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client, supplier_number="1252", unpaid=True, limit=20
+        )
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["SupplierNumber"] == "1252"
+        assert item["PaidStatus"] in ("Unpaid", "Partially paid")
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_unpaid_with_supplier_reports_honest_total():
+    """A compound 'unpaid + supplier' query reports an integer total.
+
+    Before the fix this compound reported total_available=None (the
+    overfetch cap). The paged fetch sees every one of the supplier's
+    invoices and the count is the filtered length.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client, supplier_number="1252", unpaid=True, limit=5
+        )
+    assert isinstance(result, ToolResult)
+    assert result.total_available is not None
+    assert result.total_available >= len(result.items)
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_pending_with_date_reports_honest_total():
+    """pending + invoice_date_before reports an integer count.
+
+    Acceptance test for §2.5 — 'pending for a long time' must name the
+    reading AND give a count. Before the fix, the compound used the
+    single-page overfetch and reported 'unknown'.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(
+            client, pending=True, invoice_date_before="2026-01-01", limit=5
+        )
+    assert isinstance(result, ToolResult)
+    assert result.total_available is not None
+    assert result.total_available >= len(result.items)
+    for item in result.items:
+        assert item["ApprovalStatus"] == "Required"

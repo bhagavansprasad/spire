@@ -40,6 +40,7 @@ Filters supported:
 from datetime import date
 
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 from spire.mcp_server.tools.tool_result import ToolResult
 
 
@@ -178,17 +179,44 @@ async def search_invoices(
     if server_clause:
         params["q"] = server_clause
 
-    response = await client.get(INVOICES_PATH, params=params)
-    items = list(response.get("items", []))
+    # When any client-side filtering runs on top of the server clause,
+    # the tool needs the FULL server-clause set to report an honest
+    # count for the filtered result. A single-page overfetch sees at
+    # most OVERFETCH_LIMIT rows and can miss matches beyond that
+    # window (this is the 'pending for a long time' case, whose total
+    # was previously reported as 'unknown'). Page the server clause
+    # to exhaustion when the server clause is available; the plain
+    # overfetch is the fallback for the no-server-clause case
+    # (amount-only filters).
+    fetch_truncated = False
+    if needs_client_filter and server_clause:
+        items, hit_page_cap, _ = await page_all(
+            client,
+            INVOICES_PATH,
+            "search_invoices",
+            server_clause=server_clause,
+            page_size=500,
+            max_pages=30,
+        )
+        fetch_truncated = hit_page_cap
+    else:
+        response = await client.get(INVOICES_PATH, params=params)
+        items = list(response.get("items", []))
+        if needs_client_filter:
+            fetch_truncated = len(items) >= OVERFETCH_LIMIT
 
-    # 'unpaid' means 'not fully settled', which includes the pod's
-    # 'Partially paid' rows. Composite q= is unreliable on this pod,
-    # so the two statuses ride as two single-clause calls and are
-    # merged. Only when 'unpaid' is set on its own — 'overdue'
-    # deliberately excludes partials (see module docstring).
-    if unpaid and not overdue:
-        partial_params = dict(params)
-        partial_params["q"] = "PaidStatus='Partially paid'"
+    # 'unpaid' alone: the semantic is the union of Unpaid + Partially
+    # paid. Composite q= is unreliable on this pod, so the two
+    # statuses ride as two single-clause calls and their rows merge.
+    # Composed cases (unpaid + supplier) take the paged path above;
+    # the paged fetch already carries that supplier's partials, so
+    # this second call is scoped to the 'unpaid alone' case.
+    if unpaid and not overdue and not needs_client_filter:
+        partial_params = {
+            "limit": OVERFETCH_LIMIT,
+            "q": "PaidStatus='Partially paid'",
+            "onlyData": "true",
+        }
         partial_response = await client.get(
             INVOICES_PATH, params=partial_params
         )
@@ -216,10 +244,16 @@ async def search_invoices(
                 return False
             if amount_max is not None and amt > amount_max:
                 return False
+        if unpaid and item.get("PaidStatus") not in ("Unpaid", "Partially paid"):
+            return False
         if overdue:
+            if item.get("PaidStatus") == "Paid":
+                return False
             due = item.get("DueDate") or ""
             if due >= date.today().isoformat():
                 return False
+        if pending and item.get("ApprovalStatus") != "Required":
+            return False
         return True
 
     filtered = [item for item in items if matches(item)]
@@ -232,7 +266,7 @@ async def search_invoices(
     # clauses' totals — the answer's headline count must include the
     # partials the rows already carry. Only fires when the partials
     # merge actually ran (server clause is the Unpaid clause).
-    if unpaid and not overdue:
+    if unpaid and not overdue and not needs_client_filter:
         t_unpaid = await client.total_results(
             INVOICES_PATH, "PaidStatus='Unpaid'"
         )
@@ -248,31 +282,32 @@ async def search_invoices(
 
     # ---- Determine total_available and truncated ----
     #
-    # Three cases:
+    # Two paths:
     #
-    # 1. Composite filter, server overfetch hit OVERFETCH_LIMIT:
-    #    The server clause matched more than we examined; we may have
-    #    missed records that would satisfy the full filter. We know
-    #    truncation occurred but can't compute the true total.
+    # 1. Client-side filtering ran. The fetch was paged (above) to
+    #    exhaustion or the page cap, so len(filtered) is the honest
+    #    count of the fully-filtered set — unless the page cap fired,
+    #    in which case the answer says 'unknown' rather than a
+    #    plausible-looking wrong number.
     #
-    # 2. Result is full at the client-side cap (len(final) == limit) AND
-    #    no composite filtering happened:
-    #    Single server-side filter, capped at limit. A cheap totalResults
-    #    call gives the authoritative count.
-    #
-    # 3. Otherwise:
-    #    We have every record that matches. total_available is len(filtered);
-    #    truncated is False.
+    # 2. No client-side filtering. Single server clause; a cheap
+    #    totalResults call gives the authoritative count.
 
-    if needs_client_filter and len(items) >= OVERFETCH_LIMIT:
-        return ToolResult(
+    if needs_client_filter:
+        if fetch_truncated:
+            return ToolResult(
+                items=projected,
+                total_available=None,
+                limit_applied=limit,
+                truncated=True,
+            )
+        return ToolResult.build(
             items=projected,
-            total_available=None,
             limit_applied=limit,
-            truncated=True,
+            total_available=len(filtered),
         )
 
-    if not needs_client_filter and len(final_items) >= limit:
+    if len(final_items) >= limit:
         total = await client.total_results(INVOICES_PATH, server_clause)
         return ToolResult.build(
             items=projected,
