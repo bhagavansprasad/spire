@@ -275,3 +275,46 @@ async def test_search_invoices_projects_due_date():
     assert isinstance(result, ToolResult)
     for item in result.items:
         assert "DueDate" in item
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_unpaid_total_includes_partials():
+    """The 'unpaid' total is the union of Unpaid + Partially paid.
+
+    Two single-clause fetches merge their rows; the reported total must
+    cover the union, not just the server clause. On this pod there are a
+    handful of Partially paid rows (9 as of window 34), so the union
+    total must exceed the PaidStatus='Unpaid' count alone. Guards the
+    undercount the sweep first surfaced.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, unpaid=True, limit=5)
+        raw_unpaid = await client.total_results(
+            "/fscmRestApi/resources/11.13.18.05/invoices",
+            "PaidStatus='Unpaid'",
+        )
+    assert isinstance(result, ToolResult)
+    assert result.total_available is not None
+    assert raw_unpaid is not None
+    assert result.total_available > raw_unpaid, (
+        f"unpaid total {result.total_available} should exceed the "
+        f"Unpaid-only count {raw_unpaid} by the Partially paid count"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_overdue_reports_unknown_total_not_wrong_number():
+    """'overdue' must not report the full Unpaid count as its total.
+
+    overdue is a strict subset of Unpaid (an extra DueDate < today
+    test). Without a full scan the intersection count is unknowable, so
+    the tool reports total_available=None. Guards the wrong-number
+    narration the sweep surfaced.
+    """
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, overdue=True, limit=5)
+    assert isinstance(result, ToolResult)
+    assert result.total_available is None
+    assert result.truncated is True

@@ -152,7 +152,11 @@ async def search_invoices(
         server_clause = f"InvoiceDate >= '{invoice_date_after}'"
 
     # Over-fetch if we'll be filtering further; otherwise use limit directly.
-    needs_client_filter = sum(
+    # 'overdue' is a compound predicate whose date half runs client-side,
+    # so the fetch MUST over-fetch — a single-clause 'not needs_client_filter'
+    # path would report the unfiltered PaidStatus='Unpaid' count as if it
+    # were the overdue count. Force the overfetch path when overdue is set.
+    needs_client_filter = overdue or sum(
         bool(x)
         for x in (
             invoice_number,
@@ -221,6 +225,26 @@ async def search_invoices(
     filtered = [item for item in items if matches(item)]
     final_items = filtered[:limit]
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in final_items]
+
+    # 'unpaid' is the union of Unpaid + Partially paid, fetched as two
+    # single-clause calls and merged above. The server-clause total
+    # alone underreports the union (it counts only Unpaid), so sum both
+    # clauses' totals — the answer's headline count must include the
+    # partials the rows already carry. Only fires when the partials
+    # merge actually ran (server clause is the Unpaid clause).
+    if unpaid and not overdue:
+        t_unpaid = await client.total_results(
+            INVOICES_PATH, "PaidStatus='Unpaid'"
+        )
+        t_partial = await client.total_results(
+            INVOICES_PATH, "PaidStatus='Partially paid'"
+        )
+        if t_unpaid is not None and t_partial is not None:
+            return ToolResult.build(
+                items=projected,
+                limit_applied=limit,
+                total_available=t_unpaid + t_partial,
+            )
 
     # ---- Determine total_available and truncated ----
     #
