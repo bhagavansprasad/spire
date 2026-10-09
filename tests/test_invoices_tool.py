@@ -214,3 +214,64 @@ async def test_purchase_order_filter_wins_server_clause():
     for item in result.items:
         assert item["PurchaseOrderNumber"] == "162034"
         assert "Lee" in (item.get("Supplier") or "")
+
+
+# ── Window 35: invoice_status filters ──
+#
+# unpaid / overdue / pending ride as server-side single clauses (composite
+# q= is unreliable on this pod). unpaid also runs a second single-clause
+# call for PaidStatus='Partially paid' and merges, so "not settled" covers
+# both spellings. overdue is Unpaid-only and adds a client-side DueDate
+# test. pending is ApprovalStatus='Required', the default AP reading.
+# See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_unpaid_filter():
+    """unpaid keeps Unpaid and Partially paid rows; every row is one of them."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, unpaid=True, limit=20)
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["PaidStatus"] in ("Unpaid", "Partially paid")
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_overdue_filter():
+    """overdue keeps only non-Paid rows whose DueDate is strictly before today.
+
+    Partially paid rows are outside this reading — see the tool docstring.
+    Every returned row must be non-Paid AND past due.
+    """
+    from datetime import date as _date
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, overdue=True, limit=20)
+    assert isinstance(result, ToolResult)
+    today = _date.today().isoformat()
+    for item in result.items:
+        assert item["PaidStatus"] != "Paid"
+        assert (item.get("DueDate") or "") < today
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_pending_filter():
+    """pending keeps ApprovalStatus=Required rows — the default reading."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, pending=True, limit=20)
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert item["ApprovalStatus"] == "Required"
+
+
+@pytest.mark.asyncio
+async def test_search_invoices_projects_due_date():
+    """DueDate is in the projection so the overdue filter has a field to read."""
+    persona = load_persona("default_dev")
+    async with FusionClient(persona) as client:
+        result = await search_invoices(client, supplier_number="1252", limit=5)
+    assert isinstance(result, ToolResult)
+    for item in result.items:
+        assert "DueDate" in item
