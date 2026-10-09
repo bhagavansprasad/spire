@@ -259,7 +259,7 @@ A bug is a harm. Pick exactly one:
   - wrong data returned
   - wrong narration (data right, words wrong)
   - crash
-  - refusal of an in-scope prompt
+  - refusal of an in-scope prompt (Rule 28 — "in-scope" means an SME could answer it)
   - silent omission
   - cost regression (extra calls, tokens)
   - inconsistency between two paths
@@ -468,6 +468,23 @@ was skipped.
     the next task's commands. The user should never have to ask
     "what's next?"; that question is answered proactively.
 
+28. **The SME test — an SME-answerable refusal is a defect.** When Spire
+    refuses a prompt, the first question is not "is the prompt
+    well-formed?" and not "does this capability exist today?" It is:
+    could a Fusion SME, given this prompt and read access to Fusion,
+    produce an answer? If yes, the prompt is answerable, and Spire's
+    refusal is a defect — not a coverage gap, not a narrowing of scope,
+    not an observation, not "the user asked the wrong thing."
+
+    Descriptions of the gap — no vocabulary, no parameter, no tool
+    binding, outside this POC's scope — describe the defect. They never
+    excuse it.
+
+    This governs S1. "In-scope" there means an SME could answer it, not
+    Spire supports it today. An SME-answerable refusal passes S1 as
+    "refusal of an in-scope prompt", and the capability gap that caused
+    the refusal is the finding's root cause.
+    
 ---
 
 ## Log analysis — reading, classifying, recording
