@@ -68,6 +68,7 @@ bundles:
   - docs/design/ARCHITECTURE.md
   - docs/design/FEATURES.md
   - docs/design/SQL_OVERLAY_POC.md
+  - docs/design/INVOICE_STATUS_ACCEPTANCE.md
 
   # ── reference material — consulted, not read through ──
   # Loaded when a specific phase design, endpoint quirk, or fix
@@ -386,6 +387,7 @@ bundles:
   - src/spire/nl_parser/context/modes/m_open_invoices.sysprompt
   - src/spire/nl_parser/context/modes/m_topn_open_invoices.sysprompt
   - src/spire/nl_parser/context/payables/b_invoice_amount.sysprompt
+  - src/spire/nl_parser/context/payables/b_invoice_status.sysprompt
   - src/spire/nl_parser/context/payables/b_invoice_date.sysprompt
   - src/spire/nl_parser/context/payables/b_invoices_for_po.sysprompt
   - src/spire/nl_parser/context/payables/b_invoices_for_supplier.sysprompt

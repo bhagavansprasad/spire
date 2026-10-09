@@ -136,6 +136,9 @@ def generate_plan(
                 "invoice_date",
                 "older_than_n_months",
                 "created_in_last_n_months",
+                "unpaid",
+                "overdue",
+                "pending",
             )
             for f in intent.filters
         )

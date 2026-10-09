@@ -12,6 +12,7 @@ supplier/b_created_date.sysprompt
 payables/b_invoices_for_supplier.sysprompt
 payables/b_invoice_date.sysprompt
 payables/b_invoice_amount.sysprompt
+payables/b_invoice_status.sysprompt
 supplier/b_addresses.sysprompt
 procurement/b_buyer_include.sysprompt
 procurement/b_po_supplier_details.sysprompt
