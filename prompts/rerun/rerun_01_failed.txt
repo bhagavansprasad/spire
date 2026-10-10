@@ -1,0 +1,63 @@
+account balance for ABC Corporation Americas
+Display the supplier name, supplier ID, business unit, currency, and creation date for purchase order 2144.
+Find all purchase orders created by buyer John Smith.
+Find customer accounts matching a given name.
+Find PO schedules with delivery dates in the next 30 days.
+Get the AR invoice with CustomerTransactionId 300000248096352
+Give me an overview of our purchase orders for the current period.
+Give me an overview of our supplier information.
+Give me an overview of supplier invoice activity.
+Give me sum of total value of purchase orders created between october 1, 2026, and October 8, 2026.
+Identify high-value purchase orders that are still pending approval.
+Search for purchase orders placed with supplier 'EIP Inc'.
+Show me the details of a supplier invoice.
+Show me the details of customer transactions.
+Show me the latest supplier transactions.
+Show me the top 10 purchase orders by total value.
+Show PO 2144 with its supplier, business unit, currency, and creation date.
+Show the details of a customer transaction by transaction number.
+supplier sites for Lee Supplies
+What information is available for a particular supplier?
+What is the combined total value of PO 2144 and PO 2145?
+What is the total value of purchase orders created this quarter?
+What purchase orders were recently created?
+Which business units are generating the highest purchase order spend?
+Which business units are generating the highest purchase order spend? 
+Who are our top buyers based on purchase order value?
+invoices
+purchase orders
+show me contract renewals due next quarter
+show me purchase order line items
+who should we stop buying from
+invoices
+count of invoices
+suppliers with net 30 payment terms
+show me contract renewals due next quarter
+suppliers with net 30 payment terms
+which suppliers have the best rating
+suppliers with the highest quality score
+who should we stop buying from
+show me purchase order line items
+invoices
+show me contract renewals
+count of AR invoices
+List all open invoices for the customer, top 5
+Get tax lines for that invoice line
+Fetch descriptive flexfield (DFF) values for this invoice.
+For that PO, how much has actually been received versus ordered
+Show invoices
+invoices for US1 Business Unit
+get account receivables transactions
+get transaction number
+Get Supplier contacts
+Get standardReceipts
+Trace receipt applications for this account
+Verify a newly created AR invoice
+Get the most recent standard receipts
+Identify cash collection trends over the period - volume average receipt size and month-over-month movement
+Summarise receipt volume and value by month
+Summarise receipt volume and value by month for account 25750
+total invoiced by supplier
+show lines for invoice number LEE-01-1006-111
+Show account activity summary for top accounts
+Get all credit memos for account 300000047368512
