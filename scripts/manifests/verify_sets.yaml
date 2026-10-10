@@ -11,20 +11,20 @@
 # Split of promptkit_sets.yaml: smoke=16, verify=17, exhaust=18.
 
 sets:
-  - dipstick/verify
-  - supplier/verify
-  - payables/verify
-  - procurement/verify
-  - receivables/verify
-  - payables_supplier/verify
-  - payables_procurement/verify
-  - procurement_supplier/verify
-  - columns/verify
-  - refusals/verify
-  - lifecycle/verify
-  - child_as_root/verify
-  - truncation/verify
-  - date_filters/verify
-  - fields_and_include/verify
-  - modes/verify
-  - sme/testcases
+  - dipstick/dipstick_verify
+  - supplier/supplier_verify
+  - payables/payables_verify
+  - procurement/procurement_verify
+  - receivables/receivables_verify
+  - payables_supplier/payables_supplier_verify
+  - payables_procurement/payables_procurement_verify
+  - procurement_supplier/procurement_supplier_verify
+  - columns/columns_verify
+  - refusals/refusals_verify
+  - lifecycle/lifecycle_verify
+  - child_as_root/child_as_root_verify
+  - truncation/truncation_verify
+  - date_filters/date_filters_verify
+  - fields_and_include/fields_and_include_verify
+  - modes/modes_verify
+  - sme/sme_testcases

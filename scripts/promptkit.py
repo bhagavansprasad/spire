@@ -37,7 +37,7 @@ Examples:
     python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
     python scripts/promptkit.py --run --prompt "List suppliers in India" \
                                             "Show open POs for supplier 2144"
-    python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+    python scripts/promptkit.py --run --prompt-file prompts/supplier/supplier_smoke.txt
     python scripts/promptkit.py --run --prompt-file a.txt b.txt
     python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
     python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
@@ -70,8 +70,8 @@ from spire.config import mcp_server_url, reset_usage, usage_report
 # Defaults
 # ==========================================================================
 
-# Per-set timeout for --manifest batch mode, in seconds. Four hours.
-DEFAULT_SET_TIMEOUT = 14400
+# Per-set timeout for --manifest batch mode, in seconds. 8 hours.
+DEFAULT_SET_TIMEOUT = 28800
 
 
 # ==========================================================================

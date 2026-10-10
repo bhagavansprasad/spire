@@ -142,90 +142,90 @@ bundles:
   - docs/audit/log_analysis/20260925_150333/truncation.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
-  - prompts/supplier/smoke.txt
-  - prompts/supplier/verify.txt
-  - prompts/supplier/exhaust.txt
-  - prompts/payables/smoke.txt
-  - prompts/payables/verify.txt
-  - prompts/payables/exhaust.txt
-  - prompts/procurement/smoke.txt
-  - prompts/procurement/verify.txt
-  - prompts/procurement/exhaust.txt
-  - prompts/receivables/smoke.txt
-  - prompts/receivables/verify.txt
-  - prompts/receivables/exhaust.txt
+  - prompts/supplier/supplier_smoke.txt
+  - prompts/supplier/supplier_verify.txt
+  - prompts/supplier/supplier_exhaust.txt
+  - prompts/payables/payables_smoke.txt
+  - prompts/payables/payables_verify.txt
+  - prompts/payables/payables_exhaust.txt
+  - prompts/procurement/procurement_smoke.txt
+  - prompts/procurement/procurement_verify.txt
+  - prompts/procurement/procurement_exhaust.txt
+  - prompts/receivables/receivables_smoke.txt
+  - prompts/receivables/receivables_verify.txt
+  - prompts/receivables/receivables_exhaust.txt
   # Combination folders — cross-module capabilities.
-  - prompts/payables_supplier/smoke.txt
-  - prompts/payables_supplier/verify.txt
-  - prompts/payables_supplier/exhaust.txt
-  - prompts/payables_procurement/smoke.txt
-  - prompts/payables_procurement/verify.txt
-  - prompts/payables_procurement/exhaust.txt
-  - prompts/procurement_supplier/smoke.txt
-  - prompts/procurement_supplier/verify.txt
-  - prompts/procurement_supplier/exhaust.txt
+  - prompts/payables_supplier/payables_supplier_smoke.txt
+  - prompts/payables_supplier/payables_supplier_verify.txt
+  - prompts/payables_supplier/payables_supplier_exhaust.txt
+  - prompts/payables_procurement/payables_procurement_smoke.txt
+  - prompts/payables_procurement/payables_procurement_verify.txt
+  - prompts/payables_procurement/payables_procurement_exhaust.txt
+  - prompts/procurement_supplier/procurement_supplier_smoke.txt
+  - prompts/procurement_supplier/procurement_supplier_verify.txt
+  - prompts/procurement_supplier/procurement_supplier_exhaust.txt
   # Cross-cutting features — flat tier-prefixed files at the prompts/ root.
-  - prompts/dipstick/smoke.txt
-  - prompts/dipstick/verify.txt
-  - prompts/dipstick/exhaust.txt
-  - prompts/lifecycle/smoke.txt
-  - prompts/lifecycle/verify.txt
-  - prompts/lifecycle/exhaust.txt
-  - prompts/columns/smoke.txt
-  - prompts/columns/verify.txt
-  - prompts/columns/exhaust.txt
-  - prompts/refusals/smoke.txt
-  - prompts/refusals/verify.txt
-  - prompts/refusals/exhaust.txt
-  - prompts/child_as_root/smoke.txt
-  - prompts/child_as_root/verify.txt
-  - prompts/child_as_root/exhaust.txt
-  - prompts/truncation/smoke.txt
-  - prompts/truncation/verify.txt
-  - prompts/truncation/exhaust.txt
-  - prompts/date_filters/smoke.txt
-  - prompts/date_filters/verify.txt
-  - prompts/date_filters/exhaust.txt
-  - prompts/fields_and_include/smoke.txt
-  - prompts/fields_and_include/verify.txt
-  - prompts/fields_and_include/exhaust.txt
-  - prompts/modes/smoke.txt
-  - prompts/modes/verify.txt
-  - prompts/modes/exhaust.txt
+  - prompts/dipstick/dipstick_smoke.txt
+  - prompts/dipstick/dipstick_verify.txt
+  - prompts/dipstick/dipstick_exhaust.txt
+  - prompts/lifecycle/lifecycle_smoke.txt
+  - prompts/lifecycle/lifecycle_verify.txt
+  - prompts/lifecycle/lifecycle_exhaust.txt
+  - prompts/columns/columns_smoke.txt
+  - prompts/columns/columns_verify.txt
+  - prompts/columns/columns_exhaust.txt
+  - prompts/refusals/refusals_smoke.txt
+  - prompts/refusals/refusals_verify.txt
+  - prompts/refusals/refusals_exhaust.txt
+  - prompts/child_as_root/child_as_root_smoke.txt
+  - prompts/child_as_root/child_as_root_verify.txt
+  - prompts/child_as_root/child_as_root_exhaust.txt
+  - prompts/truncation/truncation_smoke.txt
+  - prompts/truncation/truncation_verify.txt
+  - prompts/truncation/truncation_exhaust.txt
+  - prompts/date_filters/date_filters_smoke.txt
+  - prompts/date_filters/date_filters_verify.txt
+  - prompts/date_filters/date_filters_exhaust.txt
+  - prompts/fields_and_include/fields_and_include_smoke.txt
+  - prompts/fields_and_include/fields_and_include_verify.txt
+  - prompts/fields_and_include/fields_and_include_exhaust.txt
+  - prompts/modes/modes_smoke.txt
+  - prompts/modes/modes_verify.txt
+  - prompts/modes/modes_exhaust.txt
   # Layout doc and the refusal-examples contract file.
   - prompts/README.md
-  - prompts/refusals/refusal_examples.txt
+  - prompts/refusals/refusals_refusal_examples.txt
   # External corpus — verbatim, no tier.
-  - prompts/sme/testcases.txt
+  - prompts/sme/sme_testcases.txt
   - prompts/sample_prompts.txt
-  - prompts/release_gate/baseline.md
-  - prompts/release_gate/litmus.txt
+  - prompts/release_gate/release_gate_baseline.md
+  - prompts/release_gate/release_gate_litmus.txt
   # Scorer corpus — different format, different runner.
-  - prompts/scorer/parser_stress.txt
-  - prompts/scorer/tool_selection.txt
+  - prompts/scorer/scorer_parser_stress.txt
+  - prompts/scorer/scorer_tool_selection.txt
   # Pending disposition.
-  - prompts/retest/prompts.txt
+  - prompts/retest/retest_prompts.txt
   # Tooling that reads the sets.
   - scripts/run_prompt_set.py
   - src/spire/rendering/formatters.py
   
   smoke:
-  - prompts/modes/smoke.txt
-  - prompts/child_as_root/smoke.txt
-  - prompts/payables_procurement/smoke.txt
-  - prompts/fields_and_include/smoke.txt
-  - prompts/columns/smoke.txt
-  - prompts/date_filters/smoke.txt
-  - prompts/refusals/smoke.txt
-  - prompts/dipstick/smoke.txt
-  - prompts/receivables/smoke.txt
-  - prompts/payables/smoke.txt
-  - prompts/lifecycle/smoke.txt
-  - prompts/procurement_supplier/smoke.txt
-  - prompts/supplier/smoke.txt
-  - prompts/truncation/smoke.txt
-  - prompts/payables_supplier/smoke.txt
-  - prompts/procurement/smoke.txt
+  - prompts/modes/modes_smoke.txt
+  - prompts/child_as_root/child_as_root_smoke.txt
+  - prompts/payables_procurement/payables_procurement_smoke.txt
+  - prompts/fields_and_include/fields_and_include_smoke.txt
+  - prompts/columns/columns_smoke.txt
+  - prompts/date_filters/date_filters_smoke.txt
+  - prompts/refusals/refusals_smoke.txt
+  - prompts/dipstick/dipstick_smoke.txt
+  - prompts/receivables/receivables_smoke.txt
+  - prompts/payables/payables_smoke.txt
+  - prompts/lifecycle/lifecycle_smoke.txt
+  - prompts/procurement_supplier/procurement_supplier_smoke.txt
+  - prompts/supplier/supplier_smoke.txt
+  - prompts/truncation/truncation_smoke.txt
+  - prompts/payables_supplier/payables_supplier_smoke.txt
+  - prompts/procurement/procurement_smoke.txt
 
   # ── generated .json corpora (promptkit routing baselines) + mini ──
   corpora: []
