@@ -327,7 +327,7 @@ Multiple files are accepted per action.
 Write prompts one per line in a `.txt`, then let the router fill in the labels:
 
 ```bash
-python scripts/promptkit.py --generate prompts/supplier/smoke.txt
+python scripts/promptkit.py --generate prompts/supplier/supplier_smoke.txt
 # writes prompts/supplier/smoke.json — REVIEW the module/tool it captured
 ```
 
@@ -353,7 +353,7 @@ one breaks.
 
 ```bash
 # MCP server must be up (§3)
-python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+python scripts/promptkit.py --run --prompt-file prompts/supplier/supplier_smoke.txt
 ```
 
 Each prompt prints its intent, plan, and answer (like a single run), then the
@@ -453,15 +453,15 @@ then `--validate` / `--run`. Full inventory in `docs/prompt-sets/SURFACE.md`.
 
 | Path | Purpose |
 |---|---|
-| `prompts/dipstick/smoke.txt` | depth-ordered triage. **Run first** |
+| `prompts/dipstick/dipstick_smoke.txt` | depth-ordered triage. **Run first** |
 | `prompts/supplier/` | supplier module — smoke / verify / exhaust |
 | `prompts/payables/` | payables module |
 | `prompts/procurement/` | procurement module |
 | `prompts/receivables/` | receivables module |
 | `prompts/payables_supplier/` (etc.) | cross-module capabilities, top-level folders |
-| `prompts/refusals/smoke.txt` | out-of-scope. **A refusal is a pass** |
-| `prompts/columns/verify.txt` | column selection |
-| `prompts/sme/testcases.txt` | external QA corpus, verbatim |
+| `prompts/refusals/refusals_smoke.txt` | out-of-scope. **A refusal is a pass** |
+| `prompts/columns/columns_verify.txt` | column selection |
+| `prompts/sme/sme_testcases.txt` | external QA corpus, verbatim |
 
 > `prompts/scorer/` holds parser-scorer corpora in a different format
 > (`EXPECT ||| prompt`) — not for promptkit.

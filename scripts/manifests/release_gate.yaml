@@ -7,4 +7,4 @@
 # promptkit_sets.yaml. Does not touch them.
 
 sets:
-  - release_gate/litmus
+  - release_gate/release_gate_litmus

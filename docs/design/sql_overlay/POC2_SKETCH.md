@@ -71,7 +71,7 @@ eye and matches what the executor actually does.
 
 POC-1 ran five acceptance prompts plus a small supplemental set. The
 full supplier corpus (`prompts/supplier/{smoke,verify,exhaust}.txt`,
-`prompts/sme/testcases.txt`, and the supplier halves of
+`prompts/sme/sme_testcases.txt`, and the supplier halves of
 `prompts/payables_supplier/` and `prompts/procurement_supplier/`) has
 not been run with `--show-sql`.
 

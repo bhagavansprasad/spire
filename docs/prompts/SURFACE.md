@@ -58,22 +58,22 @@ Capabilities that apply to more than one module and are not themselves modules. 
 
 ~~~
 prompts/
-  supplier/          smoke.txt  verify.txt  exhaust.txt
-  payables/          smoke.txt  verify.txt  exhaust.txt
-  procurement/       smoke.txt  verify.txt  exhaust.txt
-  receivables/       smoke.txt  verify.txt  exhaust.txt
-  payables_supplier/       smoke.txt  verify.txt  exhaust.txt
-  payables_procurement/    smoke.txt  verify.txt  exhaust.txt
-  procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
-  columns/                smoke.txt  verify.txt  exhaust.txt
-  refusals/               smoke.txt  verify.txt  exhaust.txt  refusal_examples.txt
-  lifecycle/              smoke.txt  verify.txt  exhaust.txt
-  child_as_root/          smoke.txt  verify.txt  exhaust.txt
-  truncation/             smoke.txt  verify.txt  exhaust.txt
-  date_filters/           smoke.txt  verify.txt  exhaust.txt
-  fields_and_include/     smoke.txt  verify.txt  exhaust.txt
-  modes/                  smoke.txt  verify.txt  exhaust.txt
-  dipstick/               smoke.txt  verify.txt  exhaust.txt
+  supplier/          supplier_smoke.txt  supplier_verify.txt  supplier_exhaust.txt
+  payables/          payables_smoke.txt  payables_verify.txt  payables_exhaust.txt
+  procurement/       procurement_smoke.txt  procurement_verify.txt  procurement_exhaust.txt
+  receivables/       receivables_smoke.txt  receivables_verify.txt  receivables_exhaust.txt
+  payables_supplier/       payables_supplier_smoke.txt  payables_supplier_verify.txt  payables_supplier_exhaust.txt
+  payables_procurement/    payables_procurement_smoke.txt  payables_procurement_verify.txt  payables_procurement_exhaust.txt
+  procurement_supplier/    procurement_supplier_smoke.txt  procurement_supplier_verify.txt  procurement_supplier_exhaust.txt
+  columns/                columns_smoke.txt  columns_verify.txt  columns_exhaust.txt
+  refusals/               refusals_smoke.txt  refusals_verify.txt  refusals_exhaust.txt  refusal_examples.txt
+  lifecycle/              lifecycle_smoke.txt  lifecycle_verify.txt  lifecycle_exhaust.txt
+  child_as_root/          child_as_root_smoke.txt  child_as_root_verify.txt  child_as_root_exhaust.txt
+  truncation/             truncation_smoke.txt  truncation_verify.txt  truncation_exhaust.txt
+  date_filters/           date_filters_smoke.txt  date_filters_verify.txt  date_filters_exhaust.txt
+  fields_and_include/     fields_and_include_smoke.txt  fields_and_include_verify.txt  fields_and_include_exhaust.txt
+  modes/                  modes_smoke.txt  modes_verify.txt  modes_exhaust.txt
+  dipstick/               dipstick_smoke.txt  dipstick_verify.txt  dipstick_exhaust.txt
   scorer/                 parser_stress.txt  tool_selection.txt
   sme/                    testcases.txt
   retest/                 prompts.txt
@@ -102,25 +102,25 @@ Where each existing file's content goes.
 
 | Current file | New home |
 |---|---|
-| 00_dipstick.txt | dipstick/smoke.txt |
-| 01_supplier.txt | supplier/verify.txt (some prompts → smoke, some → exhaust) |
-| 02_purchase_order.txt | procurement/verify.txt |
-| 03_ar.txt | receivables/verify.txt |
-| 04_columns.txt | columns/verify.txt |
-| 05_refusals.txt | refusals/verify.txt |
-| 06_slow.txt | split: supplier parts → supplier/exhaust.txt; PO scans → procurement/exhaust.txt; compare → payables_procurement/exhaust.txt |
-| 07_alacarte.txt | columns/verify.txt (merge with 04) |
-| 08_lifecycle.txt | lifecycle/verify.txt |
-| 10_refusal_examples.txt | refusals/verify.txt (merge with 05) |
-| 11_column_vocabulary.txt | columns/verify.txt (merge) |
-| 12_po_supplier_include.txt | procurement_supplier/verify.txt |
-| 13_child_as_root.txt | child_as_root/verify.txt |
-| 14_truncation_narration.txt | truncation/verify.txt |
-| 15_po_relative_date_filters.txt | date_filters/verify.txt (merge) |
-| 16_date_filter_cluster.txt | date_filters/verify.txt (merge) |
-| 17_modes_and_columns.txt | split: modes → modes/verify.txt; columns → columns/verify.txt |
-| 18_invoice_created_dates.txt | date_filters/verify.txt (merge) |
-| 19_fields_and_include.txt | fields_and_include/verify.txt |
+| 00_dipstick.txt | dipstick/dipstick_smoke.txt |
+| 01_supplier.txt | supplier/supplier_verify.txt (some prompts → smoke, some → exhaust) |
+| 02_purchase_order.txt | procurement/procurement_verify.txt |
+| 03_ar.txt | receivables/receivables_verify.txt |
+| 04_columns.txt | columns/columns_verify.txt |
+| 05_refusals.txt | refusals/refusals_verify.txt |
+| 06_slow.txt | split: supplier parts → supplier/supplier_exhaust.txt; PO scans → procurement/procurement_exhaust.txt; compare → payables_procurement/payables_procurement_exhaust.txt |
+| 07_alacarte.txt | columns/columns_verify.txt (merge with 04) |
+| 08_lifecycle.txt | lifecycle/lifecycle_verify.txt |
+| 10_refusal_examples.txt | refusals/refusals_verify.txt (merge with 05) |
+| 11_column_vocabulary.txt | columns/columns_verify.txt (merge) |
+| 12_po_supplier_include.txt | procurement_supplier/procurement_supplier_verify.txt |
+| 13_child_as_root.txt | child_as_root/child_as_root_verify.txt |
+| 14_truncation_narration.txt | truncation/truncation_verify.txt |
+| 15_po_relative_date_filters.txt | date_filters/date_filters_verify.txt (merge) |
+| 16_date_filter_cluster.txt | date_filters/date_filters_verify.txt (merge) |
+| 17_modes_and_columns.txt | split: modes → modes/modes_verify.txt; columns → columns/columns_verify.txt |
+| 18_invoice_created_dates.txt | date_filters/date_filters_verify.txt (merge) |
+| 19_fields_and_include.txt | fields_and_include/fields_and_include_verify.txt |
 
 Merged files retain every prompt verbatim and every comment. Nothing is deleted.
 
@@ -130,11 +130,11 @@ Merged files retain every prompt verbatim and every comment. Nothing is deleted.
 
 | File | Why |
 |---|---|
-| sme/testcases.txt | External, kept verbatim by design. Labels stale from 2026-07-28. |
-| scorer/parser_stress.txt | Different format (EXPECT prefix, pipe-separated). Feeds the scorer, not promptkit run. |
-| scorer/tool_selection.txt | Same. |
-| retest/prompts.txt | Fold in to its targets (receivables, payables, columns). Header retained until the fold-in pass. |
-| refusals/refusal_examples.txt | Kept as a separate contract file inside refusals/. Its guard — "every Example in capability.py appears here" — is enforced by `tests/test_nl_parser_capability.py`, not by the prompt set. The file is not a tier file. |
+| sme/sme_testcases.txt | External, kept verbatim by design. Labels stale from 2026-07-28. |
+| scorer/scorer_parser_stress.txt | Different format (EXPECT prefix, pipe-separated). Feeds the scorer, not promptkit run. |
+| scorer/scorer_tool_selection.txt | Same. |
+| retest/retest_prompts.txt | Fold in to its targets (receivables, payables, columns). Header retained until the fold-in pass. |
+| refusals/refusals_refusal_examples.txt | Kept as a separate contract file inside refusals/. Its guard — "every Example in capability.py appears here" — is enforced by `tests/test_nl_parser_capability.py`, not by the prompt set. The file is not a tier file. |
 
 ---
 
