@@ -52,6 +52,8 @@ import json
 import subprocess
 import sys
 import time
+import oracledb
+import yaml
 from datetime import datetime
 from pathlib import Path
 
@@ -769,6 +771,41 @@ def do_batch(manifest: Path, outdir: Path, prompts_dir: Path,
 
     return 1 if any(code != 0 for _, code, _ in results) else 0
 
+def clear_cache() -> int:
+    """Delete all entries from the prompt Intent cache."""
+
+    # Load Oracle configuration from personas.yaml
+    config_path = Path("personas.yaml")
+
+    if not config_path.is_file():
+        print(f"ERROR: {config_path} not found.", file=sys.stderr)
+        return 1
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+
+    # Use the same Oracle configuration already defined in personas.yaml.
+    oracle = config["default_dev"]["oracle"]
+    
+    conn = oracledb.connect(
+        user=oracle["username"],
+        password=oracle["password"],
+        dsn=oracle["dsn"],
+    )
+
+    cur = conn.cursor()
+
+    try:
+        cur.execute("DELETE FROM PROMPT_CACHE")
+        deleted_rows = cur.rowcount
+        conn.commit()
+
+        print(f"[CACHE] CLEARED - {deleted_rows} entries removed")
+        return 0
+
+    finally:
+        cur.close()
+        conn.close()
+        
 
 # ==========================================================================
 # CLI
@@ -779,11 +816,20 @@ def main() -> int:
         description="promptkit — run Spire prompts end to end against Fusion.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--run", action="store_true", required=True,
+    ap.add_argument("--run", action="store_true", required=False,
                     help="run prompt(s) end to end against Fusion. "
                          "Pick one source: --prompt, --prompt-file, "
                          "or --manifest.")
-
+    ap.add_argument(
+    "--cache",
+    action="store_true",
+    help="manage the prompt cache.",
+    )
+    ap.add_argument(
+    "--clear",
+    action="store_true",
+    help="clear the prompt cache.",
+    )
     # Sources. nargs='+' => space-separated lists; no repeated-flag form.
     src = ap.add_mutually_exclusive_group(required=False)
     src.add_argument("--prompt", default=None, nargs="+", metavar="STR",
@@ -817,6 +863,9 @@ def main() -> int:
     add_diagnostic_arguments(ap)
 
     args = ap.parse_args()
+    
+    if args.cache and args.clear:
+        return clear_cache()
 
     # ---- batch mode: --run --manifest <yaml> [<yaml> ...] ----
     if args.manifest is not None:
