@@ -24,10 +24,23 @@ Filters supported:
   clause, so a lone invoice_date_before with no other filter over-fetches
   up to `limit` unfiltered and may miss older records beyond the fetch
   window. Pair it with invoice_date_after for a bounded range.
+- unpaid: When True, restrict to invoices not yet fully paid. Server
+  clause PaidStatus='Unpaid' plus a second single-clause call for
+  PaidStatus='Partially paid' (composite q= is unreliable here).
+  See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.2.
+- overdue: When True, restrict to Unpaid invoices whose DueDate is
+  before today. Server clause PaidStatus='Unpaid'; the DueDate test
+  runs client-side. Partially paid rows are outside this reading —
+  see §4.3.
+- pending: When True, restrict to ApprovalStatus='Required' — the
+  default reading of "pending" in AP. See §4.1.
 - limit: max records returned after client-side filtering (default 25)
 """
 
+from datetime import date
+
 from spire.fusion.client import FusionClient
+from spire.mcp_server.tools.pagination import page_all
 from spire.mcp_server.tools.tool_result import ToolResult
 
 
@@ -42,6 +55,7 @@ _PROJECTED_FIELDS = [
     "InvoiceId",
     "InvoiceNumber",
     "InvoiceDate",
+    "DueDate",
     "InvoiceAmount",
     "InvoiceCurrency",
     "Supplier",
@@ -79,6 +93,9 @@ async def search_invoices(
     invoice_date_before: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
+    unpaid: bool = False,
+    overdue: bool = False,
+    pending: bool = False,
     limit: int = 25,
 ) -> ToolResult:
     """Search Oracle Fusion invoices.
@@ -96,6 +113,11 @@ async def search_invoices(
             e.g. Jan 2022 -> after="2022-01-01", before="2022-02-01".
         amount_min: Lower bound on InvoiceAmount (inclusive). Client-side.
         amount_max: Upper bound on InvoiceAmount (inclusive). Client-side.
+        unpaid: When True, restrict to invoices not yet fully paid.
+            See the module docstring for the two-call mechanism.
+        overdue: When True, restrict to Unpaid invoices whose DueDate
+            is before today.
+        pending: When True, restrict to ApprovalStatus='Required'.
         limit: Max records to return AFTER client-side filtering.
 
     Returns:
@@ -119,11 +141,23 @@ async def search_invoices(
         server_clause = f"SupplierNumber='{supplier_number}'"
     elif supplier_name:
         server_clause = f"Supplier LIKE '%{supplier_name}%'"
+    elif overdue:
+        # Compound predicate: server clause is PaidStatus='Unpaid',
+        # the DueDate < today test runs client-side below.
+        server_clause = "PaidStatus='Unpaid'"
+    elif unpaid:
+        server_clause = "PaidStatus='Unpaid'"
+    elif pending:
+        server_clause = "ApprovalStatus='Required'"
     elif invoice_date_after:
         server_clause = f"InvoiceDate >= '{invoice_date_after}'"
 
     # Over-fetch if we'll be filtering further; otherwise use limit directly.
-    needs_client_filter = sum(
+    # 'overdue' is a compound predicate whose date half runs client-side,
+    # so the fetch MUST over-fetch — a single-clause 'not needs_client_filter'
+    # path would report the unfiltered PaidStatus='Unpaid' count as if it
+    # were the overdue count. Force the overfetch path when overdue is set.
+    needs_client_filter = overdue or sum(
         bool(x)
         for x in (
             invoice_number,
@@ -134,6 +168,9 @@ async def search_invoices(
             invoice_date_before,
             amount_min is not None,
             amount_max is not None,
+            unpaid,
+            overdue,
+            pending,
         )
     ) > 1
     fetch_limit = OVERFETCH_LIMIT if needs_client_filter else limit
@@ -142,8 +179,48 @@ async def search_invoices(
     if server_clause:
         params["q"] = server_clause
 
-    response = await client.get(INVOICES_PATH, params=params)
-    items = response.get("items", [])
+    # When any client-side filtering runs on top of the server clause,
+    # the tool needs the FULL server-clause set to report an honest
+    # count for the filtered result. A single-page overfetch sees at
+    # most OVERFETCH_LIMIT rows and can miss matches beyond that
+    # window (this is the 'pending for a long time' case, whose total
+    # was previously reported as 'unknown'). Page the server clause
+    # to exhaustion when the server clause is available; the plain
+    # overfetch is the fallback for the no-server-clause case
+    # (amount-only filters).
+    fetch_truncated = False
+    if needs_client_filter and server_clause:
+        items, hit_page_cap, _ = await page_all(
+            client,
+            INVOICES_PATH,
+            "search_invoices",
+            server_clause=server_clause,
+            page_size=500,
+            max_pages=30,
+        )
+        fetch_truncated = hit_page_cap
+    else:
+        response = await client.get(INVOICES_PATH, params=params)
+        items = list(response.get("items", []))
+        if needs_client_filter:
+            fetch_truncated = len(items) >= OVERFETCH_LIMIT
+
+    # 'unpaid' alone: the semantic is the union of Unpaid + Partially
+    # paid. Composite q= is unreliable on this pod, so the two
+    # statuses ride as two single-clause calls and their rows merge.
+    # Composed cases (unpaid + supplier) take the paged path above;
+    # the paged fetch already carries that supplier's partials, so
+    # this second call is scoped to the 'unpaid alone' case.
+    if unpaid and not overdue and not needs_client_filter:
+        partial_params = {
+            "limit": OVERFETCH_LIMIT,
+            "q": "PaidStatus='Partially paid'",
+            "onlyData": "true",
+        }
+        partial_response = await client.get(
+            INVOICES_PATH, params=partial_params
+        )
+        items.extend(partial_response.get("items", []))
 
     # Apply remaining filters in Python.
     def matches(item: dict) -> bool:
@@ -167,39 +244,70 @@ async def search_invoices(
                 return False
             if amount_max is not None and amt > amount_max:
                 return False
+        if unpaid and item.get("PaidStatus") not in ("Unpaid", "Partially paid"):
+            return False
+        if overdue:
+            if item.get("PaidStatus") == "Paid":
+                return False
+            due = item.get("DueDate") or ""
+            if due >= date.today().isoformat():
+                return False
+        if pending and item.get("ApprovalStatus") != "Required":
+            return False
         return True
 
     filtered = [item for item in items if matches(item)]
     final_items = filtered[:limit]
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in final_items]
 
+    # 'unpaid' is the union of Unpaid + Partially paid, fetched as two
+    # single-clause calls and merged above. The server-clause total
+    # alone underreports the union (it counts only Unpaid), so sum both
+    # clauses' totals — the answer's headline count must include the
+    # partials the rows already carry. Only fires when the partials
+    # merge actually ran (server clause is the Unpaid clause).
+    if unpaid and not overdue and not needs_client_filter:
+        t_unpaid = await client.total_results(
+            INVOICES_PATH, "PaidStatus='Unpaid'"
+        )
+        t_partial = await client.total_results(
+            INVOICES_PATH, "PaidStatus='Partially paid'"
+        )
+        if t_unpaid is not None and t_partial is not None:
+            return ToolResult.build(
+                items=projected,
+                limit_applied=limit,
+                total_available=t_unpaid + t_partial,
+            )
+
     # ---- Determine total_available and truncated ----
     #
-    # Three cases:
+    # Two paths:
     #
-    # 1. Composite filter, server overfetch hit OVERFETCH_LIMIT:
-    #    The server clause matched more than we examined; we may have
-    #    missed records that would satisfy the full filter. We know
-    #    truncation occurred but can't compute the true total.
+    # 1. Client-side filtering ran. The fetch was paged (above) to
+    #    exhaustion or the page cap, so len(filtered) is the honest
+    #    count of the fully-filtered set — unless the page cap fired,
+    #    in which case the answer says 'unknown' rather than a
+    #    plausible-looking wrong number.
     #
-    # 2. Result is full at the client-side cap (len(final) == limit) AND
-    #    no composite filtering happened:
-    #    Single server-side filter, capped at limit. A cheap totalResults
-    #    call gives the authoritative count.
-    #
-    # 3. Otherwise:
-    #    We have every record that matches. total_available is len(filtered);
-    #    truncated is False.
+    # 2. No client-side filtering. Single server clause; a cheap
+    #    totalResults call gives the authoritative count.
 
-    if needs_client_filter and len(items) >= OVERFETCH_LIMIT:
-        return ToolResult(
+    if needs_client_filter:
+        if fetch_truncated:
+            return ToolResult(
+                items=projected,
+                total_available=None,
+                limit_applied=limit,
+                truncated=True,
+            )
+        return ToolResult.build(
             items=projected,
-            total_available=None,
             limit_applied=limit,
-            truncated=True,
+            total_available=len(filtered),
         )
 
-    if not needs_client_filter and len(final_items) >= limit:
+    if len(final_items) >= limit:
         total = await client.total_results(INVOICES_PATH, server_clause)
         return ToolResult.build(
             items=projected,

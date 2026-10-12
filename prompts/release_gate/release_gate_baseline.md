@@ -6,7 +6,7 @@
 **Invocation:** python scripts/promptkit.py --run --prompt "<p>" --show-planner
 **Total:** 6m18s
 
-Table is in current file order (prompts/release_gate/litmus.txt). The file
+Table is in current file order (prompts/release_gate/release_gate_litmus.txt). The file
 was reordered after the run so the slow prompt sits last-but-one; wall-clocks
 are per-prompt and order-independent.
 

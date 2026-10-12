@@ -37,7 +37,7 @@ Examples:
     python scripts/promptkit.py --run --prompt "show suppliers in US" --show-all
     python scripts/promptkit.py --run --prompt "List suppliers in India" \
                                             "Show open POs for supplier 2144"
-    python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+    python scripts/promptkit.py --run --prompt-file prompts/supplier/supplier_smoke.txt
     python scripts/promptkit.py --run --prompt-file a.txt b.txt
     python scripts/promptkit.py --run --manifest scripts/manifests/promptkit_sets.yaml
     python scripts/promptkit.py --run --manifest smoke.yaml full.yaml \
@@ -70,8 +70,8 @@ from spire.config import mcp_server_url, reset_usage, usage_report
 # Defaults
 # ==========================================================================
 
-# Per-set timeout for --manifest batch mode, in seconds. Four hours.
-DEFAULT_SET_TIMEOUT = 14400
+# Per-set timeout for --manifest batch mode, in seconds. 8 hours.
+DEFAULT_SET_TIMEOUT = 28800
 
 
 # ==========================================================================
@@ -523,20 +523,25 @@ async def _run_async(prompts: list[str]) -> int:
 
     menu = load_kg_menu()
     show_header = len(prompts) > 1
+    total = len(prompts)
     failed = 0
 
     url = mcp_server_url()
     try:
         async with Client(url) as client:
-            for prompt in prompts:
+            for idx, prompt in enumerate(prompts, start=1):
                 # Reset the token accumulator per prompt so each prompt's
                 # usage_report() (printed inside _emit_run_graph_output)
                 # reflects only that prompt.
                 reset_usage()
                 if show_header:
+                    # Progress sits on its own line so the "PROMPT: <text>"
+                    # line stays byte-identical for anything that parses it.
+                    # flush so 'tail -f' on a batch log shows it immediately.
                     print(f"\n{'='*72}")
+                    print(f"[{idx} of {total}]")
                     print(f"PROMPT: {prompt}")
-                    print('='*72)
+                    print('='*72, flush=True)
                 state = await _run_one(prompt, menu, client)
                 _emit_run_graph_output(state, menu)
                 # A refusal (parser or planner) is a valid outcome — only a

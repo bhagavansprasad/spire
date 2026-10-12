@@ -1,157 +1,250 @@
-# SPIRE — SQL Overlay POC, window-33 handoff
+# SPIRE — window-35 handoff
 
-**Date:** 2026-10-08
-**Branch:** SQL-overlay work complete. Integration branch is now `master`.
-**master tip:** `3c4b208` (PR #191 merged 2026-10-08T11:32Z)
-**Predecessor:** the window-32 handoff, superseded by this document
+**Window type:** implementation. Eight commits + one merge landed on the
+round-one integration branch `hardening-master-v3`. No new F-NNN was
+filed; two residuals are recorded below as follow-ups, not as findings.
+**Predecessor:** the window-34 handoff (Invoice status investigation).
+Its findings live on in `docs/design/INVOICE_STATUS_ACCEPTANCE.md` and the
+endpoints reference's 2026-10-09 rows; this document supersedes it as the
+current anchor.
+**Branch arrangement:**
+- `master` is **frozen at `00a5176`** for the duration of round one.
+- `hardening-master-v3` is the **round-one integration branch**. Feature
+  branches fork from it and PR into it.
+- When round one completes, `hardening-master-v3` merges to `master`
+  once, via PR.
+**master tip:** `00a5176` (unchanged since before this window opened)
+**hardening-master-v3 tip:** `2494911` (merge of PR #192)
+**Successor:** the next window's handoff.
 
-## What changed since window 32
+---
 
-**Integration branch moved from `hardening-master-v2` to `master`.**
-The SQL Overlay POC promoted to `master` via PR #191 on 2026-10-08. All
-new work branches from and merges into `master`. `hardening-master-v2`
-is a historical branch, left in place, not used for new work. The
-runtime clone now pulls from `master`.
+## 0. The rule that framed this window
 
-WORKING_STYLE rule 10 has been updated to match. The old
-"Nothing merges to master without explicit instruction" clause has
-been retired — it existed to protect a frozen `master`, and `master`
-is no longer frozen.
+WORKING_STYLE.md **Rule 28** (the SME test). If a Fusion SME could answer
+a prompt with read access to Fusion, Spire must answer it; a refusal is a
+defect. This window began from that frame and ended with all five of the
+prompts in window-34 HANDOFF §1 answering.
 
-## What this POC is
+---
 
-Deterministic SQL projection of the Plan. For every Plan step, print
-the equivalent Fusion-DB SQL. No LLM in SQL emission — the Plan is a
-KG lookup, the SQL is the Plan. **Supplier module only.** Five
-entities: Supplier, Address, Site, Classification, Contact. Print
-only, no execution.
+## 1. The Rule 28 defect and its fix
 
-Scope document: `docs/design/SQL_OVERLAY_POC.md`.
+The five prompts (window-34 HANDOFF §1, unchanged):
 
-## What landed in window 32
+1. Which invoices are yet to be paid?
+2. Which supplier invoices are currently outstanding?
+3. Which invoices are still unpaid?
+4. Are any supplier invoices overdue and requiring attention?
+5. Which invoices have been pending for a long time?
 
-Three PRs merged end to end:
+Window 34 recorded all five refusing. Window 35 made all five answer:
 
-| PR | Title | Merged into | Merge commit |
-|---|---|---|---|
-| #189 | SQL Overlay POC (supplier module) | hardening-master-v2 | a8e83e7 |
-| #190 | SQL projection as a first-class diagnostic | hardening-master-v2 | a076ded |
-| #191 | promote: hardening-master-v2 → master | master | 3c4b208 |
+| # | Intent emitted | Rows on `fa-euth-dev20` |
+|---|---|---|
+| 1 | `unpaid` | 9,563 |
+| 2 | `unpaid` | 9,563 |
+| 3 | `unpaid` | 9,563 |
+| 4 | `overdue` | 9,503 |
+| 5 | `pending` + `older_than_n_months={months:3}` | 6,789 |
 
-Branches deleted after merge: `poc/sql-overlay`,
-`feat/show-sql-diagnostic`, `promote/hardening-master-to-master`.
-History is reachable through the merge commits on `master`.
+**Zero refusals.**
 
-## What changed in the POC
+The acceptance criterion — what a correct answer to each prompt must say —
+lives in `docs/design/INVOICE_STATUS_ACCEPTANCE.md`.
 
-1. **SQL projection became a first-class diagnostic.** `show_sql` is
-   a registered flag in `src/spire/diagnostics.py` (logger
-   `spire.sql`). It honours the file / env / CLI / `--show-all` layers
-   uniformly, and `--manifest` batch mode forwards it automatically.
+---
 
-2. **`show_all` semantics: override, not default.** When
-   `show_all = true`, every gated flag becomes true regardless of any
-   explicit value in any layer.
+## 2. What the fix required, layer by layer
 
-3. **`prompts/sample_prompts.txt` added** — a cross-module smoke set.
-   Not part of the SQL overlay POC.
+Window 34's §2 named four layers; each one moved.
 
-4. **`personas.yaml` credentials rotated on master** (`47907f8`).
-   Task 1.1 of the main plan (untrack + gitignore) is still pending.
+**Layer 1 — Parser vocabulary.** Three new filter types appear in the
+parser's menu: `unpaid`, `overdue`, `pending`. They ride on the existing
+`kg_entity_filter` mechanism; the parser's menu is generated from that
+table, so no dedicated sysprompt block was needed for the filter *types*
+themselves. A new block **was** needed to teach defaults — see Layer 4.
 
-5. **Schema CSV renamed and stripped.**
-   `docs/design/poc_schema.csv` → `docs/design/sql_overlay/supplier_schema.csv`,
-   3,293 → 1,420 rows.
+**Layer 2 — MCP tool.** `search_invoices` gained three boolean args
+(`unpaid`, `overdue`, `pending`) and `DueDate` was added to its
+`_PROJECTED_FIELDS`. Compound-filter paths (`unpaid + supplier`, `overdue`,
+`pending + date`) page the server clause to exhaustion via the shared
+`page_all` helper. `matches()` now checks `PaidStatus` and `ApprovalStatus`
+client-side — the earlier version leaked Paid rows into `unpaid` answers
+when a supplier clause took the server slot.
 
-## Repository state
+**Layer 3 — KG registry.** Three `kg_entity_filter` rows
+(`Invoice/unpaid`, `Invoice/overdue`, `Invoice/pending`). No `kg_vocabulary`
+kind was added — the term IS the filter type, and a vocab kind would have
+meant editing the CHECK constraint in `scripts/sql/kg_schema.sql` plus the
+four count-tracking sites the KG test names.
 
-| Path | What |
-|---|---|
-| `docs/design/SQL_OVERLAY_POC.md` | POC-1 scope doc; all seven phases done |
-| `docs/design/sql_overlay/supplier_schema.csv` | 12 tables, 1,420 rows |
-| `docs/design/sql_overlay/acceptance/` | Five `.sql` captures + run log + plans |
-| `docs/design/sql_overlay/EXTENDING.md` | Maintainer guide |
-| `docs/design/sql_overlay/POC2_SKETCH.md` | Seven follow-up questions |
-| `src/spire/kg/sql_overlay.py` | Overlay as Python dataclasses |
-| `src/spire/rendering/sql_emitter.py` | `emit_sql(plan, overlay)` |
-| `src/spire/diagnostics.py` | `show_sql` flag registered; `spire.sql` logger |
-| `scripts/promptkit.py` | `--show-sql` via the diagnostics layer |
-| `tests/test_sql_emitter.py` | 9 tests |
-| `tests/test_diagnostics.py` | 65 tests (GATED set now 7 flags) |
-| `docs/reference/sql/` | Four Oracle SQL collections (PO, Cash, PA) |
+**Layer 4 — Parser context.** New block
+`src/spire/nl_parser/context/payables/b_invoice_status.sysprompt`, added to
+the manifest and (by the Phase 1 byte-equality invariant) mirrored into
+`_SYSTEM_PROMPT_PREAMBLE`. It teaches:
 
-## Test status
+- "pending" / "pending approval" -> `pending` alone.
+- "pending for a long time" with no explicit N -> `pending` +
+  `older_than_n_months={months:3}` (the default).
+- "pending for over N months/days/weeks/years" -> `pending` +
+  `older_than_n_months={months:N}`.
+- "pending in the last N months" -> `pending` +
+  `created_in_last_n_months={months:N}`.
+- **A guard**: adjectives like "requiring attention", "urgent", "needing
+  review" are NOT pending signals. This guard is load-bearing: without it
+  the model added `pending` to prompt 4 ("overdue and requiring
+  attention"), narrowing the answer silently.
 
-- `pytest -q` → 1290 passed, 1 skipped, 22 deselected (last full run
-  before the diagnostic change).
-- `pytest tests/test_sql_emitter.py -q` → 9 passed.
-- `pytest tests/test_diagnostics.py -q` → 65 passed.
-- `pytest tests/test_bundle_manifest.py -q` → 2 passed.
+The block count moved from 49 to 50; `_EXPECTED_BLOCK_COUNT` in
+`tests/test_parser_context_assembly.py` moved with it.
 
-Note: the full suite has not been re-run after the diagnostic merge.
-A fresh window should re-run `pytest -q` before starting POC-2.
+**Layer 5 — Display.** No change. `DueDate` now reaches the projection, but
+the formatter still renders Invoice / InvoiceId / Amount / Currency / Date
+/ Supplier; the due-date column is available for a future prompt that asks
+for it.
 
-## What is NOT in this POC
+---
 
-- No SQL execution. Print only.
-- No KG tables added. The overlay is parallel.
-- No parser, planner, or synthesizer changes.
-- No LLM in SQL emission.
+## 3. Where the changes live
 
-## Open questions carried forward (documented, non-blocking)
+Branch `feat/invoice-status-filters`, merged to `hardening-master-v3` as
+PR #192 (merge commit `2494911`):
 
-- **OQ-2** — `POZ_SUPPLIER_CONTACTS.PARTY_SITE_ID` vs
-  `ORG_PARTY_SITE_ID`. Emitted SQL uses `PARTY_SITE_ID` with an
-  `-- ASSUMPTION:` comment. Oracle's own PO Prism Q16 carries a
-  comment flagging the same ambiguity.
-- **OQ-3** — whether `HZ_PARTIES.PARTY_TYPE` needs a predicate.
-  Emitter emits none, flags the assumption.
+```
+d2b8fa1 docs: register acceptance doc + invoice-status block in context bundles
+00dac8c mcp(invoices): fix unpaid/overdue client filters; honest compound totals
+712d82a nl_parser: narrow 'pending' triggers — adjectives are not approval signals
+eaadc1c mcp(invoices): honest totals for unpaid (union) and overdue (unknown)
+ba6a955 nl_parser: teach invoice-status defaults (pending for a long time)
+a76eeec planner: accept unpaid/overdue/pending as Invoice roots
+2a54747 test(invoices): add cases for unpaid/overdue/pending + DueDate projection
+90158b2 mcp(invoices): add unpaid/overdue/pending filters + DueDate projection
+e9846fb kg: register invoice_status filters (unpaid, overdue, pending)
+```
 
-Both deferred to POC-2. See `POC2_SKETCH.md`.
+Files changed:
+- `scripts/sql/kg_schema.sql` — three rows, banner 34->37
+- `scripts/print_kg.py`, `tests/test_kg_metadata.py` — count moves 34->37
+- `src/spire/mcp_server/tools/invoices.py` — the tool
+- `src/spire/mcp_server/server.py` — the MCP wrapper
+- `src/spire/planner/planner.py` — the Invoice root guard
+- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — new block
+- `src/spire/nl_parser/context/order.manifest` — the new block, 49->50
+- `src/spire/nl_parser/context_assembly.py` — the literal mirrored, block count
+- `tests/test_parser_context_assembly.py` — block count 49->50
+- `tests/test_invoices_tool.py`, `tests/test_planner.py` — new cases
+- `context_bundles.yaml` — acceptance doc into `plan`, block into `parser_context`
 
-## Deviations from the scope doc
+---
 
-- **Overlay as Python, not six Oracle tables.** Content matches what
-  the six `kg_sql_*` tables would hold; storage differs. Migration is
-  a POC-2 item. Recorded in the scope doc's Deviations section.
-- **Decision 3 flipped.** Primary-BU form (`PRC_BU_ID`), not the
-  assignments form. Oracle's own Q26/Q30 use this form.
+## 4. Costs and disclosures the next window should know
 
-## Next window agenda (in order)
+**Paged-fetch cost.** Compound-filter queries now page the server clause to
+exhaustion. On `fa-euth-dev20` this means:
 
-POC-2 starts from `master` at `3c4b208`.
+- `overdue` alone: ~9,503 rows, ~20 pages, ~3-4 minutes.
+- `pending + older_than_n_months`: ~6,789 rows, ~14 pages, ~3-4 minutes.
+- `unpaid + supplier`: ~1,300 rows, 3 pages, seconds.
 
-1. **Create `poc/sql-overlay-2` from `master`.**
-2. **Confirm DB access first.** The POC so far is print-only; no query
-   has run. Before any plan is proposed, confirm what exists —
-   SQL*Plus, python-oracledb, a read-only account, or nothing — and
-   whether the Fusion DB is reachable from this environment.
-3. **If DB access exists**, start POC-2 item 1 of `POC2_SKETCH.md`:
-   validate the emitted SQL against the real Fusion DB.
-4. **If DB access does not exist**, item 1 is blocked. Pick a
-   different POC-2 item — sketch items 2 (close OQ-2/OQ-3 by schema
-   read), 3 (views vs base tables), or 5 (migrate overlay to Oracle
-   tables) do not require a live DB.
-5. **PR into `master`.** Every change arrives via a PR; no local
-   merges.
+This is not a bug — an SME would take the same time to count 9,503 overdue
+invoices — but it is a new UX cost on two of the five prompts. A future
+window may want ">= N, exact count unavailable" as an alternative when a
+caller would rather have a fast approximate answer. Not chosen here.
 
-## Rules that shaped this work
+**Pod drift.** `unpaid` moved 9,551 -> 9,563 -> 9,564 -> 9,565 -> 9,563 across
+sweeps in this window (~10s between calls). The pod's data moves; the
+number is honest, not a defect. Do not read the variance as an
+inconsistency.
 
-- Rule 5 — approval before generating anything
-- Rule 15.1 — capture complete output to a file, then grep
-- Rule 15.2 — name a slow command's cost before handing it over
-- Rule 15.3 — every file edit is a Python script + shell verification,
-  two cells, one command at a time
-- Rule 4 — no nested code fences
-- Rule 7 — branch-first for code
-- Rule 10 — integration branch is `master`; PR into it
+**Truncation footer wording.** "N total in source" is the filtered total,
+not the source total. Cosmetic; recorded as a follow-up, not filed.
 
-## What to share with the new window
+**Prompt 4's narration.** The response is a plain table, not the verdict +
+ranked list that `INVOICE_STATUS_ACCEPTANCE.md` §2.4 asks for. The query
+answers (the Rule 28 bar), but the narration does not yet meet §2.4's
+shape. Deferred.
 
-- **This handoff** — the single anchor.
-- **`docs/design/sql_overlay/POC2_SKETCH.md`** — the working document.
-- **`docs/design/SQL_OVERLAY_POC.md`** — the POC-1 scope doc.
-- **`docs/design/sql_overlay/EXTENDING.md`** — maintainer guide.
-- **`context_bundles.yaml`** — bundle definitions.
-- Repo state — the output of `git branch` / `git status` /
-  `git log --oneline -5`.
+**The two residual items above are not filed as F-NNNs.** The disposition
+from this window: findings get filed when a fix window picks them up. A
+future window that wants to work on either should file it as part of
+picking it up.
+
+---
+
+## 5. What this window did NOT do
+
+- **`paid` and `partially paid` filter rows.** Not named by any prompt.
+  Deferred.
+- **A block rule for "overdue" as a keyword.** §4.3's compound predicate is
+  documented in `b_invoice_status.sysprompt`, but the block does not carry
+  a dedicated "past due" / "behind on payment" rule. In practice the model
+  routes it correctly (see §1's table). If a future phrasing refuses, the
+  block is where the rule would go.
+- **Fixing the "Show me the details of a supplier invoice" refusal.**
+  Confirmed in this window as a legitimate refusal (Rule 28 does not apply;
+  the prompt names no set). Not a defect.
+- **The `open_only` / AR path.** Untouched. The KG row that said the flag
+  was "unused" is stale — window 35's investigation found it wired. A
+  future KG tidy-up should correct that row.
+- **POC-2.** Still paused. The `all_tables` DB-reachability check for
+  `localhost:1521/FREEPDB1` was never run.
+
+---
+
+## 6. Next window's picks
+
+In order of what a resuming window would most likely want:
+
+1. **The HANDOFF update itself.** This document is what a next window
+   reads to know where it is. If it says the wrong thing, everything
+   downstream is wrong. Check it against `git log hardening-master-v3`
+   before starting new work.
+2. **The two residuals (§4)** — decide whether to file them or leave them
+   noted. If filing, they belong in `docs/fixes/FIXES.md` +
+   `docs/fixes/FIX_PLAN.md`.
+3. **The next prompt from round-one testing.** If the SME has found more
+   prompts that refuse or return wrong data, those are the priority.
+4. **The narration-quality work** for prompt 4's §2.4 shape — a
+   synthesizer-side change, not a Rule 28 defect, but it is what the
+   acceptance doc asks for.
+5. **`DueDate` as a column.** The tool projects it now; the KG's `Invoice`
+   field list does not carry it. A query like "show me the due dates for
+   Lee Supplies' invoices" would name it in `fields` and the KG field-split
+   would report it unresolved. One `kg_entity_field` row fixes it.
+
+---
+
+## 7. Files and prior reading
+
+**Anchor docs:**
+- `docs/design/INVOICE_STATUS_ACCEPTANCE.md` — the acceptance criterion and
+  design shape for the five prompts. This window's authority on what is in
+  scope.
+- `docs/plan/WORKING_STYLE.md` — Rule 28 is the frame; Rule 15.3 is how
+  every edit in this window was delivered.
+
+**Evidence files (untracked, repo root):**
+- `t_invoice_status_sweep.txt`, `t_invoice_status_sweep_final.txt`,
+  `t_invoice_status_sweep_final2.txt` — the three sweeps.
+- `t_pr192_gate.txt` — the ten-suite merge gate.
+- `t_prompt4_rerun.txt` — the individual prompt-4 verification after the
+  `pending`-trigger guard landed.
+- `t_kg_rebuild.txt`, `t_kg_invoice_filters.txt`, `t_pod_check.txt` — the
+  rebuild evidence.
+- `prompts_ws35.txt` — the five prompts as a file.
+
+**Key code paths, for the next window:**
+- `src/spire/mcp_server/tools/invoices.py` — the tool; `search_invoices`,
+  `matches()`, the paged-fetch branch.
+- `src/spire/planner/planner.py` — the Invoice root guard (top of
+  `generate_plan`).
+- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — the
+  new block.
+- `src/spire/nl_parser/context_assembly.py` — the retained literal; block
+  count.
+- `scripts/sql/kg_schema.sql` — the three new `kg_entity_filter` rows.
+
+---
+
+*End of window-35 handoff.*

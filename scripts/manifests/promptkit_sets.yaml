@@ -18,62 +18,62 @@
 
 sets:
   # ── smoke — seconds ─────────────────────────────────────────────
-  - dipstick/smoke
-  - supplier/smoke
-  - payables/smoke
-  - procurement/smoke
-  - receivables/smoke
-  - payables_supplier/smoke
-  - payables_procurement/smoke
-  - procurement_supplier/smoke
-  - columns/smoke
-  - refusals/smoke
-  - lifecycle/smoke
-  - child_as_root/smoke
-  - truncation/smoke
-  - date_filters/smoke
-  - fields_and_include/smoke
-  - modes/smoke
+  - dipstick/dipstick_smoke
+  - supplier/supplier_smoke
+  - payables/payables_smoke
+  - procurement/procurement_smoke
+  - receivables/receivables_smoke
+  - payables_supplier/payables_supplier_smoke
+  - payables_procurement/payables_procurement_smoke
+  - procurement_supplier/procurement_supplier_smoke
+  - columns/columns_smoke
+  - refusals/refusals_smoke
+  - lifecycle/lifecycle_smoke
+  - child_as_root/child_as_root_smoke
+  - truncation/truncation_smoke
+  - date_filters/date_filters_smoke
+  - fields_and_include/fields_and_include_smoke
+  - modes/modes_smoke
 
   # ── verify — minutes ────────────────────────────────────────────
-  - dipstick/verify
-  - supplier/verify
-  - payables/verify
-  - procurement/verify
-  - receivables/verify
-  - payables_supplier/verify
-  - payables_procurement/verify
-  - procurement_supplier/verify
-  - columns/verify
-  - refusals/verify
-  - lifecycle/verify
-  - child_as_root/verify
-  - truncation/verify
-  - date_filters/verify
-  - fields_and_include/verify
-  - modes/verify
+  - dipstick/dipstick_verify
+  - supplier/supplier_verify
+  - payables/payables_verify
+  - procurement/procurement_verify
+  - receivables/receivables_verify
+  - payables_supplier/payables_supplier_verify
+  - payables_procurement/payables_procurement_verify
+  - procurement_supplier/procurement_supplier_verify
+  - columns/columns_verify
+  - refusals/refusals_verify
+  - lifecycle/lifecycle_verify
+  - child_as_root/child_as_root_verify
+  - truncation/truncation_verify
+  - date_filters/date_filters_verify
+  - fields_and_include/fields_and_include_verify
+  - modes/modes_verify
 
   # ── corpus — external, verbatim, no tier ────────────────────────
-  - sme/testcases
+  - sme/sme_testcases
 
   # ── exhaust — overnight. Comment out for a faster pass. ─────────
-  - dipstick/exhaust
-  - supplier/exhaust
-  - payables/exhaust
-  - procurement/exhaust
-  - receivables/exhaust
-  - payables_supplier/exhaust
-  - payables_procurement/exhaust
-  - procurement_supplier/exhaust
-  - columns/exhaust
-  - refusals/exhaust
-  - lifecycle/exhaust
-  - child_as_root/exhaust
-  - truncation/exhaust
-  - date_filters/exhaust
-  - fields_and_include/exhaust
-  - modes/exhaust
+  - dipstick/dipstick_exhaust
+  - supplier/supplier_exhaust
+  - payables/payables_exhaust
+  - procurement/procurement_exhaust
+  - receivables/receivables_exhaust
+  - payables_supplier/payables_supplier_exhaust
+  - payables_procurement/payables_procurement_exhaust
+  - procurement_supplier/procurement_supplier_exhaust
+  - columns/columns_exhaust
+  - refusals/refusals_exhaust
+  - lifecycle/lifecycle_exhaust
+  - child_as_root/child_as_root_exhaust
+  - truncation/truncation_exhaust
+  - date_filters/date_filters_exhaust
+  - fields_and_include/fields_and_include_exhaust
+  - modes/modes_exhaust
 
   # ── non-tier prompt files (window 20 parity sweep) ──
-  - retest/prompts
-  - refusals/refusal_examples
+  - retest/retest_prompts
+  - refusals/refusals_refusal_examples

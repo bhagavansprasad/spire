@@ -13,13 +13,13 @@ Two axes, one tree.
 
 ~~~
 prompts/
-  supplier/                smoke.txt  verify.txt  exhaust.txt
-  payables/                smoke.txt  verify.txt  exhaust.txt
-  procurement/             smoke.txt  verify.txt  exhaust.txt
-  receivables/             smoke.txt  verify.txt  exhaust.txt
-  payables_supplier/       smoke.txt  verify.txt  exhaust.txt
-  payables_procurement/    smoke.txt  verify.txt  exhaust.txt
-  procurement_supplier/    smoke.txt  verify.txt  exhaust.txt
+  supplier/                supplier_smoke.txt  supplier_verify.txt  supplier_exhaust.txt
+  payables/                payables_smoke.txt  payables_verify.txt  payables_exhaust.txt
+  procurement/             procurement_smoke.txt  procurement_verify.txt  procurement_exhaust.txt
+  receivables/             receivables_smoke.txt  receivables_verify.txt  receivables_exhaust.txt
+  payables_supplier/       payables_supplier_smoke.txt  payables_supplier_verify.txt  payables_supplier_exhaust.txt
+  payables_procurement/    payables_procurement_smoke.txt  payables_procurement_verify.txt  payables_procurement_exhaust.txt
+  procurement_supplier/    procurement_supplier_smoke.txt  procurement_supplier_verify.txt  procurement_supplier_exhaust.txt
 ~~~
 
 **Cross-cutting features** are flat files at the root, named
@@ -27,15 +27,15 @@ prompts/
 
 ~~~
 prompts/
-  columns/                smoke.txt  verify.txt  exhaust.txt
-  refusals/               smoke.txt  verify.txt  exhaust.txt  refusal_examples.txt
-  lifecycle/              smoke.txt  verify.txt  exhaust.txt
-  child_as_root/          smoke.txt  verify.txt  exhaust.txt
-  truncation/             smoke.txt  verify.txt  exhaust.txt
-  date_filters/           smoke.txt  verify.txt  exhaust.txt
-  fields_and_include/     smoke.txt  verify.txt  exhaust.txt
-  modes/                  smoke.txt  verify.txt  exhaust.txt
-  dipstick/               smoke.txt  verify.txt  exhaust.txt
+  columns/                columns_smoke.txt  columns_verify.txt  columns_exhaust.txt
+  refusals/               refusals_smoke.txt  refusals_verify.txt  refusals_exhaust.txt  refusal_examples.txt
+  lifecycle/              lifecycle_smoke.txt  lifecycle_verify.txt  lifecycle_exhaust.txt
+  child_as_root/          child_as_root_smoke.txt  child_as_root_verify.txt  child_as_root_exhaust.txt
+  truncation/             truncation_smoke.txt  truncation_verify.txt  truncation_exhaust.txt
+  date_filters/           date_filters_smoke.txt  date_filters_verify.txt  date_filters_exhaust.txt
+  fields_and_include/     fields_and_include_smoke.txt  fields_and_include_verify.txt  fields_and_include_exhaust.txt
+  modes/                  modes_smoke.txt  modes_verify.txt  modes_exhaust.txt
+  dipstick/               dipstick_smoke.txt  dipstick_verify.txt  dipstick_exhaust.txt
   scorer/                 parser_stress.txt  tool_selection.txt
   sme/                    testcases.txt
   retest/                 prompts.txt
@@ -43,10 +43,10 @@ prompts/
 
 **Other files, no tier:**
 
-- `sme/testcases.txt` — external QA corpus, verbatim, no runner contract.
-- `refusals/refusal_examples.txt` — the refusal Examples from `capability.py`, enforced by `tests/test_nl_parser_capability.py`.
+- `sme/sme_testcases.txt` — external QA corpus, verbatim, no runner contract.
+- `refusals/refusals_refusal_examples.txt` — the refusal Examples from `capability.py`, enforced by `tests/test_nl_parser_capability.py`.
 - `scorer/` — parser-scorer corpora in a different format (`EXPECT ||| prompt`). Not for promptkit.
-- `retest/prompts.txt` — pending fold-in to its targets.
+- `retest/retest_prompts.txt` — pending fold-in to its targets.
 
 ## Tiers
 
@@ -67,16 +67,16 @@ The MCP server must be up.
 **One set:**
 
 ~~~
-python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+python scripts/promptkit.py --run --prompt-file prompts/supplier/supplier_smoke.txt
 ~~~
 
 **A module (all three tiers):**
 
 ~~~
 python scripts/promptkit.py --run --prompt-file \
-    prompts/supplier/smoke.txt \
-    prompts/supplier/verify.txt \
-    prompts/supplier/exhaust.txt
+    prompts/supplier/supplier_smoke.txt \
+    prompts/supplier/supplier_verify.txt \
+    prompts/supplier/supplier_exhaust.txt
 ~~~
 
 **Everything, via the manifest:**
@@ -116,7 +116,7 @@ a refusal.
 
 ## Where a set starts
 
-`prompts/dipstick/smoke.txt` is depth-ordered on purpose. If depth 2 fails,
+`prompts/dipstick/dipstick_smoke.txt` is depth-ordered on purpose. If depth 2 fails,
 the filter layer is broken and every later failure is probably downstream
 of it. Run it first and read it first.
 

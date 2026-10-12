@@ -224,12 +224,12 @@ python scripts/promptkit.py --run --prompt \
     "active suppliers in US"
 
 # A FILE OF PROMPTS — one prompt per line; '#'/blank skipped
-python scripts/promptkit.py --run --prompt-file prompts/supplier/smoke.txt
+python scripts/promptkit.py --run --prompt-file prompts/supplier/supplier_smoke.txt
 
 # MULTIPLE PROMPT FILES — files run in order, prompts in line order
 python scripts/promptkit.py --run --prompt-file \
-    prompts/dipstick/smoke.txt \
-    prompts/supplier/smoke.txt
+    prompts/dipstick/dipstick_smoke.txt \
+    prompts/supplier/supplier_smoke.txt
 
 # A MANIFEST — a YAML 'sets:' list; each set is its own subprocess with a
 # per-set timeout, so one hung set cannot stop the batch

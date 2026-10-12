@@ -11,19 +11,19 @@
 # Split of promptkit_sets.yaml: smoke=16, verify=17, exhaust=18.
 
 sets:
-  - dipstick/smoke
-  - supplier/smoke
-  - payables/smoke
-  - procurement/smoke
-  - receivables/smoke
-  - payables_supplier/smoke
-  - payables_procurement/smoke
-  - procurement_supplier/smoke
-  - columns/smoke
-  - refusals/smoke
-  - lifecycle/smoke
-  - child_as_root/smoke
-  - truncation/smoke
-  - date_filters/smoke
-  - fields_and_include/smoke
-  - modes/smoke
+  - dipstick/dipstick_smoke
+  - supplier/supplier_smoke
+  - payables/payables_smoke
+  - procurement/procurement_smoke
+  - receivables/receivables_smoke
+  - payables_supplier/payables_supplier_smoke
+  - payables_procurement/payables_procurement_smoke
+  - procurement_supplier/procurement_supplier_smoke
+  - columns/columns_smoke
+  - refusals/refusals_smoke
+  - lifecycle/lifecycle_smoke
+  - child_as_root/child_as_root_smoke
+  - truncation/truncation_smoke
+  - date_filters/date_filters_smoke
+  - fields_and_include/fields_and_include_smoke
+  - modes/modes_smoke

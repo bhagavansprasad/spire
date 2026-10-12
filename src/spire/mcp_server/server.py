@@ -191,6 +191,9 @@ async def search_invoices(
     invoice_date_before: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
+    unpaid: bool = False,
+    overdue: bool = False,
+    pending: bool = False,
     limit: int = 25,
 ) -> dict:
     """Search Oracle Fusion invoices.
@@ -236,6 +239,9 @@ async def search_invoices(
             invoice_date_before=invoice_date_before,
             amount_min=amount_min,
             amount_max=amount_max,
+            unpaid=unpaid,
+            overdue=overdue,
+            pending=pending,
             limit=limit,
         )
         return result.to_dict()
