@@ -41,7 +41,7 @@ Passthrough (raw docker compose args):
   ./spire-docker.sh <args>                       production default
 
 Modes:
-  production  ports 3001/3002/3003, persona default_dev  (default)
+  production  ports 5000/5001/5002, persona default_dev  (default)
   dev         ports 4001/4002/4003, persona default_dev
 
 Note: container names spire-mcp/api/ui are shared.

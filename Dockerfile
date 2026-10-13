@@ -29,7 +29,7 @@ COPY --chown=spire:spire SPIRE-PORTS.env ./
 RUN pip install -e . --no-deps
 
 USER spire
-EXPOSE 3001 3002 3003 4001 4002 4003
+EXPOSE 5000 5001 5002 4001 4002 4003
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "-m", "spire.api.server"]

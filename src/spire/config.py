@@ -83,7 +83,7 @@ OPENAI_MODEL = "gpt-5"
 # number is still in ONE place; no constant, no duplicate.
 #
 # SPIRE_MCP_MODE picks which set of ports to use: 'dev' (default, the
-# 4001 set) or 'production' (the 3001 set). The shell functions imply
+# 4001 set) or 'production' (the 5000 set). The shell functions imply
 # the mode; this fallback needs it named explicitly. Any other value
 # raises — a typo should not silently pick the wrong port set.
 #

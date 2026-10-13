@@ -74,7 +74,7 @@ same time (same host ports).
 **Host mode** — processes on your machine, Python from your venv:
 
 ```bash
-./spire-host.sh --start          # production: MCP 3001, API 3002, UI 3003
+./spire-host.sh --start          # production: MCP 5000, API 5001, UI 5002
 ./spire-host.sh --start dev      # dev:        MCP 4001, API 4002, UI 4003
 ```
 
@@ -89,7 +89,7 @@ Both honour `SPIRE-PORTS.env` (single source of truth for ports) and
 `personas.yaml` (Fusion + Oracle credentials). Full operator reference
 in [`how-to-run.md`](how-to-run.md).
 
-Open `http://localhost:3003` (production) or `http://localhost:4003`
+Open `http://localhost:5002` (production) or `http://localhost:4003`
 (dev) in a browser. The connection pill in the top-right corner turns
 **green** when the UI can reach the API.
 

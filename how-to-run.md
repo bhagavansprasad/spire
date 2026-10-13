@@ -156,7 +156,7 @@ After editing `personas.yaml`:
 Then confirm the new values are live:
 
 ```bash
-curl -s http://127.0.0.1:3002/status | jq .persona
+curl -s http://127.0.0.1:5001/status | jq .persona
 ```
 
 The `password_masked` field shows `first2••••last2` of the new value. If
@@ -259,7 +259,7 @@ cannot run at the same time (same host ports).
 **Host mode** — processes on your machine, Python from your venv:
 
 ```bash
-./spire-host.sh --start              # production: MCP 3001, API 3002, UI 3003
+./spire-host.sh --start              # production: MCP 5000, API 5001, UI 5002
 ./spire-host.sh --start dev          # dev:        MCP 4001, API 4002, UI 4003
 ./spire-host.sh --status             # show ports and holder PIDs
 ./spire-host.sh --stop               # stop these services only
@@ -781,7 +781,7 @@ git pull
 ./spire-docker.sh --build        # cached; fast if only src/ changed
 ./spire-docker.sh --restart
 ./spire-docker.sh --status       # three healthy containers
-curl -s http://127.0.0.1:3002/status | jq .pipeline_ready
+curl -s http://127.0.0.1:5001/status | jq .pipeline_ready
 ```
 
 Then bring up the tunnels:
