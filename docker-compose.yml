@@ -1,0 +1,81 @@
+name: spire
+
+x-spire-common: &spire-common
+  build: { context: . }
+  image: spire:local
+  restart: unless-stopped
+  extra_hosts:
+    # lets the api container reach the existing oracle26ai_db on the host
+    - "host.docker.internal:host-gateway"
+  env_file: [.env]
+
+services:
+  mcp:
+    <<: *spire-common
+    container_name: spire-mcp
+    command:
+      - fastmcp
+      - run
+      - src/spire/mcp_server/server.py
+      - -t
+      - http
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "${SPIRE_MCP_PORT}"
+    environment:
+      SPIRE_MCP_PORT: "${SPIRE_MCP_PORT}"
+      SPIRE_ORACLE_DSN: "${SPIRE_ORACLE_DSN:-host.docker.internal:1521/FREEPDB1}"
+    volumes:
+      # rotates weekly -> mounted, not baked
+      - ./personas.yaml:/app/personas.yaml:ro
+    ports:
+      - "127.0.0.1:${SPIRE_MCP_PORT}:${SPIRE_MCP_PORT}"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import socket,sys;s=socket.socket();s.settimeout(1);
+          sys.exit(0 if s.connect_ex(('127.0.0.1',${SPIRE_MCP_PORT}))==0 else 1)"
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+
+  api:
+    <<: *spire-common
+    container_name: spire-api
+    depends_on:
+      mcp: { condition: service_healthy }
+    command: ["python", "-m", "spire.api.server"]
+    environment:
+      SPIRE_API_HOST: "0.0.0.0"
+      SPIRE_API_PORT: "${SPIRE_API_PORT}"
+      SPIRE_MCP_URL:  "http://mcp:${SPIRE_MCP_PORT}/mcp"
+      SPIRE_UI_ORIGIN: "http://ui:${SPIRE_UI_PORT}"
+      SPIRE_PERSONA:  "${SPIRE_PERSONA}"
+      SPIRE_ORACLE_DSN: "${SPIRE_ORACLE_DSN:-host.docker.internal:1521/FREEPDB1}"
+      SPIRE_FORWARDED_ALLOW_IPS: "*"
+      SPIRE_LLM_PROVIDER: "${SPIRE_LLM_PROVIDER:-gemini}"
+      GEMINI_API_KEY:    "${GEMINI_API_KEY:-}"
+      GOOGLE_API_KEY:    "${GEMINI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY:    "${OPENAI_API_KEY:-}"
+    volumes:
+      # rotates weekly -> mounted, not baked into the image
+      - ./personas.yaml:/app/personas.yaml:ro
+    ports:
+      - "127.0.0.1:${SPIRE_API_PORT}:${SPIRE_API_PORT}"
+
+  ui:
+    <<: *spire-common
+    container_name: spire-ui
+    depends_on:
+      api: { condition: service_started }
+    command: ["spire-ui"]
+    environment:
+      SPIRE_UI_HOST: "0.0.0.0"
+      SPIRE_UI_PORT: "${SPIRE_UI_PORT}"
+      SPIRE_API_URL: "http://api:${SPIRE_API_PORT}"
+    ports:
+      - "127.0.0.1:${SPIRE_UI_PORT}:${SPIRE_UI_PORT}"
