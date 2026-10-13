@@ -171,7 +171,9 @@ case "$ACTION" in
   --restart) action_restart "${MODE:-production}" ;;
   --status)  action_status  "$MODE" ;;
   --logs)    action_logs    "${MODE:-production}" "${ARGS[@]}" ;;
-  --build)   docker compose -p spire-production -f docker-compose.yml build ;;
+  --build)
+    load_mode production
+    docker compose -p "$PROJECT" "${FILES[@]}" build ;;
   passthrough)
     dc "${MODE:-production}" "${ARGS[@]}" ;;
 esac
