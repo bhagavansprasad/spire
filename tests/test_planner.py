@@ -246,7 +246,7 @@ def test_step_ids_are_sequential(anchor_plan: Plan) -> None:
 # ─────────────────────────────────────────────────────────────────────
 # resolve_vocab — live KG tests
 #
-# Hit the live KG (oracle26ai_db_bhagavan container). Seed data lives in
+# Hit the live KG (oracle26ai_db_spire_iks container). Seed data lives in
 # scripts/rebuild_kg.sh. If these fail, run ./scripts/rebuild_kg.sh first
 # to ensure the vocabulary is loaded.
 # ─────────────────────────────────────────────────────────────────────

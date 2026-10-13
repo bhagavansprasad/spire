@@ -1,0 +1,32 @@
+# Dev-only overrides. Applied ONLY by `compose.sh dev`, via:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml ...
+# Production never loads this file.
+#
+# What it adds: source bind-mounts + MCP --reload so edits take effect
+# without a rebuild. Base file handles ports, deps, healthchecks, secrets.
+
+services:
+  mcp:
+    command:
+      - fastmcp
+      - run
+      - src/spire/mcp_server/server.py
+      - -t
+      - http
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "${SPIRE_MCP_PORT}"
+      - --reload
+      - --reload-dir
+      - src/spire
+    volumes:
+      - ./src:/app/src:ro
+
+  api:
+    volumes:
+      - ./src:/app/src:ro
+
+  ui:
+    volumes:
+      - ./src:/app/src:ro

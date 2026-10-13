@@ -94,7 +94,9 @@ async def lifespan(app: FastAPI):
         app.state.pipeline_error = f"menu load failed: {exc}"
 
     try:
-        _persona = load_persona("default_dev")
+        _persona = load_persona(
+            os.environ.get("SPIRE_PERSONA", "default_dev")
+        )
         _fusion = getattr(_persona, "fusion", None)
         if _fusion is not None:
             app.state.persona = PersonaInfo(
@@ -315,6 +317,10 @@ def main() -> None:
         host=API_HOST,
         port=API_PORT,
         reload=False,
+        proxy_headers=True,
+        forwarded_allow_ips=os.environ.get(
+            "SPIRE_FORWARDED_ALLOW_IPS", "127.0.0.1"
+        ),
     )
 
 

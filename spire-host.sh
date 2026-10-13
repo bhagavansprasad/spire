@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# spire.sh — start, inspect, and stop the SPIRE MCP / API / UI services.
+# spire-host.sh — start, inspect, and stop the SPIRE MCP / API / UI services.
 #
-#   ./spire.sh --dev              start dev services (background)
-#   ./spire.sh --runtime          start runtime services (background)
-#   ./spire.sh --dev --mcp-only   start ONLY the MCP server (foreground, --reload)
-#   ./spire.sh --status           show the current mode's ports and holder PIDs
-#   ./spire.sh --stop             stop the current mode's services
-#   ./spire.sh --tail             start, then tail the UI log
-#   ./spire.sh --help             show this help
-#   ./spire.sh                    show this help (no args)
+#   ./spire-host.sh --dev              start dev services (background)
+#   ./spire-host.sh --runtime          start runtime services (background)
+#   ./spire-host.sh --dev --mcp-only   start ONLY the MCP server (foreground, --reload)
+#   ./spire-host.sh --status           show the current mode's ports and holder PIDs
+#   ./spire-host.sh --stop             stop the current mode's services
+#   ./spire-host.sh --tail             start, then tail the UI log
+#   ./spire-host.sh --help             show this help
+#   ./spire-host.sh                    show this help (no args)
 #
 # DESIGN
 #   PORTS ARE THE SOURCE OF TRUTH.
@@ -74,6 +74,17 @@ pids_on_port() {
   return 0
 }
 
+# Any listener on the given TCP port, regardless of owner. Unlike
+# pids_on_port, this does not require us to own the process - it just
+# asks the kernel whether anything is bound. Used to detect ports held
+# by processes we cannot see with 'ss -p' (e.g. root-owned docker-proxy
+# when a compose stack is up). Without this, a foreign holder looks
+# identical to a free port.
+port_is_bound() {
+  local port="$1"
+  ss -ltn 2>/dev/null | grep -qE "[:.]${port}[[:space:]]"
+}
+
 # Does the given PID look like one of ours? Used only to avoid killing
 # unrelated processes during a port sweep. Falls back to "assume ours"
 # for a bare port sweep if the cmdline is unreadable.
@@ -123,7 +134,7 @@ read_pidfile_into() {
 
 usage() {
   cat >&2 <<EOF
-Usage: ./spire.sh [--start | --stop | --status | --restart] [dev | production]
+Usage: ./spire-host.sh [--start | --stop | --status | --restart] [dev | production]
 
   --start [target]     start services in the background (default: dev)
   --stop  [target]     stop services (default: dev)
@@ -209,11 +220,11 @@ stop_mode() {
     port="${line%%|*}"; svc="${line#*|}"
     for pid in $(pids_on_port "$port"); do
       if is_our_process "$pid"; then
-        echo "spire.sh: stopping $svc on port $port (PID $pid)"
+        echo "spire-host.sh: stopping $svc on port $port (PID $pid)"
         kill -TERM "$pid" 2>/dev/null || true
         stopped=1
       else
-        echo "spire.sh: port $port is held by non-SPIRE PID $pid; leaving it alone" >&2
+        echo "spire-host.sh: port $port is held by non-SPIRE PID $pid; leaving it alone" >&2
       fi
     done
   done < <(ports_for_mode "$target_mode")
@@ -225,7 +236,7 @@ stop_mode() {
     pf_mcp="$PF_MCP"; pf_api="$PF_API"; pf_ui="$PF_UI"
     for pid in "$pf_mcp" "$pf_api" "$pf_ui"; do
       if pid_alive "$pid" && is_our_process "$pid"; then
-        echo "spire.sh: stopping PID $pid from $pidfile"
+        echo "spire-host.sh: stopping PID $pid from $pidfile"
         kill -TERM "$pid" 2>/dev/null || true
         stopped=1
       fi
@@ -243,9 +254,9 @@ stop_mode() {
         fi
       done
     done < <(ports_for_mode "$target_mode")
-    echo "spire.sh: $target_mode stopped."
+    echo "spire-host.sh: $target_mode stopped."
   else
-    echo "spire.sh: no $target_mode processes to stop."
+    echo "spire-host.sh: no $target_mode processes to stop."
   fi
 }
 
@@ -258,7 +269,7 @@ stop_mode() {
 show_status() {
   local filter_mode="$1"
 
-  echo "spire.sh status  (mode: $filter_mode)"
+  echo "spire-host.sh status  (mode: $filter_mode)"
   echo "───────────────────────────────────"
   echo
 
@@ -269,11 +280,16 @@ show_status() {
   while IFS= read -r line; do
     port="${line%%|*}"; svc="${line#*|}"
     pids="$(pids_on_port "$port")"
-    if [ -z "$pids" ]; then
-      state="down"; pid="-"
-    else
+    if [ -n "$pids" ]; then
       state="up"
       pid="$(echo "$pids" | head -n1)"
+    elif port_is_bound "$port"; then
+      # Bound, but holder is not visible to us (not root; e.g. docker-proxy).
+      # Report 'up' with '?' so the row is not misread as 'free'.
+      state="up"
+      pid="?"
+    else
+      state="down"; pid="-"
     fi
     printf '%-7s %-6s %-6s %s\n' "$port" "$svc" "$state" "$pid"
   done < <(ports_for_mode "$filter_mode")
@@ -323,14 +339,24 @@ _preflight_ports() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     port="${line%%|*}"; svc="${line#*|}"
-    for pid in $(pids_on_port "$port"); do
-      if is_our_process "$pid"; then
-        echo "spire.sh: port $port ($svc) is already held by SPIRE PID $pid" >&2
-      else
-        echo "spire.sh: port $port ($svc) is already held by PID $pid (not SPIRE)" >&2
-      fi
+    local pids
+    pids="$(pids_on_port "$port")"
+    if [ -n "$pids" ]; then
+      for pid in $pids; do
+        if is_our_process "$pid"; then
+          echo "spire-host.sh: port $port ($svc) is already held by SPIRE PID $pid" >&2
+        else
+          echo "spire-host.sh: port $port ($svc) is already held by PID $pid (not SPIRE)" >&2
+        fi
+        held=1
+      done
+    elif port_is_bound "$port"; then
+      echo "spire-host.sh: port $port ($svc) is bound by an unidentified process" >&2
+      echo "          (often root-owned, e.g. docker-proxy from a compose stack)." >&2
+      echo "          Try:  sudo netstat -alnp | grep :$port" >&2
+      echo "          Or:   ./spire-docker.sh --stop    # if a Docker stack is up" >&2
       held=1
-    done
+    fi
   done <<< "$check_ports"
   return "$held"
 }
@@ -346,13 +372,13 @@ _preflight_pidfile() {
   local pid
   for pid in "$pf_mcp" "$pf_api" "$pf_ui"; do
     if pid_alive "$pid" && is_our_process "$pid"; then
-      echo "spire.sh: PID $pid from $PIDFILE is still alive and ours." >&2
-      echo "          run './spire.sh --stop $MODE' first, or './spire.sh --status'." >&2
+      echo "spire-host.sh: PID $pid from $PIDFILE is still alive and ours." >&2
+      echo "          run './spire-host.sh --stop $MODE' first, or './spire-host.sh --status'." >&2
       return 1
     fi
   done
   # All recorded PIDs are either dead or reassigned. Stale file.
-  echo "spire.sh: removing stale pidfile $PIDFILE" >&2
+  echo "spire-host.sh: removing stale pidfile $PIDFILE" >&2
   rm -f "$PIDFILE"
   return 0
 }
@@ -379,7 +405,7 @@ if [ "$MCP_ONLY" = "1" ]; then
 fi
 
 if ! _preflight_ports "$check_ports"; then
-  echo "spire.sh: run './spire.sh --stop $MODE' first, or './spire.sh --status'." >&2
+  echo "spire-host.sh: run './spire-host.sh --stop $MODE' first, or './spire-host.sh --status'." >&2
   exit 1
 fi
 
@@ -434,7 +460,7 @@ while [ "$SECONDS" -lt "$_mcp_deadline" ]; do
   sleep 0.5
 done
 if [ -z "$(pids_on_port "$MCP_PORT")" ]; then
-  echo "spire.sh: MCP did not bind within ${BIND_TIMEOUT_SECS}s; starting API anyway" >&2
+  echo "spire-host.sh: MCP did not bind within ${BIND_TIMEOUT_SECS}s; starting API anyway" >&2
 fi
 
 SPIRE_API_PORT="$API_PORT" \
@@ -488,10 +514,10 @@ if [ "$all_ok" = "0" ]; then
   echo "All three up. Supervisor PIDs in $PIDFILE."
 else
   echo "At least one service failed to bind. Inspect $LOG_DIR/*.log." >&2
-  echo "PIDs recorded in $PIDFILE — './spire.sh --stop' cleans up." >&2
+  echo "PIDs recorded in $PIDFILE — './spire-host.sh --stop' cleans up." >&2
 fi
-echo "  ./spire.sh --status   show ports and holder PIDs"
-echo "  ./spire.sh --stop     stop these services only"
+echo "  ./spire-host.sh --status   show ports and holder PIDs"
+echo "  ./spire-host.sh --stop     stop these services only"
 
 if [ "$TAIL_UI" = "1" ]; then
   tail -f "$LOG_DIR/ui.log" || true

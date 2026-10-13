@@ -323,4 +323,22 @@ def load_persona(name: str) -> Persona:
     if name not in data:
         raise KeyError(f"Persona '{name}' not found in {PERSONAS_FILE}")
 
-    return Persona(**data[name])
+    persona = Persona(**data[name])
+
+    # Container override. Compose sets SPIRE_ORACLE_DSN so the same
+    # personas.yaml works on the host (localhost) and inside a container
+    # (host.docker.internal). SPIRE_ORACLE_USER / SPIRE_ORACLE_PASSWORD
+    # are optional and exist for secret-injection setups that don't want
+    # credentials on disk. Unset env vars fall back to the file.
+    if persona.oracle is not None:
+        dsn  = _os.environ.get("SPIRE_ORACLE_DSN")
+        user = _os.environ.get("SPIRE_ORACLE_USER")
+        pwd  = _os.environ.get("SPIRE_ORACLE_PASSWORD")
+        if dsn or user or pwd:
+            persona.oracle = OracleCredentials(
+                dsn=dsn or persona.oracle.dsn,
+                username=user or persona.oracle.username,
+                password=pwd or persona.oracle.password,
+            )
+
+    return persona

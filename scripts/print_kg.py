@@ -8,7 +8,7 @@ kg_edge_tool) and prints them as formatted ASCII tables, with row counts
 and an FK summary.
 
 Requires:
-- Oracle container running (oracle26ai_db_bhagavan)
+- Oracle container running (oracle26ai_db_spire_iks)
 - personas.yaml present with the default_dev persona
 - spire installed in the active environment (pip install -e . from repo root)
 

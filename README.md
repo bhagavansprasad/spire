@@ -68,24 +68,30 @@ cp personas.example.yaml personas.yaml   # add your Fusion pod + DB creds
 python scripts/rebuild_kg.py             # build the Knowledge Graph
 ```
 
-Then, in **three** terminals — **in this order**:
+Then bring up the stack. Two ways — pick one. They cannot run at the
+same time (same host ports).
+
+**Host mode** — processes on your machine, Python from your venv:
 
 ```bash
-# Terminal 1 — MCP server (must be running first; the API connects to it)
-python -m spire.mcp_server.server
-# Listening on http://127.0.0.1:3333
-
-# Terminal 2 — API server (waits for the MCP server above)
-python -m spire.api.server
-# Listening on http://0.0.0.0:8000
-
-# Terminal 3 — Streamlit UI (talks to the API above)
-spire-ui
-# Listening on http://0.0.0.0:8888
+./spire-host.sh --start          # production: MCP 3001, API 3002, UI 3003
+./spire-host.sh --start dev      # dev:        MCP 4001, API 4002, UI 4003
 ```
 
-Open `http://localhost:8888` in a browser. The connection pill in the
-top-right corner turns **green** when the UI can reach the API.
+**Docker mode** — three containers, one shared image:
+
+```bash
+./spire-docker.sh --start        # production
+./spire-docker.sh --start dev    # dev
+```
+
+Both honour `SPIRE-PORTS.env` (single source of truth for ports) and
+`personas.yaml` (Fusion + Oracle credentials). Full operator reference
+in [`how-to-run.md`](how-to-run.md).
+
+Open `http://localhost:3003` (production) or `http://localhost:4003`
+(dev) in a browser. The connection pill in the top-right corner turns
+**green** when the UI can reach the API.
 
 To run a prompt from the CLI instead of the UI (no API server needed):
 
@@ -95,6 +101,32 @@ python scripts/promptkit.py --run --prompt "List all suppliers in India"
 
 Full setup, keys, diagnostics, prompt sets, and troubleshooting are in
 [`how-to-run.md`](how-to-run.md).
+
+---
+
+## Sample prompts
+
+A taste of what Spire answers. The full list with timing notes lives in
+[`how-to-run.md`](how-to-run.md#6-example-prompts).
+
+| Category | Prompt |
+|---|---|
+| Supplier | `Count of suppliers` |
+| Supplier | `Suppliers with their addresses` |
+| Procurement | `Show PO 2144 and its lines` |
+| Cross-module | `Top 5 suppliers by spend this year` |
+| Payables | `Show me invoices for supplier 1252` |
+| Payables | `invoices for supplier 1252 over 10000` |
+| Receivables | `Get the AR invoice with CustomerTransactionId 300000248096352` |
+| Receivables | `Show me AR invoices for customer ABC Corporation Americas` |
+| Slow (3–4 min) | `Which suppliers have open purchase orders?` |
+| Refusal (a pass) | `show me contract renewals due next quarter` |
+
+Run any of them with:
+
+```bash
+python scripts/promptkit.py --run --prompt "Count of suppliers"
+```
 
 ---
 

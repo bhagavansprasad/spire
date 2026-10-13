@@ -559,7 +559,7 @@ async def _run_async(prompts: list[str]) -> int:
         if "All connection attempts failed" in str(exc):
             print(f"Cannot reach the MCP server at {url}.", file=sys.stderr)
             print(
-                "Start it first: 'spired' (dev) or './spire.sh --dev'.",
+                "Start it first: 'spired' (dev) or './spire-host.sh --start dev'.",
                 file=sys.stderr,
             )
             return 1

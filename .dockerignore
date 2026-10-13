@@ -1,0 +1,39 @@
+# VCS
+.git
+.github
+.gitignore
+
+# Python artifacts
+.venv
+venv
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Dev-only trees — the runtime parser contexts live under src/, not here
+docs/
+tests/
+test_tools/
+scripts/
+prompts/
+logs/
+
+# Secrets & local state — personas.yaml is bind-mounted, not baked
+personas.yaml
+personas.example.yaml
+.env
+.env.*
+!.env.example
+.spire-dev.env
+
+# Docker artifacts themselves (avoid context recursion)
+Dockerfile
+docker-compose*.yml
+compose.sh
+.dockerignore
+ngrok*.yml
