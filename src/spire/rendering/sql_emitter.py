@@ -283,10 +283,27 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     joins = list(base.base_joins)
     where: list[str] = []
 
+    # Aggregation args fall into four categories:
+    #   1. skip_args — fetch caps or tool-internal knobs, deliberately
+    #      not translated (e.g. 'limit' which bounds the FETCH).
+    #   2. spec.top_n_arg — the top-N limit; becomes FETCH FIRST N ROWS
+    #      ONLY after the ORDER BY, not a WHERE.
+    #   3. filter args — mapped via FilterSpec into the WHERE clause.
+    #   4. unknown args — emitted as a comment so nothing is silently
+    #      dropped.
+    top_n_value: int | None = None
     for arg_name, arg_value in step.tool_args.items():
+        if arg_name in spec.skip_args:
+            continue
+        if arg_name == spec.top_n_arg:
+            try:
+                top_n_value = int(arg_value)
+            except (TypeError, ValueError):
+                where.append(
+                    f"-- non-numeric top_n: {arg_name}={arg_value!r}"
+                )
+            continue
         if arg_value == ITERATION_SENTINEL:
-            # Aggregations iterate rarely, but if they do, use the
-            # same sentinel handling as the entity path.
             fspec = overlay.filters.get((step.tool_name, arg_name))
             if fspec is None:
                 where.append(f"-- unmapped iteration arg: {arg_name}")
@@ -321,6 +338,8 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     body_lines.append(f"GROUP BY {base.alias}.{spec.group_by_column}")
     if spec.order_desc_by_measure:
         body_lines.append(f"ORDER BY {measure_sql} DESC")
+    if top_n_value is not None:
+        body_lines.append(f"FETCH FIRST {top_n_value} ROWS ONLY")
 
     sql_body = "\n".join(body_lines) + ";"
     header = f"-- Step {step.step_id}: {step.tool_name} (aggregation)"

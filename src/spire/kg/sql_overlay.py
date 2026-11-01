@@ -48,6 +48,14 @@ class AggregationSpec:
     measure_template: str
     order_desc_by_measure: bool = True
     assumption: str | None = None
+    # Arg name (in step.tool_args) that carries the top-N limit. When
+    # set, the emitter emits FETCH FIRST N ROWS ONLY after the ORDER BY,
+    # and skips this arg in the filter loop (it is a limit, not a WHERE).
+    top_n_arg: str | None = None
+    # Arg names to silently skip in the filter loop: args the tool takes
+    # that are neither filters nor limits. Used for fetch caps (e.g.
+    # 'limit') that bound the FETCH, not the result set.
+    skip_args: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -629,6 +637,41 @@ _FILTERS = {
         predicate_template="{alias}.CUSTOMER_SITE = {value}",
         assumption="standard_receipt_site_client_side",
     ),
+
+    # Phase 5: aggregation argument filters
+    ("aggregate_invoices_by_supplier", "date_from"): FilterSpec(
+        tool_name="aggregate_invoices_by_supplier",
+        arg_name="date_from",
+        predicate_template="{alias}.INVOICE_DATE >= {value}",
+        assumption="aggregation_arg_handling",
+    ),
+    ("aggregate_invoices_by_supplier", "date_to"): FilterSpec(
+        tool_name="aggregate_invoices_by_supplier",
+        arg_name="date_to",
+        predicate_template="{alias}.INVOICE_DATE < {value}",
+        assumption="aggregation_arg_handling",
+    ),
+    ("aggregate_standard_receipts_by_method", "customer_name"): FilterSpec(
+        tool_name="aggregate_standard_receipts_by_method",
+        arg_name="customer_name",
+        predicate_template="HP.PARTY_NAME = {value}",
+        assumption="aggregation_arg_handling",
+    ),
+    ("aggregate_standard_receipts_by_method", "account_number"): FilterSpec(
+        tool_name="aggregate_standard_receipts_by_method",
+        arg_name="account_number",
+        predicate_template="CA.ACCOUNT_NUMBER = {value}",
+        assumption="aggregation_arg_handling",
+    ),
+    ("rank_invoices_by_amount", "supplier_name"): FilterSpec(
+        tool_name="rank_invoices_by_amount",
+        arg_name="supplier_name",
+        predicate_template=(
+            "P.VENDOR_ID IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS "
+            "WHERE PARTY_NAME = {value})"
+        ),
+        assumption="aggregation_arg_handling",
+    ),
 }
 
 
@@ -861,6 +904,16 @@ _ASSUMPTIONS = {
         "would disagree on that column. Recorded here so a future "
         "session knows the column is deliberately absent, not forgotten."
     ),
+    "aggregation_arg_handling": (
+        "Aggregations take arguments the emitter handles in three ways: "
+        "date and identity args are mapped as WHERE filters (date_from, "
+        "date_to, customer_name, account_number, supplier_name); top_n "
+        "is emitted as FETCH FIRST N ROWS ONLY after the ORDER BY; and "
+        "fetch caps (limit) are deliberately not translated, because "
+        "they bound the FETCH, not the RESULT SET. A LIMIT in the tool "
+        "does not mean 'top N groups' and must not become a FETCH FIRST "
+        "in the SQL."
+    ),
 }
 
 
@@ -902,6 +955,7 @@ OVERLAY = Overlay(
             group_by_column="VENDOR_ID",
             measure_template="SUM(INVOICE_AMOUNT)",
             assumption="aggregation_measures",
+            top_n_arg="top_n",
         ),
         "aggregate_purchase_orders_by_status": AggregationSpec(
             tool_name="aggregate_purchase_orders_by_status",
@@ -910,6 +964,7 @@ OVERLAY = Overlay(
             measure_template="SUM(AMOUNT)",
             order_desc_by_measure=False,
             assumption="aggregation_measures",
+            top_n_arg="top_n",
         ),
         "aggregate_standard_receipts_by_method": AggregationSpec(
             tool_name="aggregate_standard_receipts_by_method",
@@ -918,6 +973,7 @@ OVERLAY = Overlay(
             measure_template="SUM(AMOUNT)",
             order_desc_by_measure=False,
             assumption="aggregation_measures",
+            skip_args={"limit"},
         ),
         "rank_invoices_by_amount": AggregationSpec(
             tool_name="rank_invoices_by_amount",
@@ -925,6 +981,7 @@ OVERLAY = Overlay(
             group_by_column="INVOICE_ID",
             measure_template="SUM(INVOICE_AMOUNT)",
             assumption="aggregation_measures",
+            top_n_arg="top_n",
         ),
     },
     not_expressible={
