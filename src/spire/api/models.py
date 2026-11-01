@@ -38,6 +38,10 @@ class Metadata(BaseModel):
     tokens_out: int                      # 0 until Phase 5
     kg_version: str | None               # None until Phase 3g
     stages: list[StageTiming] = Field(default_factory=list)
+    sql: list[str] | None = Field(
+        default=None,
+        description="The SQL projection for the plan, when available."
+    )
 
 
 # ── Answer variants ──────────────────────────────────────────────────
