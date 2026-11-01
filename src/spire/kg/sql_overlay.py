@@ -387,7 +387,6 @@ _ENTITIES = {
             ("R", "RECEIPT_DATE"),
             ("R", "AMOUNT"),
             ("R", "CURRENCY_CODE"),         # Currency
-            ("R", "RECEIPT_METHOD_ID"),     # ReceiptMethod (join to AR_RECEIPT_METHODS for display)
             ("R", "STATUS"),                # State (Applied/Unapplied)
             ("R", "AMOUNT_APPLIED"),        # derive UnappliedAmount = AMOUNT - AMOUNT_APPLIED
         ],
@@ -419,7 +418,6 @@ _ENTITIES = {
             ("R", "RECEIPT_DATE"),
             ("R", "AMOUNT"),
             ("R", "CURRENCY_CODE"),
-            ("R", "RECEIPT_METHOD_ID"),
             ("R", "STATUS"),
             ("HP", "PARTY_NAME"),
         ],
@@ -850,6 +848,18 @@ _ASSUMPTIONS = {
         "COUNT over a measure column on the base entity. Where a tool "
         "computes a RATIO or DISTINCT count not derivable as SUM/COUNT "
         "on one column, it is listed in not_expressible instead."
+    ),
+    "standard_receipt_method_not_mapped": (
+        "Both the StandardReceipt and AccountReceipt entities omit the "
+        "receipt method from their SELECT lists. The physical column on "
+        "AR_CASH_RECEIPTS_ALL is RECEIPT_METHOD_ID (a numeric FK), but "
+        "the REST field ReceiptMethod is the display string (e.g. "
+        "'Lockbox', 'Check (Directly/No Remit)') which lives on "
+        "AR_RECEIPT_METHODS. That join is not yet mapped; emitting the "
+        "numeric id where the reader expects a name would be correct in "
+        "shape but wrong in kind — the REST answer and the SQL answer "
+        "would disagree on that column. Recorded here so a future "
+        "session knows the column is deliberately absent, not forgotten."
     ),
 }
 

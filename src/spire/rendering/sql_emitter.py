@@ -218,6 +218,36 @@ def _resolve_value(
     return f"'{safe}'"
 
 
+def _qualify_measure(template: str, alias: str) -> str:
+    """Prefix the column inside a measure template with an alias.
+
+    "SUM(AMOUNT)" -> "SUM(P.AMOUNT)"
+    "SUM(INVOICE_AMOUNT)" -> "SUM(P.INVOICE_AMOUNT)"
+    "COUNT(DISTINCT VENDOR_ID)" -> "COUNT(DISTINCT P.VENDOR_ID)"
+
+    The base table's columns are the ones intended; without the alias,
+    a joined table that happens to have a same-named column makes the
+    query ambiguous. None of the current aggregations collide, but the
+    rule is too narrow to leave implicit.
+
+    If the template does not match the `<FN>(<COL>)` shape, it is
+    returned unchanged — a composite expression (e.g. a ratio) would
+    not have one column to qualify and would need per-tool handling.
+    """
+    import re
+
+    m = re.match(r"^(\w+)\((.+)\)$", template)
+    if not m:
+        return template
+    fn, inner = m.group(1), m.group(2)
+    inner_stripped = inner.strip()
+    # COUNT(DISTINCT col)
+    if inner_stripped.upper().startswith("DISTINCT "):
+        col = inner_stripped[len("DISTINCT "):].strip()
+        return f"{fn}(DISTINCT {alias}.{col})"
+    return f"{fn}({alias}.{inner_stripped})"
+
+
 def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     """Emit a GROUP BY query for an aggregation tool.
 
@@ -244,9 +274,10 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
             f"overlay — SQL not emitted)"
         )
 
+    measure_sql = _qualify_measure(spec.measure_template, base.alias)
     select_lines = [
         f"{base.alias}.{spec.group_by_column}",
-        f"       {spec.measure_template}",
+        f"       {measure_sql}",
     ]
     from_line = f"FROM {base.fusion_table} {base.alias}"
     joins = list(base.base_joins)
@@ -289,7 +320,7 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
         body_lines.append("WHERE " + "\n  AND ".join(where))
     body_lines.append(f"GROUP BY {base.alias}.{spec.group_by_column}")
     if spec.order_desc_by_measure:
-        body_lines.append(f"ORDER BY {spec.measure_template} DESC")
+        body_lines.append(f"ORDER BY {measure_sql} DESC")
 
     sql_body = "\n".join(body_lines) + ";"
     header = f"-- Step {step.step_id}: {step.tool_name} (aggregation)"
