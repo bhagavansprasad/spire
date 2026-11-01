@@ -37,6 +37,19 @@ def emit_sql(plan: Iterable[Any], overlay: Overlay = OVERLAY) -> list[str]:
 
 
 def _emit_step(step: Any, overlay: Overlay) -> str:
+    # Tools in `not_expressible` cannot be reduced to one SELECT (multi-
+    # resource reconciliation, Python-side joins that are not equivalent
+    # to a single query). They are declared covered for the guardrail
+    # invariant; the emitter prints an explicit comment rather than a
+    # fake SELECT that would return wrong rows.
+    if step.tool_name in overlay.not_expressible:
+        return (
+            f"-- Step {step.step_id}: {step.tool_name}\n"
+            f"-- (not expressible as one SELECT — this tool composes "
+            f"multiple resources into a single record; see "
+            f"docs/design/SQL_OVERLAY_COMPLETENESS.md §7)"
+        )
+
     entity_name = overlay.tool_to_entity.get(step.tool_name)
     if entity_name is None:
         return (
