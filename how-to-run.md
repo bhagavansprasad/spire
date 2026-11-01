@@ -108,6 +108,7 @@ DATABASE IS READY TO USE!
 docker exec -i oracle26ai_db_spire_iks sqlplus sys/Abcd1234@localhost:1521/FREEPDB1 as sysdba <<'EOF'
 CREATE USER spire IDENTIFIED BY "jnjnuh";
 GRANT CONNECT, RESOURCE, CREATE VIEW, UNLIMITED TABLESPACE TO spire;
+GRANT DB_DEVELOPER_ROLE TO spire;
 EXIT;
 EOF
 ```

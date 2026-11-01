@@ -1,0 +1,22 @@
+# Spire persona configuration — example file.
+#
+# Copy this file to personas.yaml and fill in real credentials.
+# personas.yaml is gitignored; never commit it.
+#
+# Each persona groups all credentials a single environment needs:
+#   - fusion: Oracle Fusion REST API credentials (required)
+#   - oracle: Oracle Database credentials (optional until Dynamic
+#             Orchestration phases 03+ start using the KG)
+
+ 
+default_dev:
+  fusion:
+    base_url: 'https://fa-euth-dev93-saasfademo1.ds-fa.oraclepdemos.com'
+    username: 'Oliver.Campbell'
+    password: 'N?@zn62G'
+    auth_type: "basic"
+ 
+  oracle:
+    dsn: "localhost:1521/FREEPDB1"
+    username: "spire"
+    password: "jnjnuh"
