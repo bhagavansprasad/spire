@@ -132,3 +132,55 @@ scp personas.yaml user@cloud-vm:~/spire/personas.yaml
 ./spire-docker.sh --restart
 python scripts/rebuild_kg.py
 ```
+
+---
+
+## 1. Supported Fusion Modules
+
+Spire routes prompts to these modules:
+- `supplier` (Supplier Master, Addresses, Sites, Classifications, Contacts)
+- `procurement` (Purchase Orders, Lines, Schedules, Distributions, Buyers)
+- `payables` (AP Invoices)
+- `receivables` (AR Invoices, Customer Accounts, Credit Memos, Standard Receipts)
+
+## 2. SQL Generation Prompts (Overlay Support)
+
+These prompts trigger the SQL Overlay POC. Currently, the SQL emitter only generates actual `SELECT` queries for the `supplier` module (via the 5 mapped tools). Prompts in other modules will show a fallback comment.
+
+```bash
+# Basic (Base entity + status)
+python scripts/promptkit.py --run --prompt "List active suppliers"
+
+# Basic (Status variant)
+python scripts/promptkit.py --run --prompt "Show me inactive suppliers"
+
+# Intermediate (Name filter)
+python scripts/promptkit.py --run --prompt "Show suppliers with 'Lee' in the name"
+
+# Intermediate (Edge traversal via joins)
+python scripts/promptkit.py --run --prompt "Show suppliers in the United States"
+
+# Complex (Edge traversal + vocab literal resolution)
+python scripts/promptkit.py --run --prompt "Find suppliers with a site in the US1 Business Unit"
+```
+
+## 3. Spire Capability Prompts (What it can answer)
+
+These prompts demonstrate the full NL-to-data pipeline, ranging from simple list queries to complex multi-hop edge traversals and aggregations across all modules.
+
+```bash
+# 1. Basic (Count)
+python scripts/promptkit.py --run --prompt "Count of suppliers"
+
+# 2. Basic (Procurement header + children)
+python scripts/promptkit.py --run --prompt "Show PO 2144 and its lines"
+
+# 3. Intermediate (Payables filtering)
+python scripts/promptkit.py --run --prompt "invoices for supplier 1252 over 10000"
+
+# 4. Intermediate (Cross-module aggregation)
+python scripts/promptkit.py --run --prompt "Top 5 suppliers by spend this year"
+
+# 5. Complex (Receivables path resolution)
+python scripts/promptkit.py --run --prompt "Show me AR invoices for customer ABC Corporation Americas"
+```
