@@ -303,9 +303,17 @@ python scripts/print_kg.py --counts-only
 python scripts/promptkit.py --run --prompt "List all suppliers in India"
 ```
 
-> **Restart the MCP server after ANY change under `src/spire/mcp_server/`.**
-> Host mode: `./spire-host.sh --restart`.
-> Docker mode: `./spire-docker.sh --restart`.
+> **Restart the stack after ANY change under `src/spire/`.**
+> Host mode: `./spire-host.sh --restart dev` (or `--restart` for production).
+> Docker mode: `./spire-docker.sh --restart dev`.
+>
+> The CLI launches a fresh Python process per invocation and always
+> picks up the current file. The API server and MCP server import their
+> modules once at startup and hold those imports in memory. A running
+> API server that started before a code change serves the OLD code from
+> disk until it is restarted — the UI will show stale behavior even
+> though `master` is current. This applies to every file under
+> `src/spire/`: `mcp_server/`, `kg/`, `rendering/`, `api/`, `synthesizer/`.
 
 Override provider or model for one command:
 
@@ -852,6 +860,70 @@ genuinely annoying.
 
 ---
 
+## 9. SQL Overlay coverage
+
+Every prompt Spire executes produces equivalent SQL. There are three
+possible shapes, and one is chosen per Plan step:
+
+- **`SELECT`** — a step that fetches records from a single physical
+  table (with any joins its entity requires). Emitted for the 23
+  entity-mapped tools.
+- **`GROUP BY`** — a step that computes an aggregate. Emitted for the
+  4 aggregation tools.
+- **`not expressible`** — a step whose output cannot be reduced to one
+  `SELECT` (composite reconciliations, two-fetch comparisons, scalar
+  triples). Emitted as a documented comment. There are 7 such tools.
+
+A refusal produces no SQL of any kind — the correct behavior for a
+prompt Spire declines.
+
+### What the overlay covers
+
+| Module | Tools that emit `SELECT` |
+|---|---|
+| Supplier | `search_suppliers`, `search_suppliers_by_site_bu`, `search_suppliers_by_classification`, `get_supplier_contacts` |
+| Address | `search_addresses` |
+| Procurement | `search_purchase_orders`, `get_purchase_order_by_id`, `get_purchase_order_lines`, `get_purchase_order_schedules`, `get_purchase_order_distributions` |
+| Payables | `search_invoices` |
+| Receivables | `get_receivables_invoice_by_id`, `get_receivables_invoice_lines`, `get_receivables_invoice_tax_lines`, `get_receivables_invoice_transaction_dff`, `list_receivables_credit_memos`, `get_customer_account_by_name`, `get_customer_transactions`, `get_account_credit_memos`, `get_account_receipts`, `get_account_receipt_applications`, `search_standard_receipts` |
+| Buyer | `get_buyer` |
+
+| Aggregations (`GROUP BY`) | Not expressible |
+|---|---|
+| `aggregate_invoices_by_supplier` | `get_purchase_order_lifecycle_status` |
+| `aggregate_purchase_orders_by_status` | `compare_purchase_order_to_invoices` |
+| `aggregate_standard_receipts_by_method` | `compare_supplier_orders_to_invoices` |
+| `rank_invoices_by_amount` | `compare_top_suppliers_orders_to_invoices` |
+| | `aggregate_purchase_orders_by_supplier` |
+| | `rank_customer_accounts_by_exposure` |
+| | `summarize_open_purchase_orders` |
+
+The coverage is enforced by `tests/test_sql_overlay_coverage.py`. The
+test asserts that every MCP tool the server registers has an entry in
+one of the overlay's three dispatch tables (`tool_to_entity`,
+`aggregations`, `not_expressible`), and that every entry references a
+live tool. Adding a new MCP tool without a matching overlay entry fails
+the test at CI time, not at prompt time.
+
+The plan, phases, invariant, and out-of-scope decisions are in
+`docs/design/SQL_OVERLAY_COMPLETENESS.md`.
+
+### Where the SQL appears
+
+- **CLI:** the `Plan:` section prints the SQL projection when
+  `--show-planner` (or `--show-all`) is on. No separate flag is needed
+  — the CLI already prints it under the plan.
+- **API/UI:** the SQL is in the `metadata.sql` array of the response
+  envelope. The UI renders it in an expander labeled "SQL projection"
+  below the answer.
+
+The SQL is *emission only*. Nothing in Spire executes it today. It is
+the deterministic translation of the Plan into Fusion-DB syntax, meant
+to be read and audited, not run against the pod in place of the REST
+tools.
+
+---
+
 ## Troubleshooting
 
 - **`ModuleNotFoundError: No module named 'spire'`** — `pip install -e .`
@@ -869,6 +941,11 @@ genuinely annoying.
   and no `SPIRE_DB_*` env vars.
 - **MCP connection errors** — server not running, or not restarted after
   an `mcp_server/` change.
+- **UI shows old SQL / stale behavior after a code change** — the API
+  server (or MCP server, or both) is holding its import of the changed
+  module in memory. `./spire-host.sh --restart dev` (or `--restart` for
+  production). The CLI is not affected because it launches a fresh
+  process per run.
 - **Diagnostics print above the answer when piped** — fixed;
   `diagnostics.answer()` flushes.
 - **A whole set refuses with a short entity list** — the KG is stale
