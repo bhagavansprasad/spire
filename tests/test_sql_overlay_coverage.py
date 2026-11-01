@@ -39,14 +39,20 @@ async def test_every_mcp_tool_has_an_overlay_entry():
 
     tools = await mcp.list_tools()
     tool_names = {t.name for t in tools}
-    # Two ways a tool can be covered:
+    # Three ways a tool can be covered:
     #   1. It has a mapping in tool_to_entity (the emitter produces a
     #      SELECT against a physical table).
-    #   2. It is listed in not_expressible (the emitter produces an
+    #   2. It has a mapping in aggregations (the emitter produces a
+    #      GROUP BY query).
+    #   3. It is listed in not_expressible (the emitter produces an
     #      explicit "not expressible as one SELECT" comment).
-    # Both satisfy the invariant, because in both cases the emitted
-    # output is the honest, correct representation of the Plan step.
-    covered = set(OVERLAY.tool_to_entity.keys()) | OVERLAY.not_expressible
+    # All three satisfy the invariant: the emitted output is the
+    # honest, correct representation of the Plan step.
+    covered = (
+        set(OVERLAY.tool_to_entity.keys())
+        | set(OVERLAY.aggregations.keys())
+        | OVERLAY.not_expressible
+    )
     missing = sorted(tool_names - covered)
 
     if missing:
@@ -75,9 +81,14 @@ async def test_every_overlay_entry_corresponds_to_a_live_tool():
 
     tools = await mcp.list_tools()
     tool_names = {t.name for t in tools}
-    # An overlay entry (in tool_to_entity) OR a not_expressible declaration
-    # is a valid annotation; both must reference a live tool.
-    annotated = set(OVERLAY.tool_to_entity.keys()) | OVERLAY.not_expressible
+    # Every annotation (tool_to_entity, aggregations, not_expressible)
+    # must reference a live tool. An orphan means drift in one of the
+    # three dispatch tables.
+    annotated = (
+        set(OVERLAY.tool_to_entity.keys())
+        | set(OVERLAY.aggregations.keys())
+        | OVERLAY.not_expressible
+    )
     orphans = sorted(annotated - tool_names)
 
     if orphans:
@@ -104,6 +115,26 @@ async def test_not_expressible_entries_are_real_tools():
     orphans = sorted(OVERLAY.not_expressible - tool_names)
     if orphans:
         lines = [f"{len(orphans)} not_expressible entry(ies) have no live MCP tool:"]
+        for name in orphans:
+            lines.append(f"  - {name}")
+        pytest.fail("\n".join(lines))
+
+
+@pytest.mark.asyncio
+async def test_aggregation_entries_are_real_tools():
+    """The aggregations dict has the same reverse-direction guard.
+
+    A stray aggregations entry would make the forward direction treat
+    a nonexistent tool as covered. Every key in
+    `OVERLAY.aggregations` must name a live MCP tool.
+    """
+    from spire.mcp_server.server import mcp
+
+    tools = await mcp.list_tools()
+    tool_names = {t.name for t in tools}
+    orphans = sorted(set(OVERLAY.aggregations.keys()) - tool_names)
+    if orphans:
+        lines = [f"{len(orphans)} aggregation entry(ies) have no live MCP tool:"]
         for name in orphans:
             lines.append(f"  - {name}")
         pytest.fail("\n".join(lines))

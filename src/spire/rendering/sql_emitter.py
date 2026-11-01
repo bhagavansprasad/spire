@@ -50,6 +50,14 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
             f"docs/design/SQL_OVERLAY_COMPLETENESS.md §7)"
         )
 
+    # Aggregation tools emit a GROUP BY query. The spec carries the
+    # base entity, the column to group on, and the measure template.
+    # Selection here precedes tool_to_entity: a tool appears in one
+    # dispatch table or the other, never both.
+    agg_spec = overlay.aggregations.get(step.tool_name)
+    if agg_spec is not None:
+        return _emit_aggregation_step(step, agg_spec, overlay)
+
     entity_name = overlay.tool_to_entity.get(step.tool_name)
     if entity_name is None:
         return (
@@ -208,6 +216,89 @@ def _resolve_value(
         return overlay.literals.get((fspec.vocab_kind, key))
     safe = key.replace("'", "''")
     return f"'{safe}'"
+
+
+def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
+    """Emit a GROUP BY query for an aggregation tool.
+
+    Shape:
+        SELECT <group_by>, <measure>
+        FROM <base_table> <alias>
+        [joins from base_entity.base_joins]
+        GROUP BY <group_by>
+        [ORDER BY <measure> DESC]   (if order_desc_by_measure)
+
+    Filters on the step's tool_args are applied the same way the
+    non-aggregating path applies them, but only simple-equality filters
+    make sense for aggregations (a > filter would be a HAVING clause,
+    not a WHERE, and no current aggregation tool takes a range filter).
+    If any arg fails to resolve through the FilterSpec lookup, a
+    comment line is emitted rather than a WHERE, so the SQL is not
+    silently wrong.
+    """
+    base = overlay.entities.get(spec.base_entity)
+    if base is None:
+        return (
+            f"-- Step {step.step_id}: {step.tool_name} "
+            f"(aggregation's base_entity {spec.base_entity!r} not in "
+            f"overlay — SQL not emitted)"
+        )
+
+    select_lines = [
+        f"{base.alias}.{spec.group_by_column}",
+        f"       {spec.measure_template}",
+    ]
+    from_line = f"FROM {base.fusion_table} {base.alias}"
+    joins = list(base.base_joins)
+    where: list[str] = []
+
+    for arg_name, arg_value in step.tool_args.items():
+        if arg_value == ITERATION_SENTINEL:
+            # Aggregations iterate rarely, but if they do, use the
+            # same sentinel handling as the entity path.
+            fspec = overlay.filters.get((step.tool_name, arg_name))
+            if fspec is None:
+                where.append(f"-- unmapped iteration arg: {arg_name}")
+                continue
+            where.append(
+                fspec.predicate_template.format(
+                    alias=base.alias, value=":iteration_value"
+                )
+            )
+            continue
+        fspec = overlay.filters.get((step.tool_name, arg_name))
+        if fspec is None:
+            where.append(f"-- unmapped tool_arg: {arg_name}={arg_value!r}")
+            continue
+        sql_value = _resolve_value(fspec, arg_value, overlay)
+        if sql_value is None:
+            where.append(
+                f"-- unresolved literal for {arg_name}={arg_value!r}"
+            )
+            continue
+        where.append(
+            fspec.predicate_template.format(
+                alias=base.alias, value=sql_value
+            )
+        )
+
+    body_lines = [f"SELECT {select_lines[0]},", select_lines[1]]
+    body_lines.append(from_line)
+    body_lines.extend(joins)
+    if where:
+        body_lines.append("WHERE " + "\n  AND ".join(where))
+    body_lines.append(f"GROUP BY {base.alias}.{spec.group_by_column}")
+    if spec.order_desc_by_measure:
+        body_lines.append(f"ORDER BY {spec.measure_template} DESC")
+
+    sql_body = "\n".join(body_lines) + ";"
+    header = f"-- Step {step.step_id}: {step.tool_name} (aggregation)"
+    parts = [header, sql_body]
+    if spec.assumption:
+        text = overlay.assumptions.get(spec.assumption, spec.assumption)
+        parts.append("")
+        parts.append(f"-- ASSUMPTION [{spec.assumption}]: {text}")
+    return "\n".join(parts)
 
 
 __all__ = ["emit_sql"]
