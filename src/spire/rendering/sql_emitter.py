@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from spire.executor.executor import ITERATION_SENTINEL
 from spire.kg.sql_overlay import (
     OVERLAY,
     FilterSpec,
@@ -52,9 +53,9 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
     where: list[str] = []
     assumptions: list[str] = []
 
-    # Iterating steps: the primary arg is $iteration_value.
+    # Iterating steps: the primary arg is $iteration_value. Handled in
+    # the per-arg loop below via FilterSpec, same as any other arg.
     parameterized = step.iterate_over is not None
-    iterate_placeholder: str | None = None
 
     for arg_name, arg_value in step.tool_args.items():
         if arg_name == "include_addresses":
@@ -64,8 +65,29 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
                 )
             continue
 
-        if arg_value == "$iteration_value":
-            iterate_placeholder = f"{entity.alias}.VENDOR_ID"
+        if arg_value == ITERATION_SENTINEL:
+            # Route the sentinel through its FilterSpec exactly as the
+            # non-iterating path does. The template's {value} slot is
+            # filled with a bind placeholder, not a literal, because the
+            # actual value comes from the parent step's output at
+            # execution time.
+            fspec = overlay.filters.get((step.tool_name, arg_name))
+            if fspec is None:
+                where.append(
+                    f"-- unmapped iteration arg: {arg_name}"
+                )
+                continue
+            if fspec.requires_join is not None:
+                _maybe_add_join(
+                    fspec.requires_join, joins, assumptions, overlay
+                )
+            where.append(
+                fspec.predicate_template.format(
+                    alias=entity.alias, value=":iteration_value"
+                )
+            )
+            if fspec.assumption:
+                assumptions.append(fspec.assumption)
             continue
 
         fspec = overlay.filters.get((step.tool_name, arg_name))
@@ -96,9 +118,6 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
         )
         if fspec.assumption:
             assumptions.append(fspec.assumption)
-
-    if parameterized and iterate_placeholder is not None:
-        where.append(f"{iterate_placeholder} = :supplier_id")
 
     # ── Build SQL body ─────────────────────────────────────────────
     body_lines: list[str] = [f"SELECT {select_list}", from_line]

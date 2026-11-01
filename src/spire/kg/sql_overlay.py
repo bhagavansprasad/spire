@@ -179,6 +179,73 @@ _ENTITIES = {
             "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
         ],
     ),
+    "PurchaseOrderLine": EntitySpec(
+        name="PurchaseOrderLine",
+        fusion_table="PO_LINES_ALL",
+        alias="L",
+        pk_column="PO_LINE_ID",
+        select_columns=[
+            ("L", "PO_LINE_ID"),
+            ("L", "LINE_NUM"),
+            ("L", "DESCRIPTION"),
+            ("L", "CATEGORY_ID"),
+            ("L", "QUANTITY"),
+            ("L", "PRICE"),
+            ("L", "AMOUNT"),
+            ("L", "TOTAL_TAX"),
+            ("L", "TOTAL"),
+            ("L", "STATUS_LOOKUP_CODE"),
+        ],
+        base_joins=[],
+    ),
+    "POSchedule": EntitySpec(
+        name="POSchedule",
+        fusion_table="PO_LINE_LOCATIONS_ALL",
+        alias="S",
+        pk_column="LINE_LOCATION_ID",
+        select_columns=[
+            ("S", "LINE_LOCATION_ID"),
+            ("S", "SCHEDULE_NUM"),
+            ("S", "SHIP_TO_LOCATION_ID"),
+            ("S", "REQUESTED_DELIVERY_DATE"),
+            ("S", "QUANTITY"),
+            ("S", "AMOUNT"),
+            ("S", "SCHEDULE_STATUS"),
+            ("S", "RECEIVED_QUANTITY"),
+            ("S", "BILLED_QUANTITY"),
+        ],
+        base_joins=[],
+    ),
+    "PODistribution": EntitySpec(
+        name="PODistribution",
+        fusion_table="PO_DISTRIBUTIONS_ALL",
+        alias="D",
+        pk_column="PO_DISTRIBUTION_ID",
+        select_columns=[
+            ("D", "PO_DISTRIBUTION_ID"),
+            ("D", "DISTRIBUTION_NUM"),
+            ("D", "PO_CHARGE_ACCOUNT_ID"),
+            ("D", "PERCENTAGE"),
+            ("D", "AMOUNT_ORDERED"),
+            ("D", "STATUS"),
+        ],
+        base_joins=[],
+    ),
+    "ReceivablesInvoiceLine": EntitySpec(
+        name="ReceivablesInvoiceLine",
+        fusion_table="RA_CUSTOMER_TRX_LINES_ALL",
+        alias="L",
+        pk_column="CUSTOMER_TRX_LINE_ID",
+        select_columns=[
+            ("L", "CUSTOMER_TRX_LINE_ID"),
+            ("L", "LINE_NUMBER"),
+            ("L", "DESCRIPTION"),
+            ("L", "QUANTITY_INVOICED"),
+            ("L", "UNIT_SELLING_PRICE"),
+            ("L", "EXTENDED_AMOUNT"),
+        ],
+        base_joins=[],
+    ),
 }
 
 
@@ -264,6 +331,46 @@ _FILTERS = {
         arg_name="customer_transaction_id",
         predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
         assumption="ar_id_maps_to_customer_trx_id",
+    ),
+
+    # PO child fetchers (Phase 1)
+    ("get_purchase_order_lines", "po_header_id"): FilterSpec(
+        tool_name="get_purchase_order_lines",
+        arg_name="po_header_id",
+        predicate_template="{alias}.PO_HEADER_ID = {value}",
+        assumption="po_child_by_header_id",
+    ),
+    ("get_purchase_order_schedules", "po_header_id"): FilterSpec(
+        tool_name="get_purchase_order_schedules",
+        arg_name="po_header_id",
+        predicate_template="{alias}.PO_HEADER_ID = {value}",
+        assumption="po_schedule_columns_from_reference",
+    ),
+    ("get_purchase_order_distributions", "po_header_id"): FilterSpec(
+        tool_name="get_purchase_order_distributions",
+        arg_name="po_header_id",
+        predicate_template=(
+            "{alias}.PO_HEADER_ID = {value} "
+            "AND {alias}.PO_LINE_ID = :po_line_id "
+            "AND {alias}.LINE_LOCATION_ID = :line_location_id"
+        ),
+        assumption="po_distribution_three_way_filter",
+    ),
+
+    # AR child fetchers (Phase 1)
+    ("get_receivables_invoice_lines", "customer_transaction_id"): FilterSpec(
+        tool_name="get_receivables_invoice_lines",
+        arg_name="customer_transaction_id",
+        predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
+        assumption="ar_line_by_customer_trx_id",
+    ),
+
+    # PO by-id fetcher (Phase 1b)
+    ("get_purchase_order_by_id", "po_header_id"): FilterSpec(
+        tool_name="get_purchase_order_by_id",
+        arg_name="po_header_id",
+        predicate_template="{alias}.PO_HEADER_ID = {value}",
+        assumption="po_by_id",
     ),
 }
 
@@ -369,6 +476,40 @@ _ASSUMPTIONS = {
     "invoice_supplier_join": (
         "AP invoice joins to supplier via VENDOR_ID on both sides."
     ),
+    "po_child_by_header_id": (
+        "PO line child filters on PO_HEADER_ID. Confirmed via curl "
+        "against PO 55269 (POHeaderId 2055): the line body carries "
+        "POHeaderId and the projection includes POLineId, LineNumber, "
+        "Description, Category, Quantity, Price, Ordered, TotalTax, "
+        "Total, and Status."
+    ),
+    "po_schedule_columns_from_reference": (
+        "PO schedule columns taken from the endpoint reference, not "
+        "confirmed via curl against this pod. Column names are: "
+        "LINE_LOCATION_ID, SCHEDULE_NUM, SHIP_TO_LOCATION_ID, "
+        "REQUESTED_DELIVERY_DATE, QUANTITY, AMOUNT, SCHEDULE_STATUS, "
+        "RECEIVED_QUANTITY, BILLED_QUANTITY. If execution fails, curl "
+        "/purchaseOrderSchedules and update the spec."
+    ),
+    "po_distribution_three_way_filter": (
+        "PO distribution requires three ids from the parent schedule "
+        "row: POHeaderId, POLineId, LineLocationId. The filter template "
+        "uses {value} for PO_HEADER_ID and named binds for the other "
+        "two. The plan's tool_args must supply all three."
+    ),
+    "ar_line_by_customer_trx_id": (
+        "AR line child filters on CUSTOMER_TRX_ID (the AR invoice's "
+        "parent id, per the endpoint path "
+        "/receivablesInvoices/{id}/child/receivablesInvoiceLines). "
+        "Column names are: CUSTOMER_TRX_LINE_ID, LINE_NUMBER, "
+        "DESCRIPTION, QUANTITY_INVOICED, UNIT_SELLING_PRICE, "
+        "EXTENDED_AMOUNT."
+    ),
+    "po_by_id": (
+        "get_purchase_order_by_id fetches one PO by PO_HEADER_ID (the "
+        "numeric internal id, not OrderNumber). Confirmed against the "
+        "pod: /purchaseOrders/2055 returns PO 55269."
+    ),
 }
 
 
@@ -383,6 +524,10 @@ OVERLAY = Overlay(
         "get_purchase_order_by_id": "PurchaseOrder",
         "search_invoices": "Invoice",
         "get_receivables_invoice_by_id": "ReceivablesInvoice",
+        "get_purchase_order_lines": "PurchaseOrderLine",
+        "get_purchase_order_schedules": "POSchedule",
+        "get_purchase_order_distributions": "PODistribution",
+        "get_receivables_invoice_lines": "ReceivablesInvoiceLine",
     },
     entities=_ENTITIES,
     filters=_FILTERS,
