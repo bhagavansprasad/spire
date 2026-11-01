@@ -36,6 +36,7 @@ from spire.api.models import (
 )
 from spire.api.translate import translate
 from spire.rendering.formatters import render_cli_stdout
+from spire.rendering.sql_emitter import emit_sql
 from spire.config import load_persona
 
 
@@ -301,6 +302,7 @@ async def prompt(req: PromptRequest, request: Request) -> JSONResponse:
             tokens_out=0,
             kg_version=None,
             stages=stages,
+            sql=emit_sql(final_state["plan"]) if final_state.get("plan") else None,
         ),
     )
     return JSONResponse(status_code=200, content=envelope.model_dump())

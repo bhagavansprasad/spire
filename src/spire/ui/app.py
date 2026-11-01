@@ -138,6 +138,11 @@ def _render_answer(env: dict) -> None:
     if meta:
         _render_metadata(meta)
 
+    sql = meta.get("sql")
+    if sql:
+        with st.expander("SQL projection", expanded=False):
+            st.code("\n\n".join(sql), language="sql")
+
     with st.expander("Raw response", expanded=False):
         st.json(env)
 
