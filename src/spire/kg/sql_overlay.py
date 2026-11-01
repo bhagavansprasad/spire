@@ -39,6 +39,18 @@ class JoinSpec:
 
 
 @dataclass
+class AggregationSpec:
+    """One aggregation tool, compiled to a GROUP BY query."""
+
+    tool_name: str
+    base_entity: str
+    group_by_column: str
+    measure_template: str
+    order_desc_by_measure: bool = True
+    assumption: str | None = None
+
+
+@dataclass
 class Overlay:
     tool_to_entity: dict[str, str]
     entities: dict[str, EntitySpec]
@@ -46,6 +58,7 @@ class Overlay:
     joins: dict[tuple[str, str], JoinSpec]
     literals: dict[tuple[str, str], str]
     assumptions: dict[str, str]
+    aggregations: dict[str, AggregationSpec] = field(default_factory=dict)
     # Tools whose SQL is not a single SELECT: multi-resource
     # reconciliations, cross-resource aggregations that compose
     # something not in one table, and tools that call multiple
@@ -374,7 +387,6 @@ _ENTITIES = {
             ("R", "RECEIPT_DATE"),
             ("R", "AMOUNT"),
             ("R", "CURRENCY_CODE"),         # Currency
-            ("R", "RECEIPT_METHOD_ID"),     # ReceiptMethod (join to AR_RECEIPT_METHODS for display)
             ("R", "STATUS"),                # State (Applied/Unapplied)
             ("R", "AMOUNT_APPLIED"),        # derive UnappliedAmount = AMOUNT - AMOUNT_APPLIED
         ],
@@ -394,6 +406,25 @@ _ENTITIES = {
             ("A", "PAYMENT_SCHEDULE_ID"),        # ReferenceInstallmentId
         ],
         base_joins=[],
+    ),
+    "StandardReceipt": EntitySpec(
+        name="StandardReceipt",
+        fusion_table="AR_CASH_RECEIPTS_ALL",
+        alias="R",
+        pk_column="CASH_RECEIPT_ID",
+        select_columns=[
+            ("R", "CASH_RECEIPT_ID"),
+            ("R", "RECEIPT_NUMBER"),
+            ("R", "RECEIPT_DATE"),
+            ("R", "AMOUNT"),
+            ("R", "CURRENCY_CODE"),
+            ("R", "STATUS"),
+            ("HP", "PARTY_NAME"),
+        ],
+        base_joins=[
+            "JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+        ],
     ),
 }
 
@@ -585,6 +616,18 @@ _FILTERS = {
             "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE BILL_TO_CUSTOMER_ID = {value})"
         ),
         assumption="account_receipt_application_by_customer",
+    ),
+    ("search_standard_receipts", "customer_name"): FilterSpec(
+        tool_name="search_standard_receipts",
+        arg_name="customer_name",
+        predicate_template="HP.PARTY_NAME = {value}",
+        assumption="standard_receipt_by_customer_name",
+    ),
+    ("search_standard_receipts", "customer_site"): FilterSpec(
+        tool_name="search_standard_receipts",
+        arg_name="customer_site",
+        predicate_template="{alias}.CUSTOMER_SITE = {value}",
+        assumption="standard_receipt_site_client_side",
     ),
 }
 
@@ -789,6 +832,35 @@ _ASSUMPTIONS = {
         "client_filters discard Unapplied rows; the emitted SQL does "
         "not add that filter because the tool does it downstream."
     ),
+    "standard_receipt_by_customer_name": (
+        "search_standard_receipts resolves customer_name to an account "
+        "number in the tool, then filters AR_CASH_RECEIPTS_ALL. The "
+        "physical table does not carry PARTY_NAME directly; the join "
+        "to HZ_CUST_ACCOUNTS and HZ_PARTIES supplies it."
+    ),
+    "standard_receipt_site_client_side": (
+        "customer_site on AR_CASH_RECEIPTS_ALL is populated but "
+        "sparse; the tool matches it client-side. The emitted SQL adds "
+        "CUSTOMER_SITE = ? to the WHERE clause."
+    ),
+    "aggregation_measures": (
+        "Every aggregation tool selects a grouped column and a SUM or "
+        "COUNT over a measure column on the base entity. Where a tool "
+        "computes a RATIO or DISTINCT count not derivable as SUM/COUNT "
+        "on one column, it is listed in not_expressible instead."
+    ),
+    "standard_receipt_method_not_mapped": (
+        "Both the StandardReceipt and AccountReceipt entities omit the "
+        "receipt method from their SELECT lists. The physical column on "
+        "AR_CASH_RECEIPTS_ALL is RECEIPT_METHOD_ID (a numeric FK), but "
+        "the REST field ReceiptMethod is the display string (e.g. "
+        "'Lockbox', 'Check (Directly/No Remit)') which lives on "
+        "AR_RECEIPT_METHODS. That join is not yet mapped; emitting the "
+        "numeric id where the reader expects a name would be correct in "
+        "shape but wrong in kind — the REST answer and the SQL answer "
+        "would disagree on that column. Recorded here so a future "
+        "session knows the column is deliberately absent, not forgotten."
+    ),
 }
 
 
@@ -816,19 +888,53 @@ OVERLAY = Overlay(
         "get_account_credit_memos": "AccountCreditMemo",
         "get_account_receipts": "AccountReceipt",
         "get_account_receipt_applications": "AccountReceiptApplication",
+        "search_standard_receipts": "StandardReceipt",
     },
     entities=_ENTITIES,
     filters=_FILTERS,
     joins=_JOINS,
     literals=_LITERALS,
     assumptions=_ASSUMPTIONS,
+    aggregations={
+        "aggregate_invoices_by_supplier": AggregationSpec(
+            tool_name="aggregate_invoices_by_supplier",
+            base_entity="Invoice",
+            group_by_column="VENDOR_ID",
+            measure_template="SUM(INVOICE_AMOUNT)",
+            assumption="aggregation_measures",
+        ),
+        "aggregate_purchase_orders_by_status": AggregationSpec(
+            tool_name="aggregate_purchase_orders_by_status",
+            base_entity="PurchaseOrder",
+            group_by_column="AUTHORIZATION_STATUS",
+            measure_template="SUM(AMOUNT)",
+            order_desc_by_measure=False,
+            assumption="aggregation_measures",
+        ),
+        "aggregate_standard_receipts_by_method": AggregationSpec(
+            tool_name="aggregate_standard_receipts_by_method",
+            base_entity="StandardReceipt",
+            group_by_column="RECEIPT_METHOD_ID",
+            measure_template="SUM(AMOUNT)",
+            order_desc_by_measure=False,
+            assumption="aggregation_measures",
+        ),
+        "rank_invoices_by_amount": AggregationSpec(
+            tool_name="rank_invoices_by_amount",
+            base_entity="Invoice",
+            group_by_column="INVOICE_ID",
+            measure_template="SUM(INVOICE_AMOUNT)",
+            assumption="aggregation_measures",
+        ),
+    },
     not_expressible={
-        # get_purchase_order_lifecycle_status composes six resources
-        # into a single reconciliation record (header + schedules +
-        # invoices + installments + supplier + site). No single SQL
-        # SELECT produces that; the emitter prints an explicit
-        # "not expressible" comment instead of faking one.
         "get_purchase_order_lifecycle_status",
+        "compare_purchase_order_to_invoices",
+        "compare_supplier_orders_to_invoices",
+        "compare_top_suppliers_orders_to_invoices",
+        "aggregate_purchase_orders_by_supplier",
+        "rank_customer_accounts_by_exposure",
+        "summarize_open_purchase_orders",
     },
 )
 
