@@ -312,6 +312,89 @@ _ENTITIES = {
         ],
         base_joins=[],
     ),
+    "CustomerAccount": EntitySpec(
+        name="CustomerAccount",
+        fusion_table="HZ_CUST_ACCOUNTS",
+        alias="CA",
+        pk_column="CUST_ACCOUNT_ID",
+        select_columns=[
+            ("CA", "CUST_ACCOUNT_ID"),      # AccountId
+            ("CA", "ACCOUNT_NUMBER"),
+            ("HP", "PARTY_NAME"),           # CustomerName
+            # Balances live on a related view on the pod; the account
+            # row does not carry them directly. Leave out of the base
+            # SELECT until verified against the physical view name.
+        ],
+        base_joins=[
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+        ],
+    ),
+    "CustomerTransaction": EntitySpec(
+        name="CustomerTransaction",
+        fusion_table="AR_PAYMENT_SCHEDULES_ALL",
+        alias="T",
+        pk_column="PAYMENT_SCHEDULE_ID",
+        select_columns=[
+            ("T", "PAYMENT_SCHEDULE_ID"),   # InstallmentId
+            ("T", "TRX_NUMBER"),            # TransactionNumber
+            ("T", "CLASS"),                 # TransactionClass
+            ("T", "TRX_DATE"),              # TransactionDate
+            ("T", "DUE_DATE"),              # PaymentScheduleDueDate
+            ("T", "AMOUNT_DUE_ORIGINAL"),   # TotalOriginalAmount
+            ("T", "AMOUNT_DUE_REMAINING"),  # TotalBalanceAmount
+            ("T", "STATUS"),                # InstallmentStatus
+        ],
+        base_joins=[],
+    ),
+    "AccountCreditMemo": EntitySpec(
+        name="AccountCreditMemo",
+        fusion_table="AR_PAYMENT_SCHEDULES_ALL",
+        alias="T",
+        pk_column="PAYMENT_SCHEDULE_ID",
+        select_columns=[
+            ("T", "PAYMENT_SCHEDULE_ID"),   # InstallmentId (the pod's CreditMemoId)
+            ("T", "TRX_NUMBER"),            # CreditMemoNumber
+            ("T", "TRX_DATE"),              # CreditMemoDate
+            ("T", "AMOUNT_DUE_ORIGINAL"),   # TotalOriginalAmount (normally negative)
+            ("T", "AMOUNT_DUE_REMAINING"),  # TotalBalanceAmount
+            ("T", "STATUS"),                # CreditMemoStatus
+            ("T", "INVOICE_CURRENCY_CODE"), # CreditMemoCurrency
+            ("T", "CLASS"),                 # TransactionClass
+        ],
+        base_joins=[],
+    ),
+    "AccountReceipt": EntitySpec(
+        name="AccountReceipt",
+        fusion_table="AR_CASH_RECEIPTS_ALL",
+        alias="R",
+        pk_column="CASH_RECEIPT_ID",
+        select_columns=[
+            ("R", "CASH_RECEIPT_ID"),       # StandardReceiptId
+            ("R", "RECEIPT_NUMBER"),
+            ("R", "RECEIPT_DATE"),
+            ("R", "AMOUNT"),
+            ("R", "CURRENCY_CODE"),         # Currency
+            ("R", "RECEIPT_METHOD_ID"),     # ReceiptMethod (join to AR_RECEIPT_METHODS for display)
+            ("R", "STATUS"),                # State (Applied/Unapplied)
+            ("R", "AMOUNT_APPLIED"),        # derive UnappliedAmount = AMOUNT - AMOUNT_APPLIED
+        ],
+        base_joins=[],
+    ),
+    "AccountReceiptApplication": EntitySpec(
+        name="AccountReceiptApplication",
+        fusion_table="AR_RECEIVABLE_APPLICATIONS_ALL",
+        alias="A",
+        pk_column="RECEIVABLE_APPLICATION_ID",
+        select_columns=[
+            ("A", "RECEIVABLE_APPLICATION_ID"),  # ApplicationId
+            ("A", "APPLY_DATE"),                 # ApplicationDate
+            ("A", "AMOUNT_APPLIED"),             # ApplicationAmount
+            ("A", "STATUS"),                     # ApplicationStatus (Applied/Unapplied)
+            ("A", "CASH_RECEIPT_ID"),            # StandardReceiptId
+            ("A", "PAYMENT_SCHEDULE_ID"),        # ReferenceInstallmentId
+        ],
+        base_joins=[],
+    ),
 }
 
 
@@ -464,6 +547,45 @@ _FILTERS = {
     ),
     # list_receivables_credit_memos takes no filter; it is a top-N list.
     # The WHERE clause is supplied by a base join on TRX_CLASS (below).
+
+    # Phase 3 filters
+    ("get_customer_account_by_name", "customer_name"): FilterSpec(
+        tool_name="get_customer_account_by_name",
+        arg_name="customer_name",
+        predicate_template="HP.PARTY_NAME = {value}",
+        assumption="customer_account_by_party_name",
+    ),
+    ("get_customer_transactions", "account_id"): FilterSpec(
+        tool_name="get_customer_transactions",
+        arg_name="account_id",
+        predicate_template="{alias}.CUSTOMER_ID = {value}",
+        assumption="customer_transaction_by_customer_id",
+    ),
+    ("get_account_credit_memos", "account_id"): FilterSpec(
+        tool_name="get_account_credit_memos",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.CUSTOMER_ID = {value} AND {alias}.CLASS = 'CM'"
+        ),
+        assumption="account_credit_memo_by_customer_class",
+    ),
+    ("get_account_receipts", "account_id"): FilterSpec(
+        tool_name="get_account_receipts",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.PAY_FROM_CUSTOMER = {value}"
+        ),
+        assumption="account_receipt_by_pay_from_customer",
+    ),
+    ("get_account_receipt_applications", "account_id"): FilterSpec(
+        tool_name="get_account_receipt_applications",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.CUSTOMER_TRX_ID IN "
+            "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE BILL_TO_CUSTOMER_ID = {value})"
+        ),
+        assumption="account_receipt_application_by_customer",
+    ),
 }
 
 
@@ -628,6 +750,45 @@ _ASSUMPTIONS = {
         "available. If a future prompt reveals different column names, "
         "update the select_columns on ReceivablesTransactionDFF."
     ),
+    "customer_account_by_party_name": (
+        "get_customer_account_by_name resolves HZ_CUST_ACCOUNTS joined "
+        "to HZ_PARTIES on PARTY_ID, filtered by PARTY_NAME. Confirmed "
+        "via curl: q=CustomerName='ABC Corporation Americas' returns "
+        "AccountId 300000047368527, AccountNumber 26370."
+    ),
+    "customer_transaction_by_customer_id": (
+        "get_customer_transactions reads AR_PAYMENT_SCHEDULES_ALL "
+        "filtered by CUSTOMER_ID (the AR account id, not the PartyId). "
+        "Confirmed via curl against account 300000047368527: two rows "
+        "returned with TransactionClass='Invoice'. The physical "
+        "CUSTOMER_ID column holds the account's CUST_ACCOUNT_ID."
+    ),
+    "account_credit_memo_by_customer_class": (
+        "get_account_credit_memos reads the same AR_PAYMENT_SCHEDULES_ALL "
+        "but filters CLASS='CM' (credit memo), which is the physical "
+        "code that REST exposes as TransactionClass='On Account Credit "
+        "Memo'. Confirmed via curl: two rows returned with "
+        "CreditMemoStatus='Closed' and TotalOriginalAmount negative."
+    ),
+    "account_receipt_by_pay_from_customer": (
+        "get_account_receipts reads AR_CASH_RECEIPTS_ALL filtered by "
+        "PAY_FROM_CUSTOMER (the account id). Confirmed via curl: two "
+        "rows returned with State='Applied'. STATUS holds the state "
+        "value; AMOUNT_APPLIED is the applied portion, so the "
+        "unapplied remainder is AMOUNT - AMOUNT_APPLIED."
+    ),
+    "account_receipt_application_by_customer": (
+        "get_account_receipt_applications reads "
+        "AR_RECEIVABLE_APPLICATIONS_ALL. The table does not carry a "
+        "direct account id column, so the filter reaches the account "
+        "through its parent transaction: CUSTOMER_TRX_ID IN "
+        "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE "
+        "BILL_TO_CUSTOMER_ID = ?). Confirmed via curl: two rows "
+        "returned, one Applied (ReferenceTransactionId populated) and "
+        "one Unapplied (ReferenceTransaction* null). The tool's own "
+        "client_filters discard Unapplied rows; the emitted SQL does "
+        "not add that filter because the tool does it downstream."
+    ),
 }
 
 
@@ -650,6 +811,11 @@ OVERLAY = Overlay(
         "get_receivables_invoice_tax_lines": "ReceivablesTaxLine",
         "get_receivables_invoice_transaction_dff": "ReceivablesTransactionDFF",
         "list_receivables_credit_memos": "CreditMemo",
+        "get_customer_account_by_name": "CustomerAccount",
+        "get_customer_transactions": "CustomerTransaction",
+        "get_account_credit_memos": "AccountCreditMemo",
+        "get_account_receipts": "AccountReceipt",
+        "get_account_receipt_applications": "AccountReceiptApplication",
     },
     entities=_ENTITIES,
     filters=_FILTERS,
