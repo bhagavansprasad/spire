@@ -226,6 +226,25 @@ For the procedural checklist that accompanies this file, see
     discipline still holds; it is asserted by cell 1 and confirmed by
     cell 2.
 
+    **Cell 2 must check both presence and absence, not just presence.**
+    A `SystemExit` inside cell 1 is a good failure — it aborts before
+    writing anything. But a patch that runs to completion and writes a
+    file that is missing a fragment is not. The failure signature is
+    identical in the terminal: the shell prompt returns, the user has
+    not pasted anything, and there is nothing to look at. Cell 2 exists
+    to catch that.
+
+    Every cell-2 verification should include at least one grep for the
+    new content and at least one grep confirming the old content is
+    absent. If the patch was supposed to remove `X` and add `Y`, then
+    cell 2 checks both. Without this pairing, a patch that silently
+    writes a partial file looks identical to a patch that succeeded.
+    Rule 15.1's "capture everything, then grep" applies to the patch
+    script's own output too — a `SystemExit` from `count != 1` checks
+    prints nothing in the terminal if the whole heredoc is being pasted
+    as one cell; only the following prompt tells the reader something
+    went wrong, and only if the reader knows to check.
+
 ## Evidence standard for findings (S0–S11)
 
 Before anything is written into a findings log as a bug, the claim
@@ -443,6 +462,27 @@ was skipped.
 
 22. **No promotion script.** Runtime updates are manual, deliberate,
     rare — `git fetch && git reset --hard` in the runtime tree.
+
+22.1. **Restart after any change under `src/spire/`.** A running API or
+    MCP server imports its modules once at startup and holds those
+    imports in memory. Changing the file on disk does not change the
+    running process's behavior until the process restarts. The CLI
+    launches a fresh process per invocation and always picks up the
+    current file — but the API and MCP servers do not.
+
+    Host mode: `./spire-host.sh --restart dev` (or `--restart` for
+    production). Docker mode: `./spire-docker.sh --restart dev`. Every
+    file under `src/spire/` counts: `mcp_server/`, `kg/`, `rendering/`,
+    `api/`, `synthesizer/`, `nl_parser/`, `planner/`, `executor/`.
+
+    The failure this rule prevents: a UI that shows stale output while
+    `master` is current and the CLI produces correct output for the
+    same prompt. The session that wrote this rule had five commits land
+    on `master` and the UI still showed the pre-first-commit output,
+    because the API server had been running since before commit #1.
+    Two responses (CLI and UI) to the same prompt, one current and one
+    five commits stale, indistinguishable from a real bug without
+    restarting to check.
 
 ## Auth
 

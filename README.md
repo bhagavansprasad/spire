@@ -54,6 +54,9 @@ A thin HTTP layer exposes the pipeline to a browser UI:
    browser  ─►  Streamlit (:8888)  ─►  FastAPI (:8000)  ─►  the pipeline above
 ```
 
+Default ports are 8888 (UI) and 8000 (API). In dev mode they are 4003 and
+4002 — see `how-to-run.md`.
+
 ---
 
 ## Quick start
@@ -121,6 +124,16 @@ A taste of what Spire answers. The full list with timing notes lives in
 | Receivables | `Show me AR invoices for customer ABC Corporation Americas` |
 | Slow (3–4 min) | `Which suppliers have open purchase orders?` |
 | Refusal (a pass) | `show me contract renewals due next quarter` |
+
+The pipeline also emits equivalent SQL for every prompt it executes — a
+`SELECT`, a `GROUP BY`, or a documented "not expressible as one SELECT"
+comment. Three prompts that surface the three branches:
+
+| Branch | Prompt |
+|---|---|
+| `tool_to_entity` | `Show PO 2144 and its lines` |
+| `aggregations` | `Show POs by status` |
+| `not_expressible` | `Compare invoiced vs ordered for supplier 1252` |
 
 Run any of them with:
 

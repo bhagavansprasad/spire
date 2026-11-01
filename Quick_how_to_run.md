@@ -143,26 +143,61 @@ Spire routes prompts to these modules:
 - `payables` (AP Invoices)
 - `receivables` (AR Invoices, Customer Accounts, Credit Memos, Standard Receipts)
 
-## 2. SQL Generation Prompts (Overlay Support)
+## 2. SQL Generation Prompts (All Modules)
 
-These prompts trigger the SQL Overlay POC. Currently, the SQL emitter only generates actual `SELECT` queries for the `supplier` module (via the 5 mapped tools). Prompts in other modules will show a fallback comment.
+Every prompt Spire executes produces equivalent SQL — a `SELECT`, a
+`GROUP BY`, or an explicit "not expressible as one SELECT" comment.
+Coverage is enforced by `tests/test_sql_overlay_coverage.py`; adding an
+MCP tool without a matching overlay entry fails the test at CI time.
+
+Run any of the prompts below and check the `Plan:` section (CLI) or the
+`SQL projection` expander (UI).
+
+### Supplier
 
 ```bash
-# Basic (Base entity + status)
 python scripts/promptkit.py --run --prompt "List active suppliers"
-
-# Basic (Status variant)
 python scripts/promptkit.py --run --prompt "Show me inactive suppliers"
-
-# Intermediate (Name filter)
 python scripts/promptkit.py --run --prompt "Show suppliers with 'Lee' in the name"
-
-# Intermediate (Edge traversal via joins)
 python scripts/promptkit.py --run --prompt "Show suppliers in the United States"
-
-# Complex (Edge traversal + vocab literal resolution)
 python scripts/promptkit.py --run --prompt "Find suppliers with a site in the US1 Business Unit"
 ```
+
+### Procurement
+
+```bash
+# Two SELECTs — header + iterating child
+python scripts/promptkit.py --run --prompt "Show PO 2144 and its lines"
+
+# Aggregation — GROUP BY AUTHORIZATION_STATUS
+python scripts/promptkit.py --run --prompt "Show POs by status"
+```
+
+### Payables
+
+```bash
+python scripts/promptkit.py --run --prompt "Show me invoices for supplier 1252"
+```
+
+### Receivables
+
+```bash
+# Single SELECT — AR invoice header
+python scripts/promptkit.py --run --prompt "Get the AR invoice with CustomerTransactionId 300000248096352"
+
+# Two SELECTs — resolve customer account, then fetch receipts (iterating)
+python scripts/promptkit.py --run --prompt "Show receipts for customer ABC Corporation Americas"
+```
+
+### Refusal — no SQL, and that is correct
+
+```bash
+python scripts/promptkit.py --run --prompt "show me contract renewals due next quarter"
+```
+
+A refusal produces no `SQL projection:` block. That is the correct
+behavior: no plan, no SQL. The three-branch model (`SELECT` / `GROUP BY`
+/ not-expressible comment) only applies to prompts Spire executes.
 
 ## 3. Spire Capability Prompts (What it can answer)
 
