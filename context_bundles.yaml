@@ -44,7 +44,6 @@ bundles:
   - docs/reference/data/spire_tools_modules.xlsx
   - tests/spire_sme_validation_checklist.md
   - docs/design/FEATURES.md
-  - spire.sh
   - spire-functions.sh
   - SPIRE-PORTS.env
   - docs/design/diagrams/01_kg_as_mcp_tool.puml
