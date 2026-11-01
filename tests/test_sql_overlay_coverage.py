@@ -39,14 +39,17 @@ async def test_every_mcp_tool_has_an_overlay_entry():
 
     tools = await mcp.list_tools()
     tool_names = {t.name for t in tools}
-    mapped_names = set(OVERLAY.tool_to_entity.keys())
-    missing = sorted(tool_names - mapped_names)
+    # Two ways a tool can be covered:
+    #   1. It has a mapping in tool_to_entity (the emitter produces a
+    #      SELECT against a physical table).
+    #   2. It is listed in not_expressible (the emitter produces an
+    #      explicit "not expressible as one SELECT" comment).
+    # Both satisfy the invariant, because in both cases the emitted
+    # output is the honest, correct representation of the Plan step.
+    covered = set(OVERLAY.tool_to_entity.keys()) | OVERLAY.not_expressible
+    missing = sorted(tool_names - covered)
 
     if missing:
-        # Produce a readable multi-line message rather than a single
-        # comma-joined string. A maintainer opening the failing test
-        # should be able to read the list in one glance and compare it
-        # to docs/design/SQL_OVERLAY_COMPLETENESS.md.
         lines = [f"{len(missing)} MCP tool(s) lack a SQL overlay entry:"]
         for name in missing:
             lines.append(f"  - {name}")
@@ -72,11 +75,35 @@ async def test_every_overlay_entry_corresponds_to_a_live_tool():
 
     tools = await mcp.list_tools()
     tool_names = {t.name for t in tools}
-    mapped_names = set(OVERLAY.tool_to_entity.keys())
-    orphans = sorted(mapped_names - tool_names)
+    # An overlay entry (in tool_to_entity) OR a not_expressible declaration
+    # is a valid annotation; both must reference a live tool.
+    annotated = set(OVERLAY.tool_to_entity.keys()) | OVERLAY.not_expressible
+    orphans = sorted(annotated - tool_names)
 
     if orphans:
         lines = [f"{len(orphans)} overlay entry(ies) have no live MCP tool:"]
+        for name in orphans:
+            lines.append(f"  - {name}")
+        pytest.fail("\n".join(lines))
+
+
+@pytest.mark.asyncio
+async def test_not_expressible_entries_are_real_tools():
+    """The not_expressible set has the same reverse-direction guard.
+
+    A not_expressible declaration for a tool that does not exist is
+    dead state: it would make the coverage invariant lie, because the
+    forward direction treats the entry as covered even though there is
+    nothing to cover. Every entry in `OVERLAY.not_expressible` must
+    name a live MCP tool.
+    """
+    from spire.mcp_server.server import mcp
+
+    tools = await mcp.list_tools()
+    tool_names = {t.name for t in tools}
+    orphans = sorted(OVERLAY.not_expressible - tool_names)
+    if orphans:
+        lines = [f"{len(orphans)} not_expressible entry(ies) have no live MCP tool:"]
         for name in orphans:
             lines.append(f"  - {name}")
         pytest.fail("\n".join(lines))

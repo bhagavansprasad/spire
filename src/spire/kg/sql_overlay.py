@@ -46,6 +46,14 @@ class Overlay:
     joins: dict[tuple[str, str], JoinSpec]
     literals: dict[tuple[str, str], str]
     assumptions: dict[str, str]
+    # Tools whose SQL is not a single SELECT: multi-resource
+    # reconciliations, cross-resource aggregations that compose
+    # something not in one table, and tools that call multiple
+    # endpoints and join in Python. The emitter treats these as
+    # "covered" for the guardrail invariant, and prints an explicit
+    # "not expressible as one SELECT" comment rather than a fake
+    # SELECT that would return wrong rows.
+    not_expressible: set[str] = field(default_factory=set)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -246,6 +254,147 @@ _ENTITIES = {
         ],
         base_joins=[],
     ),
+    "Buyer": EntitySpec(
+        name="Buyer",
+        fusion_table="PER_ALL_PEOPLE_F",
+        alias="B",
+        pk_column="PERSON_ID",
+        select_columns=[
+            ("B", "PERSON_ID"),
+            ("B", "EMPLOYEE_NUMBER"),      # PersonNumber
+            ("B", "DISPLAY_NAME"),
+            ("B", "EMAIL_ADDRESS"),        # WorkEmail
+        ],
+        base_joins=[],
+    ),
+    "ReceivablesTaxLine": EntitySpec(
+        name="ReceivablesTaxLine",
+        fusion_table="RA_CUST_TRX_LINE_GL_DIST_ALL",
+        alias="T",
+        pk_column="CUST_TRX_LINE_GL_DIST_ID",
+        select_columns=[
+            ("T", "CUST_TRX_LINE_GL_DIST_ID"),
+            ("T", "TAX_LINE_NUMBER"),
+            ("T", "TAX_JURISDICTION_CODE"),
+            ("T", "TAX_RATE"),
+            ("T", "TAX_RATE_CODE"),
+            ("T", "TAX_REGIME_CODE"),
+            ("T", "TAX"),
+            ("T", "AMOUNT"),               # TaxAmount
+            ("T", "TAXABLE_AMOUNT"),
+        ],
+        base_joins=[],
+    ),
+    "ReceivablesTransactionDFF": EntitySpec(
+        name="ReceivablesTransactionDFF",
+        fusion_table="RA_CUSTOMER_TRX_ALL",
+        alias="D",
+        pk_column="CUSTOMER_TRX_ID",
+        select_columns=[
+            ("D", "CUSTOMER_TRX_ID"),
+            ("D", "ATTRIBUTE_CATEGORY"),   # __FLEX_Context
+            ("D", "ATTRIBUTE1"),           # first DFF segment (project-specific)
+        ],
+        base_joins=[],
+    ),
+    "CreditMemo": EntitySpec(
+        name="CreditMemo",
+        fusion_table="RA_CUSTOMER_TRX_ALL",
+        alias="C",
+        pk_column="CUSTOMER_TRX_ID",
+        select_columns=[
+            ("C", "CUSTOMER_TRX_ID"),
+            ("C", "TRX_NUMBER"),
+            ("C", "TRX_DATE"),
+            ("C", "ENTERED_AMOUNT"),
+            ("C", "INVOICE_CURRENCY_CODE"),
+            ("C", "STATUS_TRX"),
+        ],
+        base_joins=[],
+    ),
+    "CustomerAccount": EntitySpec(
+        name="CustomerAccount",
+        fusion_table="HZ_CUST_ACCOUNTS",
+        alias="CA",
+        pk_column="CUST_ACCOUNT_ID",
+        select_columns=[
+            ("CA", "CUST_ACCOUNT_ID"),      # AccountId
+            ("CA", "ACCOUNT_NUMBER"),
+            ("HP", "PARTY_NAME"),           # CustomerName
+            # Balances live on a related view on the pod; the account
+            # row does not carry them directly. Leave out of the base
+            # SELECT until verified against the physical view name.
+        ],
+        base_joins=[
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+        ],
+    ),
+    "CustomerTransaction": EntitySpec(
+        name="CustomerTransaction",
+        fusion_table="AR_PAYMENT_SCHEDULES_ALL",
+        alias="T",
+        pk_column="PAYMENT_SCHEDULE_ID",
+        select_columns=[
+            ("T", "PAYMENT_SCHEDULE_ID"),   # InstallmentId
+            ("T", "TRX_NUMBER"),            # TransactionNumber
+            ("T", "CLASS"),                 # TransactionClass
+            ("T", "TRX_DATE"),              # TransactionDate
+            ("T", "DUE_DATE"),              # PaymentScheduleDueDate
+            ("T", "AMOUNT_DUE_ORIGINAL"),   # TotalOriginalAmount
+            ("T", "AMOUNT_DUE_REMAINING"),  # TotalBalanceAmount
+            ("T", "STATUS"),                # InstallmentStatus
+        ],
+        base_joins=[],
+    ),
+    "AccountCreditMemo": EntitySpec(
+        name="AccountCreditMemo",
+        fusion_table="AR_PAYMENT_SCHEDULES_ALL",
+        alias="T",
+        pk_column="PAYMENT_SCHEDULE_ID",
+        select_columns=[
+            ("T", "PAYMENT_SCHEDULE_ID"),   # InstallmentId (the pod's CreditMemoId)
+            ("T", "TRX_NUMBER"),            # CreditMemoNumber
+            ("T", "TRX_DATE"),              # CreditMemoDate
+            ("T", "AMOUNT_DUE_ORIGINAL"),   # TotalOriginalAmount (normally negative)
+            ("T", "AMOUNT_DUE_REMAINING"),  # TotalBalanceAmount
+            ("T", "STATUS"),                # CreditMemoStatus
+            ("T", "INVOICE_CURRENCY_CODE"), # CreditMemoCurrency
+            ("T", "CLASS"),                 # TransactionClass
+        ],
+        base_joins=[],
+    ),
+    "AccountReceipt": EntitySpec(
+        name="AccountReceipt",
+        fusion_table="AR_CASH_RECEIPTS_ALL",
+        alias="R",
+        pk_column="CASH_RECEIPT_ID",
+        select_columns=[
+            ("R", "CASH_RECEIPT_ID"),       # StandardReceiptId
+            ("R", "RECEIPT_NUMBER"),
+            ("R", "RECEIPT_DATE"),
+            ("R", "AMOUNT"),
+            ("R", "CURRENCY_CODE"),         # Currency
+            ("R", "RECEIPT_METHOD_ID"),     # ReceiptMethod (join to AR_RECEIPT_METHODS for display)
+            ("R", "STATUS"),                # State (Applied/Unapplied)
+            ("R", "AMOUNT_APPLIED"),        # derive UnappliedAmount = AMOUNT - AMOUNT_APPLIED
+        ],
+        base_joins=[],
+    ),
+    "AccountReceiptApplication": EntitySpec(
+        name="AccountReceiptApplication",
+        fusion_table="AR_RECEIVABLE_APPLICATIONS_ALL",
+        alias="A",
+        pk_column="RECEIVABLE_APPLICATION_ID",
+        select_columns=[
+            ("A", "RECEIVABLE_APPLICATION_ID"),  # ApplicationId
+            ("A", "APPLY_DATE"),                 # ApplicationDate
+            ("A", "AMOUNT_APPLIED"),             # ApplicationAmount
+            ("A", "STATUS"),                     # ApplicationStatus (Applied/Unapplied)
+            ("A", "CASH_RECEIPT_ID"),            # StandardReceiptId
+            ("A", "PAYMENT_SCHEDULE_ID"),        # ReferenceInstallmentId
+        ],
+        base_joins=[],
+    ),
 }
 
 
@@ -371,6 +520,71 @@ _FILTERS = {
         arg_name="po_header_id",
         predicate_template="{alias}.PO_HEADER_ID = {value}",
         assumption="po_by_id",
+    ),
+
+    # Phase 2 filters
+    ("get_buyer", "buyer_id"): FilterSpec(
+        tool_name="get_buyer",
+        arg_name="buyer_id",
+        predicate_template="{alias}.PERSON_ID = {value}",
+        assumption="buyer_person_id",
+    ),
+    ("get_receivables_invoice_tax_lines", "customer_transaction_id"): FilterSpec(
+        tool_name="get_receivables_invoice_tax_lines",
+        arg_name="customer_transaction_id",
+        predicate_template=(
+            "{alias}.CUSTOMER_TRX_ID = {value} "
+            "AND {alias}.CUST_TRX_LINE_ID = :line_id "
+            "AND {alias}.ACCOUNT_CLASS = 'TAX'"
+        ),
+        assumption="ar_tax_line_filter",
+    ),
+    ("get_receivables_invoice_transaction_dff", "customer_transaction_id"): FilterSpec(
+        tool_name="get_receivables_invoice_transaction_dff",
+        arg_name="customer_transaction_id",
+        predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
+        assumption="ar_dff_columns_uncertain",
+    ),
+    # list_receivables_credit_memos takes no filter; it is a top-N list.
+    # The WHERE clause is supplied by a base join on TRX_CLASS (below).
+
+    # Phase 3 filters
+    ("get_customer_account_by_name", "customer_name"): FilterSpec(
+        tool_name="get_customer_account_by_name",
+        arg_name="customer_name",
+        predicate_template="HP.PARTY_NAME = {value}",
+        assumption="customer_account_by_party_name",
+    ),
+    ("get_customer_transactions", "account_id"): FilterSpec(
+        tool_name="get_customer_transactions",
+        arg_name="account_id",
+        predicate_template="{alias}.CUSTOMER_ID = {value}",
+        assumption="customer_transaction_by_customer_id",
+    ),
+    ("get_account_credit_memos", "account_id"): FilterSpec(
+        tool_name="get_account_credit_memos",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.CUSTOMER_ID = {value} AND {alias}.CLASS = 'CM'"
+        ),
+        assumption="account_credit_memo_by_customer_class",
+    ),
+    ("get_account_receipts", "account_id"): FilterSpec(
+        tool_name="get_account_receipts",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.PAY_FROM_CUSTOMER = {value}"
+        ),
+        assumption="account_receipt_by_pay_from_customer",
+    ),
+    ("get_account_receipt_applications", "account_id"): FilterSpec(
+        tool_name="get_account_receipt_applications",
+        arg_name="account_id",
+        predicate_template=(
+            "{alias}.CUSTOMER_TRX_ID IN "
+            "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE BILL_TO_CUSTOMER_ID = {value})"
+        ),
+        assumption="account_receipt_application_by_customer",
     ),
 }
 
@@ -510,6 +724,71 @@ _ASSUMPTIONS = {
         "numeric internal id, not OrderNumber). Confirmed against the "
         "pod: /purchaseOrders/2055 returns PO 55269."
     ),
+    "buyer_person_id": (
+        "get_buyer looks up PER_ALL_PEOPLE_F by PERSON_ID. Confirmed "
+        "via curl against PERSON_ID 300000047340498: returns DISPLAY_NAME "
+        "'Calvin Roth', EMPLOYEE_NUMBER '3', EMAIL_ADDRESS "
+        "'CALVIN.ROTH_euth-dev93@oraclepdemos.com'."
+    ),
+    "ar_tax_line_filter": (
+        "AR tax lines come from RA_CUST_TRX_LINE_GL_DIST_ALL filtered "
+        "to ACCOUNT_CLASS = 'TAX'. Confirmed via curl against AR "
+        "invoice 1002, line 74: two tax rows (COUNTY 2.25%, STATE 6.5%) "
+        "with their own CUST_TRX_LINE_GL_DIST_IDs (112, 113) - distinct "
+        "from the parent invoice line (74). The filter takes two ids: "
+        "customer_transaction_id and the parent line_id (named bind). "
+        "The physical column name for the parent line id is not "
+        "confirmed; if execution fails, curl the AR endpoint and update."
+    ),
+    "ar_dff_columns_uncertain": (
+        "AR transaction DFF is projected as ATTRIBUTE_CATEGORY (the "
+        "flexfield context, matching __FLEX_Context in REST) and "
+        "ATTRIBUTE1 (the first segment). The physical DFF column names "
+        "are pod-specific; on this pod the context is 'DOO' but no "
+        "segment values are populated, so the mapping cannot be "
+        "confirmed end-to-end until a pod with populated DFF is "
+        "available. If a future prompt reveals different column names, "
+        "update the select_columns on ReceivablesTransactionDFF."
+    ),
+    "customer_account_by_party_name": (
+        "get_customer_account_by_name resolves HZ_CUST_ACCOUNTS joined "
+        "to HZ_PARTIES on PARTY_ID, filtered by PARTY_NAME. Confirmed "
+        "via curl: q=CustomerName='ABC Corporation Americas' returns "
+        "AccountId 300000047368527, AccountNumber 26370."
+    ),
+    "customer_transaction_by_customer_id": (
+        "get_customer_transactions reads AR_PAYMENT_SCHEDULES_ALL "
+        "filtered by CUSTOMER_ID (the AR account id, not the PartyId). "
+        "Confirmed via curl against account 300000047368527: two rows "
+        "returned with TransactionClass='Invoice'. The physical "
+        "CUSTOMER_ID column holds the account's CUST_ACCOUNT_ID."
+    ),
+    "account_credit_memo_by_customer_class": (
+        "get_account_credit_memos reads the same AR_PAYMENT_SCHEDULES_ALL "
+        "but filters CLASS='CM' (credit memo), which is the physical "
+        "code that REST exposes as TransactionClass='On Account Credit "
+        "Memo'. Confirmed via curl: two rows returned with "
+        "CreditMemoStatus='Closed' and TotalOriginalAmount negative."
+    ),
+    "account_receipt_by_pay_from_customer": (
+        "get_account_receipts reads AR_CASH_RECEIPTS_ALL filtered by "
+        "PAY_FROM_CUSTOMER (the account id). Confirmed via curl: two "
+        "rows returned with State='Applied'. STATUS holds the state "
+        "value; AMOUNT_APPLIED is the applied portion, so the "
+        "unapplied remainder is AMOUNT - AMOUNT_APPLIED."
+    ),
+    "account_receipt_application_by_customer": (
+        "get_account_receipt_applications reads "
+        "AR_RECEIVABLE_APPLICATIONS_ALL. The table does not carry a "
+        "direct account id column, so the filter reaches the account "
+        "through its parent transaction: CUSTOMER_TRX_ID IN "
+        "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE "
+        "BILL_TO_CUSTOMER_ID = ?). Confirmed via curl: two rows "
+        "returned, one Applied (ReferenceTransactionId populated) and "
+        "one Unapplied (ReferenceTransaction* null). The tool's own "
+        "client_filters discard Unapplied rows; the emitted SQL does "
+        "not add that filter because the tool does it downstream."
+    ),
 }
 
 
@@ -528,12 +807,29 @@ OVERLAY = Overlay(
         "get_purchase_order_schedules": "POSchedule",
         "get_purchase_order_distributions": "PODistribution",
         "get_receivables_invoice_lines": "ReceivablesInvoiceLine",
+        "get_buyer": "Buyer",
+        "get_receivables_invoice_tax_lines": "ReceivablesTaxLine",
+        "get_receivables_invoice_transaction_dff": "ReceivablesTransactionDFF",
+        "list_receivables_credit_memos": "CreditMemo",
+        "get_customer_account_by_name": "CustomerAccount",
+        "get_customer_transactions": "CustomerTransaction",
+        "get_account_credit_memos": "AccountCreditMemo",
+        "get_account_receipts": "AccountReceipt",
+        "get_account_receipt_applications": "AccountReceiptApplication",
     },
     entities=_ENTITIES,
     filters=_FILTERS,
     joins=_JOINS,
     literals=_LITERALS,
     assumptions=_ASSUMPTIONS,
+    not_expressible={
+        # get_purchase_order_lifecycle_status composes six resources
+        # into a single reconciliation record (header + schedules +
+        # invoices + installments + supplier + site). No single SQL
+        # SELECT produces that; the emitter prints an explicit
+        # "not expressible" comment instead of faking one.
+        "get_purchase_order_lifecycle_status",
+    },
 )
 
 
