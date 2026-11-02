@@ -1,0 +1,3548 @@
+
+===== FILE: src/spire/planner/__init__.py =====
+
+
+===== FILE: src/spire/planner/date_utils.py =====
+"""Date arithmetic for computed iteration filters.
+
+Naive calendar-month math with day clamping, used by
+_build_iteration_args_with_computed for filters like
+'no_invoices_in_N_months'. Pure functions, no dependency on anything else
+in the planner — pulled out on its own because it is the one piece of
+plan_builders.py with zero KG or registry involvement.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+
+def _compute_date_n_months_ago(months: int, reference_date: date) -> date:
+    """
+    Return reference_date minus ``months`` months.
+
+    Naive month arithmetic — handles month rollover with day clamping.
+    Example: 2026-03-31 minus 1 month -> 2026-02-28 (not 2026-02-31).
+
+    Pure function for testability; reference_date defaulting happens
+    in the orchestrator, not here.
+    """
+    year = reference_date.year
+    month = reference_date.month - months
+    while month <= 0:
+        month += 12
+        year -= 1
+    # Clamp day to last day of target month.
+    day = min(reference_date.day, _days_in_month(year, month))
+    return date(year, month, day)
+
+
+def _days_in_month(year: int, month: int) -> int:
+    """Return the number of days in the given (year, month)."""
+    if month == 12:
+        next_month_first = date(year + 1, 1, 1)
+    else:
+        next_month_first = date(year, month + 1, 1)
+    last_day = (next_month_first - _one_day()).day
+    return last_day
+
+
+def _one_day():
+    """Return a one-day timedelta. Helper to avoid a top-level import
+    when most of this module doesn't need timedelta."""
+    from datetime import timedelta
+    return timedelta(days=1)
+
+
+
+===== FILE: src/spire/planner/kg_db.py =====
+"""Oracle KG connection and the lazy-loaded filter definitions.
+
+Two things live here because the second depends on the first:
+_oracle_credentials / _kg_cursor / _read_clob are the raw connection
+layer, and _load_filter_defs and its accessors are the one KG table read
+through that connection, cached for the process lifetime. No other
+planner module opens a connection — every KG-lookup function elsewhere
+goes through _kg_cursor from here.
+"""
+
+from __future__ import annotations
+
+import os
+from contextlib import contextmanager
+from typing import Any, Iterator
+
+import oracledb
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG connection
+# ─────────────────────────────────────────────────────────────────────
+
+# Oracle KG credentials resolve in this order, per field:
+#   1. Environment variable (SPIRE_DB_USER / _PASSWORD / _DSN) — for CI
+#      and ad-hoc overrides.
+#   2. The persona's `oracle` block in personas.yaml — the normal source
+#      and the single place to configure DB credentials.
+# There is no hardcoded credential fallback: if neither source supplies a
+# value, _oracle_credentials raises. (The DSN, being a non-secret local
+# address, keeps a default; user and password must be configured.)
+
+_DEFAULT_DSN = "localhost:1521/FREEPDB1"
+
+
+def _oracle_credentials() -> tuple[str, str, str]:
+    """Resolve (user, password, dsn) for the KG connection.
+
+    Env vars win, then the persona's oracle block. No credential is
+    hardcoded: if neither source provides a username/password, raise a
+    clear error rather than silently using a baked-in default. The DSN
+    falls back to the local address (not a secret) if unspecified."""
+    persona_oracle = None
+    try:
+        from spire.config import load_persona
+
+        persona_name = os.environ.get("SPIRE_PERSONA", "default_dev")
+        persona_oracle = load_persona(persona_name).oracle
+    except Exception:
+        # No personas.yaml, unknown persona, or no oracle block — env
+        # vars may still supply the credentials.
+        persona_oracle = None
+
+    user = os.environ.get("SPIRE_DB_USER") or (
+        persona_oracle.username if persona_oracle else None
+    )
+    password = os.environ.get("SPIRE_DB_PASSWORD") or (
+        persona_oracle.password if persona_oracle else None
+    )
+    dsn = os.environ.get("SPIRE_DB_DSN") or (
+        persona_oracle.dsn if persona_oracle else None
+    ) or _DEFAULT_DSN
+
+    if not user or not password:
+        raise RuntimeError(
+            "No Oracle DB credentials. Set the oracle block in "
+            "personas.yaml (username + password), or export "
+            "SPIRE_DB_USER / SPIRE_DB_PASSWORD."
+        )
+    return user, password, dsn
+
+
+@contextmanager
+def _kg_cursor() -> Iterator[oracledb.Cursor]:
+    """
+    Yield a cursor against the KG database. Closes connection on exit.
+
+    Every KG-lookup function opens a fresh connection; pooling can be
+    added later if profiling shows it matters.
+    """
+    user, password, dsn = _oracle_credentials()
+    connection = oracledb.connect(user=user, password=password, dsn=dsn)
+    try:
+        with connection.cursor() as cursor:
+            yield cursor
+    finally:
+        connection.close()
+
+
+def _read_clob(value: Any) -> str:
+    """
+    Coerce a possibly-CLOB column value to a Python str.
+
+    Sync oracledb sometimes returns CLOB values as oracledb.LOB objects
+    (which have a sync .read() method), and sometimes — depending on
+    driver version and column size — as plain strings. Handle both.
+
+    Returns empty string for None.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    # Sync oracledb.LOB: .read() is synchronous (unlike AsyncLOB).
+    return value.read()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Filter definitions — loaded from kg_entity_filter (lazy, cached).
+#
+# Replaces the hardcoded filter dicts. Read once on first use, cached
+# for the process lifetime. Mirrors the lazy-read style of the other
+# KG lookups in this module.
+# ─────────────────────────────────────────────────────────────────────
+
+_FILTER_DEFS_CACHE: dict[tuple[str, str], dict[str, Any]] | None = None
+
+
+def _load_filter_defs() -> dict[tuple[str, str], dict[str, Any]]:
+    """Read kg_entity_filter once; cache by (filter_type, entity_name)."""
+    global _FILTER_DEFS_CACHE
+    if _FILTER_DEFS_CACHE is not None:
+        return _FILTER_DEFS_CACHE
+
+    defs: dict[tuple[str, str], dict[str, Any]] = {}
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            "SELECT filter_type, mechanism, tool_arg_name, tool_arg_name_hi, "
+            "vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, "
+            "implicit_term, entity_name FROM kg_entity_filter"
+        )
+        for row in cursor.fetchall():
+            (ftype, mechanism, tool_arg, tool_arg_hi, vocab_kind, target,
+             kg_filter_type, imp_vocab, imp_term, entity) = row
+            key = (ftype, entity)
+            defs[key] = {
+                "mechanism": mechanism,
+                "tool_arg_name": tool_arg,
+                "tool_arg_name_hi": tool_arg_hi,
+                "vocab_kind": vocab_kind,
+                "target_entity": target,
+                "kg_filter_type": kg_filter_type,
+                "implicit_vocab_kind": imp_vocab,
+                "implicit_term": imp_term,
+            }
+    _FILTER_DEFS_CACHE = defs
+    return defs
+
+
+def _filter_def_for(ftype: str, entity: str) -> dict[str, Any]:
+    """Return the filter definition for (filter_type, source_entity)."""
+    defs = _load_filter_defs()
+    key = (ftype, entity)
+    if key not in defs:
+        raise KeyError(f"No filter definition for ({ftype!r}, {entity!r})")
+    return defs[key]
+
+
+def _entity_level_filter_types() -> dict[str, set[str]]:
+    """Filter types with a dedicated entity-level fetcher, grouped by source entity."""
+    defs = _load_filter_defs()
+    result: dict[str, set[str]] = {}
+    for (ftype, entity), d in defs.items():
+        if d["mechanism"] == "entity_level":
+            result.setdefault(entity, set()).add(ftype)
+    return result
+
+
+def _edge_traversal_filters() -> dict[str, tuple[str, str]]:
+    """Edge-traversal filters: type -> (target_entity, kg_filter_type)."""
+    defs = _load_filter_defs()
+    result: dict[str, tuple[str, str]] = {}
+    for (ftype, entity), d in defs.items():
+        if d["mechanism"] == "edge_traversal":
+            result[ftype] = (d["target_entity"], d["kg_filter_type"])
+    return result
+
+
+def _edge_filter_implicit_values() -> dict[str, tuple[str, str]]:
+    """Edge filters with an implicit value: type -> (vocab_kind, term)."""
+    defs = _load_filter_defs()
+    result: dict[str, tuple[str, str]] = {}
+    for (ftype, entity), d in defs.items():
+        if d["implicit_vocab_kind"] is not None:
+            result[ftype] = (d["implicit_vocab_kind"], d["implicit_term"])
+    return result
+
+
+
+===== FILE: src/spire/planner/lookup.py =====
+"""KG entity, edge, pattern and vocabulary lookups.
+
+Six read-only functions, each answering one question against the KG:
+what tool and args does an entity or edge use, what pattern binds a
+filter, what does a vocabulary term resolve to. All go through
+_kg_cursor / _read_clob from kg_db.py; none of them build a Plan
+themselves — that is plan_builders.py's job, one layer up.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from spire.planner.kg_db import _kg_cursor, _read_clob
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG entity lookups
+# ─────────────────────────────────────────────────────────────────────
+
+
+def find_entity(entity_name: str) -> dict[str, Any]:
+    """
+    Look up an entity by name in ``kg_entity``.
+
+    Returns a dict with keys:
+        endpoint_path, canonical_id_field, display_name_field, description
+
+    Raises ``KeyError`` if no row exists for the given entity_name.
+    Match is case-sensitive (entity_name is a primary key).
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT endpoint_path, canonical_id_field,
+                   display_name_field, description
+            FROM kg_entity
+            WHERE entity_name = :entity_name
+            """,
+            entity_name=entity_name,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        raise KeyError(f"No entity in KG: {entity_name!r}")
+
+    endpoint_path, canonical_id_field, display_name_field, description = row
+    return {
+        "endpoint_path": endpoint_path,
+        "canonical_id_field": canonical_id_field,
+        "display_name_field": display_name_field,
+        "description": description,
+    }
+
+
+def find_entity_tool(entity_name: str, filter_type: str) -> str:
+    """
+    Find the MCP tool that fetches this entity with the given filter type.
+
+    Queries ``kg_entity_tool``. Use ``filter_type='none'`` for the default
+    (unfiltered) fetcher.
+
+    Examples:
+        find_entity_tool('Supplier', 'none')    -> 'search_suppliers'
+        find_entity_tool('Supplier', 'country') -> 'search_suppliers_by_country'
+
+    Returns the MCP tool name as a string.
+    Raises ``KeyError`` if no row exists for the (entity_name, filter_type)
+    pair.
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT mcp_tool_name
+            FROM kg_entity_tool
+            WHERE entity_name = :entity_name
+              AND filter_type = :filter_type
+            """,
+            entity_name=entity_name,
+            filter_type=filter_type,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        raise KeyError(
+            f"No entity tool for ({entity_name!r}, {filter_type!r})"
+        )
+
+    return row[0]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG edge lookups
+# ─────────────────────────────────────────────────────────────────────
+
+
+def find_edge(from_entity: str, to_entity: str) -> dict[str, Any]:
+    """
+    Look up the edge connecting two entities in ``kg_edge``.
+
+    Returns a dict with keys:
+        edge_name, from_join_field, to_join_field,
+        cardinality, server_filter_rule, traversal_hint, notes,
+        iter_fields
+
+    ``iter_fields`` is the parsed iter_fields_json column: a
+    {tool_arg: parent_field} map for edges whose traversal needs SEVERAL
+    parent fields per call (e.g. HAS_DISTRIBUTION needs POHeaderId,
+    POLineId and LineLocationId). It is None for every single-field
+    edge, which is all of them except HAS_DISTRIBUTION.
+
+    Raises ``KeyError`` if no edge connects from_entity to to_entity.
+    Note: edges are directional. find_edge('Supplier', 'PurchaseOrder')
+    finds HAS_PURCHASE_ORDER; find_edge('PurchaseOrder', 'Supplier')
+    will NOT find it (no reverse edge declared in v1).
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT edge_name, from_join_field, to_join_field,
+                   cardinality, server_filter_rule, traversal_hint, notes,
+                   iter_fields_json
+            FROM kg_edge
+            WHERE from_entity = :from_entity
+              AND to_entity   = :to_entity
+            """,
+            from_entity=from_entity,
+            to_entity=to_entity,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        raise KeyError(
+            f"No edge from {from_entity!r} to {to_entity!r}"
+        )
+
+    (
+        edge_name,
+        from_join_field,
+        to_join_field,
+        cardinality,
+        server_filter_rule,
+        traversal_hint,
+        notes,
+        iter_fields_json,
+    ) = row
+    return {
+        "edge_name": edge_name,
+        "from_join_field": from_join_field,
+        "to_join_field": to_join_field,
+        "cardinality": cardinality,
+        "server_filter_rule": server_filter_rule,
+        "traversal_hint": traversal_hint,
+        "notes": notes,
+        "iter_fields": json.loads(iter_fields_json) if iter_fields_json else None,
+    }
+
+
+def find_edge_tool(edge_name: str) -> str | None:
+    """
+    Find the MCP tool that traverses this edge in ``kg_edge_tool``.
+
+    Returns the tool name string, or ``None`` if the edge has no row
+    (e.g. ``HAS_ADDRESS`` is bundled with ``search_suppliers_by_country``
+    via ``expand=addresses``; absence of a row is meaningful and signals
+    the edge is not independently traversable).
+
+    Examples:
+        find_edge_tool('HAS_PURCHASE_ORDER') -> 'search_purchase_orders'
+        find_edge_tool('ASSIGNED_TO')        -> 'get_buyer'
+        find_edge_tool('HAS_ADDRESS')        -> None
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT mcp_tool_name
+            FROM kg_edge_tool
+            WHERE edge_name = :edge_name
+            """,
+            edge_name=edge_name,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    return row[0]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG pattern lookups
+# ─────────────────────────────────────────────────────────────────────
+
+
+def find_pattern_for_filter(
+    entity_name: str, filter_type: str
+) -> dict[str, Any]:
+    """
+    Find which pattern handles this filter type on this entity.
+
+    Queries ``kg_pattern_binding``. Returns:
+        {
+          "pattern_name": <str>,
+          "parameter_bindings": <dict parsed from JSON>,
+        }
+
+    ``parameter_bindings`` is stored as a JSON string in a CLOB and is
+    parsed before return — callers receive a Python dict, not a string.
+
+    Examples:
+        find_pattern_for_filter('Supplier', 'country')
+          -> {
+               "pattern_name": "country_filter_via_address",
+               "parameter_bindings": {
+                   "parent": "Supplier",
+                   "child_edge": "HAS_ADDRESS",
+                   "country_term_param": "country",
+                 },
+             }
+
+    Raises ``KeyError`` if no binding exists for the (entity_name,
+    filter_type) pair.
+    Raises ``json.JSONDecodeError`` if parameter_bindings is malformed
+    (indicates seed-data corruption, not a user error).
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT pattern_name, parameter_bindings
+            FROM kg_pattern_binding
+            WHERE entity_name = :entity_name
+              AND filter_type = :filter_type
+            """,
+            entity_name=entity_name,
+            filter_type=filter_type,
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise KeyError(
+                f"No pattern binding for ({entity_name!r}, {filter_type!r})"
+            )
+        # Read CLOB while the connection is still open. Sync oracledb's
+        # LOB.read() is synchronous (unlike the async driver's AsyncLOB).
+        pattern_name, parameter_bindings_raw = row
+        parameter_bindings_str = _read_clob(parameter_bindings_raw)
+
+    parameter_bindings = json.loads(parameter_bindings_str)
+    return {
+        "pattern_name": pattern_name,
+        "parameter_bindings": parameter_bindings,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# KG vocabulary lookups
+# ─────────────────────────────────────────────────────────────────────
+
+
+def resolve_vocab(vocab_kind: str, term: str) -> str:
+    """
+    Resolve a business term to its canonical Fusion code.
+
+    Queries ``kg_vocabulary``. Examples:
+        resolve_vocab('country', 'US')        -> 'US'
+        resolve_vocab('country', 'USA')       -> 'US'
+        resolve_vocab('po_status', 'open')    -> 'OPEN'
+        resolve_vocab('po_status', 'active')  -> 'OPEN'
+
+    Raises ``KeyError`` if no matching row exists for the
+    (vocab_kind, term) pair. Match is case-insensitive on the term.
+    """
+    with _kg_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT canonical_value
+            FROM kg_vocabulary
+            WHERE vocab_kind = :vocab_kind AND LOWER(term) = LOWER(:term)
+            """,
+            vocab_kind=vocab_kind,
+            term=term,
+        )
+        row = cursor.fetchone()
+
+    if row is None:
+        raise KeyError(f"No vocab for ({vocab_kind!r}, {term!r})")
+
+    return row[0]
+
+
+===== FILE: src/spire/planner/models.py =====
+"""Planner data types: Intent, Step, and the Plan alias.
+
+Intent is the parser's output and the planner's input. Step is the
+planner's output, one per fetch/iterate/filter action the executor will
+perform; Plan is just list[Step]. Pure dataclasses, no dependency on any
+other planner module.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Types
+# ─────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class Intent:
+    """
+    Output of the LLM intent-parsing step.
+    Input to ``generate_plan``.
+
+    Example (for the original Track A prompt
+    'suppliers in US with no invoices in 6 months but with open POs,
+    including the buyer assigned to each'):
+
+        Intent(
+            target_entity="Supplier",
+            filters=[
+                {"type": "country", "value": "US"},
+                {"type": "has_no_recent_invoices", "value": {"months": 6}},
+                {"type": "has_open_PO", "value": True},
+            ],
+            include=["Buyer"],
+        )
+    """
+
+    target_entity: str
+    filters: list[dict[str, Any]] = field(default_factory=list)
+    include: list[str] = field(default_factory=list)
+    # Phase 7: when the prompt names specific columns, the LLM fills this
+    # with exact column names (from kg_entity_field). Empty means "return
+    # the default field set". Projection trims the raw output records to
+    # these columns; the synthesized prose answer is unaffected.
+    fields: list[str] = field(default_factory=list)
+    # COL-03 (partial column resolution): columns the user named that the
+    # entity does NOT have. Populated by validate_intent (Step 4), which
+    # splits the parser's raw column list — valid names stay in `fields`,
+    # unknown ones move here — instead of refusing the whole query. The
+    # planner and executor IGNORE this field entirely; it rides through to
+    # display, which prints a note naming these columns and offering the
+    # entity's available columns, above the projected table. Empty means
+    # every requested column resolved (or none were requested).
+    #
+    # WHY A SEPARATE LIST AND NOT AN em-dash COLUMN: an absent field
+    # printed as a dashed column cannot be told apart from a real field
+    # that is simply null on every row. Carrying the unresolved names as
+    # data lets display disclose them explicitly — the silent-drop defect
+    # (a clean table with a requested column quietly missing) is exactly
+    # what COL-03 exists to remove. Substitution is NOT performed: a
+    # near-match is never guessed in place of an unknown column.
+    unresolved_fields: list[str] = field(default_factory=list)
+    # Feature 7: when set, the question is an aggregation, not a list.
+    # The LLM parser fills this when it detects aggregation/ranking
+    # wording; it is None for ordinary list queries (the default), so
+    # all existing behavior is unchanged. Shape:
+    #   {"op": "by_supplier", "date_from": "...", "date_to": "...",
+    #    "top_n": 10}
+    # The planner maps a populated aggregate to a single tool step; the
+    # op names the bounded aggregation tool (one op per tool, by design).
+    aggregate: dict[str, Any] | None = None
+
+    # P6c: when set, the question is a comparison of invoiced vs ordered,
+    # not a list, ranking, or total. The LLM parser fills this when it
+    # detects invoiced-vs-ordered wording; None for everything else (the
+    # default), so all existing behavior is unchanged. Shape:
+    #   {"op": "po_invoiced_vs_ordered", "po_number": "162034",
+    #    "supplier_name": None, "top_n": 5, "status": None}
+    # The planner maps a populated compare to a single tool step; the op
+    # names the bounded comparison tool (one op per tool, like aggregate).
+    # Checked AFTER aggregate in generate_plan, so if a confused parse
+    # sets both, aggregate wins and compare is ignored (mirrors the
+    # aggregate/count_only precedence).
+    compare: dict[str, Any] | None = None
+
+    # Phase 10: when True, the question asks "how many X" — report the
+    # count, not a record list. The normal fetch still runs (its
+    # total_available carries the count); the synthesizer emits a count
+    # summary. Kept separate from aggregate (which routes to bounded
+    # aggregation tools) — count reuses the entity's default fetcher.
+    count_only: bool = False
+
+    # AR-P2c: when True on a customer-invoices query (CustomerAccount +
+    # by_customer_name + CustomerTransaction in include), the
+    # CustomerTransaction include step passes open_only=True to its tool,
+    # restricting the listed transactions to those with a positive open
+    # balance. Consumed entirely in Block 3; the fetcher applies the
+    # balance filter (and returns rows balance-desc). Defaults False so
+    # ordinary customer-invoice listings (prompt 15) are unchanged.
+    open_only: bool = False
+
+    # Top-N open invoices: when set alongside open_only on a customer-
+    # invoices query, cap the listed transactions to the N highest-balance
+    # open rows. Rides as a literal `limit` tool_arg on the same
+    # CustomerTransaction include step (the fetcher returns balance-desc,
+    # so limit keeps the top N). Consumed entirely in Block 3. Defaults
+    # None (no cap) so plain open-invoice listings are unchanged.
+    invoice_limit: int | None = None
+
+    # AR-P5 (prompt 6): when True, the question asks for a customer's
+    # ACCOUNT BALANCE / activity summary rather than their transactions —
+    # "what is the account balance for customer X". Same root as the
+    # customer-invoices shape (CustomerAccount + by_customer_name), but
+    # the parser emits an EMPTY include, so Block 3 never runs and no
+    # transaction fetch happens: the balance fields
+    # (TotalOpenReceivablesForAccount, TotalTransactionsDueForAccount)
+    # already ride on the account record Block 1 fetches.
+    #
+    # WHY A FLAG AND NOT JUST THE EMPTY INCLUDE: the empty include is what
+    # makes the plan correct, but it is not a reliable SIGNAL — a future
+    # prompt could legitimately root on CustomerAccount with no include and
+    # mean something else. The synthesizer and run_plan.py dispatch on this
+    # flag rather than inferring shape from an absence. Consumed
+    # downstream of the planner only; generate_plan needs no branch for it
+    # (an empty include already produces the right plan).
+    balance_only: bool = False
+
+    # #32 fault (b): True only when the user explicitly asked to LIST/show
+    # all purchase orders ("list purchase orders", "show all POs") — a
+    # genuine bounded sample-and-disclose (#23). The parser sets it ONLY on
+    # that wording. generate_plan uses it to tell an explicit PO list apart
+    # from a PO query whose identifier the parser dropped ("Is PO N
+    # complete?" losing the number): both arrive as a filter-less
+    # PurchaseOrder intent, but only the explicit list should list — the
+    # dropped-identifier case must refuse, not dump 25 of ~17k unrelated
+    # POs. Defaults False so the SAFE direction (refuse when unscoped and
+    # not an explicit list) is the default. Consumed only in generate_plan.
+    list_all: bool = False
+
+    # F-016: a plain-list row cap extracted from the raw prompt ("top 5
+    # recent credit memos", "first 10 suppliers"). Distinct from
+    # `invoice_limit` (open-invoices only) and `aggregate['top_n']`
+    # (aggregation only). The parser computes it deterministically
+    # post-LLM (see parser.py::_extract_list_cap) and the planner injects
+    # `limit=N` into the entity fetcher's tool_args — but ONLY for the
+    # fetchers whose signatures accept a `limit` argument (the set lives
+    # in registries._LIMIT_CAPABLE_TOOLS). Tools that take no limit are
+    # unaffected, so an intent carrying a cap for a non-list fetch is a
+    # no-op at plan time rather than a crash. Default None (no cap) so
+    # every existing intent behaves unchanged.
+    list_limit: int | None = None
+
+
+@dataclass
+class Step:
+    """
+    One step in a Plan. The executor reads these top-to-bottom.
+
+    - ``tool_args`` values may be literals or the sentinel string
+      ``"$iteration_value"`` (substituted by the executor when iterating).
+    - ``iterate_over`` is ``None`` when the step runs once; otherwise
+      ``{"from_step": <output_name>, "field": <field_name>}``.
+    - ``client_filters`` are applied in Python after each tool call.
+      All v1 edges have ``server_filter_rule = 'join_only'``, so any
+      filter beyond the join key lives here.
+    - ``filter_source_when_empty`` (F2): when True, the step's output
+      is the SOURCE step's items, filtered to those whose per-iteration
+      tool call returned an empty list. Used for "negation by absence"
+      filters like "suppliers with NO invoices in the last 6 months".
+      The executor honors this flag; it defaults to False so existing
+      steps behave unchanged.
+    - ``filter_source_when_nonempty`` (Phase 11): the mirror — the
+      step's output is the SOURCE items whose per-iteration call returned
+      SOMETHING (after any value filter in tool_args, e.g. amount_min).
+      Used for "X that HAS a Y matching a condition" — e.g. "suppliers
+      with an invoice over 10000". Defaults to False.
+    """
+
+    step_id: int
+    tool_name: str
+    tool_args: dict[str, Any]
+    iterate_over: dict[str, str] | None
+    client_filters: list[dict[str, Any]]
+    output_name: str
+    output_dedupe_by: str | None
+    filter_source_when_empty: bool = False
+    filter_source_when_nonempty: bool = False
+    # AR-P3: when True, the executor stamps this iterating step's parent
+    # field(s) onto each child row it returns, so a FOLLOWING grandchild
+    # step can iterate on a parent id the child body doesn't natively
+    # carry (AR invoice lines don't echo CustomerTransactionId). Off by
+    # default so every other iterating step's output is byte-for-byte
+    # unchanged. The planner sets it only on a child step that feeds a
+    # further include.
+    stamp_parent_key: bool = False
+
+
+Plan = list[Step]
+
+
+===== FILE: src/spire/planner/plan_builders.py =====
+"""Plan-building helpers — everything generate_plan delegates to.
+
+generate_plan (in planner.py) is the orchestrator; every function here
+does one piece of the work it needs done: building the aggregation or
+comparison sub-plan, validating an Intent's filters, resolving which
+argument name a tool expects, working out iteration args (including the
+computed date filters), and naming a step's output bucket. Kept together
+because they are called only from generate_plan and only make sense in
+that context — none of them is a public entry point on its own.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+from spire.planner.date_utils import (  # noqa: F401
+    _compute_date_n_months_ago,
+    _days_in_month,
+    _one_day,
+)
+from spire.planner.kg_db import (
+    _edge_filter_implicit_values,
+    _edge_traversal_filters,
+    _entity_level_filter_types,
+    _filter_def_for,
+)
+from spire.planner.lookup import find_pattern_for_filter, resolve_vocab
+from spire.planner.models import Plan, Step
+from spire.planner.registries import (
+    _AGGREGATION_PARAMS,
+    _AGGREGATION_TOOLS,
+    _SCOPE_FILTER_TO_PARAM,
+    _COMPARISON_PARAMS,
+    _COMPARISON_TOOLS,
+    _FILTER_SOURCE_NAME_SUFFIX,
+    _FILTER_SOURCE_NONEMPTY_SUFFIX,
+    _LIMIT_CAPABLE_TOOLS,
+    _OUTPUT_NAME_BY_ENTITY,
+    _TOOL_PRIMARY_ARG,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+
+def _build_aggregation_plan(
+    aggregate: dict[str, Any],
+    filters: list[dict[str, Any]] | None = None,
+) -> Plan:
+    """
+    Build a single-step plan for an aggregation intent (feature 7).
+
+    The aggregate block names an op (which maps to a bounded aggregation
+    tool) plus the tool's parameters (date_from, date_to, top_n). The
+    result is one non-iterating Step; the tool does the fetch + math and
+    returns a structured ranking, which the executor passes through to
+    the synthesizer.
+
+    SCOPED aggregations also take a scope (e.g. "receipt method
+    distribution for customer X"), and the parser puts that scope in
+    intent.filters, NOT in the aggregate block. So this reads both:
+    the aggregate block first, then any filter whose type the op's tool
+    accepts. Without the second pass the filter is silently dropped and
+    the tool runs pod-wide while the answer still names the customer.
+
+    Raises NotImplementedError if the op has no registered tool — the
+    aggregation analog of _validate_intent_filters' unknown-type guard,
+    so an unsupported aggregation fails loudly rather than silently.
+    """
+    op = aggregate.get("op")
+    tool = _AGGREGATION_TOOLS.get(op)
+    if tool is None:
+        raise NotImplementedError(
+            f"Aggregation op {op!r} is not supported in v1. "
+            f"Supported ops: {sorted(_AGGREGATION_TOOLS)}."
+        )
+
+    # Pass through only the recognized tool params, dropping None so the
+    # tool's own defaults (e.g. top_n=10) apply when unspecified.
+    # Pass through only the params THIS op's tool accepts. Relying on the
+    # parser to omit irrelevant params doesn't work: it helpfully sets
+    # top_n=10 by default, which then reaches a tool that takes no top_n
+    # and raises. The accepted set is per-op because the tools genuinely
+    # differ — a status breakdown takes no filter, an open summary takes
+    # no top_n.
+    accepted = _AGGREGATION_PARAMS.get(op, ())
+    tool_args: dict[str, Any] = {}
+    for key in accepted:
+        if aggregate.get(key) is not None:
+            tool_args[key] = aggregate[key]
+
+    # Second pass: merge scoping filters the op's tool accepts. The scope
+    # arrives as an intent filter named by_<param> (by_customer_name),
+    # while the tool's kwarg is <param> (customer_name), so translate the
+    # filter type through _SCOPE_FILTER_TO_PARAM before whitelisting it
+    # against `accepted`; a type with no mapping passes through unchanged
+    # (identity). Without the translation the by_-prefixed type never
+    # matched and the scope was silently dropped — the tool ran pod-wide
+    # while the answer still named the customer (finding #7). The aggregate
+    # block wins on conflict — it is the more specific statement of intent.
+    for f in filters or []:
+        ftype = f.get("type")
+        param = _SCOPE_FILTER_TO_PARAM.get(ftype, ftype)
+        if param in accepted and param not in tool_args:
+            value = f.get("value")
+            if value is not None:
+                tool_args[param] = value
+
+    return [
+        Step(
+            step_id=1,
+            tool_name=tool,
+            tool_args=tool_args,
+            iterate_over=None,
+            client_filters=[],
+            output_name="aggregation",
+            output_dedupe_by=None,
+        )
+    ]
+    
+def _build_comparison_plan(compare: dict[str, Any]) -> Plan:
+    """
+    Build a single-step plan for a comparison intent (P6c).
+
+    The compare block names an op (which maps to a bounded comparison
+    tool) plus the tool's parameters (po_number, or supplier_name+top_n,
+    or top_n+status). The result is one non-iterating Step; the tool does
+    the two fetches, the join, and the arithmetic, and returns a
+    structured comparison the executor passes through to the synthesizer.
+
+    Mirrors _build_aggregation_plan exactly — same one-op-per-tool
+    dispatch, same "forward only accepted params" discipline. Raises
+    NotImplementedError if the op has no registered tool, so an
+    unsupported comparison fails loudly rather than silently.
+    """
+    op = compare.get("op")
+    tool = _COMPARISON_TOOLS.get(op)
+    if tool is None:
+        raise NotImplementedError(
+            f"Comparison op {op!r} is not supported in v1. "
+            f"Supported ops: {sorted(_COMPARISON_TOOLS)}."
+        )
+
+    # Forward only the params THIS op's tool accepts, dropping None so the
+    # tool's own defaults apply. Per-op because the tools genuinely differ
+    # — a PO comparison takes a po_number and no top_n; a top-suppliers
+    # comparison takes top_n and status and no po_number.
+    accepted = _COMPARISON_PARAMS.get(op, ())
+    tool_args: dict[str, Any] = {}
+    for key in accepted:
+        if compare.get(key) is not None:
+            tool_args[key] = compare[key]
+
+    return [
+        Step(
+            step_id=1,
+            tool_name=tool,
+            tool_args=tool_args,
+            iterate_over=None,
+            client_filters=[],
+            output_name="comparison",
+            output_dedupe_by=None,
+        )
+    ]
+
+
+def _validate_intent_filters(filters: list[dict[str, Any]], target_entity: str) -> None:
+    """Verify every filter in the intent has a known handler for the target entity.
+
+    Raises RefusalError(UNSUPPORTED_FILTER) naming the entity and the
+    unsupported filter type(s). plan_node routes the wrapped Refusal into
+    state["refusal"], so it renders through capability_message — the same
+    Reason/Solution/Example shape every other refusal uses — instead of the
+    legacy dense "plan: Spire can't filter ..." dump. The user-facing
+    wording (the supported filters, an example) comes from
+    _FILTER_GUIDANCE[entity] in capability.py; `detail` stays blunt for
+    logs and tests, and `offending_filters` carries the rejected types.
+
+    (Previously this raised NotImplementedError with a pre-built dense
+    string. plan_node's NotImplementedError branch dumped that string flat,
+    bypassing capability_message — the #11 defect. The only caller that
+    distinguished the type was plan_node, whose RefusalError branch already
+    handles the structured path; the aggregation-op NotImplementedError
+    raises elsewhere are unaffected.)
+
+    Called AFTER the entity guards in generate_plan. Those guards give a
+    better-aimed message for the cases they cover, and several
+    unsupported-filter intents are really missing-root-reference intents
+    wearing a different hat: 'show details for invoice number X' parses
+    to Invoice + by_id, but what the user needs to hear is "name the
+    supplier". Validating first meant the raw filter dump always won.
+    This still runs before any plan block, so an unknown filter type can
+    never be silently dropped.
+    """
+    entity_level = _entity_level_filter_types().get(target_entity, set())
+    edge_filters = _edge_traversal_filters()
+    unknown = []
+    for f in filters:
+        ftype = f.get("type")
+        if ftype in entity_level or ftype in edge_filters:
+            continue
+        # Allow by_id for PurchaseOrder and ReceivablesInvoice even if not in entity_level
+        if ftype == "by_id" and target_entity in ("PurchaseOrder", "ReceivablesInvoice"):
+            continue
+        unknown.append(ftype)
+    if not unknown:
+        return
+
+    named = ", ".join(repr(u) for u in unknown)
+    # UNSUPPORTED_FILTER: the entity is valid but one of its filters is not.
+    # Raise structured so plan_node routes it into state["refusal"] and it
+    # renders through capability_message (Reason/Solution/Example, sourced
+    # from _FILTER_GUIDANCE[entity]) — the readable shape every other
+    # refusal gets, not the legacy dense dump. detail stays blunt for
+    # logs/tests; offending_filters names the rejected types. Local import
+    # mirrors the entity guards in planner.py and avoids a module-load
+    # cycle (result.py imports Intent via planner.planner).
+    from spire.nl_parser.result import Refusal, RefusalError, RefusalFlavor
+
+    raise RefusalError(
+        Refusal(
+            flavor=RefusalFlavor.UNSUPPORTED_FILTER,
+            detail=f"{target_entity} cannot be filtered by {named}",
+            offending_entity=target_entity,
+            offending_filters=[str(u) for u in unknown],
+        )
+    )
+
+
+def _pick_entity_filter(filters: list[dict[str, Any]], entity: str) -> str:
+    """Return the first entity-level filter type, or 'none'."""
+    entity_level = _entity_level_filter_types().get(entity, set())
+    for f in filters:
+        ftype = f.get("type")
+        if ftype in entity_level:
+            return ftype
+    return "none"
+
+# Filter types whose KG tool_arg_name is a PLACEHOLDER, not a literal arg
+# name: the concrete argument depends on the SHAPE of the value. Both the
+# Invoice/supplier and Address/supplier KG rows document this routing in
+# their notes ("planner routes an all-digit value to supplier_number,
+# otherwise supplier_name") but nothing implemented it, so the placeholder
+# reached the tool verbatim and Pydantic rejected it.
+# v1.2 candidate: make this declarative — a tool_arg_name_alt column on
+# kg_entity_filter — rather than a hardcoded special case here. Same note
+# as _TOOL_PRIMARY_ARG above.
+_VALUE_SHAPE_ROUTED_ARGS: dict[str, tuple[str, str]] = {
+    # placeholder -> (arg when all-digit, arg otherwise)
+    "supplier": ("supplier_number", "supplier_name"),
+    # PurchaseOrder supplier filter. POs expose SupplierId (numeric), NOT
+    # SupplierNumber (HTTP 400 if projected) -- so an all-digit value routes
+    # to search_purchase_orders' supplier_id, unlike the Invoice/Address
+    # 'supplier' placeholder above which routes to supplier_number. Same
+    # digit-vs-name shape test, different target args; hence a distinct
+    # placeholder token in the PurchaseOrder/supplier KG row (supplier_po).
+    "supplier_po": ("supplier_id", "supplier_name"),
+}
+
+
+def _resolve_arg_name(arg_name: str, raw_value: Any) -> str:
+    """Resolve a placeholder tool_arg_name against the value's shape.
+
+    Most KG rows name the tool argument literally. A few name a
+    placeholder because one filter type maps to two different tool
+    arguments depending on whether the user gave an id or a name —
+    'invoices for supplier 1252' vs 'invoices for Lee Supplies'.
+    Non-placeholder names pass through unchanged.
+    """
+    routed = _VALUE_SHAPE_ROUTED_ARGS.get(arg_name)
+    if routed is None:
+        return arg_name
+    numeric_arg, name_arg = routed
+    return numeric_arg if str(raw_value).strip().isdigit() else name_arg
+
+
+def _build_entity_fetcher_args(
+    filters: list[dict[str, Any]],
+    entity: str,
+    reference_date: date | None = None,
+) -> dict[str, Any]:
+    """Build tool_args for the entity fetcher.
+
+    reference_date is threaded in for the two entity-level filters
+    whose value is a RELATIVE window (older_than_n_months,
+    created_in_last_n_months): the planner computes the ISO cutoff
+    via the same _compute_date_n_months_ago helper
+    has_no_recent_invoices uses, so tests can pin "today" without
+    monkeypatching datetime. Every other filter is unaffected.
+    """
+    if reference_date is None:
+        reference_date = date.today()
+    args = {}
+    for f in filters:
+        ftype = f.get("type")
+        try:
+            defn = _filter_def_for(ftype, entity)
+        except KeyError:
+            continue  # not an entity-level filter for this entity
+        if defn["mechanism"] != "entity_level":
+            continue
+        raw_value = f.get("value")
+        arg_name = _resolve_arg_name(defn["tool_arg_name"], raw_value)
+        arg_name_hi = defn.get("tool_arg_name_hi")
+
+        # F-011: relative PO-date window. Value is {"months": N};
+        # compute the ISO cutoff locally (never the LLM's job) and
+        # forward it under the tool arg the KG row names
+        # (created_before). Runs BEFORE the generic dict handler,
+        # which would otherwise read the wrong keys.
+        if ftype in (
+            "older_than_n_months",
+            "created_in_last_n_months",
+            "updated_older_than_n_months",
+            "updated_in_last_n_months",
+        ):
+            months = (
+                raw_value.get("months")
+                if isinstance(raw_value, dict) else raw_value
+            )
+            if (
+                not isinstance(months, int)
+                or isinstance(months, bool)
+                or months <= 0
+            ):
+                raise ValueError(
+                    f"{ftype} requires value="
+                    "{'months': <positive int>}; got "
+                    f"{raw_value!r}."
+                )
+            cutoff = _compute_date_n_months_ago(months, reference_date)
+            args[arg_name] = cutoff.isoformat()
+            continue
+
+        if isinstance(raw_value, dict):
+            low = raw_value.get("from", raw_value.get("min"))
+            high = raw_value.get("to", raw_value.get("max"))
+            if low is not None:
+                args[arg_name] = low
+            if high is not None and arg_name_hi:
+                args[arg_name_hi] = high
+            continue
+        vocab_kind = defn.get("vocab_kind")
+        if vocab_kind is not None:
+            args[arg_name] = resolve_vocab(vocab_kind, raw_value)
+        else:
+            args[arg_name] = raw_value
+    return args
+
+
+def _apply_list_limit(
+    tool_name: str,
+    tool_args: dict[str, Any],
+    list_limit: int | None,
+) -> None:
+    """F-016: inject `limit=N` into a list fetcher's tool_args in place.
+
+    No-op unless the tool accepts a limit AND the intent carries a cap.
+    The set of limit-capable tools lives in registries._LIMIT_CAPABLE_TOOLS
+    (the same file that holds _TOOL_PRIMARY_ARG) so a new list tool is
+    one row in each map and the two stay consistent.
+
+    A `limit` sent to a fetcher whose signature does not declare one
+    raises at the MCP boundary — FastMCP/Pydantic rejects the unknown
+    kwarg — so the set is the guard against a shape the parser does not
+    yet distinguish from the list case.
+
+    Mutates `tool_args` in place rather than returning a new dict. Called
+    once, from generate_plan's Block 1, immediately after the args are
+    built — before the address-expand flag and before the Step is
+    constructed — so the mutating contract is local and visible.
+    """
+    if list_limit is None:
+        return
+    if tool_name not in _LIMIT_CAPABLE_TOOLS:
+        return
+    tool_args["limit"] = list_limit
+
+
+def _filters_needing_edge_traversal(
+    filters: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Return the subset of filters not handled by the entity-level fetcher
+    and therefore needing a separate edge traversal step.
+
+    Returns filters whose type is an edge-traversal filter (from the KG).
+    Entity-level filters (already consumed by Block 1) and unknown
+    filter types are excluded.
+
+    Note: this function used to silently drop unknown filter types
+    (the v1 defect surfaced in the Design 3 measurement report).
+    _validate_intent_filters is now called from generate_plan before
+    this function runs, so unknown types raise before reaching here.
+    """
+    edge_filters = _edge_traversal_filters()
+    return [f for f in filters if f.get("type") in edge_filters]
+
+
+def _filter_target_entity(filter_spec: dict[str, Any]) -> str:
+    """
+    Given a filter spec, return the entity it constrains.
+
+    Example: {"type": "has_open_PO", ...} -> "PurchaseOrder"
+
+    Raises KeyError if the filter type is unknown to v1.
+    """
+    filter_type = filter_spec.get("type")
+    edge_filters = _edge_traversal_filters()
+    if filter_type not in edge_filters:
+        raise KeyError(
+            f"Filter type {filter_type!r} has no edge-traversal target "
+            "in the KG filter table."
+        )
+    target_entity, _kg_filter_type = edge_filters[filter_type]
+    return target_entity
+
+
+def _resolve_client_filters(
+    filter_spec: dict[str, Any], target_entity: str
+) -> list[dict[str, Any]]:
+    """
+    Translate a filter spec into the list of client-side filters to apply
+    after the tool call.
+
+    Internally calls ``find_pattern_for_filter``, parses the pattern's
+    ``parameter_bindings``, resolves vocab values, and constructs the
+    filter list in the ``{field, op, value}`` shape.
+
+    v1 only implements ``status_filter`` here. country_filter_via_address
+    is handled by the entity-level fetcher in Block 1.
+    no_child_in_N_months is handled via filter_source_when_empty in the
+    orchestrator, not via client filters.
+
+    Example: {"type": "has_open_PO", ...} on PurchaseOrder
+        -> [{"field": "StatusCode", "op": "equals", "value": "OPEN"}]
+    """
+    intent_filter_type = filter_spec.get("type")
+    edge_filters = _edge_traversal_filters()
+    if intent_filter_type not in edge_filters:
+        raise KeyError(
+            f"Filter type {intent_filter_type!r} is not an edge-traversal "
+            "filter and has no client-filter mapping."
+        )
+    _target_entity, kg_filter_type = edge_filters[intent_filter_type]
+
+    binding = find_pattern_for_filter(target_entity, kg_filter_type)
+    pattern_name = binding["pattern_name"]
+    bindings = binding["parameter_bindings"]
+
+    if pattern_name == "status_filter":
+        # bindings carry: X (entity), status_field, status_term_param.
+        field_name = bindings["status_field"]
+        vocab_kind, implicit_term = _edge_filter_implicit_values()[intent_filter_type]
+        canonical = resolve_vocab(vocab_kind, implicit_term)
+        return [{"field": field_name, "op": "equals", "value": canonical}]
+
+    # Other patterns (e.g., country_filter_via_address, no_child_in_N_months)
+    # are NOT handled here in v1.1 — they're handled elsewhere in the
+    # orchestrator (Block 1 entity fetcher, or filter_source_when_empty
+    # respectively). If we get here, the planner is being asked
+    # something v1 doesn't cover.
+    raise NotImplementedError(
+        f"Client-filter construction for pattern {pattern_name!r} "
+        "is not implemented in v1."
+    )
+
+
+def _build_iteration_args_with_computed(
+    filter_spec: dict[str, Any],
+    tool_name: str,
+    reference_date: date,
+) -> dict[str, Any]:
+    """
+    Build tool_args for an iterating step whose args include a
+    computed value (e.g. invoice_date_after = today - N months).
+
+    The primary iteration key is always set to the iteration sentinel.
+    Additional computed args are added based on the filter type.
+
+    For has_no_recent_invoices with value {"months": 6}, returns:
+        {"supplier_number": "$iteration_value",
+         "invoice_date_after": "2025-11-26"}
+    where the date is reference_date minus 6 months.
+
+    v1.1 only handles has_no_recent_invoices. Other computed-arg
+    filter types would extend this function.
+    """
+    intent_filter_type = filter_spec["type"]
+    primary_arg = _arg_name_for_tool(tool_name)
+    args: dict[str, Any] = {primary_arg: "$iteration_value"}
+
+    if intent_filter_type == "has_no_recent_invoices":
+        value = filter_spec.get("value") or {}
+        months = value.get("months")
+        if not isinstance(months, int) or months <= 0:
+            raise ValueError(
+                f"has_no_recent_invoices requires value={{'months': <positive int>}}; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        cutoff = _compute_date_n_months_ago(months, reference_date)
+        args["invoice_date_after"] = cutoff.isoformat()
+        return args
+
+    if intent_filter_type == "has_invoice_over_amount":
+        # The threshold rides in as a plain number; route it to the
+        # child invoice call's amount_min (Phase 5 filter). A non-empty
+        # result means the supplier has an invoice at/over the amount.
+        value = filter_spec.get("value")
+        amount = value.get("amount") if isinstance(value, dict) else value
+        if not isinstance(amount, (int, float)) or isinstance(amount, bool):
+            raise ValueError(
+                f"has_invoice_over_amount requires a numeric value "
+                f"(the amount threshold); got {filter_spec.get('value')!r}."
+            )
+        args["amount_min"] = amount
+        return args
+
+    if intent_filter_type == "has_site_in_bu":
+        # The BU value rides in as the canonical display string (already
+        # resolved from supplier_site_bu vocab by the parser). Route it to
+        # the child sites call's business_unit arg. A non-empty child
+        # result means the supplier has a site in that BU.
+        value = filter_spec.get("value")
+        bu = value.get("business_unit") if isinstance(value, dict) else value
+        if not isinstance(bu, str) or not bu.strip():
+            raise ValueError(
+                f"has_site_in_bu requires a business-unit string; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        args["business_unit"] = bu
+        return args
+
+    if intent_filter_type == "has_classification":
+        # The classification value rides in as the canonical display
+        # string (already resolved from supplier_classification vocab by
+        # the parser). Route it to the child businessClassifications
+        # call's classification arg. A non-empty child result means the
+        # supplier has a matching classification.
+        value = filter_spec.get("value")
+        cls = value.get("classification") if isinstance(value, dict) else value
+        if not isinstance(cls, str) or not cls.strip():
+            raise ValueError(
+                f"has_classification requires a classification string; "
+                f"got {filter_spec.get('value')!r}."
+            )
+        args["classification"] = cls
+        return args
+
+    if intent_filter_type == "has_open_PO":
+        # F-053. Presence flag: the parent is kept when the child
+        # call returns at least one open PO. The status filter rides
+        # as a server-side tool_arg (search_purchase_orders sends
+        # StatusCode='OPEN'), so an empty child result means genuinely
+        # no open POs, not "some POs, none matching a client filter".
+        args["status"] = "OPEN"
+        return args
+
+    # Other filter types with computed args would dispatch here.
+    raise NotImplementedError(
+        f"Computed iteration args not implemented for filter type "
+        f"{intent_filter_type!r}."
+    )
+
+
+def _arg_name_for_tool(tool_name: str) -> str:
+    """
+    Return the argument name the given MCP tool expects for its primary
+    input.
+
+    Examples:
+        search_purchase_orders -> 'supplier_id'
+        get_buyer              -> 'buyer_id'
+        search_invoices        -> 'supplier_number'
+
+    v1: static dict (_TOOL_PRIMARY_ARG). v2 may want this in the KG.
+    Raises KeyError if the tool is not in the table.
+    """
+    if tool_name not in _TOOL_PRIMARY_ARG:
+        raise KeyError(
+            f"No primary-arg mapping for tool {tool_name!r}. "
+            "Add it to _TOOL_PRIMARY_ARG."
+        )
+    return _TOOL_PRIMARY_ARG[tool_name]
+
+
+def _make_output_name(
+    entity_name: str,
+    filter_type: str | None = None,
+    filters: list[dict[str, Any]] | None = None,
+) -> str:
+    """
+    Stable, readable output name for a step's results.
+
+    Examples:
+        _make_output_name('Supplier', 'country', [{"type":"country","value":"US"}])
+          -> 'us_suppliers'
+        _make_output_name('PurchaseOrder')
+          -> 'open_pos'    (v1 special-cases PO since the only PO-producing
+                            step in the anchor plan is the open-PO traversal)
+        _make_output_name('Buyer')
+          -> 'buyers'
+
+    Implementation note: the executor doesn't interpret these; pure
+    convention. The 'open_pos' special-case matches the anchor-plan
+    fixture; v1.1 can derive the prefix from filter context.
+    """
+    base = _OUTPUT_NAME_BY_ENTITY.get(entity_name, entity_name.lower())
+
+    # Country-filtered entity fetch: prefix with the country code.
+    # We need the entity name to look up the vocab kind, but we can just
+    # resolve the country value directly – the vocab_kind is always 'country'
+    # for this filter, and the value is already normalized by the parser.
+    if filter_type == "country" and filters:
+        matching = next((f for f in filters if f.get("type") == "country"), None)
+        if matching is not None:
+            country_value = matching["value"]
+            try:
+                # Try to canonicalize it if it's not already a code.
+                country_value = resolve_vocab('country', country_value)
+            except KeyError:
+                pass  # Fall back to the raw value.
+            return f"{country_value.lower()}_{base}"
+
+    # PurchaseOrder output naming. The anchor plan's PO step always carries
+    # the open-PO filter, so its canonical output name is 'open_pos'. P2's
+    # single-PO fetch (by_id) is a different shape — name it 'po' so a
+    # by-id fetch isn't mislabeled as a list of open POs. Additive: only
+    # the by_id path changes; every existing PO plan still yields
+    # 'open_pos'.
+    if entity_name == "PurchaseOrder":
+        if filter_type == "by_id":
+            return "po"
+        return "open_pos"
+
+    return base
+
+
+def _make_filtered_source_output_name(
+    source_output_name: str, filter_type: str
+) -> str:
+    """
+    Compose the output name for a step that filters its source items by
+    iteration-emptiness (filter_source_when_empty) or by iteration
+    non-emptiness (filter_source_when_nonempty, Phase 11).
+
+    Example: source='us_suppliers', filter='has_no_recent_invoices'
+        -> 'us_suppliers_no_recent_invoices'
+    Example: source='suppliers', filter='has_invoice_over_amount'
+        -> 'suppliers_has_invoice_over_amount'
+
+    Raises KeyError if filter_type has no suffix in either
+    _FILTER_SOURCE_NAME_SUFFIX or _FILTER_SOURCE_NONEMPTY_SUFFIX.
+    """
+    suffix = _FILTER_SOURCE_NAME_SUFFIX.get(
+        filter_type
+    ) or _FILTER_SOURCE_NONEMPTY_SUFFIX.get(filter_type)
+    if suffix is None:
+        raise KeyError(
+            f"No filter-source name suffix for {filter_type!r}. Add it to "
+            "_FILTER_SOURCE_NAME_SUFFIX or _FILTER_SOURCE_NONEMPTY_SUFFIX."
+        )
+    return f"{source_output_name}_{suffix}"
+
+
+def _previous_entity(plan: Plan) -> str:
+    """
+    Return the entity name that the previous step's output represents.
+
+    NOTE: v1 does NOT use this helper; the orchestrator tracks the
+    previous entity as a local variable instead, because Step doesn't
+    carry the entity name and reverse-deriving it from output_name is
+    brittle. Kept here as a stub so the design-doc contract is visible.
+
+    v1.1 candidate: add an `entity` field to Step and derive this from
+    plan[-1].entity.
+    """
+    raise NotImplementedError(
+        "v1 tracks previous entity inline in generate_plan. "
+        "This helper exists for design symmetry; do not call it."
+    )
+
+
+===== FILE: src/spire/planner/planner.py =====
+"""Planner entry point — generate_plan.
+
+The orchestrator. Everything else in the package (registries, kg_db,
+models, lookup, plan_builders) exists to serve this one function: read
+an Intent, walk it against the KG, and return a Plan the executor can
+run. No LLM in this module or anywhere in the package — planning is a
+deterministic KG lookup, never a judgement call (Design 3).
+
+This module re-exports every public and internal name the package used
+to define as one file, so no import anywhere else in the repo changes.
+Organisation only; no behavioural change is intended by this split.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+from spire.planner.date_utils import (  # noqa: F401
+    _compute_date_n_months_ago,
+    _days_in_month,
+    _one_day,
+)
+from spire.planner.kg_db import (  # noqa: F401
+    _DEFAULT_DSN,
+    _edge_filter_implicit_values,
+    _edge_traversal_filters,
+    _entity_level_filter_types,
+    _filter_def_for,
+    _FILTER_DEFS_CACHE,
+    _kg_cursor,
+    _load_filter_defs,
+    _oracle_credentials,
+    _read_clob,
+)
+from spire.planner.models import Intent, Plan, Step  # noqa: F401
+from spire.planner.registries import (  # noqa: F401
+    _AGGREGATION_PARAMS,
+    _AGGREGATION_TOOLS,
+    _COMPARISON_PARAMS,
+    _COMPARISON_TOOLS,
+    _ENTITY_EXAMPLE_PROMPT,
+    _FILTER_SOURCE_NAME_SUFFIX,
+    _FILTER_SOURCE_NONEMPTY_SUFFIX,
+    _OUTPUT_NAME_BY_ENTITY,
+    _TOOL_PRIMARY_ARG,
+)
+from spire.planner.lookup import (  # noqa: F401
+    find_edge,
+    find_edge_tool,
+    find_entity,
+    find_entity_tool,
+    find_pattern_for_filter,
+    resolve_vocab,
+)
+from spire.planner.plan_builders import (  # noqa: F401
+    _apply_list_limit,
+    _arg_name_for_tool,
+    _build_aggregation_plan,
+    _build_comparison_plan,
+    _build_entity_fetcher_args,
+    _build_iteration_args_with_computed,
+    _filter_target_entity,
+    _filters_needing_edge_traversal,
+    _make_filtered_source_output_name,
+    _make_output_name,
+    _pick_entity_filter,
+    _previous_entity,
+    _resolve_arg_name,
+    _resolve_client_filters,
+    _validate_intent_filters,
+    _VALUE_SHAPE_ROUTED_ARGS,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Orchestrator
+# ─────────────────────────────────────────────────────────────────────
+
+
+def generate_plan(
+    intent: Intent, reference_date: date | None = None
+) -> Plan:
+    """
+    Produce an ordered, executable plan from a structured intent.
+
+    Uses only KG lookups. No LLM. No prose interpretation.
+
+    Three-block flow:
+
+    1. Fetch target entity (with entity-level filter if applicable).
+    2. For each filter needing an edge traversal, add an iterating step.
+       Some filters (negation-by-absence, e.g. has_no_recent_invoices)
+       emit a step whose output is the FILTERED PARENT list, not the
+       child list. Such steps carry filter_source_when_empty=True for
+       the executor.
+    3. For each include, add a lookup step (with dedup on the join field).
+
+    Args:
+        intent: The structured intent (validated; unknown filter types
+            raise NotImplementedError before any plan work happens).
+        reference_date: For testability of date-computing filters
+            (e.g. has_no_recent_invoices computes today - N months).
+            Defaults to date.today() in production.
+
+    Raises NotImplementedError if any filter in ``intent.filters`` has
+    a ``type`` not supported in v1 (silent-drop defect fix — F1).
+    Raises RefusalError (structured) when an include cannot be satisfied
+    (BUG-3 — see Block 3).
+    """
+    # ── Feature 7: aggregation short-circuit ──────────────────────
+    # When the intent carries an aggregate block, the question is a
+    # ranking/total, not a list. Emit a single non-iterating step that
+    # calls the bounded aggregation tool. This bypasses the entity-fetch
+    # / edge-traversal / include flow entirely — aggregation owns its
+    # own fetch+filter+math inside the tool.
+    if intent.aggregate is not None:
+        return _build_aggregation_plan(intent.aggregate, intent.filters)
+    # ── P6c: comparison short-circuit ─────────────────────────────
+    # When the intent carries a compare block, the question is an
+    # invoiced-vs-ordered comparison, not a list. Emit a single
+    # non-iterating step calling the bounded comparison tool, which owns
+    # its own two fetches + join + arithmetic. Checked AFTER aggregate so
+    # that if a confused parse sets both, aggregate wins (mirrors the
+    # aggregate/count_only precedence).
+    if intent.compare is not None:
+        return _build_comparison_plan(intent.compare)
+
+    # Invoice queries require a supplier reference. Without it the fetch
+    # would pull every invoice on the pod. Refuse loudly instead.
+    if intent.target_entity == "Invoice":
+        has_root_ref = any(
+            f.get("type") in (
+                "supplier",
+                "purchase_order",
+                "invoice_number",
+                "invoice_date",
+                "older_than_n_months",
+                "created_in_last_n_months",
+            )
+            for f in intent.filters
+        )
+        if not has_root_ref:
+            # MISSING_IDENTIFIER: the record type is named but not scoped.
+            # Structured raise -> plan_node -> state["refusal"] -> the same
+            # readable shape a parser decline gets. Words come from
+            # _IDENTIFIER_GUIDANCE["Invoice"] in capability.py.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="Invoice root has no supplier reference",
+                    offending_entity="Invoice",
+                )
+            )
+
+    # Address queries require a supplier or a country. Without one the
+    # fetch would flatten every supplier's addresses on the pod.
+    if intent.target_entity == "Address":
+        has_addr_filter = any(
+            f.get("type") in ("supplier", "country") for f in intent.filters
+        )
+        if not has_addr_filter:
+            # MISSING_IDENTIFIER: needs a supplier or a country to scope.
+            # _IDENTIFIER_GUIDANCE["Address"] carries the two-option wording.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="Address root has no supplier or country scope",
+                    offending_entity="Address",
+                )
+            )
+
+    # PurchaseOrder roots two ways. A FILTERED PO intent routes onward
+    # exactly as before: the KG's PurchaseOrder root filters (by_id,
+    # created_before, created_since, lifecycle_status) scope the fetch, and
+    # any OTHER filter (status, supplier — not PO entity-level filters) is
+    # refused one layer down by _validate_intent_filters with a structured
+    # UNSUPPORTED_FILTER naming the rejected filters. This guard must NOT
+    # intercept that case — an intent that HAS filters is not "missing an
+    # identifier", it has the wrong ones, which is a different refusal.
+    #
+    # Only a truly FILTER-LESS PO intent is ambiguous, and two very
+    # different requests land there identically (filters=[]): an explicit
+    # "list purchase orders" (a valid bounded sample-and-disclose, #23) and
+    # a PO query whose identifier was dropped ("Is PO N complete?" losing
+    # the number, #32). intent.list_all separates them — the parser sets it
+    # True (deterministically, from the raw prompt) ONLY for an explicit
+    # list request.
+    #
+    # So: a filter-less PO intent falls through to the bounded
+    # (PurchaseOrder,'none') fetcher ONLY when list_all is True. Otherwise
+    # refuse MISSING_IDENTIFIER rather than dumping 25 of ~17k unrelated POs
+    # (#32 fault b). This is the safety net: even when the parser drops the
+    # id, the miss fails safe to a refusal, not a table dump. An explicit
+    # list still lists; every filtered PO query still routes through.
+    if intent.target_entity == "PurchaseOrder":
+        if not intent.filters and not intent.list_all:
+            # MISSING_IDENTIFIER: filter-less and not an explicit list.
+            # Structured raise -> plan_node -> state["refusal"] -> the
+            # readable Reason/Solution/Example shape. Words come from
+            # _IDENTIFIER_GUIDANCE["PurchaseOrder"] in capability.py, keyed
+            # on the entity below. Local import breaks a module-load cycle
+            # (result.py imports Intent via planner.planner).
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail=(
+                        "PurchaseOrder root has no identifier and no "
+                        "explicit list request"
+                    ),
+                    offending_entity="PurchaseOrder",
+                )
+            )
+
+    # ReceivablesInvoice is a valid root only for a single-invoice fetch
+    # (by_id on CustomerTransactionId). Like PurchaseOrder it has no
+    # unfiltered default fetcher (no (ReceivablesInvoice,'none') row), and
+    # the collection holds 173k invoices — a root without an id would scan
+    # the whole pod. AR's only root ref is by_id: unlike PO there is no
+    # date-bound list filter on this endpoint (BillToCustomerName/Number
+    # are not queryable, so customer listing goes via the account path, not
+    # here). Refuse cleanly and point at the account path for listing.
+    if intent.target_entity == "ReceivablesInvoice":
+        has_root_ref = any(
+            f.get("type") == "by_id" for f in intent.filters
+        )
+        if not has_root_ref:
+            # A ReceivablesInvoice root with no id is a MISSING_IDENTIFIER
+            # decline — the user named the record type but not WHICH one.
+            # Raise it structured so plan_node routes it into state["refusal"]
+            # and it renders through capability_message, the same readable
+            # Reason/Solution/Example shape a parser decline gets. The words
+            # come from _IDENTIFIER_GUIDANCE["ReceivablesInvoice"] in
+            # capability.py (transaction number / CustomerTransactionId, with
+            # a worked example), keyed on the entity below — so no message
+            # string lives here. detail stays blunt for logs/tests.
+            # Local import breaks a module-load cycle: result.py imports
+            # Intent via planner.planner, so a top-level result import here
+            # would import-cycle. By call time both modules are fully loaded.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail=(
+                        "ReceivablesInvoice root has no identifier; "
+                        "by_id on CustomerTransactionId is required"
+                    ),
+                    offending_entity="ReceivablesInvoice",
+                )
+            )
+
+
+    # StandardReceipt has a (none) entity tool — search_standard_receipts —
+    # but that tool REFUSES to run unscoped: its first statement raises
+    # "At least one of customer_name or customer_site is required." So the
+    # KG advertised a fetcher the tool would not honour, and "Get
+    # standardReceipts" reached the executor before failing. The user saw
+    # a raw tool exception; the planner had every means to say so first.
+    #
+    # A lag_query filter and a get_receipts_with_lag entity tool were
+    # live in the KG database but in NEITHER the seed nor master: the
+    # code sits on feature/ar-prompt-18-parking. The KG was advertising
+    # a tool the running server does not have, so a lag query planned
+    # cleanly and then failed at dispatch. Those rows are gone; when
+    # prompt 18 lands it should bring them, and add "lag_query" to the
+    # scope list below (it routes to its own tool with its own args).
+    if intent.target_entity == "StandardReceipt":
+        has_scope = any(
+            f.get("type") in ("customer_name", "customer_site")
+            for f in intent.filters
+        )
+        if not has_scope:
+            # MISSING_IDENTIFIER: needs a customer or a site to scope.
+            # _IDENTIFIER_GUIDANCE["StandardReceipt"] holds the wording.
+            from spire.nl_parser.result import (
+                Refusal,
+                RefusalError,
+                RefusalFlavor,
+            )
+
+            raise RefusalError(
+                Refusal(
+                    flavor=RefusalFlavor.MISSING_IDENTIFIER,
+                    detail="StandardReceipt root has no customer or site scope",
+                    offending_entity="StandardReceipt",
+                )
+            )
+
+    # Validate AFTER the entity guards. Unknown filter types still raise
+    # loudly rather than being silently dropped by
+    # _filters_needing_edge_traversal — this runs before every plan block
+    # below. But the guards above are better aimed for the cases they
+    # cover, and an unsupported-filter intent is often a
+    # missing-root-reference intent in disguise.
+    _validate_intent_filters(intent.filters, intent.target_entity)
+
+    ref_date = reference_date if reference_date is not None else date.today()
+
+    plan: Plan = []
+    step_id = 1
+
+    # ── Block 1: entity fetch ─────────────────────────────────────
+    # All entity-level filters go to the entity's single default
+    # fetcher (kg_entity_tool filter_type='none'), combined into one
+    # tool_args dict. This lets filters stack (e.g. active US suppliers
+    # named Lee) instead of each needing its own fetcher tool.
+    entity_filter_type = _pick_entity_filter(intent.filters, intent.target_entity)
+    # Most entity-level filters (status, country, name) deliberately share
+    # the ONE default fetcher (filter_type='none') so they can stack. A few
+    # filters instead have their OWN dedicated fetcher registered in the KG
+    # as a distinct (entity, filter_type) row in kg_entity_tool — e.g.
+    # (PurchaseOrder, by_id) -> get_purchase_order_by_id. Prefer that
+    # dedicated fetcher when the KG declares one; otherwise use the shared
+    # default. This keeps routing KG-driven rather than hardcoded.
+    try:
+        fetcher_tool = find_entity_tool(
+            intent.target_entity, entity_filter_type
+        )
+    except KeyError:
+        fetcher_tool = find_entity_tool(intent.target_entity, "none")
+    fetcher_args = _build_entity_fetcher_args(
+        intent.filters, intent.target_entity, ref_date
+    )
+
+    # F-016: plain-list row cap ("top 5 credit memos"). Injected only for
+    # the fetchers whose signatures accept a `limit` arg (see
+    # registries._LIMIT_CAPABLE_TOOLS); a non-capable fetcher is a no-op
+    # rather than an error at the MCP boundary. Runs before the
+    # Address-expand flag below so a "top 5 suppliers with addresses"
+    # intent keeps both — the cap on the fetch and the addresses child
+    # expansion.
+    _apply_list_limit(fetcher_tool, fetcher_args, intent.list_limit)
+
+    # Address include on a supplier-rooted query is satisfied by expanding
+    # the addresses child on the supplier fetch itself (Path B), NOT by a
+    # separate edge-traversal step. Flag it here; Block 3 skips Address so
+    # it isn't also fetched as an edge. Concrete Supplier+Address case
+    # only — not a general expand mechanism.
+    if intent.target_entity == "Supplier" and "Address" in intent.include:
+        fetcher_args["include_addresses"] = True
+
+    plan.append(
+        Step(
+            step_id=step_id,
+            tool_name=fetcher_tool,
+            tool_args=fetcher_args,
+            iterate_over=None,
+            client_filters=[],
+            output_name=_make_output_name(
+                intent.target_entity, entity_filter_type, intent.filters
+            ),
+            output_dedupe_by=None,
+        )
+    )
+    previous_entity = intent.target_entity
+    previous_output_name = plan[-1].output_name
+    # The root entity and its output name, captured once. Block 2 and each
+    # include in Block 3 overwrite previous_entity / previous_output_name as
+    # they chain, so a sibling include (below) — which must iterate off the
+    # ROOT, not the include before it — needs these preserved separately.
+    root_entity = intent.target_entity
+    root_output_name = plan[-1].output_name
+    step_id += 1
+
+    # F-053: parent-keeping filters (filter_source_when_empty and
+    # filter_source_when_nonempty) do not advance previous_entity to
+    # the child — they keep the parent and filter it. If a later
+    # include chains from that child (Buyer lives on PurchaseOrder,
+    # not on Supplier), Block 3 must re-fetch the child rows for the
+    # surviving parents so the include has something to iterate.
+    # Track each parent-keeping filter's (spec, target) so Block 3
+    # can decide.
+    _parent_filter_steps: list[tuple[dict, str]] = []
+
+    # ── Block 2: edge-traversal filters ───────────────────────────
+    for filter_spec in _filters_needing_edge_traversal(intent.filters):
+        filter_type = filter_spec["type"]
+        target_entity = _filter_target_entity(filter_spec)
+        edge = find_edge(previous_entity, target_entity)
+        tool = find_edge_tool(edge["edge_name"])
+        if tool is None:
+            # v1 invariant: any edge used for traversal must have a tool.
+            # HAS_ADDRESS doesn't, but no filter type targets Address in v1.
+            raise RuntimeError(
+                f"Edge {edge['edge_name']!r} has no tool binding; "
+                "cannot traverse independently."
+            )
+
+        # Decide step shape based on the filter type:
+        #
+        # - status-style filters (has_open_PO): per-iteration client
+        #   filter on the child results; output is the child list.
+        #
+        # - negation-by-absence filters (has_no_recent_invoices): no
+        #   client filter; output is the PARENT items whose per-iteration
+        #   call returned empty. filter_source_when_empty=True.
+        #
+        # - presence-with-value filters (has_invoice_over_amount, Phase
+        #   11): the child call carries a value filter (e.g. amount_min);
+        #   output is the PARENT items whose per-iteration call returned
+        #   something. filter_source_when_nonempty=True.
+        filter_source_when_empty = filter_type in _FILTER_SOURCE_NAME_SUFFIX
+        filter_source_when_nonempty = (
+            filter_type in _FILTER_SOURCE_NONEMPTY_SUFFIX
+        )
+
+        if filter_source_when_empty or filter_source_when_nonempty:
+            # Build args including computed / value args (e.g.
+            # invoice_date_after, amount_min).
+            tool_args = _build_iteration_args_with_computed(
+                filter_spec, tool, ref_date
+            )
+            client_filters: list[dict[str, Any]] = []
+            output_name = _make_filtered_source_output_name(
+                previous_output_name, filter_type
+            )
+            # Output is parent items, so previous_entity stays as parent.
+            new_previous_entity = previous_entity
+            # F-053: remember the filter spec and its target so Block 3
+            # can re-fetch the child rows if an include needs them.
+            _parent_filter_steps.append((filter_spec, target_entity))
+        else:
+            tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
+            client_filters = _resolve_client_filters(
+                filter_spec, target_entity
+            )
+            output_name = _make_output_name(target_entity, None, [])
+            new_previous_entity = target_entity
+
+        plan.append(
+            Step(
+                step_id=step_id,
+                tool_name=tool,
+                tool_args=tool_args,
+                iterate_over={
+                    "from_step": previous_output_name,
+                    "field": edge["from_join_field"],
+                },
+                client_filters=client_filters,
+                output_name=output_name,
+                output_dedupe_by=None,
+                filter_source_when_empty=filter_source_when_empty,
+                filter_source_when_nonempty=filter_source_when_nonempty,
+            )
+        )
+        previous_entity = new_previous_entity
+        previous_output_name = plan[-1].output_name
+        step_id += 1
+
+    # ── Block 3: includes ─────────────────────────────────────────
+    # AR-P5 (prompt 6): a balance-only question wants the account record's
+    # own figures, so no child traversal runs — the balance fields ride on
+    # the row Block 1 already fetched. The FLAG decides this, not an empty
+    # include list: asking the parser to emit an empty include proved
+    # unreliable (the LLM dropped the by_customer_name filter along with
+    # the include, producing an unroutable filterless intent). Skipping
+    # here makes the shape robust to whatever the parser puts in include.
+    includes = [] if intent.balance_only else intent.include
+    for include_pos, include_entity in enumerate(includes):
+        # Address on a supplier query is already handled by expand in
+        # Block 1 (include_addresses on the supplier fetch); don't also
+        # fetch it as an edge step. There is no HAS_ADDRESS edge tool
+        # binding anyway, so this would otherwise raise.
+        if intent.target_entity == "Supplier" and include_entity == "Address":
+            continue
+
+        # F-053: when a parent-keeping filter ran, previous_entity is
+        # still the parent (e.g. Supplier) but the include may chain
+        # from the filter's TARGET (Buyer lives on PurchaseOrder). If
+        # the direct chain fails and a re-fetch through one of the
+        # parent-keeping targets would work, insert the re-fetch step
+        # first and advance previous_entity to that target. The
+        # re-fetch reuses the parent-filter's args (so a server-side
+        # status filter is preserved), but omits the parent-keeping
+        # flag — it is a plain child-list fetch.
+        try:
+            find_edge(previous_entity, include_entity)
+            _need_refetch = False
+        except KeyError:
+            _need_refetch = True
+
+        if _need_refetch and _parent_filter_steps:
+            for _spec, _target in reversed(_parent_filter_steps):
+                if _target == previous_entity:
+                    continue
+                try:
+                    find_edge(_target, include_entity)
+                except KeyError:
+                    continue
+                try:
+                    _refetch_edge = find_edge(previous_entity, _target)
+                except KeyError:
+                    continue
+                _refetch_tool = find_edge_tool(_refetch_edge["edge_name"])
+                if _refetch_tool is None:
+                    continue
+                _refetch_args = _build_iteration_args_with_computed(
+                    _spec, _refetch_tool, ref_date
+                )
+                _refetch_output_name = _make_output_name(_target, None, [])
+                plan.append(
+                    Step(
+                        step_id=step_id,
+                        tool_name=_refetch_tool,
+                        tool_args=_refetch_args,
+                        iterate_over={
+                            "from_step": previous_output_name,
+                            "field": _refetch_edge["from_join_field"],
+                        },
+                        client_filters=[],
+                        output_name=_refetch_output_name,
+                        output_dedupe_by=None,
+                    )
+                )
+                previous_entity = _target
+                previous_output_name = _refetch_output_name
+                step_id += 1
+                break
+
+        # An include is normally the CHILD of the include before it — a
+        # grandchild chain, e.g. ReceivablesInvoice -> ReceivablesInvoiceLine
+        # -> ReceivablesTaxLine — so the hop runs previous_entity ->
+        # include_entity and iterates on the previous step's output. But two
+        # includes can instead be SIBLINGS under the same root: CustomerAccount
+        # -> AccountReceiptApplication AND CustomerAccount -> AccountReceipt are
+        # both direct children of the account, with no edge between the
+        # siblings. Chaining blindly (the old behaviour) called
+        # find_edge('AccountReceiptApplication', 'AccountReceipt') and raised
+        # KeyError. Decide by which edge the KG actually declares: try the
+        # chain hop first (preserves the grandchild case unchanged); on KeyError
+        # fall back to the sibling hop off the root, iterating the root output.
+        try:
+            edge = find_edge(previous_entity, include_entity)
+            include_iter_output = previous_output_name
+        except KeyError:
+            try:
+                edge = find_edge(root_entity, include_entity)
+            except KeyError:
+                # BUG-3: route the unsatisfiable include as a STRUCTURED
+                # REFUSAL, not a raw KeyError. plan_node catches RefusalError
+                # and drops it into state["refusal"] — the same channel a
+                # parser decline uses — so run_graph renders it through
+                # capability_message (readable Reason/Solution/Example) and
+                # exits with the refusal code, instead of printing
+                # "ERROR: plan: ..." to stderr and exiting 2 as a hard
+                # failure.
+                #
+                # This path is now UNREACHABLE for parser-generated intents:
+                # the validate_intent include gate (BUG-2, on this branch)
+                # refuses the shape before the planner runs. This is the
+                # BACKSTOP for the two cases the gate cannot reach — a
+                # hand-built Intent (the planner is a public API; run_plan.py
+                # and tests construct Intents directly), or a KG change that
+                # removes an edge a working parser include still assumes.
+                # Layered defence: BUG-2 is the front gate, this is the net.
+                #
+                # The flavor is UNSUPPORTED_OPERATION (an include the intent
+                # asks for cannot be satisfied), matching the message the
+                # gate produces — so a user who somehow reaches either path
+                # sees the same reason. capability.py's wording for this
+                # flavor is not yet ideal (BUG-4); that is a separate fix.
+                #
+                # Local import breaks a module-load cycle: result.py imports
+                # Intent via planner.planner, so a top-level result import
+                # here would import-cycle. By call time both modules are
+                # fully loaded — same pattern the entity guards above use.
+                from spire.nl_parser.result import (
+                    Refusal,
+                    RefusalError,
+                    RefusalFlavor,
+                )
+
+                raise RefusalError(
+                    Refusal(
+                        flavor=RefusalFlavor.UNSUPPORTED_OPERATION,
+                        detail=(
+                            f"{include_entity} is not a valid include "
+                            f"on {intent.target_entity}."
+                        ),
+                        offending_entity=include_entity,
+                    )
+                )
+            include_iter_output = root_output_name
+        tool = find_edge_tool(edge["edge_name"])
+        if tool is None:
+            raise RuntimeError(
+                f"Edge {edge['edge_name']!r} has no tool binding; "
+                "cannot satisfy include."
+            )
+        # Most edges traverse on ONE parent field -> one tool arg. A few
+        # need SEVERAL parent fields per call (e.g. HAS_DISTRIBUTION: the
+        # nested distributions path needs POHeaderId, POLineId and
+        # LineLocationId, all carried on the parent schedule row). Those
+        # edges declare an iter_fields map in the KG; emit the multi-field
+        # step shape for them. Every other edge (iter_fields is None) emits
+        # the original single-field shape unchanged.
+        iter_fields = edge.get("iter_fields")
+        if iter_fields:
+            step_tool_args = {arg: "$iteration_value" for arg in iter_fields}
+            step_iterate_over = {
+                "from_step": include_iter_output,
+                "fields": iter_fields,
+            }
+        else:
+            step_tool_args = {_arg_name_for_tool(tool): "$iteration_value"}
+            step_iterate_over = {
+                "from_step": include_iter_output,
+                "field": edge["from_join_field"],
+            }
+        # AR-P2c: the CustomerTransaction include supports an open_only
+        # modifier — restrict the listed transactions to those with a
+        # positive open balance. It rides as a literal tool_arg (the
+        # fetcher's native open_only), not a client_filter: the balance
+        # test is `> 0`, which the executor's equals-only client filters
+        # can't express. Scoped to this entity because open_only is not a
+        # universal include arg (cf. the Supplier/Address special-case
+        # above).
+        if include_entity == "CustomerTransaction" and intent.open_only:
+            step_tool_args["open_only"] = True
+            # Top-N: cap to the N highest-balance open rows. Gated on
+            # open_only too (invoice_limit is only meaningful for the open
+            # set, which the fetcher returns balance-desc). Rides as the
+            # fetcher's native `limit` arg on this same step.
+            if intent.invoice_limit is not None:
+                step_tool_args["limit"] = intent.invoice_limit
+        # AR-P3: if a FURTHER include follows this one, it will iterate on
+        # this step's output — and may need a parent id the child body
+        # doesn't carry (tax lines need the invoice's CustomerTransactionId,
+        # absent from the line row). Flag this step so the executor stamps
+        # its parent field(s) onto each child row. Only when a next include
+        # exists, so leaf includes (the common case) are unaffected.
+        has_following_include = include_pos < len(includes) - 1
+        plan.append(
+            Step(
+                step_id=step_id,
+                tool_name=tool,
+                tool_args=step_tool_args,
+                iterate_over=step_iterate_over,
+                client_filters=[],
+                output_name=_make_output_name(include_entity, None, []),
+                output_dedupe_by=edge["from_join_field"],
+                stamp_parent_key=has_following_include,
+            )
+        )
+        previous_entity = include_entity
+        previous_output_name = plan[-1].output_name
+        step_id += 1
+
+    return plan
+
+===== FILE: src/spire/planner/registries.py =====
+"""Planner registries — the v1 mapping tables.
+
+Intent filter types come from the LLM parser, which uses domain-friendly
+names ('country', 'has_open_PO', 'has_no_recent_invoices'). The KG uses
+normalized names. These tables bridge the two. Pure data, no logic, no
+dependency on any other planner module — this is the bottom of the
+planner's dependency graph, same role constants.py plays for the
+synthesizer.
+
+v1.2 candidate: move these into the KG itself so the planner is fully
+data-driven. For v1.1 they are hardcoded so the planner stays small and
+the KG schema stays simple.
+"""
+
+from __future__ import annotations
+
+
+# ─────────────────────────────────────────────────────────────────────
+# v1 mapping tables (intent vocabulary -> KG vocabulary)
+#
+# Intent filter types come from the LLM parser, which uses
+# domain-friendly names ('country', 'has_open_PO',
+# 'has_no_recent_invoices'). The KG uses normalized names
+# ('country' as kg_entity_tool.filter_type, 'status' as
+# kg_pattern_binding.filter_type). These tables bridge the two.
+#
+# v1.2 candidate: move these into the KG itself so the planner is
+# fully data-driven. For v1.1 they're hardcoded so the planner stays
+# small and the KG schema stays simple.
+# ─────────────────────────────────────────────────────────────────────
+
+# Filter definitions (entity-level vs edge-traversal, vocab kinds,
+# implicit values) are no longer hardcoded here. They live in the KG
+# table kg_entity_filter and are read lazily by _load_filter_defs()
+# below. See the "Filter definitions" section further down.
+
+# Map MCP tool name -> primary argument name (the one the executor
+# substitutes $iteration_value into when iterating).
+# v1.2 candidate: store this in the KG (e.g., kg_edge_tool.arg_name).
+_TOOL_PRIMARY_ARG: dict[str, str] = {
+    "search_invoices": "supplier_number",
+    "search_purchase_orders": "supplier_id",
+    "get_buyer": "buyer_id",
+    "search_suppliers_by_site_bu": "supplier_id",
+    "search_suppliers_by_classification": "supplier_id",
+    # P2: single-PO fetch and its lines child. Both key off POHeaderId.
+    "get_purchase_order_by_id": "po_header_id",
+    # Module 5: the lifecycle reconciliation. Keys off the PO NUMBER
+    # (OrderNumber), not POHeaderId — the only PO tool that does. Rooted
+    # and single-fetch, so nothing iterates on it today; registered for
+    # any single-arg reader, as the distributions and tax-line tools are.
+    "get_purchase_order_lifecycle_status": "po_number",
+    "get_purchase_order_lines": "po_header_id",
+    # P3: PO schedules (flat endpoint), one-hop expansion by POHeaderId.
+    "get_purchase_order_schedules": "po_header_id",
+    # P4: supplier contacts, per-supplier child expansion by SupplierId.
+    "get_supplier_contacts": "supplier_id",
+    # P3b: PO distributions. Multi-field iteration (needs three ids), so
+    # Block 3 builds its args from the edge's iter_fields map rather than
+    # this table. Registered anyway for any single-arg reader; the primary
+    # id is the schedule's LineLocationId.
+    "get_purchase_order_distributions": "line_location_id",
+    # AR-P2: single AR-invoice fetch and its lines child. Both key off
+    # CustomerTransactionId.
+    "get_receivables_invoice_by_id": "customer_transaction_id",
+    "get_receivables_invoice_lines": "customer_transaction_id",
+    # AR-P3: tax lines. Multi-field iteration (needs two ids: invoice +
+    # line), so Block 3 builds its args from the edge's iter_fields map,
+    # not this table. Registered anyway for any single-arg reader; the
+    # primary id is the parent line's CustomerTransactionLineId, which
+    # the tool receives as line_id.
+    "get_receivables_invoice_tax_lines": "line_id",
+    # AR-P2b: customer's transactions via the account traversal. The edge
+    # tool iterates on the account's AccountId. (The resolver
+    # get_customer_account_by_name is the entity fetcher, not an iterated
+    # tool, so it takes its arg from the by_customer_name filter, not here.)
+    "get_customer_transactions": "account_id",
+    # AR-P3 DFF: invoice TransactionDFF child. Plain single-parent
+    # expansion (iter_fields is NULL), so Block 3 reads the primary arg
+    # from this table. The tool takes customer_transaction_id.
+    "get_receivables_invoice_transaction_dff": "customer_transaction_id",
+    # AR-P5 prompt 7: the account's credit memos. Plain single-parent
+    # expansion iterating on the account's AccountId, same shape as
+    # get_customer_transactions above.
+    "get_account_credit_memos": "account_id",
+    # AR-P5 prompt 8: the account's receipts. Same shape again — a plain
+    # single-parent expansion on AccountId.
+    "get_account_receipts": "account_id",
+    # AR-P5 prompt 9: receipt applications.
+    "get_account_receipt_applications": "account_id",
+}
+
+# Map aggregation op -> (mcp_tool_name, arg names it accepts). One op
+# per tool, by design (feature 7 boundedness rule): a new aggregation
+# shape is a new op + new tool, never a parameter on an existing one.
+_AGGREGATION_TOOLS: dict[str, str] = {
+    # Each op names ONE bounded aggregation tool. Per the aggregation
+    # layer's rule, a different grouping or measure is a different tool —
+    # and so a different op — never a flag on an existing one.
+    #
+    # NOTE: 'by_supplier' names only the grouping, not the source or
+    # measure. That was unambiguous when it was the only aggregation; it
+    # isn't now that two rankings group by supplier (invoice spend vs PO
+    # value). Left as-is rather than renamed to spend_by_supplier: the
+    # rename would break the parser instruction and any test asserting the
+    # op string, for tidiness only. The P6 ops below carry the fuller
+    # source+measure+grouping naming, so the pattern is set going forward.
+    "by_supplier": "aggregate_invoices_by_supplier",
+    "po_value_by_supplier": "aggregate_purchase_orders_by_supplier",
+    "po_count_by_status": "aggregate_purchase_orders_by_status",
+    "open_po_summary": "summarize_open_purchase_orders",
+    "exposure_ranking": "rank_customer_accounts_by_exposure",
+    "receipt_method_distribution": "aggregate_standard_receipts_by_method",
+    # Rank individual invoices by their own InvoiceAmount (server-side
+    # orderBy=InvoiceAmount:desc). NOT a grouping like by_supplier (which ranks
+    # suppliers by summed spend) — this ranks the invoice records themselves.
+    "top_invoices_by_amount": "rank_invoices_by_amount",
+}
+
+
+# Which aggregate-block params each op's tool actually accepts. The
+# parser sets what the question implies (and defaults top_n=10), so the
+# planner must not forward a param the tool has no parameter for — it
+# raises. Kept beside the op registry so adding a tool means adding both
+# rows, and forgetting one fails loudly at plan time rather than in the
+# tool call.
+_AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
+    "by_supplier": ("date_from", "date_to", "top_n"),
+    "po_value_by_supplier": ("status", "top_n"),  # no date: PO dates aren't filterable
+    "po_count_by_status": (),                     # groups by status; takes nothing
+    "open_po_summary": (),                        # open by identity; takes nothing
+    "exposure_ranking": ("top_n",),
+    # Scoped aggregate: the scope arrives as an intent FILTER, not in the
+    # aggregate block, so _build_aggregation_plan reads both.
+    "receipt_method_distribution": ("customer_name", "account_number", "limit"),
+    # top_n only for now; per-supplier scoping (supplier_name) is added with
+    # the parser-side change that lets the block/filter carry the supplier.
+    "top_invoices_by_amount": ("top_n",),
+}
+
+
+# Scope-filter type -> the tool kwarg it feeds, for scoped aggregations.
+# The scope of a scoped aggregation (currently only
+# receipt_method_distribution) arrives as an intent filter named
+# by_<param> (by_customer_name), but the tool's parameter is <param>
+# (customer_name). _build_aggregation_plan whitelists filters against the
+# op's accepted params, so without this bridge the by_-prefixed type never
+# matches and the scope is silently dropped — the tool then runs pod-wide
+# while the answer still names the customer (finding #7). Only
+# by_customer_name is mapped: it is the sole scope filter confirmed emitted
+# for a scoped aggregation. by_account_number would map to account_number
+# the same way, but the parser has not been observed to emit it, so it is
+# not added speculatively.
+_SCOPE_FILTER_TO_PARAM: dict[str, str] = {
+    "by_customer_name": "customer_name",
+}
+
+
+# P6c: map comparison op -> tool. Same one-op-per-tool discipline as the
+# aggregation registry: a different comparison shape is a different op and
+# a different tool, never a flag. Comparison is its own block (not an
+# aggregate op) because it joins two sources and reports a difference
+# rather than grouping and totalling one.
+_COMPARISON_TOOLS: dict[str, str] = {
+    "po_invoiced_vs_ordered": "compare_purchase_order_to_invoices",
+    "supplier_invoiced_vs_ordered": "compare_supplier_orders_to_invoices",
+    "top_suppliers_invoiced_vs_ordered": "compare_top_suppliers_orders_to_invoices",
+}
+
+# Which compare-block params each op's tool accepts. Same rationale as
+# _AGGREGATION_PARAMS: the parser sets what the question implies (and
+# defaults top_n), so the planner forwards only the params THIS op's tool
+# takes — forwarding an unknown one raises in the tool call. Adding a
+# comparison tool means adding both this row and the _COMPARISON_TOOLS
+# row; forgetting one fails loudly at plan time.
+_COMPARISON_PARAMS: dict[str, tuple[str, ...]] = {
+    "po_invoiced_vs_ordered": ("po_number",),
+    "supplier_invoiced_vs_ordered": ("supplier_name", "top_n"),
+    "top_suppliers_invoiced_vs_ordered": ("top_n", "status"),
+}
+
+# Friendly output-name prefixes per entity. Pure naming convention;
+# the executor doesn't interpret these.
+_OUTPUT_NAME_BY_ENTITY: dict[str, str] = {
+    "Supplier": "suppliers",
+    "Invoice": "invoices",
+    "PurchaseOrder": "pos",
+    "Buyer": "buyers",
+    "Address": "addresses",
+    "ReceivablesInvoice": "receivables_invoices",
+    "ReceivablesInvoiceLine": "receivables_invoice_lines",
+    "CustomerAccount": "customer_accounts",
+    "CustomerTransaction": "customer_transactions",
+    "CreditMemo": "credit_memos",
+    # AR-P5 prompt 7. Deliberately NOT "credit_memos" — that name belongs
+    # to AR-P4's top-level CreditMemo, and the two are different entities
+    # over different id spaces. Sharing a bucket name would let one
+    # overwrite the other and would make the synthesizer's id-harvest
+    # ambiguous about which set a row belongs to.
+    "AccountCreditMemo": "account_credit_memos",
+    # AR-P5 prompt 8. Its own bucket, like the memos above — the
+    # synthesizer nests receipts and memos separately under the account.
+    "AccountReceipt": "account_receipts",
+    # AR-P5 prompt 9.
+    "AccountReceiptApplication": "account_receipt_applications",
+    "StandardReceipt": "standard_receipts",
+}
+
+# Filter-type -> short suffix used when the step's output is the
+# filtered parent list (i.e. filter_source_when_empty=True).
+# Composed with the source output name as
+# "{source_output_name}_{suffix}". v1.2 candidate: move into the KG.
+_FILTER_SOURCE_NAME_SUFFIX: dict[str, str] = {
+    "has_no_recent_invoices": "no_recent_invoices",
+}
+
+# Phase 11: edge-traversal filters that keep the PARENT when the child
+# call returns something (after a value filter carried in tool_args) —
+# the mirror of _FILTER_SOURCE_NAME_SUFFIX. Maps type -> output suffix.
+_FILTER_SOURCE_NONEMPTY_SUFFIX: dict[str, str] = {
+    "has_invoice_over_amount": "has_invoice_over_amount",
+    "has_site_in_bu": "has_site_in_bu",
+    "has_classification": "has_classification",
+    "has_open_PO": "has_open_PO",
+}
+
+
+# F-016: entity-level fetchers whose MCP wrapper signatures accept a
+# `limit` argument. The planner injects `intent.list_limit` into
+# tool_args for these tools ONLY — a `limit` sent to a fetcher that does
+# not declare one raises at the MCP boundary (FastMCP/Pydantic rejects
+# the unknown kwarg), so the set is the guard against a shape the
+# parser does not yet distinguish from the list case.
+#
+# Kept here beside _TOOL_PRIMARY_ARG (the other map keyed by MCP tool
+# name) so a new list tool needs its row in both — no divergence
+# between "this tool takes a primary arg" and "this tool takes a limit".
+#
+# get_purchase_order_by_id, get_purchase_order_lifecycle_status,
+# get_buyer, and the child/edge tools are NOT here: they either take no
+# limit, or take a limit whose semantics are bounded by the parent
+# (child fetches cap per parent, which is a different question from a
+# user-facing "top N rows").
+_LIMIT_CAPABLE_TOOLS: frozenset[str] = frozenset({
+    "search_suppliers",
+    "search_invoices",
+    "search_addresses",
+    "search_purchase_orders",
+    "list_receivables_credit_memos",
+    "search_standard_receipts",
+})
+
+
+# W1 (refusal quality): a worked example per entity, used when an intent
+# names a filter type the entity does not support. Without one the user
+# got a raw dump of internal filter names and had to guess what to type
+# instead. This mirrors what the entity guards in generate_plan already
+# do inline — those cover Invoice, Address, PurchaseOrder and
+# ReceivablesInvoice; this covers everything else, and any entity added
+# later. An entity absent from this map degrades to the supported-filter
+# list alone: the old behaviour minus the internal jargon.
+_ENTITY_EXAMPLE_PROMPT: dict[str, str] = {
+    "Supplier": "active suppliers in US",
+    "Invoice": "invoices for Lee Supplies",
+    "Address": "addresses for supplier 1252",
+    "PurchaseOrder": "show PO 2144 and its lines",
+    "ReceivablesInvoice": (
+        "show the AR invoice with CustomerTransactionId 300000248096352"
+    ),
+    "CustomerAccount": "account balance for ABC Application Software",
+    "CreditMemo": "list recent credit memos",
+    "StandardReceipt": "receipts for ABC Application Software",
+}
+
+
+===== FILE: src/spire/graph/pipeline.py =====
+"""
+Design 3 pipeline expressed as a LangGraph custom graph.
+
+This is the SAME bounded pipeline as scripts/run_plan.py — parse, plan,
+execute, synthesize — re-expressed as an explicit LangGraph graph. It is
+deliberately NOT an agent: there is no tool-calling loop and no
+LLM-driven control flow. The edges are fixed; the LLM is bounded to the
+two single-shot roles it already had (parser + synthesizer). The graph
+structure exists so the orchestration is explicit and extensible, not to
+introduce agent behavior.
+
+Each node wraps the existing function rather than reimplementing it, so
+behavior matches Design 3 exactly:
+
+    parse ──(refusal)──────────────► END
+      │
+      └─(intent)─► plan ─► execute ─► synthesize ─► END
+
+State flows as a typed dict. The MCP client/session needed by the
+execute node is passed in at invocation time (config), since LangGraph
+nodes are otherwise pure functions of state.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional, TypedDict
+
+from langgraph.graph import END, StateGraph
+
+from spire.executor.executor import execute_plan
+from spire.nl_parser.router import route_and_parse as parse_prompt
+from spire.nl_parser.prompt_intent_cache import get_intent, save_intent,get_cache_duration
+from spire.planner.planner import generate_plan
+from spire.nl_parser.result import RefusalError
+from spire.synthesizer.synthesizer import DegenerateOutputError, synthesize_response
+
+class GraphState(TypedDict, total=False):
+    """State threaded through the graph.
+
+    Inputs:
+        prompt: the natural-language question.
+        menu: the KG menu (loaded once by the caller).
+        session: an open MCP client, used by the execute node.
+        progress_handler: optional async (progress, total, message)
+            callback; the execute node forwards it to execute_plan so a
+            long tool call reports progress back to the caller.
+    Produced along the way:
+        intent, refusal, plan, outputs, truncation_by_step, metadata_by_step, response.
+        error: set if a node failed; downstream nodes short-circuit.
+        plan_refusal: True when `error` is a planner REFUSAL (Spire
+            declining an under-specified or unsupported query) rather
+            than a failure. Read this instead of matching on the
+            message text.
+    """
+
+    prompt: str
+    menu: Any
+    session: Any
+    progress_handler: Optional[Any]
+
+    # Execution cache (2026-08-04). Set by the caller; read only by
+    # execute_node. See _cache_path for what is stored and why it is
+    # only the executor's output.
+    #   cache_mode: "save" | "use" | None
+    #   cache_slot: a name the caller chooses, e.g. "po_status"
+    cache_mode: Optional[str]
+    cache_slot: Optional[str]
+
+    # The classifier's module selection, written by parse_node
+    # from the ParseResult the router returns. None when the
+    # router did not run (a direct parse() call) or when the
+    # router fell back to a full-context parse after a
+    # ClassificationError. Read by promptkit for its diagnostic
+    # line; the pipeline itself does not consume it.
+    _modules_got: Optional[list[str]]
+
+    intent: Optional[Any]
+    refusal: Optional[Any]
+    plan: Optional[Any]
+    outputs: Optional[dict]
+    projected_outputs: Optional[dict]
+    truncation_by_step: Optional[dict]
+    metadata_by_step: Optional[dict]   # added
+    response: Optional[Any]
+    synth_failed: Optional[str]        # set when synthesis overran the cap
+    error: Optional[str]
+    # True when `error` is Spire DECLINING rather than Spire BREAKING.
+    # Callers render a refusal differently from a failure, and used to
+    # tell them apart by grepping the message ("require" in err) — so
+    # rewording a guard silently reclassified it. It did: a planner
+    # message reworded to name the supported filters stopped matching,
+    # and a perfectly good refusal started being counted as a crash.
+    plan_refusal: Optional[bool]
+
+
+# ── Nodes ─────────────────────────────────────────────────────────────
+
+def parse_node(state: GraphState) -> dict:
+    #print("[PARSE_NODE] START")
+
+    duration = get_cache_duration()
+    if duration != -1:
+        cached_intent = get_intent(state["prompt"])
+        #print("[PARSE_NODE] CACHE CHECK DONE")
+
+        if cached_intent is not None:
+            #print("[PARSE_NODE] CACHE HIT - RETURNING")
+            return {
+                "_modules_got": None,
+                "intent": cached_intent,
+            }
+    # else:
+    #     print("[PARSE_NODE] CACHE DISABLED")
+
+    # print("[PARSE_NODE] CACHE MISS - CALLING PARSER")
+
+    result = parse_prompt(
+        state["prompt"],
+        menu=state["menu"],
+    )
+
+    # Surface the classifier's module selection.
+    out: dict = {
+        "_modules_got": getattr(result, "modules", None)
+    }
+
+    if result.is_refusal:
+        out["refusal"] = result.refusal
+
+    else:
+        
+        if duration != -1:
+            # duration == 0 means cache forever.
+            cache_duration = None if duration == 0 else duration
+
+            save_intent(
+                state["prompt"],
+                result.intent,
+                cache_duration,
+            )
+
+        out["intent"] = result.intent
+
+    return out
+
+def plan_node(state: GraphState) -> dict:
+    try:
+        plan = generate_plan(state["intent"])
+        return {"plan": plan}
+    except RefusalError as exc:
+        # A guard that has been converted to the structured path. Route the
+        # wrapped Refusal into the SAME channel parse_node uses for a parser
+        # decline, so run_graph renders it through capability_message — the
+        # readable Reason/Solution/Example shape — instead of printing a raw
+        # guard string. No plan_refusal flag: that flag drives the legacy
+        # "REFUSED (planner guard): ..." render, which this path replaces.
+        return {"refusal": exc.refusal}
+    except (ValueError, NotImplementedError) as exc:
+        # Spire DECLINING, not Spire breaking — both carry a message
+        # written for the user, naming what is missing and giving an
+        # example to type:
+        #   ValueError          an entity guard: the query has no root
+        #                       reference ("Invoice queries require a
+        #                       supplier ...")
+        #   NotImplementedError an unsupported filter for this entity
+        #                       ("Spire can't filter CustomerAccount
+        #                       by 'account_number' ...")
+        # The distinction between the two matters inside the planner
+        # (and its tests) but not to a caller: both are answers.
+        return {"error": f"plan: {exc}", "plan_refusal": True}
+    except Exception as exc:  # a genuine planner failure
+        return {"error": f"plan: {exc}"}
+
+
+def _project_outputs(outputs: dict, fields: list) -> dict:
+    """Trim each record in each output bucket to the requested fields.
+
+    Phase 7 projection. Only columns named in `fields` are kept; a record
+    missing all of them is left untouched (better to show something than
+    an empty row). Returns a new dict; the original outputs are unchanged,
+    so the synthesizer still sees full records.
+    """
+    if not fields:
+        return outputs
+    wanted = list(fields)
+    projected: dict = {}
+    for name, records in outputs.items():
+        # F-014 defence: a bucket whose first record carries a `shape`
+        # key is a tool-computed wrapper (aggregation, comparison,
+        # lifecycle), not an entity list. Its keys are the wrapper's
+        # (`shape`, `rows`, `date_from`, ...); none is an entity column,
+        # so applying `fields` would trim to `{}` and fall back to the
+        # original — or, worse, leave a wrapper whose requested columns
+        # do not exist on it and render em dashes. The tool has already
+        # projected its `rows[]`; skip.
+        #
+        # The parser-side correction in F-014 clears `intent.fields` on
+        # aggregate and compare intents before this ever runs, so this
+        # is the net: a shape-wrapper bucket must survive a projection
+        # attempt even if `fields` arrives populated.
+        first = records[0] if records else None
+        if isinstance(first, dict) and "shape" in first:
+            projected[name] = list(records)
+            continue
+        new_records = []
+        for rec in records:
+            if not isinstance(rec, dict):
+                new_records.append(rec)
+                continue
+            trimmed = {k: rec[k] for k in wanted if k in rec}
+            new_records.append(trimmed if trimmed else rec)
+        projected[name] = new_records
+    return projected
+
+
+# ── Execution cache ───────────────────────────────────────────────────
+#
+# A page-capped aggregation takes minutes: "top 5 suppliers by spend"
+# walks 50 pages of 500 invoices, and timed out mid-fetch once on
+# 2026-08-04. Iterating on the SYNTHESIZER against that is a poor trade —
+# the layer being changed runs in milliseconds and the fetch in front of
+# it runs for minutes.
+#
+# WHAT IS CACHED, AND WHY ONLY THIS
+# The executor's three outputs and nothing else. Parse and plan still run
+# live on every replay, so:
+#
+#   - intent and plan never need serialising. They are Pydantic objects
+#     and rebuilding them from JSON would be a second, drifting
+#     definition of what the graph already produces.
+#   - a parser or planner change is still exercised. Only the POD is
+#     removed, which is the slow part and the only part.
+#   - projected_outputs is DERIVED (outputs + intent.fields), so it is
+#     recomputed rather than stored. Storing it would let it disagree
+#     with outputs after a projection change.
+#
+# The cost of a live parse is one cheap LLM call, ~9k tokens. Worth it to
+# avoid a serialised copy of two Pydantic models.
+#
+# WHAT THIS CANNOT CATCH
+# A tool whose return shape changed. The cache keeps answering with the
+# old shape and everything looks fine — the same drift that makes stale
+# context bundles dangerous. Hence the header: every replay prints the
+# prompt and the age of the file it is reading, to stderr, before the
+# answer. A view that does not announce its own limits produces confident
+# wrong answers indefinitely.
+
+_CACHE_DIR = Path(".spire_cache")
+
+
+def _cache_path(slot: str) -> Path:
+    """File for a named slot. Named, not hashed, deliberately.
+
+    A hash of the prompt is automatic and unreadable: `ls .spire_cache`
+    shows nothing about what is in there, and two variants of the same
+    question cannot both be kept. A slot the caller names survives
+    rephrasing and is greppable.
+    """
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in slot)
+    return _CACHE_DIR / f"{safe}.json"
+
+
+def _save_execution(slot: str, prompt: str, payload: dict) -> None:
+    """Write the executor's output for a slot, overwriting any previous.
+
+    Overwrite IS the refresh mechanism — re-running with --save-cache
+    replaces the file. A confirm-before-clobber step was considered and
+    rejected: friction there means stale caches survive longer, which is
+    the failure this whole thing is meant to avoid.
+    """
+    _CACHE_DIR.mkdir(exist_ok=True)
+    record = {
+        "prompt": prompt,
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "outputs": payload["outputs"],
+        "truncation_by_step": payload["truncation_by_step"],
+        "metadata_by_step": payload["metadata_by_step"],
+    }
+    _cache_path(slot).write_text(json.dumps(record, indent=2, default=str))
+
+
+def _load_execution(slot: str) -> dict:
+    """Read a slot, or raise.
+
+    Raises rather than falling back to a live fetch. A --use-cache run
+    that silently went to the pod would be indistinguishable from a
+    cached one except by how long it took, and the whole point is to know
+    which you are looking at.
+    """
+    path = _cache_path(slot)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No cached execution in slot {slot!r} ({path}). "
+            f"Run once with --save-cache {slot} first."
+        )
+    return json.loads(path.read_text())
+
+
+async def execute_node(state: GraphState) -> dict:
+    mode = state.get("cache_mode")
+    slot = state.get("cache_slot")
+
+    try:
+        if mode == "use":
+            record = _load_execution(slot)
+            # To stderr, always, ungated — same reasoning as the progress
+            # lines and the counts footer. A replay that does not announce
+            # itself is a trap.
+            print(
+                f"[cache] replaying slot {slot!r} saved "
+                f"{record.get('saved_at')} for prompt "
+                f"{record.get('prompt')!r} — no pod call",
+                file=sys.stderr,
+                flush=True,
+            )
+            outputs = record["outputs"]
+            truncation = record["truncation_by_step"]
+            metadata = record["metadata_by_step"]
+        else:
+            outputs, truncation, metadata = await execute_plan(
+                state["plan"],
+                state["session"],
+                progress_handler=state.get("progress_handler"),
+            )
+            if mode == "save":
+                _save_execution(
+                    slot,
+                    state["prompt"],
+                    {
+                        "outputs": outputs,
+                        "truncation_by_step": truncation,
+                        "metadata_by_step": metadata,
+                    },
+                )
+                print(
+                    f"[cache] saved slot {slot!r} -> {_cache_path(slot)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        fields = getattr(state.get("intent"), "fields", []) or []
+        projected = _project_outputs(outputs, fields)
+        return {
+            "outputs": outputs,
+            "projected_outputs": projected,
+            "truncation_by_step": truncation,
+            "metadata_by_step": metadata,   # added
+        }
+    except Exception as exc:
+        return {"error": f"execute: {exc}"}
+
+
+def _filtered_fields(intent) -> list[str]:
+    """Field names the user filtered on, for the local summary.
+
+    A locally-built summary may describe a field the reader can SEE or a
+    field the reader ASKED for. This supplies the second half.
+
+    Without it the rule collapses to displayed-fields-only, and on the
+    commonest query in the system — "list active suppliers" — the whole
+    summary becomes the count line: build_supplier_records renders name,
+    number and addresses, so Status is not on screen and could not be
+    mentioned. "All 25 are ACTIVE" is worth saying, and the reader can
+    check it, because they are the one who said "active".
+
+    Filters carry a `type` (status, country, name), which is the field
+    in the user's vocabulary rather than the pod's. That is the right
+    end to take it from: the reader recognises what they asked for, not
+    what Oracle calls it.
+    """
+    out: list[str] = []
+    for f in getattr(intent, "filters", None) or []:
+        ftype = f.get("type") if isinstance(f, dict) else getattr(f, "type", None)
+        if ftype and ftype not in out:
+            out.append(str(ftype))
+    return out
+
+
+def synthesize_node(state: GraphState) -> dict:
+    try:
+        intent = state["intent"]
+        target_entity = intent.target_entity
+        response = synthesize_response(
+            state["outputs"],
+            target_entity=target_entity,
+            truncation_by_step=state.get("truncation_by_step"),
+            count_only=getattr(intent, "count_only", False),
+            metadata_by_step=state.get("metadata_by_step"),   # added
+            filtered_fields=_filtered_fields(intent),
+        )
+        return {"response": response}
+    except DegenerateOutputError as exc:
+        # The summary overran the token cap. Do NOT abort the run: fall
+        # through with a flag so the print step can show the table alone
+        # (the table is always available from `outputs`). Only applies when
+        # the intent carries `fields`; a degenerate synthesis on a normal
+        # query still leaves response=None and prints no summary.
+        return {"synth_failed": str(exc)}
+    except Exception as exc:
+        return {"error": f"synthesize: {exc}"}
+
+
+# ── Edges ─────────────────────────────────────────────────────────────
+
+
+def _after_parse(state: GraphState) -> str:
+    # Refusal short-circuits straight to END (mirrors run_plan exit 4).
+    return "refusal" if state.get("refusal") else "plan"
+
+
+def _continue_or_end(state: GraphState) -> str:
+    # Any node that set `error` ends the run early.
+    return "end" if state.get("error") else "continue"
+
+
+def build_graph():
+    """Compile and return the Design 3 pipeline graph.
+
+    If SPIRE_GRAPH_PNG is set (to a path, or "1" for a default path), the
+    compiled graph is also rendered to PNG. Rendering is opt-in because it
+    needs pyppeteer and is slow; normal runs/imports skip it.
+    """
+    g = StateGraph(GraphState)
+
+    g.add_node("parse", parse_node)
+    g.add_node("plan", plan_node)
+    g.add_node("execute", execute_node)
+    g.add_node("synthesize", synthesize_node)
+
+    g.set_entry_point("parse")
+
+    g.add_conditional_edges(
+        "parse", _after_parse, {"refusal": END, "plan": "plan"}
+    )
+    g.add_conditional_edges(
+        "plan", _continue_or_end, {"continue": "execute", "end": END}
+    )
+    g.add_conditional_edges(
+        "execute", _continue_or_end, {"continue": "synthesize", "end": END}
+    )
+    g.add_edge("synthesize", END)
+
+    compiled = g.compile()
+    _maybe_save_png(compiled)
+    return compiled
+
+
+def _maybe_save_png(compiled) -> None:
+    """Render the compiled graph to PNG if SPIRE_GRAPH_PNG is set.
+
+    SPIRE_GRAPH_PNG="1" -> default path docs/pipeline_graph.png
+    SPIRE_GRAPH_PNG="<path>" -> that path
+    Failures (no pyppeteer, etc.) are logged to stderr, never fatal."""
+    import os
+
+    val = os.environ.get("SPIRE_GRAPH_PNG")
+    if not val:
+        return
+    path = "docs/pipeline_graph.png" if val == "1" else val
+    try:
+        png = compiled.get_graph().draw_mermaid_png()
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(png)
+        print(f"[graph] wrote {path}", flush=True)
+    except Exception as exc:  # rendering is best-effort (needs network)
+        import sys
+
+        print(f"[graph] PNG render skipped: {exc}", file=sys.stderr)
+
+
+# Module-level compiled graph (compilation is cheap and reusable).
+GRAPH = build_graph()
+
+
+
+
+===== FILE: src/spire/executor/__init__.py =====
+
+
+===== FILE: src/spire/executor/executor.py =====
+"""
+Executor for the KG-driven path (Architecture Option 3).
+
+Consumes a Plan produced by spire.planner.planner.generate_plan and
+runs each Step against the Spire MCP server. No LLM in the loop.
+
+Scope (current):
+- Non-iterating steps (A.1)
+- Iterating steps with $iteration_value substitution and
+  output_dedupe_by handling (A.2)
+- Multi-field iterating steps: when iterate_over declares a
+  "fields" map ({tool_arg: parent_field}) instead of a single "field", the step
+  carries several sentinel-valued args and each iteration substitutes
+  ALL of them from one parent row. Needed where a resource requires
+  more than one id (PO distributions need POHeaderId + POLineId +
+  LineLocationId). Purely additive: steps declaring "field" run the
+  original single-field path untouched.
+- Negation-by-absence steps (filter_source_when_empty=True): for each
+  source item, call the tool; KEEP the source item iff the call
+  returns an empty list. Output is the FILTERED source items, not
+  the iteration results. (F2b)
+- client_filters with 'equals' operator
+- Returns dict[output_name, list[dict]]
+
+Design decisions locked for v1:
+- Sequential execution (no asyncio.gather parallelism)
+- Fail-the-whole-plan on any tool error (no partial results)
+- Raw MCP (session.call_tool), no LangChain
+- Caller manages the fastmcp Client; we accept it as a parameter
+- Source items with None for the iteration field are SKIPPED entirely
+  in filter_source_when_empty mode (they don't appear in the output).
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from fastmcp import Client
+
+from spire.planner.planner import Plan, Step
+
+
+# Sentinel value in step.tool_args; the executor substitutes the current
+# iteration value for any key whose value equals this string.
+ITERATION_SENTINEL = "$iteration_value"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# MCP result parsing
+# ─────────────────────────────────────────────────────────────────────
+
+def _is_tool_result_envelope(payload: object) -> bool:
+    """Detect the ToolResult serialized shape.
+
+    A ToolResult is a dict with at least these keys: items (list) and
+    truncated (anything). The combination is distinctive — no existing
+    Spire tool returns a record with both 'items' and 'truncated' keys.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if not isinstance(payload.get("items"), list):
+        return False
+    if "truncated" not in payload:
+        return False
+    return True
+
+def _extract_truncation_meta(call_tool_result: Any) -> dict | None:
+    """Extract truncation metadata from a ToolResult envelope if present.
+
+    Returns None if the tool's payload isn't a ToolResult envelope (i.e.
+    the tool hasn't been migrated yet). Returns a dict with the three
+    metadata fields if it is.
+    """
+    content = getattr(call_tool_result, "content", None)
+    if not content or len(content) != 1:
+        return None
+    block = content[0]
+    if getattr(block, "type", None) != "text":
+        return None
+    raw_text = getattr(block, "text", None)
+    if raw_text is None:
+        return None
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not _is_tool_result_envelope(payload):
+        return None
+    return {
+        "total_available": payload.get("total_available"),
+        "limit_applied": payload.get("limit_applied"),
+        "truncated": payload.get("truncated"),
+    }
+    
+
+def _parse_tool_result(call_tool_result: Any) -> list[dict]:
+    """
+    Extract the JSON payload from an MCP CallToolResult.
+
+    The Spire MCP tools (search_suppliers, search_invoices, etc.) return
+    Python list[dict] or dict from their underlying functions. FastMCP
+    serializes those to JSON and wraps in a TextContent block. The
+    CallToolResult.content is a list of content blocks.
+
+    We expect exactly one TextContent block carrying the JSON.
+
+    Returns:
+        list[dict] — even for tools that return a single dict (e.g.,
+        get_buyer), we normalize to a list with 0 or 1 elements so the
+        executor's downstream iteration code is uniform.
+
+    Raises:
+        RuntimeError if the result is shaped unexpectedly (multiple
+        blocks, non-text block, unparseable JSON). These indicate an
+        MCP/server-side problem, not a user error.
+    """
+    content = getattr(call_tool_result, "content", None)
+    if not content:
+        # Some tools (notably get_buyer) can return None / null on
+        # not-found. Treat empty content as an empty result list.
+        return []
+
+    if len(content) != 1:
+        raise RuntimeError(
+            f"Expected exactly one content block from MCP tool call; "
+            f"got {len(content)}."
+        )
+
+    block = content[0]
+    # FastMCP's TextContent has .type == "text" and .text == the payload.
+    block_type = getattr(block, "type", None)
+    if block_type != "text":
+        raise RuntimeError(
+            f"Expected TextContent block from MCP tool call; "
+            f"got type={block_type!r}."
+        )
+    raw_text = getattr(block, "text", None)
+    if raw_text is None:
+        raise RuntimeError("TextContent block has no .text attribute.")
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"MCP tool result was not valid JSON: {exc}"
+        ) from exc
+
+    # Normalize to list[dict].
+    if payload is None:
+        return []
+    if _is_tool_result_envelope(payload):
+        # ToolResult envelope: unwrap to its items list. Truncation
+        # metadata (total_available, truncated) is dropped here; it
+        # will be plumbed through to the synthesizer in a later step.
+        return payload["items"]
+    if isinstance(payload, dict):
+        return [payload]
+    if isinstance(payload, list):
+        return payload
+    raise RuntimeError(
+        f"MCP tool result JSON was neither dict, list, nor null; "
+        f"got {type(payload).__name__}."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Client-side filters
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _apply_client_filters(
+    items: list[dict], filters: list[dict[str, Any]]
+) -> list[dict]:
+    """
+    Apply a list of client-side filters to a list of items.
+
+    Each filter is a dict like:
+        {"field": "StatusCode", "op": "equals", "value": "OPEN"}
+
+    v1 supports only the 'equals' operator (case-sensitive exact match).
+    Raises ValueError on any unknown operator — silent ignores would
+    mask planner bugs.
+    """
+    if not filters:
+        return items
+
+    result = items
+    for f in filters:
+        op = f.get("op")
+        field = f["field"]
+        value = f["value"]
+        if op == "equals":
+            result = [item for item in result if item.get(field) == value]
+        else:
+            raise ValueError(
+                f"Unsupported client-filter op {op!r}. "
+                "v1 supports only 'equals'."
+            )
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Iteration helpers
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _find_substitution_key(tool_args: dict[str, Any]) -> str:
+    """
+    Find the single key in tool_args whose value is the iteration
+    sentinel.
+
+    v1 contract: exactly one such key per iterating step. Zero or two
+    or more are planner bugs and raise RuntimeError loudly. The exec
+    loop calls this once per iterating step, not once per iteration
+    value, so the cost is bounded.
+    """
+    keys = [k for k, v in tool_args.items() if v == ITERATION_SENTINEL]
+    if len(keys) == 0:
+        raise RuntimeError(
+            f"Iterating step's tool_args contain no {ITERATION_SENTINEL!r} "
+            "sentinel; planner bug. tool_args=" + repr(tool_args)
+        )
+    if len(keys) > 1:
+        raise RuntimeError(
+            f"Iterating step's tool_args contain multiple "
+            f"{ITERATION_SENTINEL!r} sentinels (keys: {keys}); "
+            "v1 supports exactly one substitution key per step."
+        )
+    return keys[0]
+
+
+def _collect_iteration_values(
+    outputs: dict[str, list[dict]],
+    iterate_over: dict[str, Any],
+    dedupe: bool,
+) -> list[Any]:
+    """
+    Extract the values to iterate over from a previous step's output.
+
+    Two shapes, dispatched on what iterate_over declares:
+
+    SINGLE-FIELD (the default, unchanged): iterate_over carries
+    "field". Pulls that one field from each item in
+    outputs[iterate_over.from_step], returning a list of scalars.
+    Drops None values.
+
+    MULTI-FIELD: iterate_over carries "fields", a {tool_arg:
+    parent_field} map. Returns a list of DICTS — one per source item,
+    each {tool_arg: value} — so a step can pass several parent fields
+    into one tool call. Used where a resource needs more than one id
+    (e.g. PO distributions need POHeaderId + POLineId +
+    LineLocationId, all carried on the parent schedule row). An item
+    missing ANY required field is dropped, mirroring the single-field
+    None-drop.
+
+    If dedupe is True, dedupes while preserving order of first
+    occurrence (multi-field dedupes on the tuple of values).
+
+    Raises:
+        RuntimeError if from_step is not in outputs (planner bug).
+    """
+    from_step = iterate_over["from_step"]
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"Iterating step references unknown output {from_step!r}. "
+            "Planner bug: a step's iterate_over.from_step must name a "
+            "previous step's output_name."
+        )
+
+    source_items = outputs[from_step]
+
+    # ---- Multi-field branch ----
+    fields_map = iterate_over.get("fields")
+    if fields_map:
+        multi_values: list[dict] = []
+        for item in source_items:
+            arg_values = {
+                arg: item.get(parent_field)
+                for arg, parent_field in fields_map.items()
+            }
+            # Drop the item if ANY required field is absent — we cannot
+            # build a complete call without every id.
+            if any(v is None for v in arg_values.values()):
+                continue
+            multi_values.append(arg_values)
+
+        if not dedupe:
+            return multi_values
+
+        seen_keys: set[tuple] = set()
+        deduped_multi: list[dict] = []
+        for av in multi_values:
+            key = tuple(av[arg] for arg in sorted(av))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                deduped_multi.append(av)
+        return deduped_multi
+
+    # ---- Single-field branch (unchanged) ----
+    field = iterate_over["field"]
+    raw_values = [item.get(field) for item in source_items]
+    # Drop None: an item that didn't carry the field shouldn't be
+    # iterated. This is a real condition (Fusion responses can be
+    # sparse) and shouldn't crash the plan.
+    values = [v for v in raw_values if v is not None]
+
+    if not dedupe:
+        return values
+
+    seen: set[Any] = set()
+    deduped: list[Any] = []
+    for v in values:
+        if v not in seen:
+            seen.add(v)
+            deduped.append(v)
+    return deduped
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Step execution
+# ─────────────────────────────────────────────────────────────────────
+
+
+async def _execute_non_iterating_step(
+    step: Step, session: Client, progress_handler=None
+) -> tuple[list[dict], dict | None, dict]:
+    """
+    Execute a single step that does NOT iterate.
+
+    The step's tool_args go to the MCP tool verbatim. Result is parsed
+    and any client_filters applied.
+
+    Returns:
+        (items, truncation, metadata)
+        - items: the list of records (unwrapped)
+        - truncation: the truncation dict (if any) from the ToolResult
+        - metadata: the full ToolResult metadata dict (total_available, etc.)
+    """
+    # Sanity check: a non-iterating step should not contain the
+    # iteration sentinel in its args. Catch a planner bug loudly.
+    for k, v in step.tool_args.items():
+        if v == ITERATION_SENTINEL:
+            raise RuntimeError(
+                f"Step {step.step_id} ({step.tool_name}) is non-iterating "
+                f"but its tool_args contain the iteration sentinel for "
+                f"key {k!r}. Planner bug."
+            )
+
+    call_result = await session.call_tool(
+        step.tool_name, step.tool_args, progress_handler=progress_handler
+    )
+    items = _parse_tool_result(call_result)
+    truncation = _extract_truncation_meta(call_result)
+    # Build metadata from the ToolResult envelope (if present)
+    metadata = {}
+    if truncation is not None:
+        # Keep all metadata fields (total_available, limit_applied, truncated)
+        metadata = truncation.copy()
+    items = _apply_client_filters(items, step.client_filters)
+    return items, truncation, metadata
+
+async def _execute_iterating_step(
+    step: Step,
+    session: Client,
+    outputs: dict[str, list[dict]],
+) -> tuple[list[dict], dict | None]:
+    """
+    Execute a single step that iterates over a previous step's output.
+
+    For each value pulled from outputs[step.iterate_over.from_step]
+    by step.iterate_over.field:
+    - Build per-iteration tool_args by replacing the sentinel-valued
+      key with the current value
+    - Call the MCP tool
+    - Parse the result and apply client_filters
+    - Concatenate into a single flat list
+
+    Note on output_dedupe_by semantics: the field name suggests
+    deduping the OUTPUT, but the planner uses it to control whether
+    iteration values are deduped before calling the tool (avoiding
+    redundant calls like get_buyer with the same buyer_id twice).
+    v1 implements iteration-value dedup; v1.1 could distinguish if
+    output-item dedup ever becomes a separate need.
+
+    Returns:
+        (aggregated_items, metadata) where metadata is the ToolResult
+        envelope from the first iteration (assumed representative for
+        total_available, limit_applied, truncated).
+    """
+    if step.iterate_over is None:
+        # Should never reach here; execute_plan dispatches based on
+        # iterate_over. But guard anyway.
+        raise RuntimeError(
+            f"Step {step.step_id} marked as iterating but iterate_over "
+            "is None."
+        )
+
+    # Multi-field steps declare iterate_over.fields and carry SEVERAL
+    # sentinel-valued args; single-field steps carry exactly one.
+    # _find_substitution_key enforces the one-sentinel contract, so only
+    # call it on the single-field path.
+    multi_field = bool(step.iterate_over.get("fields"))
+    substitution_key = (
+        None if multi_field else _find_substitution_key(step.tool_args)
+    )
+    dedupe = step.output_dedupe_by is not None
+    values = _collect_iteration_values(outputs, step.iterate_over, dedupe)
+
+    aggregated: list[dict] = []
+    metadata: dict | None = None
+    for value in values:
+        per_iter_args = dict(step.tool_args)  # shallow copy is enough
+        if multi_field:
+            # value is a {tool_arg: value} dict — merge it in, replacing
+            # every sentinel-valued arg at once.
+            per_iter_args.update(value)
+        else:
+            per_iter_args[substitution_key] = value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        # Capture metadata from the first iteration (assume all iterations
+        # share the same total_available, limit_applied, truncated).
+        if metadata is None:
+            metadata = _extract_truncation_meta(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+        # Stamp the parent field(s) this iteration was keyed by onto each
+        # child row — but ONLY when the planner flagged this step (a child
+        # that feeds a further grandchild iteration). A child endpoint often
+        # does NOT echo its parent id in the row body (e.g. AR invoice lines
+        # carry no CustomerTransactionId), so the grandchild step would have
+        # no source for it. Gated by stamp_parent_key so every other
+        # iterating step's output is byte-for-byte unchanged. setdefault
+        # never overwrites a real body field.
+        if step.stamp_parent_key:
+            stamp = _parent_stamp(step.iterate_over, value)
+            if stamp:
+                for item in items:
+                    for k, v in stamp.items():
+                        item.setdefault(k, v)
+        aggregated.extend(items)
+
+    return aggregated, metadata
+
+
+def _parent_stamp(
+    iterate_over: dict[str, Any], value: Any
+) -> dict[str, Any]:
+    """Build the {parent_field: value} map to stamp onto child rows.
+
+    Single-field iteration: the value came from iterate_over['field'];
+    stamp it back under that field name.
+    Multi-field iteration: value is already a {tool_arg: value} dict, and
+    iterate_over['fields'] maps tool_arg -> parent_field; stamp each value
+    under its PARENT field name (what a downstream iteration reads), not
+    the tool-arg name.
+    Returns an empty dict if nothing can be stamped.
+    """
+    fields_map = iterate_over.get("fields")
+    if fields_map:
+        # value: {tool_arg: v}; fields_map: {tool_arg: parent_field}.
+        return {
+            parent_field: value[tool_arg]
+            for tool_arg, parent_field in fields_map.items()
+            if tool_arg in value
+        }
+    field = iterate_over.get("field")
+    if field is not None:
+        return {field: value}
+    return {}
+
+
+async def _execute_filter_source_step(
+    step: Step,
+    session: Client,
+    outputs: dict[str, list[dict]],
+) -> list[dict]:
+    """
+    Execute a step whose semantic is "filter the source by per-iteration
+    emptiness" (F2: negation by absence).
+
+    For each item in the source step's output:
+      - Read the iteration field's value (e.g. SupplierNumber).
+      - If that value is None: SKIP the item entirely (do NOT include
+        in output). v1 design choice. Documented in module docstring.
+      - Otherwise: call the tool with the value substituted in.
+        Apply client_filters.
+        If the result is empty -> KEEP the source item (full original dict).
+        If the result is non-empty -> DROP the source item.
+
+    Returns the kept source items in their original order. Output items
+    are full source dicts (e.g. Supplier records), NOT the iteration
+    results.
+
+    The point of this step shape: handle "X with NO Y" queries — e.g.
+    "suppliers with no invoices in the last 6 months". The iterating
+    tool finds Ys per X; emptiness means the negation holds.
+    """
+    if step.iterate_over is None:
+        raise RuntimeError(
+            f"Step {step.step_id} has filter_source_when_empty=True but "
+            "iterate_over is None. Planner bug: these fields are coupled."
+        )
+
+    substitution_key = _find_substitution_key(step.tool_args)
+    from_step = step.iterate_over["from_step"]
+    iter_field = step.iterate_over["field"]
+
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"filter_source_when_empty step references unknown output "
+            f"{from_step!r}. Planner bug."
+        )
+    source_items = outputs[from_step]
+
+    kept: list[dict] = []
+    for source_item in source_items:
+        iteration_value = source_item.get(iter_field)
+        if iteration_value is None:
+            # Skip: no join key, can't iterate. Documented v1 behavior.
+            continue
+
+        per_iter_args = dict(step.tool_args)
+        per_iter_args[substitution_key] = iteration_value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+
+        # Negation by absence: empty result means the source item
+        # passes the filter.
+        if not items:
+            kept.append(source_item)
+
+    return kept
+
+
+async def _execute_filter_source_nonempty_step(
+    step: Step,
+    session: Client,
+    outputs: dict[str, list[dict]],
+) -> list[dict]:
+    """
+    Execute a step whose semantic is "keep the source item when its
+    per-iteration call returns anything" — the mirror of
+    _execute_filter_source_step (Phase 11).
+
+    For each item in the source step's output:
+      - Read the iteration field's value (e.g. SupplierNumber).
+      - If None: SKIP (no join key).
+      - Otherwise: call the tool with the value substituted (plus any
+        value filter already in tool_args, e.g. amount_min). Apply
+        client_filters.
+        If the result is NON-empty -> KEEP the source item.
+        If the result is empty     -> DROP the source item.
+
+    Returns kept source items (full source dicts, e.g. Supplier records)
+    in original order — NOT the iteration results.
+
+    The point: handle "X that HAS a Y matching a condition" — e.g.
+    "suppliers with an invoice over 10000". The child call carries the
+    value filter (amount_min); a non-empty result means the supplier has
+    at least one qualifying invoice.
+    """
+    if step.iterate_over is None:
+        raise RuntimeError(
+            f"Step {step.step_id} has filter_source_when_nonempty=True but "
+            "iterate_over is None. Planner bug: these fields are coupled."
+        )
+
+    substitution_key = _find_substitution_key(step.tool_args)
+    from_step = step.iterate_over["from_step"]
+    iter_field = step.iterate_over["field"]
+
+    if from_step not in outputs:
+        raise RuntimeError(
+            f"filter_source_when_nonempty step references unknown output "
+            f"{from_step!r}. Planner bug."
+        )
+    source_items = outputs[from_step]
+
+    kept: list[dict] = []
+    for source_item in source_items:
+        iteration_value = source_item.get(iter_field)
+        if iteration_value is None:
+            continue
+
+        per_iter_args = dict(step.tool_args)
+        per_iter_args[substitution_key] = iteration_value
+
+        call_result = await session.call_tool(step.tool_name, per_iter_args)
+        items = _parse_tool_result(call_result)
+        items = _apply_client_filters(items, step.client_filters)
+
+        # Presence with a value test: a non-empty result means the source
+        # item has at least one qualifying child.
+        if items:
+            kept.append(source_item)
+
+    return kept
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Public entry point
+# ─────────────────────────────────────────────────────────────────────
+
+
+async def execute_plan(
+    plan: Plan, session: Client, progress_handler=None
+) -> tuple[dict[str, list[dict]], dict[str, dict], dict[str, dict]]:
+    """
+    Run a Plan against the MCP server. Returns the outputs of every
+    step keyed by output_name, plus truncation and metadata dictionaries.
+
+    Args:
+        plan: The list of Steps produced by spire.planner.generate_plan.
+        session: An already-connected fastmcp Client. Caller is
+            responsible for opening and closing it (same convention as
+            runner.py).
+        progress_handler: Optional async callable
+            (progress, total, message) passed through to call_tool for
+            non-iterating steps. When provided, a long-running tool (e.g.
+            aggregate_invoices_by_supplier paginating the pod) reports
+            progress back to the caller mid-call. None disables it.
+
+    Returns:
+        (outputs, truncation_by_step, metadata_by_step)
+        - outputs: dict mapping each step's output_name to its result list.
+          For tools that return a single record (e.g. get_buyer), the
+          record is wrapped in a single-element list.
+          For iterating steps, results across iterations are concatenated
+          into one flat list.
+          For filter_source_when_empty steps, the output is the source
+          items kept by negation-by-absence (i.e. those whose iteration
+          returned empty).
+        - truncation_by_step: dict mapping output_name to truncation info
+          (total_available, limit_applied, truncated) for steps that were
+          truncated.
+        - metadata_by_step: dict mapping output_name to the full metadata
+          dict from the ToolResult envelope (currently total_available,
+          limit_applied, truncated) for non-iterating steps that returned
+          a ToolResult. This is used by the synthesizer to know the true
+          total counts.
+
+    Raises:
+        RuntimeError: if MCP returns an unexpectedly shaped result,
+            or if a step's iterate_over references an output that
+            doesn't exist (planner bug), or if a non-iterating step
+            carries the iteration sentinel (planner bug), or if an
+            iterating step carries zero / multiple sentinels.
+        ValueError: if a client_filters operator is unknown.
+        Any exception from session.call_tool propagates (fail-the-whole-
+        plan policy).
+    """
+    outputs: dict[str, list[dict]] = {}
+    truncation_by_step: dict[str, dict] = {}
+    metadata_by_step: dict[str, dict] = {}
+
+    for step in plan:
+        if step.iterate_over is None:
+            if step.filter_source_when_empty or step.filter_source_when_nonempty:
+                raise RuntimeError(
+                    f"Step {step.step_id} has a filter_source_when_* flag "
+                    "but iterate_over is None. Planner bug: these fields "
+                    "are coupled."
+                )
+            items, truncation, metadata = await _execute_non_iterating_step(
+                step, session, progress_handler
+            )
+            if truncation and truncation.get("truncated"):
+                truncation_by_step[step.output_name] = truncation
+            if metadata:
+                metadata_by_step[step.output_name] = metadata
+        elif step.filter_source_when_empty:
+            items = await _execute_filter_source_step(step, session, outputs)
+        elif step.filter_source_when_nonempty:
+            items = await _execute_filter_source_nonempty_step(
+                step, session, outputs
+            )
+        else:
+            items, metadata = await _execute_iterating_step(step, session, outputs)
+            if metadata:
+                metadata_by_step[step.output_name] = metadata
+        outputs[step.output_name] = items
+
+    return outputs, truncation_by_step, metadata_by_step
