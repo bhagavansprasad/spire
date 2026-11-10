@@ -1,27 +1,28 @@
 # Platform Comparison: PRISM vs. Spire
 
-## PRISM
+## PRISM (Target Audience: Fusion Developers)
 
 ### Pros
-- **Proven Corpus:** ~2,000 verified SQL queries encode how to ask the right questions against the Fusion schema.
-- **Execution Engine:** Takes a written query, sends it to Fusion (via BIP or SQL), and returns results.
-- **Fusion Schema Catalog:** Maintains a deep catalog of tables, columns, and meanings to support the corpus.
-- **Analytical Power:** Supports complex joins and aggregations (GROUP BY, ORDER BY) required for business reporting.
-- **Platform Ready:** Tenant isolation, user roles, and licensing models are already built.
+- **Unified Developer Workspace:** Collapses multiple disconnected Fusion screens (querying, data model creation, reporting) into a single environment.
+- **Accelerated Iteration:** Lets developers write, test, and validate SQL queries in one place before exporting them to create the Fusion Data Model.
+- **Frictionless Publishing:** Automates the creation of the Data Model and the Report, removing the need to manually click through Fusion setup screens.
+- **Complex Query Power:** Supports the full analytical power of SQL, including complex joins and aggregations, giving developers complete control.
+- **Built-in Schema Catalog:** Maintains a deep catalog of Fusion tables and columns so developers don't have to guess the underlying schema.
 
 ### Cons
-- **User Must Know SQL:** The corpus is a library without a librarian. Users arrive with requirements, but PRISM only accepts queries.
-- **No Search or Discovery:** There is no way to browse the corpus or match an English requirement to a query.
-- **No Intelligence Layer (LLM):** There is no system integrated to translate a prompt (English statement) into a query.
-- **LLM is Not a Silver Bullet:** Even if an LLM is added, it is not full-proof until validated and verified across multiple iterations.
+- **The "Discovery" Problem (No Semantic Search):** The ~2,000 query corpus is a flat document with no semantic search. If a developer gets a new business request, there is no way to ask the system, "Which of these 2,000 queries do I start with?" They cannot easily find the 5-10 variant queries needed to build a new one.
+- **Requires SQL Expertise:** As a developer tool, it requires the user to understand SQL and the Fusion schema. It is not a natural-language tool for business users.
+- **Manual Requirement Mapping:** The developer must translate the business user's English requirement into the SQL query manually; PRISM does not generate the initial query from a prompt.
+- **Validation is Manual:** The developer must test the query and validate the data output themselves. The system does not automatically guarantee the data is "correct."
 
 ---
 
-## Spire
+## Spire (Target Audience: Business Users / SMEs / Fusion Developers)
 
 ### Pros
 - **Natural Language Interface:** Users ask questions in plain English, eliminating the need to know SQL or the Fusion schema.
-- **Intelligent Mapping (Knowledge DB):** Uses a deterministic relational Knowledge DB to map an English requirement to the correct entities, joins, and tools — *the step PRISM leaves to the user.*
+- **Intelligent Mapping (Knowledge DB):** Uses a deterministic relational Knowledge DB to map an English requirement to the correct entities, joins, and tools — *the step PRISM leaves to the developer.*
+- **Association & Context:** Maintains the association between the user's intent, the SQL generated, and the data fetched, providing a continuous context across the pipeline.
 - **Deterministic Execution:** The planner and executor run without an LLM, ensuring predictable and auditable data fetching.
 - **Built-in SQL Overlay:** Generates equivalent, executable SQL alongside the data, providing total transparency on how the answer was derived.
 
