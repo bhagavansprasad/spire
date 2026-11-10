@@ -58,7 +58,24 @@ TBD
 
 ## Deviations from the F-NNN entry's suggested fix
 
-TBD
+None yet — V1 has not run.
+
+### Design decision: sysprompt stays untouched on this PR
+
+The meeting capture §5.2 describes a pure-code sibling extractor
+(`_is_sampleable_po_request`) beside `_is_explicit_po_list`. That
+is the shape being built: no sysprompt edit is planned for this
+PR, matching `_is_explicit_po_list`, which is code-only and has
+no prompt rule on `master`. This avoids V9 (a 240-prompt
+`--validate` sweep) on PR #1.
+
+If V1 goes red because the parser SELF-DECLARES an unanswerable
+refusal for `get po with distribution details` before the extractor
+sees the intent, the fix is not a sysprompt rule — it is the same
+deterministic post-parse override F-018 uses (`_extract_invoice_number`):
+detect the shape from the raw prompt, override the self-declared
+refusal, produce the Intent. Still code-only, still no V9. Sysprompt
+is the last resort if a code path cannot be made to fire.
 
 ## Not checked
 
