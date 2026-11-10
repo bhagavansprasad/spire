@@ -1,250 +1,362 @@
-# SPIRE — window-35 handoff
+# SPIRE — window-36 handoff
 
-**Window type:** implementation. Eight commits + one merge landed on the
-round-one integration branch `hardening-master-v3`. No new F-NNN was
-filed; two residuals are recorded below as follow-ups, not as findings.
-**Predecessor:** the window-34 handoff (Invoice status investigation).
-Its findings live on in `docs/design/INVOICE_STATUS_ACCEPTANCE.md` and the
-endpoints reference's 2026-10-09 rows; this document supersedes it as the
-current anchor.
-**Branch arrangement:**
-- `master` is **frozen at `00a5176`** for the duration of round one.
-- `hardening-master-v3` is the **round-one integration branch**. Feature
-  branches fork from it and PR into it.
-- When round one completes, `hardening-master-v3` merges to `master`
-  once, via PR.
-**master tip:** `00a5176` (unchanged since before this window opened)
-**hardening-master-v3 tip:** `2494911` (merge of PR #192)
+**Window type:** design + investigation + one reverted attempt. **Zero
+commits merged.** `master` is unchanged at `fa57bc2` from this window's
+open to its close.
+
+**Working tree at close:**
+
+    $ git status --porcelain
+     M docs/plan/HANDOFF.md
+
+One file modified: this handoff. Nothing else. The trial branch
+`Phase3-SampleAndDisclose` was created and deleted (zero commits);
+the files touched on it (`parser.py`, `planner.py`, `narrowing.py`)
+were reverted before any commit. `git status` is the evidence.
+
+**Predecessor:** the window-35 handoff (Invoice status filters, PR
+#192). That window's work is intact on `master`; nothing in it is
+touched by this one.
+**master tip:** `fa57bc2` (unchanged since before this window opened)
 **Successor:** the next window's handoff.
 
 ---
 
-## 0. The rule that framed this window
+## 0. What this window did
 
-WORKING_STYLE.md **Rule 28** (the SME test). If a Fusion SME could answer
-a prompt with read access to Fusion, Spire must answer it; a refusal is a
-defect. This window began from that frame and ended with all five of the
-prompts in window-34 HANDOFF §1 answering.
+Nothing was merged. Two activities, both recorded in this document
+because there is no separate artifact:
+
+1. **A promptkit run analysis.** Three prompts against
+   `fa-esll-saasfademo1` (`get po with distribution details`,
+   `end-to-end summary of PO 701337`, `Is PO 162034 complete?`).
+   Four candidates walked through S0–S11, three closed as
+   not-a-bug, one pass, zero bugs. The full walk is in §5 below,
+   not in a separate file — a `docs/plan/PROMPTKIT_2026-11-10_promptkit_run.md`
+   was proposed earlier in this window and **was not created**.
+   The next window that wants the analysis reads §5.
+
+2. **A reverted attempt at the sample-and-disclose feature.** The
+   window's design work produced a branch, a new module, and edits
+   to `parser.py` and `planner.py`. All were reverted when a grep
+   showed the narrowing-tip portion of the feature already exists
+   on `master`. See §2 and §4 below. Nothing survives on disk.
 
 ---
 
-## 1. The Rule 28 defect and its fix
+## 1. The defect this window leaves open
 
-The five prompts (window-34 HANDOFF §1, unchanged):
+`get po with distribution details` refuses. It is a Rule 28 defect.
 
-1. Which invoices are yet to be paid?
-2. Which supplier invoices are currently outstanding?
-3. Which invoices are still unpaid?
-4. Are any supplier invoices overdue and requiring attention?
-5. Which invoices have been pending for a long time?
+- An SME reading the prompt answers it (asks "which PO?", produces a
+  sample).
+- Spire refuses with `missing_identifier`.
+- That refusal is not the right answer.
 
-Window 34 recorded all five refusing. Window 35 made all five answer:
+**Root cause (`file:line`):**
 
-| # | Intent emitted | Rows on `fa-euth-dev20` |
+- `src/spire/nl_parser/parser.py:121` — `_is_explicit_po_list` is the
+  only extractor that sets `intent.list_all`, and it fires only on
+  explicit list verbs ("list purchase orders", "show all POs"). It
+  does **not** fire on "get po with distribution details" because
+  there is no "list" verb. That is why the prompt refuses.
+- `src/spire/planner/planner.py:211` — the `not intent.filters and
+  not intent.list_all` guard. Correct by design; the fix is to make
+  the parser set `list_all` for the child-entity shape, not to change
+  the guard.
+
+**Do not confuse this with the narrowing tip.** The tip already exists
+(see §2). It is inactive for `get po with distribution details` because
+that prompt never produces a `PurchaseOrderResponse` — it refuses before
+the synthesizer runs. The tip and the defect are orthogonal: the tip
+makes a sample legible; the defect prevents a sample being produced at
+all.
+
+---
+
+## 2. What already exists on `master` — the narrowing tip
+
+The window's central discovery: **the QA-12 narrowing tip is already
+implemented on `master`.** It is Supplier-only today. The exact
+footprint, from
+`grep -rn 'narrowing_tip\|build_narrowing_tip' src/ --include='*.py'`:
+
+| File:line | What |
+|---|---|
+| `p2p.py:317` | `narrowing_tip: str = Field(...)` on `SupplierResponse` |
+| `p2p.py:1272` | `build_narrowing_tip(filter_types, total, entity_label='suppliers')` |
+| `p2p.py:~1260` | `_SUPPLIER_FILTER_LABELS` — the label map |
+| `synthesizer.py:160` | `from ...p2p import build_narrowing_tip` |
+| `synthesizer.py:733, 813, 866` | three call sites, all `SupplierResponse` returns |
+| `formatters.py:169` | render branch: `─── Tip ───` above the table |
+
+**Signature already entity-agnostic:** `filter_types: set[str]`,
+`total: int | None`, `entity_label: str = "suppliers"`.
+
+**The one thing that limits it to Supplier:** inside the function,
+`labels = [_SUPPLIER_FILTER_LABELS.get(ft, ft) for ft in filter_types
+if ft in _SUPPLIER_FILTER_LABELS]`. The `if ft in
+_SUPPLIER_FILTER_LABELS` drops any filter type not in the Supplier
+map. For a `PurchaseOrder` filter set like `{status, supplier,
+created_before}`, the tip would name only `status`.
+
+**What the extension requires:**
+
+- One field per response type on the six non-Supplier response types.
+- One `labels_map: dict[str, str] | None = None` parameter on
+  `build_narrowing_tip`, defaulting to `_SUPPLIER_FILTER_LABELS`
+  (backwards-compatible; three existing Supplier call sites unchanged).
+- One new `_*_FILTER_LABELS` dict per entity beside the Supplier one.
+- One tip-computation block in each entity's plain-list branch of
+  `synthesize_response`.
+
+That is roughly 150 lines of copy-paste-shaped work across
+`p2p.py` and `synthesizer.py`. Not a design.
+
+**What the tip does not fix.** Extending it to `PurchaseOrder` still
+leaves `get po with distribution details` refusing — the parser does
+not set `list_all` for that prompt (§1). Tip and defect are two
+separate, small PRs.
+
+---
+
+## 3. The design decision for the next window
+
+**How does the parser recognize the child-entity sample shape?**
+
+Two shapes for the parser-side fix, both small:
+
+- **Extend `_is_explicit_po_list`** — add the "all" trigger and a
+  child-entity pattern to the existing function. One function, one
+  call site. The name becomes inaccurate.
+- **Add a sibling** — `_is_sampleable_po_request` alongside
+  `_is_explicit_po_list`. Two functions, both called from `parse()`.
+  `_is_explicit_po_list` stays honest; the sibling detects the new
+  shape.
+
+**Recommended: sibling.** The two shapes are conceptually different
+("explicit list" vs "sample request because no filter was supplied")
+and conflating them makes both names wrong.
+
+**The pattern generalizes.** Same shape recurs for `Invoice`,
+`ReceivablesInvoice`, `CustomerAccount`, `StandardReceipt`, and
+`CreditMemo` (this last one already works — `list_receivables_credit_memos`
+samples by design). For each entity: one new parser extractor (or a
+table entry plus a loop), one `and not intent.list_all` in the
+entity's planner guard.
+
+**`Address` is out of scope.** `get all addresses` is not honestly
+sampleable — the address is a child of Supplier, and a sample would
+describe itself as "25 addresses" while meaning "addresses of the
+first 25 suppliers". The current refusal for `get all addresses` is
+correct.
+
+---
+
+## 4. What this window attempted and reverted — historical record
+
+The next window needs to know what was tried, so it does not re-try it.
+
+**Files created and deleted:**
+
+- `src/spire/nl_parser/narrowing.py` — a parallel
+  `build_narrowing_tip` + `_NARROWING_BY_ENTITY`. **Deleted.** Do not
+  recreate. `p2p.py::build_narrowing_tip` already exists and is
+  better (it formats totals with `{total:,}`; the parallel version
+  did not).
+
+**Files modified and reverted:**
+
+- `src/spire/nl_parser/parser.py` — renamed `_is_explicit_po_list` to
+  `_is_sampleable_entity_request`, added `_SAMPLEABLE_ENTITIES`, added
+  a new extractor, updated six stale comments. **Reverted.** The
+  rename churned a working file; the net behaviour change was zero.
+  If the next window extends the parser, add a sibling rather than
+  rename.
+- `src/spire/planner/planner.py` — `SAMPLE_SIZE_FOR_LIST_ALL = 25`
+  and a `setdefault("limit", 25)` / `setdefault("orderBy",
+  "OrderNumber:asc")` branch. **Reverted.** The existing `list_all`
+  path already produces a bounded fetch through whatever
+  `_build_entity_fetcher_args` and `search_purchase_orders` do on
+  `master`, and duplicating the bound risks shadowing it.
+
+**Branch created and deleted:** `Phase3-SampleAndDisclose`. Zero
+commits. Its SHA at delete time was `fa57bc2`, which is `master`'s
+SHA. `git status` after the branch was deleted showed one modified
+file (`docs/plan/HANDOFF.md`); nothing else.
+
+**The process lesson** (worth the next window's muscle memory): run
+`grep -rn '<feature-symbol>' src/` **before** designing the feature.
+A thirty-second grep would have shown the tip already existed and the
+whole design discussion would have started from the actual feature.
+
+---
+
+## 5. The promptkit run analysis (C-001 … C-004)
+
+Run against `fa-esll-saasfademo1`. Three prompts, three outcomes:
+
+| # | Prompt | Outcome |
 |---|---|---|
-| 1 | `unpaid` | 9,563 |
-| 2 | `unpaid` | 9,563 |
-| 3 | `unpaid` | 9,563 |
-| 4 | `overdue` | 9,503 |
-| 5 | `pending` + `older_than_n_months={months:3}` | 6,789 |
+| 1 | `get po with distribution details` | refused — MISSING_IDENTIFIER |
+| 2 | `Give me an end-to-end summary of PO 701337 from supplier setup through payment.` | answered — `found: False` |
+| 3 | `Is PO 162034 complete?` | answered — full lifecycle |
 
-**Zero refusals.**
+Three candidates raised, three closed by direct command or by reading
+the existing implementation. **Zero bugs.**
 
-The acceptance criterion — what a correct answer to each prompt must say —
-lives in `docs/design/INVOICE_STATUS_ACCEPTANCE.md`.
+**C-001 — "get po with distribution details" refuses.**
 
----
+- S1: refusal of an in-scope prompt — **passes S1** (SME could answer).
+- S3: mechanism — `parser.py:121` `_is_explicit_po_list` does not
+  fire on this shape; `planner.py:211` guard refuses.
+- S7: **not a bug in the sense of "wrong behaviour given the current
+  code"** — the refusal is the correct behaviour of `_is_explicit_po_list`
+  + the guard. It is a **capability gap** per Rule 28. The finding is
+  that `_is_explicit_po_list` should be extended or a sibling added;
+  the defect is the missing sample path, not a bug in an existing path.
 
-## 2. What the fix required, layer by layer
+**C-002 — "end-to-end summary of PO 701337" returns `found: False`.**
 
-Window 34's §2 named four layers; each one moved.
+- S1: wrong data — *iff* PO exists. Disproved by curl.
+- S6: falsifier — `q=OrderNumber='701337'` on `fa-esll-saasfademo1`
+  returns `totalResults: 0`.
+- S7: **closed, not-a-bug.** Shape: audit-time observation diverged.
+  Pod data drift, not a code bug.
 
-**Layer 1 — Parser vocabulary.** Three new filter types appear in the
-parser's menu: `unpaid`, `overdue`, `pending`. They ride on the existing
-`kg_entity_filter` mechanism; the parser's menu is generated from that
-table, so no dedicated sysprompt block was needed for the filter *types*
-themselves. A new block **was** needed to teach defaults — see Layer 4.
+**C-003 — "Is PO 162034 complete?" passes.**
 
-**Layer 2 — MCP tool.** `search_invoices` gained three boolean args
-(`unpaid`, `overdue`, `pending`) and `DueDate` was added to its
-`_PROJECTED_FIELDS`. Compound-filter paths (`unpaid + supplier`, `overdue`,
-`pending + date`) page the server clause to exhaustion via the shared
-`page_all` helper. `matches()` now checks `PaidStatus` and `ApprovalStatus`
-client-side — the earlier version leaked Paid rows into `unpaid` answers
-when a supplier clause took the server slot.
+- S1: no harm. **Observation, not a candidate.**
+- S6: cross-checked against
+  `tests/test_po_lifecycle_tool.py::test_162034_end_to_end_is_complete_and_settled`,
+  which pins the exact figures. `q=OrderNumber='162034'` on
+  `fa-esll-saasfademo1` returns the record with `POHeaderId: 1`,
+  `Ordered: 758.00` — matches. **Pass.**
 
-**Layer 3 — KG registry.** Three `kg_entity_filter` rows
-(`Invoice/unpaid`, `Invoice/overdue`, `Invoice/pending`). No `kg_vocabulary`
-kind was added — the term IS the filter type, and a vocab kind would have
-meant editing the CHECK constraint in `scripts/sql/kg_schema.sql` plus the
-four count-tracking sites the KG test names.
+**C-004 — the refusal Example `What is the risk rating on PO 701337 and why?`.**
 
-**Layer 4 — Parser context.** New block
-`src/spire/nl_parser/context/payables/b_invoice_status.sysprompt`, added to
-the manifest and (by the Phase 1 byte-equality invariant) mirrored into
-`_SYSTEM_PROMPT_PREAMBLE`. It teaches:
+- S1: refusal of an in-scope prompt — *iff* the Example refuses.
+- S3: `capability.py:_IDENTIFIER_GUIDANCE["PurchaseOrder"]` — the
+  Example is correct against `dev37` (reference §13.4) and correctly
+  resolves to "PO not found" on `fa-esll-saasfademo1` where PO
+  701337 does not exist.
+- S7: **closed, not-a-bug.** Same pod drift as C-002.
 
-- "pending" / "pending approval" -> `pending` alone.
-- "pending for a long time" with no explicit N -> `pending` +
-  `older_than_n_months={months:3}` (the default).
-- "pending for over N months/days/weeks/years" -> `pending` +
-  `older_than_n_months={months:N}`.
-- "pending in the last N months" -> `pending` +
-  `created_in_last_n_months={months:N}`.
-- **A guard**: adjectives like "requiring attention", "urgent", "needing
-  review" are NOT pending signals. This guard is load-bearing: without it
-  the model added `pending` to prompt 4 ("overdue and requiring
-  attention"), narrowing the answer silently.
+**Observations.**
 
-The block count moved from 49 to 50; `_EXPECTED_BLOCK_COUNT` in
-`tests/test_parser_context_assembly.py` moved with it.
-
-**Layer 5 — Display.** No change. `DueDate` now reaches the projection, but
-the formatter still renders Invoice / InvoiceId / Amount / Currency / Date
-/ Supplier; the due-date column is available for a future prompt that asks
-for it.
-
----
-
-## 3. Where the changes live
-
-Branch `feat/invoice-status-filters`, merged to `hardening-master-v3` as
-PR #192 (merge commit `2494911`):
-
-```
-d2b8fa1 docs: register acceptance doc + invoice-status block in context bundles
-00dac8c mcp(invoices): fix unpaid/overdue client filters; honest compound totals
-712d82a nl_parser: narrow 'pending' triggers — adjectives are not approval signals
-eaadc1c mcp(invoices): honest totals for unpaid (union) and overdue (unknown)
-ba6a955 nl_parser: teach invoice-status defaults (pending for a long time)
-a76eeec planner: accept unpaid/overdue/pending as Invoice roots
-2a54747 test(invoices): add cases for unpaid/overdue/pending + DueDate projection
-90158b2 mcp(invoices): add unpaid/overdue/pending filters + DueDate projection
-e9846fb kg: register invoice_status filters (unpaid, overdue, pending)
-```
-
-Files changed:
-- `scripts/sql/kg_schema.sql` — three rows, banner 34->37
-- `scripts/print_kg.py`, `tests/test_kg_metadata.py` — count moves 34->37
-- `src/spire/mcp_server/tools/invoices.py` — the tool
-- `src/spire/mcp_server/server.py` — the MCP wrapper
-- `src/spire/planner/planner.py` — the Invoice root guard
-- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — new block
-- `src/spire/nl_parser/context/order.manifest` — the new block, 49->50
-- `src/spire/nl_parser/context_assembly.py` — the literal mirrored, block count
-- `tests/test_parser_context_assembly.py` — block count 49->50
-- `tests/test_invoices_tool.py`, `tests/test_planner.py` — new cases
-- `context_bundles.yaml` — acceptance doc into `plan`, block into `parser_context`
-
----
-
-## 4. Costs and disclosures the next window should know
-
-**Paged-fetch cost.** Compound-filter queries now page the server clause to
-exhaustion. On `fa-euth-dev20` this means:
-
-- `overdue` alone: ~9,503 rows, ~20 pages, ~3-4 minutes.
-- `pending + older_than_n_months`: ~6,789 rows, ~14 pages, ~3-4 minutes.
-- `unpaid + supplier`: ~1,300 rows, 3 pages, seconds.
-
-This is not a bug — an SME would take the same time to count 9,503 overdue
-invoices — but it is a new UX cost on two of the five prompts. A future
-window may want ">= N, exact count unavailable" as an alternative when a
-caller would rather have a fast approximate answer. Not chosen here.
-
-**Pod drift.** `unpaid` moved 9,551 -> 9,563 -> 9,564 -> 9,565 -> 9,563 across
-sweeps in this window (~10s between calls). The pod's data moves; the
-number is honest, not a defect. Do not read the variance as an
-inconsistency.
-
-**Truncation footer wording.** "N total in source" is the filtered total,
-not the source total. Cosmetic; recorded as a follow-up, not filed.
-
-**Prompt 4's narration.** The response is a plain table, not the verdict +
-ranked list that `INVOICE_STATUS_ACCEPTANCE.md` §2.4 asks for. The query
-answers (the Rule 28 bar), but the narration does not yet meet §2.4's
-shape. Deferred.
-
-**The two residual items above are not filed as F-NNNs.** The disposition
-from this window: findings get filed when a fix window picks them up. A
-future window that wants to work on either should file it as part of
-picking it up.
-
----
-
-## 5. What this window did NOT do
-
-- **`paid` and `partially paid` filter rows.** Not named by any prompt.
-  Deferred.
-- **A block rule for "overdue" as a keyword.** §4.3's compound predicate is
-  documented in `b_invoice_status.sysprompt`, but the block does not carry
-  a dedicated "past due" / "behind on payment" rule. In practice the model
-  routes it correctly (see §1's table). If a future phrasing refuses, the
-  block is where the rule would go.
-- **Fixing the "Show me the details of a supplier invoice" refusal.**
-  Confirmed in this window as a legitimate refusal (Rule 28 does not apply;
-  the prompt names no set). Not a defect.
-- **The `open_only` / AR path.** Untouched. The KG row that said the flag
-  was "unused" is stale — window 35's investigation found it wired. A
-  future KG tidy-up should correct that row.
-- **POC-2.** Still paused. The `all_tables` DB-reachability check for
-  `localhost:1521/FREEPDB1` was never run.
+- **O-1** — `capability.py::_IDENTIFIER_GUIDANCE` Examples are
+  "promised" but `test_every_promised_example_is_verifiable` checks
+  presence, not runnability. Accurate — not a code bug, a doc-accuracy
+  question.
+- **O-2** — prompt-set anchors are pod-specific; the sweep does not
+  disclose which pod it ran against. A future promptkit sweep should
+  add a pod-identity line to its summary.
+- **O-3** — `fa-esll-saasfademo1` is a fourth pod (neither `dev37`
+  nor `euth-dev20` nor `etaj`). Row counts and anchor census
+  recorded here for reference: `/purchaseOrders` `totalResults: 3367`;
+  `701337` absent; `162034` present; `162352` present; `2144` is a
+  `POHeaderId` on this pod, not an `OrderNumber`, so
+  `q=OrderNumber='2144'` returns 0 (category error, not a missing
+  anchor).
 
 ---
 
 ## 6. Next window's picks
 
-In order of what a resuming window would most likely want:
+In order:
 
-1. **The HANDOFF update itself.** This document is what a next window
-   reads to know where it is. If it says the wrong thing, everything
-   downstream is wrong. Check it against `git log hardening-master-v3`
-   before starting new work.
-2. **The two residuals (§4)** — decide whether to file them or leave them
-   noted. If filing, they belong in `docs/fixes/FIXES.md` +
-   `docs/fixes/FIX_PLAN.md`.
-3. **The next prompt from round-one testing.** If the SME has found more
-   prompts that refuse or return wrong data, those are the priority.
-4. **The narration-quality work** for prompt 4's §2.4 shape — a
-   synthesizer-side change, not a Rule 28 defect, but it is what the
-   acceptance doc asks for.
-5. **`DueDate` as a column.** The tool projects it now; the KG's `Invoice`
-   field list does not carry it. A query like "show me the due dates for
-   Lee Supplies' invoices" would name it in `fields` and the KG field-split
-   would report it unresolved. One `kg_entity_field` row fixes it.
+1. **Run the ground-truth grep** before designing anything:
+
+       grep -rn 'narrowing_tip\|build_narrowing_tip\|_is_explicit_po_list' src/ --include='*.py' | grep -v __pycache__
+
+   If the output matches §2, `master` has not moved and this handoff
+   is current. If it differs, correct this handoff before proceeding.
+
+2. **Decide the parser-side shape (§3).** Extend or sibling.
+   Recommendation: sibling.
+
+3. **Fix C-001 as a small PR.** One new sibling extractor in
+   `parser.py`, one `and not intent.list_all` in `planner.py`,
+   one new test. Three files, ~40 lines, one test. That closes the
+   actual defect.
+
+4. **Extend the narrowing tip to `PurchaseOrder`** as a second small
+   PR (§2). Field on `PurchaseOrderResponse`, `labels_map` parameter,
+   tip block in the `PurchaseOrder` branch of `synthesize_response`.
+   ~40 lines across two files.
+
+5. **Extend tip and sample to the other five entities** as follow-up
+   PRs, one entity per PR. Same shape each time.
+
+   The plan for that extension is in `docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6 — seven PRs, one per entity, with the five-by-five review discipline and the evidence-file-per-PR requirement.
+6. **Add a pod-identity line to `promptkit.py`** (O-2). One line in
+   the summary output naming the pod and its `/purchaseOrders` row
+   count. A promptkit sweep against `dev37` and one against
+   `fa-esll-saasfademo1` currently produce indistinguishable "N/N
+   passed" summaries.
 
 ---
 
 ## 7. Files and prior reading
 
 **Anchor docs:**
-- `docs/design/INVOICE_STATUS_ACCEPTANCE.md` — the acceptance criterion and
-  design shape for the five prompts. This window's authority on what is in
-  scope.
-- `docs/plan/WORKING_STYLE.md` — Rule 28 is the frame; Rule 15.3 is how
-  every edit in this window was delivered.
 
-**Evidence files (untracked, repo root):**
-- `t_invoice_status_sweep.txt`, `t_invoice_status_sweep_final.txt`,
-  `t_invoice_status_sweep_final2.txt` — the three sweeps.
-- `t_pr192_gate.txt` — the ten-suite merge gate.
-- `t_prompt4_rerun.txt` — the individual prompt-4 verification after the
-  `pending`-trigger guard landed.
-- `t_kg_rebuild.txt`, `t_kg_invoice_filters.txt`, `t_pod_check.txt` — the
-  rebuild evidence.
-- `prompts_ws35.txt` — the five prompts as a file.
+- `docs/design/INVOICE_STATUS_ACCEPTANCE.md` — the Rule 28 acceptance
+  criterion and design shape from window 35.
+- `docs/plan/WORKING_STYLE.md` — §15.3 (patch delivery), §1 (bundles),
+  Rule 28 (SME test). All three were tested this window; §1 was
+  violated repeatedly (individual files requested one at a time
+  instead of bundles). The handoff records that so the next window
+  does not repeat it.
 
-**Key code paths, for the next window:**
-- `src/spire/mcp_server/tools/invoices.py` — the tool; `search_invoices`,
-  `matches()`, the paged-fetch branch.
-- `src/spire/planner/planner.py` — the Invoice root guard (top of
-  `generate_plan`).
-- `src/spire/nl_parser/context/payables/b_invoice_status.sysprompt` — the
-  new block.
-- `src/spire/nl_parser/context_assembly.py` — the retained literal; block
-  count.
-- `scripts/sql/kg_schema.sql` — the three new `kg_entity_filter` rows.
+**Key code paths:**
+
+- `src/spire/nl_parser/parser.py:121` — `_is_explicit_po_list`.
+- `src/spire/nl_parser/parser.py:807` — the wiring that sets
+  `intent.list_all`.
+- `src/spire/planner/planner.py:211` — the PurchaseOrder guard.
+- `src/spire/synthesizer/p2p.py:317` — `SupplierResponse.narrowing_tip`.
+- `src/spire/synthesizer/p2p.py:1272` — `build_narrowing_tip`.
+- `src/spire/synthesizer/synthesizer.py:733/813/866` — the three
+  Supplier tip call sites.
+- `src/spire/rendering/formatters.py:169` — the render branch.
+
+**Evidence files (untracked, repo root or `docs/plan/`):**
+
+- `docs/plan/t_c002_701337.json` — the curl that closed C-002.
+- `docs/plan/t_o3_162034.json` — the curl that confirmed 162034 is on
+  this pod.
+- `docs/plan/t_pod_identity.json` — the pod identity check.
+
+(These are the three files named in the window's earlier verification
+session. Verify they exist before relying on them.)
 
 ---
 
-*End of window-35 handoff.*
+## 8. What this window did NOT do
+
+- **No code merged to `master`.** The tip extension was designed and
+  reverted.
+- **No branch left open.** `Phase3-SampleAndDisclose` is deleted
+  (zero commits).
+- **C-001 is still open.**
+- **The narrowing tip is not extended.** `PurchaseOrderResponse` and
+  the other five response types still lack `narrowing_tip`.
+- **No pod-identity line in `promptkit.py`.** O-2 is unresolved.
+- **The promptkit run analysis file was not created.** An earlier
+  proposal in this window named
+  `docs/plan/PROMPTKIT_2026-11-10_promptkit_run.md` as an artifact;
+  it was not written. The analysis lives in §5 above. If the next
+  window wants it as a standalone file, that is a first task — one
+  cell 1 (write), one cell 2 (verify), one commit.
+- **The five `orderBy` fields were verified but not acted on.**
+  `SupplierNumber:asc`, `InvoiceDate:desc`, `TransactionDate:desc`
+  (AR invoice), `CustomerName:asc` (customer account), and
+  `ReceiptDate:desc` (standard receipt) all sort server-side on
+  `fa-esll-saasfademo1`. `PurchaseOrder/OrderNumber:asc` is confirmed
+  on `dev37`. The `orderBy` table for the tip extension is fully
+  determined.
+
+---
+
+*End of window-36 handoff.*
