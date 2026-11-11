@@ -542,4 +542,18 @@ that changes an actual sysprompt block.
 
 ## V-walk state
 
-TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
+| V | Status | Note |
+|---|---|---|
+| V0 | done | opened with the original V0 (`f36b11c`), corrected to reflect `master`'s already-implemented Supplier path (`7b7bb51`) |
+| V1 | **green** | `get all suppliers` and `suppliers with their contacts and sites` against `fa-esll-saasfademo1`; first runs surfaced Fix D-a/D-b/E, re-runs green with tip and clean prose |
+| V2 | **green** | `suppliers with their contacts, sites, and classifications` — three-child branch at maximum arity; 25/93/153/20 buckets, tip present |
+| V3 | **green** | `contacts for Lee Supplies` — two-bucket shape; multi-child branch did **not** shadow it |
+| V4 | **green** | `get all addresses` — clean refusal at the planner's Address guard; multi-child detector did not claim an address shape |
+| V5 | **green** | three golden Intents matched (`count_suppliers`, `po_2144_and_lines`, `suppliers_with_open_pos`); V5-3 green on retry after a transient upstream timeout |
+| V6 | scoped + narrow + synth **green**; full **deferred** | branch tests 7/7, neighbourhood 62/62, synth blast-radius 97/97; full-suite run stalled at ~48% on an unidentified test — same class as PR #1's V6 environment defect; a future window with `pytest-timeout` resolves |
+| V7 | **green** | two red commits (`f4f9a13` before the multi-child fix, `257bf56` before the tip fix); both green after |
+| V8 | **partial** (N=4, threshold not met) | parser, summary, and tip lines byte-identical across 4 complete runs; N≥20 (WORKING_STYLE) not reached |
+| V9 | not required | no `.sysprompt` change on the branch |
+
+**State:** in-progress. Frozen to `closed` at PR merge, per
+`FIX_PLAN.md` §8 step 9.
