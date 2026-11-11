@@ -776,6 +776,13 @@ def synthesize_response(
             ),
             suppliers=build_supplier_records(rows),
             truncation_notes=notes,
+            narrowing_tip=build_narrowing_tip(
+                {ft for ft in _entity_level_filter_types().get(
+                    "Supplier", set()
+                ) if ft != "by_id"},
+                total_available,
+                entity_label="suppliers",
+            ),
         )
 
     # Suppliers with their open POs (join): no LLM.
