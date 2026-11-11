@@ -4,7 +4,9 @@
 the resume surface; the per-PR evidence files are the durable record.
 
 **Last updated:** 2026-11-11
-**Branch:** `Phase3-PurchaseOrder-Sample`
+**Branch:** `Phase3-PurchaseOrder-Sample` — **merged** to `master`
+at `2a23906` as PR #203. The branch on origin may be deleted; the
+work is on `master`.
 **Base:** `master` at `a78c00b`
 **Branch commits:** `2681217` (failing test, V7 evidence base),
 `c71488d` (MCP conflict finding, not a fix)
@@ -62,26 +64,46 @@ PR #1 of the seven-PR sequence in
 
 ### Next concrete action
 
-V-walk is complete for what can run this window (V1–V5, V7 green;
-V6 and V8 deferred behind the MCP conflict; V9 not required).
+**This branch is done.** PR #203 merged to `master` at `2a23906`.
+The V-walk for what could run in that window is complete (V1–V5,
+V7 green; V6 and V8 deferred behind the MCP conflict; V9 not
+required).
 
-Remaining before PR #1 is opened:
+The next window starts **PR #2 (Supplier sample-and-disclose)**,
+the second row of the seven-PR sequence in
+`docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6:
 
-1. Commit the **source change set** — four files
-   (`parser.py`, `p2p.py`, `synthesizer.py`,
-   `tests/test_sample_and_disclose_po.py`) — as one commit on
-   `Phase3-PurchaseOrder-Sample`, on top of `2681217`. Message
-   names the extractor, the tip parameterisation, and the two
-   V1-surfaced fixes (label de-dup, `lifecycle_status` exclusion).
-2. Commit the **doc changes** — `purchase_order.md`
-(V1–V9 filled) and `STATUS.md` (this file) — as one commit,
-   so the branch history shows `fix → evidence` cleanly.
-3. Open PR #1 with the template from `docs/fixes/FIX_PLAN.md`
-   §11.2. PR body names V6/V8 as deferred with a pointer to
-   `MCP_DEPENDENCY_CONFLICT.md`.
+    git checkout -b Phase3-Supplier-Sample
 
-Do **not** stage `personas.yaml` (a local credential edit; not
-part of the PR).
+Prerequisites and first tasks, in order:
+
+1. **Write the Issue C finding file first** —
+   `docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md`.
+   Issue C (the malformed multi-field-iteration SQL) is recorded
+   in `purchase_order.md` §Deviations but has no finding file
+   yet. PR #2's V1 on a Supplier prompt will not reproduce it
+   (Supplier has no multi-field iteration), but the finding
+   should land as its own file before someone else rediscovers
+   it. Small, self-contained, one cell.
+2. **Open the PR #2 evidence file** —
+   `docs/phase-3/sample_and_disclose/supplier.md` — with V0 only,
+   same pattern as `purchase_order.md` was opened.
+3. **Write the failing test first** —
+   `tests/test_sample_and_disclose_supplier.py`. Red before fix,
+   per `FIX_PLAN.md` §8 step 3. Supplier already samples (the
+   `SupplierResponse` path in `synthesizer.py` and
+   `build_narrowing_tip`'s Supplier default already exist); PR #2
+   is mainly proving the extractor path works for the shape that
+   already has all the plumbing. Do not assume the test will be
+   trivial — V-walk on this PR found three defects the unit tests
+   did not catch (see `purchase_order.md` §Deviations Fix A/B/C).
+4. **Read** `MCP_DEPENDENCY_CONFLICT.md` before starting V6/V8.
+   If the MCP migration has landed as its own PR by then, V6 and
+   V8 are unblocked; if not, they are deferred again the same way.
+
+**Carry-forward note.** `personas.yaml` in the working tree is a
+local credential edit that should not go into PR #2. Confirm with
+`git status` before staging anything in the new window.
 
 ---
 
