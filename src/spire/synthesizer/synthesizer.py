@@ -1247,10 +1247,18 @@ def synthesize_response(
             )
             parts.append(f"{total_classifications} {cl_word}")
         summary = " ".join(parts) + "." if parts else ""
+        tip = build_narrowing_tip(
+            {ft for ft in _entity_level_filter_types().get(
+                "Supplier", set()
+            ) if ft != "by_id"},
+            total_available,
+            entity_label="suppliers",
+        )
         return SupplierResponse(
             summary=summary,
             suppliers=records,
             truncation_notes=notes,
+            narrowing_tip=tip,
         )
 
     # Plain credit-memo list: no LLM, same reasoning as the supplier
