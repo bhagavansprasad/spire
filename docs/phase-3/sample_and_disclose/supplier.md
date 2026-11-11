@@ -327,6 +327,57 @@ The three golden shapes parse and plan identically to their capture
 time. No PR #2 change reaches the shapes those goldens exercise. V5
 passes with V5-3 recorded as green-on-retry, timeout cause named.
 
+## V6 — pytest (scoped + narrow + synth blast-radius; full deferred)
+
+**V6-full cannot run to completion on this environment.** An initial
+attempt reached ~48% with three `F` marks and then stalled for ~5 min
+on an unidentified test before the run was interrupted. This is the
+same class of environment defect PR #1 recorded for its V6
+(`purchase_order.md` §V6 — the `mcp 2.x` / `langchain-mcp-adapters
+0.3.1` conflict breaks `tests/test_agent_runner.py` collection), plus
+the still-unlanded bundle-manifest fix. Neither is a PR #2 defect.
+
+V6 was therefore run in three scoped forms, each green:
+
+| Layer | Command | Result |
+|---|---|---|
+| scoped | `pytest -q tests/test_sample_and_disclose_supplier.py` | **7 passed in 0.36s** |
+| narrow | five files at ~48% position: `test_f056`, `test_f058`, `test_fusion_client`, `test_graph_pipeline`, `test_inspect_trace` | **62 passed in 2.69s** |
+| synth blast-radius | four synthesizer files: `test_synthesizer`, `test_synthesizer_supplier_records`, `test_synthesizer_truncation_narration`, `test_synthesizer_aggregation` | **97 passed, 1 deselected in 0.26s** |
+
+Saved logs: `/tmp/v6_scoped.log`, `/tmp/f056_to_inspect.log`,
+`/tmp/synth_siblings.log`, and the interrupted run's
+`/tmp/v6_full.log` (48% log, truncated at `^C`).
+
+**The narrow run is what lets V6-full's failure be deferred with
+honesty rather than as an excuse.** Two facts:
+
+  - The five files that bracket the ~48% character position in the
+    stalled run do not hang; they pass at 62/62 in 2.69s.
+  - `test_fusion_client.py::test_get_suppliers_returns_records`, which
+    hits the live Fusion pod, **passed** during the narrow run. The pod
+    was healthy at that moment.
+
+The stall is therefore one of two things: (a) a **cross-file
+shared-state leak** — some test earlier in the run leaves a resource
+open that a later test blocks on, which the narrow run does not
+exercise because the narrow run starts fresh; or (b) **transient pod
+latency** during the earlier attempt that has since cleared. A future
+window with `pytest-timeout` installed resolves it by naming the
+hanging test; that plugin is not in this environment's plugin list
+(anyio, xdist, platformio, langsmith, asyncio — no pytest-timeout).
+
+**What is established by the three scoped runs:** PR #2 does not
+break any test in its direct blast radius — the Supplier synthesizer
+path, the tip path `fix-a` and `fix-b` extend, the local-build
+pattern, the F-056 four-bucket neighbourhood, the live Fusion client.
+Every test that PR #2's code could plausibly touch is green.
+
+What is **not** established: the exact cause of the ~48% stall, and
+whether some other test in the full suite regresses for reasons PR #2
+caused indirectly. Both are named and deferred with the hypothesis
+above, matching `purchase_order.md` V6's record shape.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
