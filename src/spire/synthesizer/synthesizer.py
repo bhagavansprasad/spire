@@ -158,6 +158,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     _supplier_pos_buyers,
     build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
+    _PURCHASE_ORDER_FILTER_LABELS,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -1030,6 +1031,18 @@ def synthesize_response(
         total_available, notes = _local_truncation(
             po_bucket, rows, truncation_by_step, metadata_by_step
         )
+        # QA-12 completeness advisory for PurchaseOrder. Same shape
+        # as the three Supplier call sites: the entity-level filter
+        # types from the KG, minus by_id (a fetch-one, not a
+        # narrowing filter), with a PurchaseOrder label map instead
+        # of the Supplier default.
+        po_filters = _entity_level_filter_types().get("PurchaseOrder", set())
+        po_tip = build_narrowing_tip(
+            {ft for ft in po_filters if ft not in {"by_id", "lifecycle_status"}},
+            total_available,
+            entity_label="purchase orders",
+            labels_map=_PURCHASE_ORDER_FILTER_LABELS,
+        )
         return PurchaseOrderResponse(
             summary="\n".join(
                 local_list_summary(
@@ -1049,6 +1062,7 @@ def synthesize_response(
             ),
             purchase_orders=build_purchase_order_records(rows),
             truncation_notes=notes,
+            narrowing_tip=po_tip,
         )
 
     # Plain invoice list: no LLM (#3).
@@ -1123,6 +1137,17 @@ def synthesize_response(
         total_available, notes = _local_truncation(
             po_child_buckets["po"], po_rows, truncation_by_step, metadata_by_step
         )
+        # Same tip as the plain-list branch. This is the branch the
+        # SME's own prompt — `get po with distribution details` —
+        # reaches, because the child include makes it the with-children
+        # shape rather than the plain list.
+        po_filters = _entity_level_filter_types().get("PurchaseOrder", set())
+        po_tip = build_narrowing_tip(
+            {ft for ft in po_filters if ft not in {"by_id", "lifecycle_status"}},
+            total_available,
+            entity_label="purchase orders",
+            labels_map=_PURCHASE_ORDER_FILTER_LABELS,
+        )
         return PurchaseOrderResponse(
             summary="\n".join(
                 local_list_summary(
@@ -1139,6 +1164,7 @@ def synthesize_response(
             ),
             purchase_orders=build_po_with_children(outputs, po_child_buckets),
             truncation_notes=notes,
+            narrowing_tip=po_tip,
         )
 
     # Plain credit-memo list: no LLM, same reasoning as the supplier
