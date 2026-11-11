@@ -50,6 +50,44 @@ VALUES (?, ?, ?, ?)
 """, payments)
 
 
+
+# Insert examination data
+cursor.executemany("""
+INSERT OR IGNORE INTO exams
+(exam_id, course_id, exam_name, pass_marks, max_marks)
+VALUES (?, ?, ?, ?, ?)
+""", [
+    ("E1", "C1", "Embedded Systems", 40, 100),
+    ("E2", "C1", "Digital Electronics", 40, 100),
+    ("E3", "C2", "Python Programming", 35, 100),
+    ("E4", "C2", "Database Management", 35, 100)
+])
+
+
+# Insert examination results
+cursor.executemany("""
+INSERT OR IGNORE INTO exam_results
+(result_id, exam_id, student_id, marks_obtained)
+VALUES (?, ?, ?, ?)
+""", [
+    ("R1", "E1", "S1", 85),
+    ("R2", "E2", "S1", 32),
+
+    ("R3", "E1", "S2", 30),
+    ("R4", "E2", "S2", 75),
+
+    ("R5", "E1", "S3", 65),
+    ("R6", "E2", "S3", 55),
+
+    ("R7", "E3", "S4", 90),
+    ("R8", "E4", "S4", 25),
+
+    ("R9", "E3", "S5", 20),
+    ("R10", "E4", "S5", 80)
+])
+
+
+
 # Save all changes
 conn.commit()
 

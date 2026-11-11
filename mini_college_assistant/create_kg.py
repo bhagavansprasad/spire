@@ -17,8 +17,10 @@ CREATE TABLE IF NOT EXISTS kg_entity (
 entities = [
     ("Student", "Represents a college student"),
     ("Course", "Represents a college course"),
-    ("Payment", "Represents a student's fee payment")
-]
+    ("Payment", "Represents a student's fee payment"),
+    ("Exam", "Represents an examination conducted for a course"),
+    ("ExamResult", "Represents a student's marks in an examination")
+]   
 
 cursor.executemany("""
 INSERT OR IGNORE INTO kg_entity (entity_name, description)
@@ -93,6 +95,30 @@ relationships = [
         "A student has a fee-payment record",
         "student_id",
         "student_id"
+    ),
+    (
+        "has_exam",
+        entity_ids["Course"],
+        entity_ids["Exam"],
+        "A course has examinations",
+        "course_id",
+        "course_id"
+    ),
+    (
+        "has_result",
+        entity_ids["Exam"],
+        entity_ids["ExamResult"],
+        "An examination has student results",
+        "exam_id",
+        "exam_id"
+    ),
+    (
+        "student_has_result",
+        entity_ids["Student"],
+        entity_ids["ExamResult"],
+        "A student has examination results",
+        "student_id",
+        "student_id"
     )
 ]
 
@@ -149,22 +175,35 @@ fields = [
     (entity_ids["Payment"], "payment_id", "Unique payment record identifier"),
     (entity_ids["Payment"], "student_id", "ID of the student associated with the payment"),
     (entity_ids["Payment"], "amount_due", "Total amount the student must pay"),
-    (entity_ids["Payment"], "amount_paid", "Amount the student has paid")
+    (entity_ids["Payment"], "amount_paid", "Amount the student has paid"),
+    
+    # Exam fields
+    (entity_ids["Exam"], "exam_id", "Unique examination identifier"),
+    (entity_ids["Exam"], "course_id", "ID of the course for this examination"),
+    (entity_ids["Exam"], "exam_name", "Name of the examination"),
+    (entity_ids["Exam"], "pass_marks", "Minimum marks required to pass"),
+    (entity_ids["Exam"], "max_marks", "Maximum marks for the examination"),
+
+    (entity_ids["ExamResult"], "result_id", "Unique examination result identifier"),
+    (entity_ids["ExamResult"], "exam_id", "ID of the examination"),
+    (entity_ids["ExamResult"], "student_id", "ID of the student"),
+    (entity_ids["ExamResult"], "marks_obtained", "Marks obtained by the student"),
+    (entity_ids["ExamResult"], "student_name", "Name of the student from the joined Student table"),
+    (entity_ids["ExamResult"], "exam_name", "Name of the examination from the joined Exam table"),
+    (entity_ids["ExamResult"], "pass_marks", "Minimum marks required to pass"),
+    (entity_ids["ExamResult"], "max_marks", "Maximum marks for the examination"),
+    (entity_ids["ExamResult"], "result", "Calculated examination status: PASS or FAIL")
+    
+    
 ]
 
-# Insert field descriptions
+
 cursor.executemany("""
 INSERT OR IGNORE INTO kg_field
     (entity_id, field_name, description)
 VALUES (?, ?, ?)
 """, fields)
 
-# Insert field descriptions
-cursor.executemany("""
-INSERT OR IGNORE INTO kg_field
-    (entity_id, field_name, description)
-VALUES (?, ?, ?)
-""", fields)
 
 # Create the KG filter table
 cursor.execute("""
@@ -244,6 +283,16 @@ tool_mappings = [
         entity_ids["Payment"],
         "query_payments",
         "Retrieves payment information"
+    ),
+        (
+        entity_ids["Exam"],
+        "query_exams",
+        "Retrieves examination information"
+    ),
+    (
+        entity_ids["ExamResult"],
+        "query_exam_results",
+        "Retrieves student examination results"
     )
 ]
 

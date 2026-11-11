@@ -20,6 +20,7 @@ MODULES = {
     "Students": "Questions about student information.",
     "Courses": "Questions about courses and course details.",
     "Payments": "Questions about fees, payments, and pending fees.",
+    "Examinations": "Questions about exams, examination marks, results, and pass or fail status.",
 }
 
 
@@ -154,12 +155,21 @@ Available modules:
 Rules:
 1. Select every module needed to answer the question.
 2. Select multiple modules when necessary.
-3. Student questions may require Students.
-4. Fee and payment questions may require Payments.
-5. Course questions may require Courses.
-6. Do not invent module names.
-7. If no module is relevant, return an empty list.
-8. Return only JSON in this format:
+3. Select Students for questions asking for student details,
+   such as student names, IDs, email addresses, or profiles.
+4. Select Payments for fee and payment questions.
+5. Select Courses for course questions.
+6. Questions about exam marks, examination results, or PASS/FAIL
+   status require Examinations.
+7. Do not select Students just because the word "students" appears
+   in an examination-results question. The Examinations module
+   already provides student names along with exam results.
+8. Select Students along with Examinations only when the question
+   also asks for separate student information not included in
+   examination results, such as email addresses.
+9. Do not invent module names.
+10. If no module is relevant, return an empty list.
+11. Return only JSON in the specified format.
 
 {{
     "modules": ["Students", "Payments"]
@@ -206,6 +216,7 @@ def assemble_subset(modules: list[str], menu: dict) -> str:
         "Students": "Student",
         "Courses": "Course",
         "Payments": "Payment",
+        "Examinations": "ExamResult",
     }
 
     # Convert selected modules into KG entity names.
@@ -334,7 +345,7 @@ def parse(
     # If no selected context is supplied, use the full KG.
     if system_prompt is None:
         system_prompt = assemble_subset(
-            ["Students", "Courses", "Payments"],
+            ["Students", "Courses", "Payments", "Examinations"],
             menu,
         )
 
@@ -358,10 +369,16 @@ def parse(
         entity = "Student"
         related_entity = "Payment"
         when the KG context contains the relationship connecting Student and Payment.
-    11. Do not set entity to null merely because the question requires combining related entities.
-    12. Set entity to null only if the main entity genuinely cannot be identified
-        or the question cannot reasonably be represented using the provided KG.
-
+    11. If the question asks for examination results, use:
+    entity = "ExamResult"
+    related_entity = null
+    when the KG context contains the ExamResult entity.
+    12. The ExamResult tool retrieves student names, exam names,
+        marks, and calculated PASS/FAIL status using database JOINs.
+    13. Do not set related_entity to Student or Exam for an
+    examination-results question. The ExamResult tool already
+    retrieves the required joined information.
+    
     EXAMPLES:
 
     Question: "Show me the details of all students."
@@ -391,6 +408,20 @@ def parse(
         "requested_fields": ["student_id", "name"]
     }}
 
+    Question: "Show me the examination results of all students."
+    Intent:
+    {{
+        "entity": "ExamResult",
+        "related_entity": null,
+        "filter": null,
+        "requested_fields": [
+            "student_name",
+            "exam_name",
+            "marks_obtained",
+            "result"
+        ]
+    }}
+    
     IMPORTANT:
     - The examples show the expected output structure.
     - Select a filter only when its meaning matches the question.
@@ -538,7 +569,7 @@ def route_and_parse(
 
 if __name__ == "__main__":
 
-    user_prompt = "Which students have no outstanding college fees?"
+    user_prompt = "Show me the examination results of all students."
 
     print("User prompt:")
     print(user_prompt)

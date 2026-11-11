@@ -3,11 +3,14 @@ from planner import generate_plan
 
 
 intent = {
-    "entity": "Student",
-    "related_entity": "Payment",
-    "filter": "pending_fees",
-    "requested_fields": ["student_id", "name"],
-    "modules": ["Students", "Payments"],
+    "entity": "ExamResult",
+    "requested_fields": [
+        "student_name",
+        "exam_name",
+        "marks_obtained",
+        "result"
+    ],
+    "modules": ["Examinations"]
 }
 
 plan = generate_plan(intent)

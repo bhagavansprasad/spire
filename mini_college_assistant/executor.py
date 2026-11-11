@@ -1,10 +1,11 @@
-from tools import query_students, query_courses, query_payments
+from tools import query_students, query_courses, query_payments, query_exam_results
 
 
 TOOL_REGISTRY = {
     "query_students": query_students,
     "query_courses": query_courses,
     "query_payments": query_payments,
+    "query_exam_results": query_exam_results,
 }
 
 
