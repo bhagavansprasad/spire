@@ -1,8 +1,7 @@
 # Phase 3 — Sample-and-disclose: Supplier
 
 **Branch:** `Phase3-Supplier-Sample`
-**PR:** TBD (this file is committed before the branch's PR is opened;
-PR number added when the PR is raised, per `FIX_PLAN.md` §8 step 8)
+**PR:** #204
 **State:** in-progress
 **Finding:** MEETING_2026-11-10 §6 row 2 — the second entity in the
 seven-PR sample-and-disclose sequence. Supplier already samples on
