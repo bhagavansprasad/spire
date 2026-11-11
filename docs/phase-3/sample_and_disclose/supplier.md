@@ -205,6 +205,48 @@ made; `purchase_order.md` V2 was green on two runs and recorded the
 second as the "reproduced twice" evidence. PR #2's V2 is green on
 one run; if you want the second-run discipline, it is one more cell.
 
+## V3 — Sibling unchanged (two-bucket supplier + contacts)
+
+Prompt: `contacts for Lee Supplies` against `fa-esll-saasfademo1`.
+Saved transcript at `/tmp/v3_contacts_two_bucket.txt` (104 lines,
+`exit=0`).
+
+This is the shape PR #2 did **not** change: a two-bucket fetch —
+suppliers plus the contacts of each — whose answer is built by
+`_supplier_with_contacts` on `master` (long before this branch). V3's
+purpose is to prove the multi-child branch added by 0822047 does not
+shadow the two-bucket branch; the detector's conservative contract
+(`len(outputs) < 3` returns None, fewer than two child kinds returns
+None) is supposed to protect it.
+
+Intent:
+
+    target_entity: Supplier
+    filters: [{'type': 'name_fragment', 'value': 'Lee Supplies'}]
+    include: ['Contact']
+
+Plan: two steps —
+
+    search_suppliers (supplier_name_contains='Lee Supplies')
+    get_supplier_contacts (iterating: SupplierId from suppliers)
+
+Bucket counts: `suppliers: 1 record(s)`, `contact: 18 record(s)`.
+Two buckets, not three or four.
+
+Summary line:
+
+    Lee Supplies has 18 contacts.
+
+That is `_supplier_with_contacts`'s single-supplier branch, not the
+multi-child branch's `Showing N of M suppliers: X contacts, Y sites.`
+form. One `Lee Supplies — contacts:` block rendered (the two-bucket
+render path); zero ` — sites:` blocks; zero ` — classifications:`
+blocks. If the multi-child detector had fired, all three would have
+been present.
+
+Green on one run. The multi-child branch does not over-reach onto a
+two-bucket shape.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
