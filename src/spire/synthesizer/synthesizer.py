@@ -1229,11 +1229,9 @@ def synthesize_response(
         )
         parts: list[str] = []
         if examined == 1:
-            parts.append(f"{records[0].supplier_name}:")
+            head = f"{records[0].supplier_name} —"
         else:
-            parts.append(
-                f"Showing {examined} of {total_text} suppliers."
-            )
+            head = f"Showing {examined} of {total_text} suppliers:"
         if child_kind_to_bucket.get("contact") is not None:
             c_word = "contact" if total_contacts == 1 else "contacts"
             parts.append(f"{total_contacts} {c_word}")
@@ -1246,7 +1244,7 @@ def synthesize_response(
                 else "classifications"
             )
             parts.append(f"{total_classifications} {cl_word}")
-        summary = " ".join(parts) + "." if parts else ""
+        summary = f"{head} {', '.join(parts)}." if parts else head
         tip = build_narrowing_tip(
             {ft for ft in _entity_level_filter_types().get(
                 "Supplier", set()
