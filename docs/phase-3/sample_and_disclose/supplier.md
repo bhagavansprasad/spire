@@ -378,6 +378,152 @@ whether some other test in the full suite regresses for reasons PR #2
 caused indirectly. Both are named and deferred with the hypothesis
 above, matching `purchase_order.md` V6's record shape.
 
+## V7 — Test fails without the fix
+
+PR #2 has **two** red commits on the branch, each committed **before**
+its corresponding source fix, per `FIX_PLAN.md` §8 step 3. Neither was
+a post-hoc stash; both were verified red at commit time.
+
+### V7-a — the multi-child test (commit `f4f9a13`)
+
+`tests/test_sample_and_disclose_supplier.py` was committed at
+`f4f9a13` with one red test and four green. The red test:
+
+    test_multi_child_supplier_shape_builds_locally_without_llm
+
+Failure reason, from `/tmp/f0_pytest_pr2_red.log` (55 lines):
+
+    synthesizer.py:1447: in synthesize_response
+        structured_llm = llm.with_structured_output(schema, include_raw=True)
+    AssertionError: synthesize_response called the LLM on a Supplier
+    path that should be local
+
+The traceback names the exact line reached only after every local
+Supplier branch returned None — the multi-bucket shape had no local
+builder, so `synthesize_response` fell through to the LLM setup. The
+`_forbidden_llm` fixture raised there. That is the defect signature,
+not a `KeyError`, not a `build_llm` call, not a schema error.
+
+The fix (`0822047`) adds `_supplier_multi_child` and
+`build_suppliers_with_children` to `p2p.py` and the branch to
+`synthesizer.py`. After the fix the five tests pass
+(`/tmp/f0_pytest_pr2_green.log`, 2 lines, `5 passed in 0.13s`).
+
+### V7-b — the two tip tests (commit `257bf56`)
+
+After V1's live runs surfaced the missing tip (Fix D-a and Fix D-b),
+two new tests were added:
+
+    test_plain_supplier_list_carries_narrowing_tip
+    test_multi_child_supplier_shape_carries_narrowing_tip
+
+Committed at `257bf56` with both red and five green. Failure reason
+from `/tmp/f0_pytest_pr2_fixd_red.log` (84 lines):
+
+    AssertionError: multi-child Supplier shape must populate
+    narrowing_tip when total_available is known; got empty string
+    assert '' = SupplierResponse(... narrowing_tip='').narrowing_tip
+
+The other red test failed on the same class of assertion on the plain
+list. Fix D-a (`a515b81`) and Fix D-b (`1adc9a7`) add the tip
+computation to the two branches; both tests go green (V6-scoped log
+`/tmp/v6_scoped.log`, `7 passed in 0.36s`).
+
+### Why two red commits, not one
+
+PR #1's V-walk surfaced three defects its unit tests did not catch
+(Fix A/B/C in `purchase_order.md` §Deviations). PR #2's V-walk
+surfaced two: the missing tip on both branches, and the summary prose.
+The tip was worth a **new red** because the earlier tests only
+asserted `isinstance(result, SupplierResponse)` and the records inside
+— neither checked that `narrowing_tip` was populated. That is a
+tautological-test defect of the same class PR #1's Fix C addressed: a
+test that passes when the property it names is missing. Adding the
+test first, seeing it fail, then fixing the source, is the discipline.
+
+## V8 — N-run reproducibility (N=4, threshold not met)
+
+**Scope statement first.** WORKING_STYLE's rule is N≥20 for any
+nondeterminism claim. PR #2 reached N=4. The four-run evidence below
+is recorded as-is; the N≥20 threshold is **not** met, and no rate is
+claimed. A future window with a working pytest-timeout plugin (this
+environment does not have it — see V6) can run the remaining 16
+without the ~48%-stall class of interference that has affected the
+full-suite runs.
+
+Prompt: `suppliers with their contacts, sites, and classifications`
+against `fa-esll-saasfademo1` — the V2 three-child prompt.
+Four complete runs on disk under `/tmp/v8_20runs/run_0{1,2,3,4}.txt`
+(668 lines each, identical). A fifth run (`run_05.txt`, 5 lines) was
+interrupted by the operator before completing; not counted.
+
+Three determinism checks, four-of-four identical each:
+
+**Intent (parser):** all four runs produce
+
+    target_entity: Supplier
+    include: ['Contact', 'Site', 'Classification']
+
+Same entity, same three-include list, same order, no filters. The
+parser classifies the prompt identically across four runs.
+
+**Summary line (summarizer, local):** all four runs produce
+
+    Showing 25 of 409 suppliers: 93 contacts, 153 sites, 20 classifications.
+
+The summary is built locally by the multi-child branch (fix-E's
+format), not by an LLM, so this is expected rather than interesting
+on its own — but it is confirmation that the branch produces
+byte-identical output for a byte-identical intent.
+
+**Tip line (summarizer, local):** all four runs produce
+
+    Reading all 409 suppliers is slow. Narrow with a filter: business
+    relationship, country, creation date, name, status.
+
+The tip is built locally by fix-b's `build_narrowing_tip` call. The
+`409` reflects the pod's **current** supplier count; V2's single run
+was `402`, seven suppliers ago. The tip is not cached and tracks the
+source total per-run.
+
+### What N=4 proves and does not prove
+
+Proves: for this prompt, the parser and the multi-child summarizer
+are deterministic across four runs; the shape does not vary; the
+summary and tip track the pod's live count rather than a stale value.
+
+Does not prove: an N≥20 rate. Three specific residual risks:
+
+  - A rare (>1-in-4) failure mode — e.g. the classifier dropping
+    `Classification` from the include, or the pod occasionally
+    timing out on one of the 25 `search_purchase_orders` fan-out
+    calls — would not appear in four runs. V5-3 saw exactly that
+    fan-out timeout on a different prompt; this prompt's `get_
+    supplier_contacts` / `search_suppliers_by_site_bu` / `search_
+    suppliers_by_classification` fan-out is the same shape and could
+    hit the same transient. None of the four runs did.
+  - Parser nondeterminism under prompt paraphrase — the four runs
+    are the **same** prompt. A paraphrase sweep at N≥20 would test
+    whether the classifier produces the same include set for
+    semantically-equivalent phrasings. Not done.
+  - Interaction with pod state — four runs within minutes; the pod's
+    data was stable in that window (93 contacts, 153 sites, 20
+    classifications reproduced). If a supplier's child counts
+    changed mid-run, the counts would vary even though the shape did
+    not. That variability is a property of the data, not the code.
+
+### Save file
+
+The check pattern that failed in B18-tally (`Showing 25 of 402
+suppliers: …`) was overfit on V2's single-run count of 402. The
+pod's live count had drifted to 409 by the V8 sweep, so the literal
+`402` pattern matched zero of four. The fix was to grep structurally
+(`^Showing \d+ of \d+ suppliers: \d+ contacts, \d+ sites, \d+
+classifications\.`), which matched four of four. Same class of
+verifier error as the V2 and V5 wrap-issue: a literal pattern that
+locks to a single run's data is not a stable check; the structural
+pattern is.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
