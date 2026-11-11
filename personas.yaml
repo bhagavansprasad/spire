@@ -17,6 +17,6 @@ default_dev:
     auth_type: "basic"
  
   oracle:
-    dsn: "localhost:1521/FREEPDB1"
+    dsn: "localhost:1521/freepdb1"
     username: "spire"
     password: "jnjnuh"
