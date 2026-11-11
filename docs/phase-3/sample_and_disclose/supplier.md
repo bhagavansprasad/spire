@@ -247,6 +247,13 @@ been present.
 Green on one run. The multi-child branch does not over-reach onto a
 two-bucket shape.
 
+**Commit history note.** V3's content was committed at `4abbb05`
+("docs(phase-3): supplier.md V3 (two-bucket contacts unchanged)"). A
+second commit, `ce23c69`, was written with a message claiming "V3 +
+V4" — but its diff is V4 only, because V3 was already on the branch.
+The tree at `ce23c69` is correct; only the commit message is
+over-stated. No history rewrite.
+
 ## V4 — Negative (get all addresses, still refuses)
 
 Prompt: `get all addresses` against `fa-esll-saasfademo1`. Saved
