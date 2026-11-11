@@ -524,6 +524,22 @@ verifier error as the V2 and V5 wrap-issue: a literal pattern that
 locks to a single run's data is not a stable check; the structural
 pattern is.
 
+## V9 — `--validate` (not required)
+
+PR #2 changes no `.sysprompt` file. The check:
+
+    git diff d0acaf8..HEAD --name-only | grep '\.sysprompt$'
+
+returns nothing on this branch. The fix surface is pure Python
+(`p2p.py`, `synthesizer.py`, `tests/test_sample_and_disclose_supplier.py`)
+plus this evidence file and the Issue C finding file. No prompt rule
+is added, changed, or removed.
+
+By the same rule `purchase_order.md` V9 applied — no `.sysprompt`
+change, no `--validate` sweep required — PR #2's V9 is **not
+required**. The 240-prompt `--validate` sweep is deferred to a window
+that changes an actual sysprompt block.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
