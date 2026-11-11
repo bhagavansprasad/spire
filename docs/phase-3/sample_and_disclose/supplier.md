@@ -94,7 +94,117 @@ nowhere. The corrected V0 reflects the code; the original is kept
 here for the record.
 
 
+## V1 — Reproducer (live)
+
+Prompt: `get all suppliers` against `fa-esll-saasfademo1`. Saved
+transcript at `/tmp/v1a_rerun.txt` (89 lines, `exit=0`).
+
+**First run** (`/tmp/v1a_get_all_suppliers.txt`, 85 lines): the
+answer read `Showing 25 of 402 suppliers.` with the `Truncation:`
+block present — but **no `─── Tip ───` block**. The plain-list
+branch was missing the `narrowing_tip=` kwarg entirely. See
+`## Deviations` Fix D-a.
+
+**Re-run after Fix D-a** (`/tmp/v1a_rerun.txt`):
+
+    Showing 25 of 402 suppliers.
+    ...
+    Truncation:
+      - suppliers: 402 total in source; 25 returned.
+
+    ─── Tip ───
+    Reading all 402 suppliers is slow. Narrow with a filter: business
+    relationship, country, creation date, name, status.
+
+The Rule 28 defect (SME could answer; earlier runs answered without
+disclosure) is closed: 25 rows, honest `25 of 402`, and a tip naming
+the entity-level filters the reader can add.
+
+Prompt: `suppliers with their contacts and sites` against
+`fa-esll-saasfademo1`. Saved transcripts at
+`/tmp/v1b_multi_child.txt` (582 lines, first run) and
+`/tmp/v1b_rerun.txt` (586 lines, re-run).
+
+**First run**: three-step plan, 25 suppliers + 93 contacts + 153
+sites, all built locally. But the answer's summary read
+`Showing 25 of 402 suppliers. 93 contacts 153 sites.` — a full stop
+where a colon belongs, no separator between child counts — and the
+`─── Tip ───` block was absent. See `## Deviations` Fix D-b (the
+multi-child branch I introduced at 0822047 omitted the tip) and
+Fix E (the summary prose).
+
+**Re-run after Fix D-b + Fix E** (`/tmp/v1b_rerun.txt`):
+
+    Showing 25 of 402 suppliers: 93 contacts, 153 sites.
+    ...
+    Truncation:
+      - suppliers: 402 total in source; 25 returned.
+
+    ─── Tip ───
+    Reading all 402 suppliers is slow. Narrow with a filter: business
+    relationship, country, creation date, name, status.
+
+Both V1 shapes answer with a local `SupplierResponse`, a bounded
+25-row sample, an honest truncation disclosure, and a narrowing tip.
+
+## V2 — Paraphrase (multi-child, three children)
+
+Prompt: `suppliers with their contacts, sites, and classifications`
+against `fa-esll-saasfademo1`. Saved transcript at
+`/tmp/v2_multi_three_children.txt` (668 lines, `exit=0`).
+
+This exercises the multi-child branch at its **maximum arity** —
+three child kinds in one prompt, the fullest shape the detector
+(`_supplier_multi_child`) accepts. V1b proved the two-child branch;
+V2 proves the three-child form on real data with a non-empty third
+child.
+
+Intent:
+
+    target_entity: Supplier
+    include: ['Contact', 'Site', 'Classification']
+
+Plan: four steps —
+
+    search_suppliers
+    get_supplier_contacts          (iterating: SupplierId from suppliers)
+    search_suppliers_by_site_bu    (iterating: SupplierId from suppliers)
+    search_suppliers_by_classification (iterating: SupplierId from suppliers)
+
+All three child steps iterate from the supplier bucket on
+`SupplierId`; all three use F-043's dual-purpose tools with only
+`supplier_id`, which the tools honour as "fetch all children for this
+parent." Output buckets: `suppliers`, `contact`, `site`,
+`classification`.
+
+Bucket counts on the run:
+
+    suppliers:      25 record(s)
+    contact:        93 record(s)
+    site:          153 record(s)
+    classification: 20 record(s)
+
+Summary line:
+
+    Showing 25 of 402 suppliers: 93 contacts, 153 sites, 20
+    classifications.
+
+Tip block (present):
+
+    Reading all 402 suppliers is slow. Narrow with a filter: business
+    relationship, country, creation date, name, status.
+
+Nine per-supplier classification blocks rendered (nine of the 25
+suppliers carry classifications; 20 rows across them). The third
+child is non-empty, which is what makes V2 stronger than V1b — it
+would have passed even if the classifier was silently empty, but
+here it is not.
+
+Green on one run. A second run on the same prompt has not been
+made; `purchase_order.md` V2 was green on two runs and recorded the
+second as the "reproduced twice" evidence. PR #2's V2 is green on
+one run; if you want the second-run discipline, it is one more cell.
+
 ## V-walk state
 
-TBD after the first live run. Filled in by the cells that follow this
-commit; frozen `State: closed` at PR merge, per `FIX_PLAN.md` §8 step 9.
+TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
