@@ -156,6 +156,8 @@ from spire.synthesizer.p2p import (  # noqa: F401
     _supplier_with_classifications,
     build_suppliers_with_classifications,
     _supplier_pos_buyers,
+    _supplier_multi_child,
+    build_suppliers_with_children,
     build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
     _PURCHASE_ORDER_FILTER_LABELS,
@@ -1165,6 +1167,83 @@ def synthesize_response(
             purchase_orders=build_po_with_children(outputs, po_child_buckets),
             truncation_notes=notes,
             narrowing_tip=po_tip,
+        )
+
+    # Supplier with two or more child buckets at once: no LLM.
+    #
+    # The shape PR #2's failing test exercises: a Supplier prompt naming
+    # contacts AND sites (or contacts AND classifications, or any two of
+    # the three) at once. No existing local Supplier builder claims a
+    # shape with three or more buckets — plain_supplier_bucket requires
+    # len(outputs)==1, and each _supplier_with_* detector requires
+    # exactly 2. So the shape fell through to the LLM path, which the
+    # failing test forbids.
+    #
+    # This branch goes AFTER every specific single-child and PO-join
+    # branch, so a two-bucket contacts shape still hits
+    # _supplier_with_contacts and a two-bucket sites shape still hits
+    # _supplier_with_sites; only the shape no specific branch claims
+    # reaches here. It goes BEFORE the CreditMemo branch and every
+    # non-Supplier branch below, because target_entity=="Supplier" is
+    # the guard on the multi-child detector — a non-Supplier target
+    # never matches and falls through untouched.
+    #
+    # The detector's contract (see _supplier_multi_child in p2p.py)
+    # requires the shape to be exactly {supplier} ∪ {two or more of
+    # contact, site, classification} and nothing else; a shape with a
+    # PO bucket mixed in is rejected by the detector, not claimed by
+    # this branch, and continues to the PO-join branches above.
+    supplier_multi_child = (
+        _supplier_multi_child(outputs)
+        if target_entity == "Supplier"
+        else None
+    )
+    if supplier_multi_child is not None:
+        supplier_bucket, child_kind_to_bucket = supplier_multi_child
+        supplier_rows = outputs[supplier_bucket]
+        records = build_suppliers_with_children(
+            supplier_rows,
+            outputs.get(child_kind_to_bucket.get("contact", ""), []),
+            outputs.get(child_kind_to_bucket.get("site", ""), []),
+            outputs.get(child_kind_to_bucket.get("classification", ""), []),
+        )
+        total_available, notes = _local_truncation(
+            supplier_bucket, supplier_rows, truncation_by_step, metadata_by_step
+        )
+        examined = len(supplier_rows)
+        total_contacts = sum(len(r.contacts) for r in records)
+        total_sites = sum(len(r.sites) for r in records)
+        total_classifications = sum(
+            len(r.classifications) for r in records
+        )
+        total_text = (
+            f"{total_available:,}" if total_available is not None
+            else "an unknown number of"
+        )
+        parts: list[str] = []
+        if examined == 1:
+            parts.append(f"{records[0].supplier_name}:")
+        else:
+            parts.append(
+                f"Showing {examined} of {total_text} suppliers."
+            )
+        if child_kind_to_bucket.get("contact") is not None:
+            c_word = "contact" if total_contacts == 1 else "contacts"
+            parts.append(f"{total_contacts} {c_word}")
+        if child_kind_to_bucket.get("site") is not None:
+            s_word = "site" if total_sites == 1 else "sites"
+            parts.append(f"{total_sites} {s_word}")
+        if child_kind_to_bucket.get("classification") is not None:
+            cl_word = (
+                "classification" if total_classifications == 1
+                else "classifications"
+            )
+            parts.append(f"{total_classifications} {cl_word}")
+        summary = " ".join(parts) + "." if parts else ""
+        return SupplierResponse(
+            summary=summary,
+            suppliers=records,
+            truncation_notes=notes,
         )
 
     # Plain credit-memo list: no LLM, same reasoning as the supplier
