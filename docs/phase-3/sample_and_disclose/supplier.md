@@ -2,7 +2,7 @@
 
 **Branch:** `Phase3-Supplier-Sample`
 **PR:** #204
-**State:** in-progress
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 2 — the second entity in the
 seven-PR sample-and-disclose sequence. Supplier already samples on
 `master`: `SupplierResponse` carries `narrowing_tip`, and
@@ -554,5 +554,5 @@ that changes an actual sysprompt block.
 | V8 | **partial** (N=4, threshold not met) | parser, summary, and tip lines byte-identical across 4 complete runs; N≥20 (WORKING_STYLE) not reached |
 | V9 | not required | no `.sysprompt` change on the branch |
 
-**State:** in-progress. Frozen to `closed` at PR merge, per
+**State:** closed. Merged as PR #204 at `850feb5`, per
 `FIX_PLAN.md` §8 step 9.
