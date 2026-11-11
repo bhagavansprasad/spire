@@ -888,6 +888,183 @@ def build_suppliers_with_classifications(
     return records
 
 
+def _supplier_multi_child(
+    outputs: dict[str, list[dict]],
+) -> tuple[str, dict[str, str]] | None:
+    """(supplier_bucket, {child_kind: bucket_name}) for the multi-child
+    shape.
+
+    The shape this detector claims — and the shape it MUST NOT claim:
+
+      Claims: exactly one supplier bucket, plus two or more of
+              {contact, site, classification} as child buckets, and
+              NOTHING else in outputs.
+
+      Rejects: any shape with a PO bucket (that shape belongs to
+              _supplier_with_open_pos or _supplier_pos_buyers and
+              carries open-PO counts this builder does not know how
+              to compute); any shape with a buyer bucket (same reason);
+              any shape with an unrecognised bucket (silence is the
+              safe answer); any shape with fewer than two child kinds
+              (the single-child builders own those); any shape with
+              more than one bucket of the same child kind (ambiguous).
+
+    The conservative contract mirrors plain_supplier_bucket and
+    _supplier_pos_buyers: a wrong return routes a shape through a
+    builder that does not know its children, which is worse than a
+    miss (a miss falls to the LLM, which is the status quo). This
+    detector deliberately does not widen to include POs; a Supplier
+    prompt naming contacts, sites AND open purchase orders is a
+    follow-up finding, not a PR #2 shape.
+
+    Detection is by content signature, not by output_name, matching
+    the other detectors. A supplier bucket carries SupplierId and
+    Supplier; a contact bucket carries SupplierContactId; a site
+    bucket carries SupplierSiteId; a classification bucket carries
+    ClassificationId.
+    """
+    if len(outputs) < 3:
+        return None
+
+    supplier_bucket: str | None = None
+    child_kind_to_bucket: dict[str, str] = {}
+    for name, rows in outputs.items():
+        if not rows or not isinstance(rows[0], dict):
+            return None
+        first = rows[0]
+        if "SupplierContactId" in first:
+            if "contact" in child_kind_to_bucket:
+                return None
+            child_kind_to_bucket["contact"] = name
+        elif "SupplierSiteId" in first:
+            if "site" in child_kind_to_bucket:
+                return None
+            child_kind_to_bucket["site"] = name
+        elif "ClassificationId" in first:
+            if "classification" in child_kind_to_bucket:
+                return None
+            child_kind_to_bucket["classification"] = name
+        elif "SupplierId" in first and "Supplier" in first:
+            if supplier_bucket is not None:
+                return None
+            supplier_bucket = name
+        else:
+            # Unrecognised bucket — the shape is not what this detector
+            # claims. Return None so the LLM path handles it.
+            return None
+
+    if supplier_bucket is None or len(child_kind_to_bucket) < 2:
+        return None
+    return supplier_bucket, child_kind_to_bucket
+
+
+def build_suppliers_with_children(
+    supplier_rows: list[dict],
+    contact_rows: list[dict],
+    site_rows: list[dict],
+    classification_rows: list[dict],
+) -> list[SupplierRecord]:
+    """Supplier rows + two or more child bucket lists -> SupplierRecords.
+
+    The multi-child counterpart to the three single-child builders
+    (build_suppliers_with_contacts, build_suppliers_with_sites,
+    build_suppliers_with_classifications). PR #2's failing test is a
+    Supplier prompt naming contacts AND sites at once; no existing
+    builder claims three buckets, so the shape fell to the LLM path.
+    This builder claims it.
+
+    Each child list is optional (empty list means "not fetched for this
+    shape"). A supplier with no child of a given kind gets an empty
+    list for that child, matching the single-child builders' treatment.
+
+    Pure: no LLM, no I/O. Every child id on every row is copied from an
+    executor row, so the response validator's contact / site /
+    classification cross-checks pass by construction.
+
+    The grouping loop is written three times, once per child, rather
+    than extracted to a shared helper. The three existing single-child
+    builders each have their own copy of the same loop; a fourth copy
+    here is deliberate — a reader can see the three children side by
+    side and know they are handled symmetrically. A shared helper is a
+    follow-up refactor with its own PR and its own V-walk; not part of
+    PR #2.
+    """
+    contacts_by_supplier: dict[int, list[dict]] = {}
+    for c in contact_rows:
+        sid = c.get("SupplierId")
+        if sid is None:
+            continue
+        contacts_by_supplier.setdefault(sid, []).append(c)
+
+    sites_by_supplier: dict[int, list[dict]] = {}
+    for s in site_rows:
+        sid = s.get("SupplierId")
+        if sid is None:
+            continue
+        sites_by_supplier.setdefault(sid, []).append(s)
+
+    classifications_by_supplier: dict[int, list[dict]] = {}
+    for cl in classification_rows:
+        sid = cl.get("SupplierId")
+        if sid is None:
+            continue
+        classifications_by_supplier.setdefault(sid, []).append(cl)
+
+    records: list[SupplierRecord] = []
+    for row in supplier_rows:
+        sid = row.get("SupplierId") or 0
+
+        contacts = [
+            ContactInfo(
+                supplier_contact_id=c.get("SupplierContactId") or 0,
+                contact_name=c.get("ContactName") or "",
+                email=c.get("Email") or "",
+                job_title=c.get("JobTitle") or "",
+                is_administrative=(
+                    c.get("AdministrativeContactFlag") is True
+                    or (
+                        isinstance(c.get("AdministrativeContactFlag"), str)
+                        and c["AdministrativeContactFlag"].strip().upper() == "Y"
+                    )
+                ),
+            )
+            for c in contacts_by_supplier.get(sid, [])
+        ]
+
+        sites = [
+            SiteInfo(
+                supplier_site_id=s.get("SupplierSiteId") or 0,
+                supplier_site=s.get("SupplierSite") or "",
+                procurement_bu=s.get("ProcurementBU") or "",
+                procurement_bu_id=s.get("ProcurementBUId"),
+            )
+            for s in sites_by_supplier.get(sid, [])
+        ]
+
+        classifications = [
+            ClassificationInfo(
+                classification_id=cl.get("ClassificationId") or 0,
+                classification=cl.get("Classification") or "",
+                classification_code=cl.get("ClassificationCode") or "",
+                status=cl.get("Status") or "",
+                certifying_agency=cl.get("CertifyingAgency") or "",
+            )
+            for cl in classifications_by_supplier.get(sid, [])
+        ]
+
+        records.append(
+            SupplierRecord(
+                supplier_id=sid,
+                supplier_number=str(row.get("SupplierNumber") or ""),
+                supplier_name=row.get("Supplier") or "",
+                contacts=contacts,
+                sites=sites,
+                classifications=classifications,
+            )
+        )
+    return records
+
+
 def build_purchase_order_records(rows: list[dict]) -> list[PurchaseOrderRecord]:
     """Executor PO rows -> PurchaseOrderRecord list, verbatim.
 
