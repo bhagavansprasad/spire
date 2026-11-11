@@ -64,46 +64,66 @@ PR #1 of the seven-PR sequence in
 
 ### Next concrete action
 
-**This branch is done.** PR #203 merged to `master` at `2a23906`.
+**This branch is done.** PR #204 merged to `master` at `850feb5`.
 The V-walk for what could run in that window is complete (V1–V5,
-V7 green; V6 and V8 deferred behind the MCP conflict; V9 not
-required).
+V7, V9 green; V6 scoped + narrow + synth-blast-radius green, full
+deferred; V8 partial at N=4). The evidence file
+(`supplier.md`) is frozen at `State: closed`.
 
-The next window starts **PR #2 (Supplier sample-and-disclose)**,
-the second row of the seven-PR sequence in
+The next window starts **PR #3 (Invoice sample-and-disclose)**,
+the third row of the seven-PR sequence in
 `docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6:
 
-    git checkout -b Phase3-Supplier-Sample
+    git checkout -b Phase3-Invoice-Sample
 
 Prerequisites and first tasks, in order:
 
-1. **Write the Issue C finding file first** —
-   `docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md`.
-   Issue C (the malformed multi-field-iteration SQL) is recorded
-   in `purchase_order.md` §Deviations but has no finding file
-   yet. PR #2's V1 on a Supplier prompt will not reproduce it
-   (Supplier has no multi-field iteration), but the finding
-   should land as its own file before someone else rediscovers
-   it. Small, self-contained, one cell.
-2. **Open the PR #2 evidence file** —
-   `docs/phase-3/sample_and_disclose/supplier.md` — with V0 only,
-   same pattern as `purchase_order.md` was opened.
-3. **Write the failing test first** —
-   `tests/test_sample_and_disclose_supplier.py`. Red before fix,
-   per `FIX_PLAN.md` §8 step 3. Supplier already samples (the
-   `SupplierResponse` path in `synthesizer.py` and
-   `build_narrowing_tip`'s Supplier default already exist); PR #2
-   is mainly proving the extractor path works for the shape that
-   already has all the plumbing. Do not assume the test will be
-   trivial — V-walk on this PR found three defects the unit tests
-   did not catch (see `purchase_order.md` §Deviations Fix A/B/C).
-4. **Read** `MCP_DEPENDENCY_CONFLICT.md` before starting V6/V8.
-   If the MCP migration has landed as its own PR by then, V6 and
-   V8 are unblocked; if not, they are deferred again the same way.
+1. **Read** `MCP_DEPENDENCY_CONFLICT.md` before any work. If the
+   MCP migration has landed as its own PR by then, V6 and V8 are
+   unblocked for PR #3; if not, they are deferred again the same
+   way PR #1 and PR #2 deferred them.
+2. **Check the Issue C finding is on `master`** —
+   `docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md`
+   landed on `master` as part of PR #204 (commit `fe5a41f` on the
+   branch, `850feb5` on `master`). It is a finding only; the
+   emitter is not fixed. Do not fix it in PR #3 — it is a future
+   window's PR, not Invoice's.
+3. **Open the PR #3 evidence file** —
+   `docs/phase-3/sample_and_disclose/invoice.md` — with V0 only,
+   same pattern as `supplier.md` was opened. The V0 statement
+   must be based on a read of `master`'s current Invoice path
+   (does `plain_invoice_bucket` already sample? Does the tip fire?
+   Is there a guard?) — **not** on the meeting's prescription.
+   The meeting §6 row 3 names the shape ("Extend extractor;
+   `sample_all=True` arg on `search_invoices`; `narrowing_tip` on
+   `InvoiceResponse`; tip block"), but the V0 may discover the
+   shape is different on `master` — exactly as PR #2's V0
+   correction at `7b7bb51` discovered Supplier already sampled and
+   PR #2 became a coverage + one-new-shape PR, not a wiring
+   change.
+4. **Write the failing test first** — `tests/test_sample_and_disclose_invoice.py`.
+   Red before fix, per `FIX_PLAN.md` §8 step 3. Read
+   `test_sample_and_disclose_supplier.py` first: its five original
+   tests (plain list, two-bucket join, four-bucket join, empty,
+   multi-child) are the coverage template. Do not assume Invoice
+   will be the same shape as Supplier — the Invoice path already
+   carries a `narrowing_tip` field on its response, but whether
+   the tip is *populated* on `master` is the question PR #2
+   had to answer for Supplier, and PR #3 must answer it for
+   Invoice.
 
-**Carry-forward note.** `personas.yaml` in the working tree is a
-local credential edit that should not go into PR #2. Confirm with
-`git status` before staging anything in the new window.
+**Two carry-forward notes from PR #2.**
+
+- **`personas.yaml`.** Confirm `git status` is clean before
+  staging anything in the new window. It is a local credential
+  edit; it does not go into any PR.
+- **V-walk will surface defects the unit tests do not catch.**
+  PR #1 found three (Fix A/B/C); PR #2 found three more (Fix
+  D-a, D-b, E). Expect the same on PR #3. Read `supplier.md`
+  §Deviations for the shape of those fixes: a live-run surface, a
+  targeted fix commit, a re-run that proves the fix. Do not
+  assume the tests you write at step 4 are the tests PR #3
+  needs; they are the tests PR #3 *starts* with.
 
 ---
 
