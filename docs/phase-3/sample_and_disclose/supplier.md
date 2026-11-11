@@ -290,6 +290,43 @@ for `Address`.
 
 Green on one run.
 
+## V5 — Goldens (Intent-only, per PR #1 §V5's precedent)
+
+Three golden traces in `docs/audit/golden/` were re-run and their
+`Intent:` blocks diffed against the current pipeline's `Intent:` block
+for the same prompts. Scope is Intent only, per `purchase_order.md`
+§V5's own note: a full-output byte-diff is not achievable against
+goldens captured before `sql_emitter.py` entered the pipeline and
+before the pod's supplier 1256 was renamed (`US Gas and Electric
+Rushi` → `US Gas and Electric`) and the supplier count drifted
+(431 → 402). Intent is the shape decision the parser makes, and it is
+what a golden can prove.
+
+| Prompt | Golden | Result |
+|---|---|---|
+| `Count of suppliers` | `count_suppliers.txt` | **MATCH** |
+| `Show PO 2144 and its lines` | `po_2144_and_lines.txt` | **MATCH** |
+| `suppliers with open purchase orders` | `suppliers_with_open_pos.txt` | **MATCH** (retry) |
+
+Saved transcripts: `/tmp/v5_1_count_suppliers.txt` (53 lines),
+`/tmp/v5_2_po_2144_lines.txt` (97 lines),
+`/tmp/v5_3_suppliers_open_pos.txt` (122 lines after retry).
+
+**V5-3 first run: transient upstream timeout, not a shape change.**
+The first attempt exited 1 with `ERROR: execute: Upstream request
+timed out, please retry` at six lines. The `has_open_PO` shape fetches
+`search_suppliers` then iterates `search_purchase_orders` once per
+supplier in the first page (25 sequential HTTP calls to Fusion); one
+upstream call exceeded `FusionClient`'s 30s timeout. This is
+pre-existing cost-profile behavior on the shape, not a PR #2 defect
+(PR #2 does not touch `search_purchase_orders`, the planner's
+`has_open_PO` branch, or `FusionClient`). Retried immediately; the
+retry reached execute and produced an Intent that matches the golden.
+
+The three golden shapes parse and plan identically to their capture
+time. No PR #2 change reaches the shapes those goldens exercise. V5
+passes with V5-3 recorded as green-on-retry, timeout cause named.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
