@@ -190,20 +190,32 @@ def test_purchase_order_response_has_a_narrowing_tip_field():
 
 
 def test_purchase_order_filter_labels_covers_all_types():
-    """The labels map must name every PurchaseOrder filter type used
-    by the planner. The Supplier map (`_SUPPLIER_FILTER_LABELS`) drops
-    any filter not on its list, so a PO tip built from that map would
-    name `status` alone and silently under-report the filters. This
-    test pins the correct set."""
-    expected = {
-        "status", "supplier", "created_before", "created_since",
-        "updated_older_than_n_months", "updated_in_last_n_months",
-        "by_id",
-    }
-    # by_id is a fetch-one and is excluded from the tip by the caller,
-    # but the label should still exist so the map is complete.
+    """The labels map must name every PurchaseOrder filter type the
+    KG declares for the entity. The Supplier map
+    (`_SUPPLIER_FILTER_LABELS`) drops any filter not on its list, so
+    a PO tip built from that map would name a subset and silently
+    under-report the filters. This test derives the expected set from
+    the same KG accessor `synthesize_response` reads — not from a
+    hand-written literal, which is what this test's first version did
+    and which rotted on first run (it missed the two relative-date
+    filters that are genuinely PurchaseOrder entity-level filters:
+    `older_than_n_months` and `created_in_last_n_months`). Deriving
+    from the KG makes the assertion stronger: it catches map drift
+    whenever the KG gains or loses a filter type."""
+    from spire.planner.kg_db import _entity_level_filter_types
+    expected = _entity_level_filter_types().get("PurchaseOrder", set())
+    # A sanity floor: the KG genuinely has PurchaseOrder entity-level
+    # filters, and status + supplier are two of them. If the KG is
+    # unreachable this assertion surfaces a clear error rather than
+    # passing on an empty set.
+    assert {"status", "supplier"} <= expected, (
+        f"KG accessor returned an unexpected PurchaseOrder filter "
+        f"set: {sorted(expected)}"
+    )
     assert set(_PURCHASE_ORDER_FILTER_LABELS) == expected, (
-        f"labels map keys: {sorted(_PURCHASE_ORDER_FILTER_LABELS)}"
+        f"labels map keys {sorted(_PURCHASE_ORDER_FILTER_LABELS)} do "
+        f"not match KG PurchaseOrder entity-level filters "
+        f"{sorted(expected)}"
     )
 
 
@@ -223,3 +235,94 @@ def test_build_narrowing_tip_accepts_a_labels_map():
         assert word in tip.lower(), (
             f"expected {word!r} in tip: {tip!r}"
         )
+
+
+def test_build_narrowing_tip_dedupes_shared_labels():
+    """Four PurchaseOrder filters share the label "creation date";
+    two share "last-updated date". The tip must name each once, not
+    once per filter type. V1 caught this: the tip came out
+    "creation date, creation date, creation date, creation date,
+    last-updated date, last-updated date, lifecycle, status,
+    supplier"."""
+    tip = build_narrowing_tip(
+        {
+            "created_before", "created_since",
+            "older_than_n_months", "created_in_last_n_months",
+            "updated_older_than_n_months",
+            "updated_in_last_n_months",
+            "status", "supplier",
+        },
+        total=17620,
+        entity_label="purchase orders",
+        labels_map=_PURCHASE_ORDER_FILTER_LABELS,
+    )
+    assert tip.count("creation date") == 1, (
+        f"'creation date' appears more than once in tip: {tip!r}"
+    )
+    assert tip.count("last-updated date") == 1, (
+        f"'last-updated date' appears more than once in tip: {tip!r}"
+    )
+    for word in ("status", "supplier"):
+        assert word in tip.lower(), (
+            f"expected {word!r} in tip: {tip!r}"
+        )
+
+
+def test_synthesize_response_po_tip_excludes_lifecycle_status():
+    """`lifecycle_status` must not appear in the PO sample tip.
+
+    The exclusion is done by the CALLER — `synthesize_response`'s
+    two PO branches build the filter set as
+    `{ft for ft in po_filters if ft not in {"by_id",
+    "lifecycle_status"}}` — not by `build_narrowing_tip` itself.
+    So the test must be at the `synthesize_response` level, where
+    the caller-side exclusion lives. An earlier version of this
+    test called `build_narrowing_tip` with a set that already had
+    lifecycle_status removed, which was a tautology: it stayed
+    green when the caller-side exclusion was missing (V1 caught
+    exactly that: the live tip still named 'lifecycle' after a
+    green test run)."""
+    from spire.synthesizer.synthesizer import synthesize_response
+
+    # A minimal PO sample: 1 row, matching the executor's actual
+    # shape. The local plain-PO path builds the response and the
+    # tip without an LLM.
+    outputs = {
+        "open_pos": [
+            {
+                "POHeaderId": 300000347075721,
+                "OrderNumber": "1",
+                "Status": "Closed",
+                "StatusCode": "CLOSED",
+                "Supplier": "CAB USA Supplier-1",
+                "SupplierId": 300000345317223,
+                "Buyer": "Someone",
+                "BuyerId": 300000345000001,
+            }
+        ]
+    }
+    truncation = {
+        "open_pos": {
+            "total_available": 17620,
+            "truncated": True,
+            "limit_applied": 25,
+        }
+    }
+    response = synthesize_response(
+        outputs,
+        target_entity="PurchaseOrder",
+        llm=None,
+        truncation_by_step=truncation,
+    )
+    tip = response.narrowing_tip
+    # The excluded filters must not appear.
+    assert "lifecycle" not in tip.lower(), (
+        f"lifecycle_status must not appear in the tip: {tip!r}"
+    )
+    assert "po number" not in tip.lower(), (
+        f"by_id (PO number) must not appear in the tip: {tip!r}"
+    )
+    # Sibling filters still named — proves the tip is populated,
+    # so the exclusion assertions are not passing on an empty tip.
+    assert "status" in tip.lower()
+    assert "supplier" in tip.lower()

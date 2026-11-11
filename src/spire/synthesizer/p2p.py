@@ -358,6 +358,14 @@ class PurchaseOrderResponse(BaseModel):
         "Empty if none.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) — tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set.",
+    )
 
 
 class AddressRecord(BaseModel):
@@ -1268,11 +1276,36 @@ _SUPPLIER_FILTER_LABELS: dict[str, str] = {
     "created_date": "creation date",
 }
 
+# Phase 3, PR #1 — the PurchaseOrder sibling of the Supplier map.
+#
+# The PurchaseOrder filter set on this pod is: status, supplier,
+# created_before, created_since, older_than_n_months,
+# created_in_last_n_months, updated_older_than_n_months,
+# updated_in_last_n_months, by_id. The four relative-month filters
+# all collapse to the same underlying KG column (CreationDate /
+# LastUpdateDate) as their absolute counterparts, so they share a
+# reader-facing label. by_id is a fetch-one, excluded by the tip
+# caller — its label lives here for completeness of the map, not to
+# be shown.
+_PURCHASE_ORDER_FILTER_LABELS: dict[str, str] = {
+    "status": "status",
+    "supplier": "supplier",
+    "created_before": "creation date",
+    "created_since": "creation date",
+    "older_than_n_months": "creation date",
+    "created_in_last_n_months": "creation date",
+    "updated_older_than_n_months": "last-updated date",
+    "updated_in_last_n_months": "last-updated date",
+    "lifecycle_status": "lifecycle",
+    "by_id": "PO number",
+}
+
 
 def build_narrowing_tip(
     filter_types: set[str],
     total: int | None,
     entity_label: str = "suppliers",
+    labels_map: dict[str, str] | None = None,
 ) -> str:
     """Short completeness advisory (QA-12), or "" when not applicable.
 
@@ -1288,14 +1321,28 @@ def build_narrowing_tip(
     """
     if total is None:
         return ""
+    # Default keeps every existing Supplier call site working
+    # unchanged: three call sites in synthesizer.py pass neither
+    # this parameter nor a label map, and get the supplier map.
+    active_map = (
+        labels_map if labels_map is not None else _SUPPLIER_FILTER_LABELS
+    )
     labels = [
-        _SUPPLIER_FILTER_LABELS.get(ft, ft)
+        active_map.get(ft, ft)
         for ft in filter_types
-        if ft in _SUPPLIER_FILTER_LABELS
+        if ft in active_map
     ]
     if not labels:
         return ""
-    labels.sort()
+    # De-duplicate before joining. Two filter types can share a
+    # reader-facing label — the four PurchaseOrder creation-date
+    # filters all map to "creation date", and the two last-updated
+    # filters all map to "last-updated date". Without set() the
+    # tip repeats a label once per filter type, producing
+    # "creation date, creation date, creation date, creation date"
+    # in the V1 run. set() collapses duplicates, sorted() keeps the
+    # output stable across runs.
+    labels = sorted(set(labels))
     filters_text = ", ".join(labels)
     return (
         f"Reading all {total:,} {entity_label} is slow. "

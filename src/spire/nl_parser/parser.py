@@ -161,6 +161,100 @@ def _is_explicit_po_list(prompt: str) -> bool:
     return True
 
 
+# Phase 3, PR #1 — sample-and-disclose for PurchaseOrder.
+#
+# _is_explicit_po_list above answers "did the user type a list verb".
+# It does NOT fire on "get po with distribution details", because that
+# prompt has no list verb — it names a child entity and expects a
+# bounded sample. The SME would answer it (asks which PO, or shows the
+# first 25 and says so). Rule 28 defect.
+#
+# This sibling answers the DIFFERENT question: "did the user name a
+# supported PO child without naming a specific PO". When true, the
+# caller sets intent.list_all=True and adds the child to intent.include,
+# so the planner's existing guard permits a bounded fetch and the
+# synthesizer samples and discloses. Sibling, not rename — the two
+# prompts fire one and not the other, and each function's name stays
+# honest about what it detects.
+#
+# Deterministic, raw-prompt only. Same pattern as _is_explicit_po_list
+# and the F-018/F-019 extractors: pure Python, after the LLM, before KG
+# validation.
+
+_SAMPLEABLE_PO_CHILDREN: dict[str, tuple[str, ...]] = {
+    "PODistribution": (
+        "distribution details", "distributions", "distribution",
+        "accounting", "accounting lines",
+    ),
+    "POSchedule": (
+        "schedules", "schedule", "shipment schedules",
+        "shipment schedule", "delivery schedules", "delivery schedule",
+    ),
+    "PurchaseOrderLine": (
+        "line items", "line details", "po lines", "purchase order lines",
+    ),
+    "Buyer": (
+        "buyer details", "the buyer", "with the buyer", "buyer info",
+    ),
+}
+
+# A prompt naming a specific PO number is a by-id fetch, not a sample
+# request. The same disqualifier _is_explicit_po_list uses.
+_SAMPLEABLE_PO_DISQUALIFIERS = (_PO_NUMBER_RE, _BARE_NUMBER_RE)
+
+
+def _is_sampleable_po_request(prompt: str) -> bool:
+    """True when the prompt names a supported PO child without
+    naming a specific PO.
+
+    Sibling to _is_explicit_po_list. That function detects "did the
+    user type a list verb" (list purchase orders, show all POs). This
+    function detects "did the user name a supported PO child"
+    (distribution details, schedules, line items, the buyer) — the
+    shape that has no list verb but expects a bounded sample. Both
+    are consumed by the same line in parse():
+        intent.list_all = _is_explicit_po_list(prompt) or
+                          _is_sampleable_po_request(prompt)
+
+    Requires BOTH:
+      - a generic purchase-order mention ("po", "purchase order",
+        "purchase orders"), AND
+      - at least one child trigger phrase from _SAMPLEABLE_PO_CHILDREN.
+
+    And MUST NOT carry a PO number (`_PO_NUMBER_RE`) or a 3+ digit
+    run that is not a plausible year (`_BARE_NUMBER_RE`): those
+    prompts name a specific record and belong to the by-id path,
+    not the sample path.
+    """
+    p = prompt.lower().strip()
+
+    tokens = p.replace("?", " ").replace(",", " ").split()
+    mentions_pos = (
+        "purchase order" in p
+        or "purchase orders" in p
+        or "pos" in tokens
+        or "po" in tokens
+    )
+    if not mentions_pos:
+        return False
+
+    if not any(
+        trigger in p
+        for triggers in _SAMPLEABLE_PO_CHILDREN.values()
+        for trigger in triggers
+    ):
+        return False
+
+    if _PO_NUMBER_RE.search(p):
+        return False
+    for m in _BARE_NUMBER_RE.finditer(p):
+        n = m.group()
+        if not (len(n) == 4 and n.startswith("20")):
+            return False
+
+    return True
+
+
 def _is_all_digit_customer_value(value: Any) -> bool:
     """True when a by_customer_name value is actually an account number.
 
@@ -804,7 +898,20 @@ def parse(
     # setting it on a PO intent that carries filters is also a no-op
     # (the guard short-circuits on `intent.filters` first).
     if intent.target_entity == "PurchaseOrder":
-        intent.list_all = _is_explicit_po_list(prompt)
+        # Two sibling extractors, one flag: an explicit list verb
+        # (_is_explicit_po_list) or a supported child name without
+        # a specific PO (_is_sampleable_po_request). Both produce a
+        # bounded sample; both are the parser's job, not the LLM's.
+        _sampleable = _is_sampleable_po_request(prompt)
+        intent.list_all = (
+            _is_explicit_po_list(prompt) or _sampleable
+        )
+        if _sampleable:
+            for _child, _triggers in _SAMPLEABLE_PO_CHILDREN.items():
+                if _child in intent.include:
+                    continue
+                if any(_t in prompt.lower() for _t in _triggers):
+                    intent.include.append(_child)
 
     # --- Include correction (BUG-1) ---
     from spire.nl_parser.vocabulary import strip_po_supplier_include
