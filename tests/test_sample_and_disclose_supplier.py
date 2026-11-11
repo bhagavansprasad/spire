@@ -292,3 +292,102 @@ def test_multi_child_supplier_shape_builds_locally_without_llm():
     assert supplier.contacts[0].contact_name == "Kim, John"
     assert len(supplier.sites) == 1
     assert supplier.sites[0].supplier_site == "Lee US1"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# V-walk Fix D — the narrowing tip must be present on both Supplier
+# local paths.
+#
+# V1 on fa-esll-saasfademo1 (the live run that opened PR #2's V-walk)
+# surfaced two omissions the earlier unit tests did not catch:
+#
+#   - plain_supplier_bucket's return statement (synthesizer.py:760)
+#     omits narrowing_tip= entirely, so a plain `get all suppliers`
+#     answer prints "Showing 25 of 402 suppliers." and no "Tip" block.
+#
+#   - The multi-child branch added in B10c (synthesizer.py:1201) also
+#     omits narrowing_tip=, so `suppliers with their contacts and
+#     sites` prints the child tables but no tip.
+#
+# Both omissions predate or ship with this PR; both are fixed by a
+# one-line narrowing_tip=<expr> addition on each return. These tests
+# assert the tip is non-empty on both paths, which is exactly the
+# property V1's live prompt expects and the earlier tests did not
+# check.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_plain_supplier_list_carries_narrowing_tip():
+    """A plain Supplier list must populate narrowing_tip from the
+    total_available the executor reports.
+
+    On the current tree this test FAILS: the plain_supplier_bucket
+    branch does not pass narrowing_tip, so the response's tip is "".
+    After Fix D-a, the response carries the same tip the filtered
+    Supplier branches already produce.
+    """
+    outputs = {
+        "suppliers": [
+            _supplier_row(100, "Lee Supplies"),
+            _supplier_row(200, "JGA"),
+        ],
+    }
+    truncation = {
+        "suppliers": {
+            "total_available": 402,
+            "truncated": True,
+            "limit_applied": 25,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="Supplier",
+        llm=_forbidden_llm(),
+        truncation_by_step=truncation,
+    )
+    assert isinstance(result, SupplierResponse)
+    assert result.narrowing_tip, (
+        "plain Supplier list must populate narrowing_tip when "
+        "total_available is known; got empty string"
+    )
+    assert "402" in result.narrowing_tip, (
+        f"narrowing_tip should name the source total (402); got "
+        f"{result.narrowing_tip!r}"
+    )
+
+
+def test_multi_child_supplier_shape_carries_narrowing_tip():
+    """The multi-child Supplier shape must populate narrowing_tip too.
+
+    On the current tree this test FAILS: the multi-child branch added
+    in B10c does not pass narrowing_tip. After Fix D-b, it does, and
+    a live `suppliers with their contacts and sites` prompt renders
+    the same "Tip" block the filtered Supplier branches produce.
+    """
+    outputs = {
+        "suppliers": [_supplier_row(100, "Lee Supplies")],
+        "contact": [_contact_row(10, 100, "Kim, John")],
+        "site": [_site_row(20, 100, "Lee US1")],
+    }
+    truncation = {
+        "suppliers": {
+            "total_available": 402,
+            "truncated": True,
+            "limit_applied": 25,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="Supplier",
+        llm=_forbidden_llm(),
+        truncation_by_step=truncation,
+    )
+    assert isinstance(result, SupplierResponse)
+    assert result.narrowing_tip, (
+        "multi-child Supplier shape must populate narrowing_tip when "
+        "total_available is known; got empty string"
+    )
+    assert "402" in result.narrowing_tip, (
+        f"narrowing_tip should name the source total (402); got "
+        f"{result.narrowing_tip!r}"
+    )
