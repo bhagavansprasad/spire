@@ -247,6 +247,42 @@ been present.
 Green on one run. The multi-child branch does not over-reach onto a
 two-bucket shape.
 
+## V4 — Negative (get all addresses, still refuses)
+
+Prompt: `get all addresses` against `fa-esll-saasfademo1`. Saved
+transcript at `/tmp/v4_addresses_negative.txt` (16 lines, `exit=0`).
+
+This is the shape the sample-and-disclose feature deliberately
+excludes (MEETING_2026-11-10 §4.6): an Address is a child of Supplier,
+so a sample of "the first 25 addresses" would be "the addresses of the
+first 25 suppliers" and would misrepresent the count — 25 addresses
+would stand for ~625. The correct behaviour is to refuse, and PR #2
+must not accidentally make the shape sampleable.
+
+The refusal is well-formed:
+
+    Reason:   I can look up addresses, but this doesn't say which one.
+
+    Solution: Name the supplier, or give me a country.
+
+    Example:  addresses for supplier 1252
+      (refusal: missing_identifier — Address queries require a
+       supplier or country filter as addresses are not a top-level
+       searchable resource.)
+
+No `Answer:`, no `Plan:`, no `SQL projection:` block — the refusal
+fires at the planner's Address guard, before any fetch. The
+multi-child detector did not claim an address-shaped input:
+address rows carry `SupplierAddressId`, not `SupplierContactId`
+/ `SupplierSiteId` / `ClassificationId`, and there is no `Supplier`
+bucket for the detector to anchor on.
+
+The Address refusal is intact. PR #2 does not touch `planner.py`
+and does not touch `capability.py`'s `_IDENTIFIER_GUIDANCE` entry
+for `Address`.
+
+Green on one run.
+
 ## V-walk state
 
 TBD after V2. V3–V9 still to fill; `State: closed` after PR merge.
