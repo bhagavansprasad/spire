@@ -48,6 +48,7 @@ durable record for each is its evidence file, frozen at
 | #206 | `5eadf7b` | StandardReceipt |
 | #207 | `4d301c4` | CreditMemo |
 | #208 | `0eb05b4` | ReceivablesInvoice |
+| #209 | `b66607a` | CustomerAccount |
 
 Post-merge docs commits: `05d7978` (froze `supplier.md`),
 `983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
@@ -127,47 +128,30 @@ advance), `341b9f9` (PR #5 extended prompt set findings), `5ef278c`
 
 ### Next
 
-The seven-PR sequence continues with **PR #7** — the seventh and last
-entity from `MEETING_2026-11-10_sample_and_disclose.md` §6,
-CustomerAccount. A new window opens the branch from `master` at
-`0eb05b4` (or its successor). The V0 must be based on a read of
-`master`, not on the meeting's row; PR #2's `7b7bb51` correction, PR
-#3's `invoice.md` V0, PR #4's `standard_receipt.md` V0 (the unscoped
-`get all receipts` case is refused by design), PR #5's
-`credit_memo.md` V0 (the tip ships empty by construction because the
-KG has no CreditMemo entity-level filters), and PR #6's
-`receivables_invoice.md` V0 (three corrections — plain-list branch,
-empty-by-construction tip, parser helper as shape-check-not-verb-
-whitelist) all proved that lesson. **Read `receivables_invoice.md`
-§V0-history before opening PR #7's V0.**
+**The seven-PR sample-and-disclose sequence is COMPLETE.** All seven
+entities merged on `master`:
 
-**Three carry-forward notes, updated through PR #6:**
+| PR | Entity | Merge |
+|---|---|---|
+| #203 | PurchaseOrder (anchor) | `2a23906` |
+| #204 | Supplier | `850feb5` |
+| #205 | Invoice | `3f3ff11` |
+| #206 | StandardReceipt | `5eadf7b` |
+| #207 | CreditMemo | `4d301c4` |
+| #208 | ReceivablesInvoice | `0eb05b4` |
+| #209 | CustomerAccount | `b66607a` |
 
-- **`personas.yaml`.** Local credential edit. Confirm `git status`
-  is clean before staging anything. It does not go into any PR.
-- **V-walk is not a rubber stamp.** PR #1 found three defects the
-  unit tests did not catch; PR #2 found three; PR #3 found one
-  (V3c); PR #4 found one (Fix P — the empty-truncated summary
-  narrating the cap as the cause); PR #5 found zero IN-SCOPE defects
-  (the tip is empty by construction and never fires), but the
-  extended prompt set surfaced two out-of-scope findings
-  (`capability.py` `_FILTER_GUIDANCE["CreditMemo"]` live;
-  `aggregation.py` count-path pluralisation); PR #6 found one wiring
-  defect (`server.py` registration omitted — `Unknown tool:
-  'search_receivables_invoices'` in the V9-scoped sweep). The V-walk
-  is still where the real fix set lives. Expect at least one
-  V-walk-surfaced fix per PR. The test you write at step 4 is the
-  test PR #N *starts* with, not the test it needs.
-- **For a wiring PR, the module + registration + KG row land
-  together, before V9.** A new MCP tool needs three files in lockstep
-  — the module, the `server.py` registration, and (for a
-  KG-advertised tool) the `kg_entity_tool` row. Landing the module
-  and KG row without the registration leaves the executor calling a
-  tool the server does not expose; the failure shows up as `Unknown
-  tool` from the executor, mid-plan, after the parser and planner
-  have both succeeded. A `.py` patch's verify also includes
-  `ast.parse` + `import` — the four §15.4 postconditions are
-  necessary, not sufficient, for a `.py` file.
+The durable record for each is its evidence file at `State: closed`.
+The rulebook capture from PR #7 (`WORKING_STYLE.md` §15.3.1 multi-
+file loop, §15.4.1 worked example) is on `master` at `b66607a`.
+
+**Remaining work:** the six items in the queue below. No new PR in
+this sequence is scheduled.
+
+**Three carry-forward notes, standing:** `personas.yaml` is local
+only; V-walk surfaces defects the unit tests do not catch; for a
+wiring PR the module + registration + KG row land together, and a
+`.py` patch's verify includes `ast.parse` + `import`.
 
 ---
 
@@ -270,17 +254,12 @@ blocking the next window:
    finding; belongs with the SQL emitter fix window.
 5. **MCP migration PR** — V6/V8 of PRs #1, #2, #3 all deferred to
    it. Still unscheduled.
-6. **PR #6 onward** — the next entity from the seven-PR sequence,
-   ReceivablesInvoice (PR #6, open).
-7. **`--validate` tool does not exist.** The briefs' V9 mechanism —
+6. **`--validate` tool does not exist.** The briefs' V9 mechanism —
    `promptkit.py --validate` against the full prompt corpus — was never
-   implemented on this branch. PRs #1–#5 never surfaced its absence
-   because their sysprompts were untouched (`V9: not required`); PR #6
-   is the first PR that needs V9 and the first that discovers the
-   missing mechanism. V9-scoped (a chosen subset run with
-   `--show-parser --show-planner` and inspected for shape) is what
-   PR #6 used. Building `--validate` proper is its own tooling PR;
-   recorded in `receivables_invoice.md` §V9.
+   implemented. V9-scoped (a chosen subset run with `--show-parser
+   --show-planner` and inspected for shape) is what PRs #6 and #7
+   used. Building `--validate` proper is its own tooling PR; recorded
+   in `receivables_invoice.md` §V9.
 
 
 ## Pointers
