@@ -122,7 +122,7 @@ TABLES: list[dict] = [
                    "ReceivablesInvoice carries two rows since PR #6: "
                    "by_id (get_receivables_invoice_by_id) and none "
                    "(search_receivables_invoices), the latter the plain "
-                   "list fetcher for a sample-and-disclose."
+                   "list fetcher for a sample-and-disclose.",
         "columns": ["entity_name", "filter_type", "mcp_tool_name", "notes"],
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
