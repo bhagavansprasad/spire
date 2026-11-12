@@ -264,6 +264,141 @@ def test_empty_result_does_not_carry_narrowing_tip():
 # ─────────────────────────────────────────────────────────────────────
 
 
+def test_empty_result_with_capped_fetch_does_not_claim_the_cap_is_the_cause():
+    """A capped 0-row result must not narrate the cap as the cause.
+
+    FIX P (V-walk-surfaced). The live prompt
+    ``receipts for ABC Application Software at Santa Clara`` returned 0
+    rows: the site filter ran client-side over a capped 500-row fetch
+    and dropped all of them (no Santa Clara receipt exists for this
+    customer). ``search_standard_receipts`` reports that honestly as
+    ``truncated=True, total_available=None`` (see the tool's own
+    comment: composite q= fails silently on this endpoint, so the pod
+    cannot be asked for account AND site together).
+
+    The synthesizer's ``_all_buckets_empty`` branch read the truncation
+    entry, saw ``truncated=True``, and wrote:
+
+        No receipts found in the examined sample. The search was capped
+        before examining all matching records, so more may exist beyond
+        the examined window.
+
+    Over 0 rows, that sentence asserts a cause the data does not
+    support: the fetch was capped, but zero rows matched within it,
+    so the cap is not why the answer is empty. The 0-row truth is
+    "nothing matched," not "we might have missed matches."
+
+    Fix P: when every bucket's row count is 0, the summary falls
+    through to the plain empty wording — ``No {label} found matching
+    the criteria.`` — and the truncation block prints below unchanged.
+    The cap stays disclosed (truncation_notes); it just stops being
+    claimed as the cause of an empty answer.
+
+    Distinguishes Fix P from the untruncated empty path: both end
+    with the same "no matching criteria" sentence, and the difference
+    between "0 of 0 because nothing exists" and "0 of 500 because the
+    filter dropped all" lives in the truncation block, which is where
+    a reader looks for "was this capped?".
+    """
+    outputs = {"standard_receipts": []}
+    # The tool's capped path: truncated=True, total_available=None.
+    truncation = {
+        "standard_receipts": {
+            "total_available": None,
+            "limit_applied": 25,
+            "truncated": True,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="StandardReceipt",
+        llm=_forbidden_llm(),
+        truncation_by_step=truncation,
+    )
+    assert isinstance(result, StandardReceiptResponse)
+    summary = result.summary
+    # The fix's assertion: the summary does NOT say the cap caused
+    # the emptiness.
+    assert "capped" not in summary, (
+        "0-row truncated result must not narrate the cap as the "
+        "cause; got: " + repr(summary)
+    )
+    assert "examined sample" not in summary, (
+        "0-row truncated result must not use the sample-narrative "
+        "wording; got: " + repr(summary)
+    )
+    # It DOES say the plain empty wording.
+    assert "No receipts found" in summary, (
+        "0-row result must say 'No receipts found'; got: " + repr(summary)
+    )
+    # The truncation note still discloses the cap — the fix removes
+    # the claim, not the disclosure.
+    assert any(
+        "capped" in note for note in result.truncation_notes
+    ), (
+        "truncation_notes must still disclose the cap; got: "
+        + repr(result.truncation_notes)
+    )
+
+
+def test_empty_result_with_capped_fetch_does_not_claim_the_cap_is_the_cause():
+    """A capped 0-row result must not narrate the cap as the cause.
+
+    FIX P (V-walk-surfaced). The live prompt
+    ``receipts for ABC Application Software at Santa Clara`` returned 0
+    rows: the site filter ran client-side over a capped 500-row fetch
+    and dropped all of them. ``search_standard_receipts`` reports that
+    as ``truncated=True, total_available=None``.
+
+    ``_all_buckets_empty`` read the truncation entry, saw
+    ``truncated=True``, and wrote:
+
+        No receipts found in the examined sample. The search was capped
+        before examining all matching records, so more may exist beyond
+        the examined window.
+
+    Over 0 rows, that asserts a cause the data does not support: zero
+    rows matched within the cap, so the cap is not why the answer is
+    empty.
+
+    Fix P: over 0 rows the summary falls through to the plain wording.
+    The truncation block below still discloses the cap.
+    """
+    outputs = {"standard_receipts": []}
+    truncation = {
+        "standard_receipts": {
+            "total_available": None,
+            "limit_applied": 25,
+            "truncated": True,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="StandardReceipt",
+        llm=_forbidden_llm(),
+        truncation_by_step=truncation,
+    )
+    assert isinstance(result, StandardReceiptResponse)
+    summary = result.summary
+    assert "capped" not in summary, (
+        "0-row truncated result must not narrate the cap as the "
+        "cause; got: " + repr(summary)
+    )
+    assert "examined sample" not in summary, (
+        "0-row truncated result must not use the sample-narrative "
+        "wording; got: " + repr(summary)
+    )
+    assert "No receipts found" in summary, (
+        "0-row result must say 'No receipts found'; got: " + repr(summary)
+    )
+    assert any(
+        "capped" in note for note in result.truncation_notes
+    ), (
+        "truncation_notes must still disclose the cap; got: "
+        + repr(result.truncation_notes)
+    )
+
+
 def test_tip_labels_do_not_leak_from_invoice(sampled_outputs, sampled_truncation):
     """The StandardReceipt tip names only StandardReceipt labels.
 
