@@ -27,11 +27,18 @@ in `server.py`), inserts a `kg_entity_tool` row for
 sequence** — so the entity advertises a filter-less fetch the planner
 will honour; relaxes the ReceivablesInvoice planner guard so a
 filter-less intent reaches the new tool; adds a new parser helper
-`_is_explicit_receivables_invoice_list(prompt)` in `parser.py`
-(the third parser-side addition in the sequence, after PR #1's
-`_is_explicit_po_list` and `_is_sampleable_po_request`) that sets
-`intent.list_all=True` for a genuine filter-less AR-invoice list
-prompt; adds a new sysprompt block
+`_is_filter_less_receivables_invoice_request(prompt, intent)` in
+`parser.py` that sets `intent.list_all=True` when the model has
+already produced a filter-less `ReceivablesInvoice` intent and the
+raw prompt does not carry a by-id-shaped numeric token (a number
+that plausibly binds to `by_id`). **The helper does not enumerate
+list verbs.** The shape the sequence samples is `filters=[]` on a
+target the model has already judged in-scope; the phrasing the
+user typed is not the signal, and a verb whitelist would miss
+`get all AR invoices` (the brief's own canonical prompt) as
+readily as it would miss any other phrasing a user invented. The
+helper's disqualifier — a by-id-shaped number in the prompt — is
+the ONLY prompt-level check it performs; adds a new sysprompt block
 `b_ar_invoices.sysprompt` teaching the filter-less shape (with an
 `order.manifest` entry after `b_ar_invoice_by_id`) and runs the V9
 `--validate` sweep against all 240 prompts; adds a `narrowing_tip`
@@ -157,16 +164,46 @@ prompt. Without the helper, the intent is produced but the guard
 refuses it. **Both are load-bearing.** PR #6's file inventory is
 therefore **eleven**, not ten: `parser.py` joins the source files.
 
-The helper is a **sibling**, not an extension of
-`_is_explicit_po_list`. The two entities disqualify on different
-identifier shapes (an integer after `PO` is an OrderNumber; an
-integer after `AR invoice` is a CustomerTransactionId) and their
-regexes differ. Widening `_is_explicit_po_list` would silently
-change PO behaviour in an AR-invoice commit, which PR #6 does not
-own and cannot V-walk. The parallel-pair pattern (one function per
-entity, same call shape) is what PR #1 used when it added
-`_is_sampleable_po_request` beside `_is_explicit_po_list` rather
-than renaming.
+**Fourth correction, at the same V0 stage — the helper is a
+shape check, not a verb whitelist.** The third correction recorded
+that the parser needs a helper to set `intent.list_all`, and named
+it a sibling of `_is_explicit_po_list`. That naming carried an
+implication PR #1's pattern had already made: that the helper is a
+list of English list-verbs the prompt must match. **It is not, and
+the sequence is worse for it.** The SME's design (`MEETING §1`) is
+fire the query, bound the sample, disclose it, tell the user how to
+narrow — for *any* phrasing of a filter-less request, because the
+user's wording is not the signal. A verb whitelist would miss
+`get all AR invoices` (the brief's own canonical prompt) unless
+`get all` happened to be on the list, and would require extending
+the list each time a phrasing the author did not anticipate
+appears. That is a refusal waiting for the next user, which is the
+class of defect Phase 3 exists to remove.
+
+The helper's real question is: **is this a filter-less
+`ReceivablesInvoice` intent that came from a genuine question about
+the collection, and not from a prompt whose identifier the model
+dropped?** Two conditions answer it. (a) The intent already
+targets `ReceivablesInvoice` with `filters=[]` and `include=[]`.
+That is the model's judgement, already made. (b) The prompt does
+not carry a by-id-shaped numeric token — the one shape that binds
+to `by_id` and could therefore be a dropped identifier rather than
+a collection request. If both, `list_all=True`.
+
+The name carries the correction. `_is_filter_less_receivables_
+invoice_request(prompt, intent)` says what the function checks. A
+sibling name like `_is_explicit_receivables_invoice_list` would
+look like `_is_explicit_po_list` on the page, and the next reader
+would re-read the same verb-list assumption back into it. The
+function takes `(prompt, intent)` — not `prompt` alone — because
+one of its two inputs is the model's already-produced intent, and
+the check is about that intent's shape.
+
+The `_is_explicit_po_list` helper has the same latent gap (`get
+all POs` is not in its `_LIST_VERBS`), and that is recorded as an
+out-of-scope pointer in §Deviations. Fixing it is not PR #6's to
+own — it is a `parser.py` change to a `PurchaseOrder` path PR #1
+V-walked without exercising, and it belongs in the queue.
 
 This is the **fifth** such correction in six PRs. The pattern
 established across PRs #2–#5 holds: the meeting's row describes a
@@ -181,6 +218,19 @@ such PR, but with the PR #5 tip-caveat layered on top.
 ## Deviations
 
 *(Populated as the V-walk runs. Empty at V0 commit.)*
+
+### Out of scope — `_is_explicit_po_list` verb-set gap (`get all POs`)
+
+`_is_explicit_po_list` (`parser.py`, added by PR #1) enumerates its
+list verbs: `list `, `show all`, `show me all`, `all purchase
+orders`, `every purchase order`. `get all` is not on the list, so a
+prompt of the brief's own shape — `get all POs` — will not set
+`intent.list_all=True`, and the PurchaseOrder guard will refuse it
+as a dropped identifier. That is the same class of refusal PR #6's
+helper exists to avoid for ReceivablesInvoice. Fixing it is a
+parser.py change to a PO path PR #1 V-walked without exercising;
+belongs in the queue alongside the other parser items. Not fixed
+here.
 
 ### `personas.yaml` in the working tree
 
