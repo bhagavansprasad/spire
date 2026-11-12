@@ -148,3 +148,82 @@ def test_narrowing_tip_absent_when_source_is_complete():
         f"narrowing_tip must be the empty string when the source "
         f"total is unknown or not exceeded; got {tip!r}"
     )
+
+
+# ---------------------------------------------------------------------
+# V3c red — the tip must NOT fire on a non-sample Invoice result.
+#
+# At commit d964bb6, `invoice_number LEE-01-1006-111` (a by-number
+# fetch, one row, complete) produced:
+#   "Reading all 1 invoices is slow. Narrow with a filter: ..."
+# The tip is for a SAMPLE; a complete fetch of one row is not one.
+# Fix: guard the call-site in the plain-invoice branch on
+# `len(rows) < total_available`. These two tests pin the red.
+# ---------------------------------------------------------------------
+
+
+def test_by_invoice_number_does_not_carry_narrowing_tip():
+    """A single-invoice fetch is not a sample, so the tip must be empty.
+
+    RED at d964bb6 (V3c): the tip fires on a 1-row complete fetch with
+    the false sentence 'Reading all 1 invoices is slow'.
+    """
+    outputs = {
+        "invoices": [
+            {
+                "InvoiceId": 489503,
+                "InvoiceNumber": "LEE-01-1006-111",
+                "InvoiceDate": "2016-10-17",
+                "InvoiceAmount": 11138.34,
+                "InvoiceCurrency": "USD",
+                "Supplier": "Lee Supplies",
+                "SupplierNumber": "1252",
+            }
+        ]
+    }
+    truncation = {
+        "invoices": {
+            "total_available": 1,
+            "truncated": False,
+            "limit_applied": 25,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="Invoice",
+        truncation_by_step=truncation,
+        llm=_forbidden_llm(),
+    )
+    assert isinstance(result, InvoiceResponse)
+    assert result.narrowing_tip == "", (
+        f"narrowing_tip must be empty on a single-invoice fetch; "
+        f"got {result.narrowing_tip!r}"
+    )
+
+
+def test_complete_fetch_does_not_carry_narrowing_tip():
+    """A complete fetch (all matching rows returned) is not a sample.
+
+    RED at d964bb6: the same plain-invoice branch builds the tip
+    whenever total_available is non-null, regardless of whether the
+    rows are the whole set.
+    """
+    outputs = {"invoices": _invoice_rows(3)}
+    truncation = {
+        "invoices": {
+            "total_available": 3,
+            "truncated": False,
+            "limit_applied": 25,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="Invoice",
+        truncation_by_step=truncation,
+        llm=_forbidden_llm(),
+    )
+    assert isinstance(result, InvoiceResponse)
+    assert result.narrowing_tip == "", (
+        f"narrowing_tip must be empty when all matching rows were "
+        f"returned; got {result.narrowing_tip!r}"
+    )
