@@ -1,8 +1,8 @@
 # Phase 3 — Sample-and-disclose: CustomerAccount
 
 **Branch:** `Phase3-CustomerAccount-Sample`
-**PR:** — (filled when the PR is opened, per FIX_PLAN.md §8 step 8)
-**State:** open
+**PR:** #209 (merged b66607a)
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 7 — the seventh and last entity
 in the seven-PR sample-and-disclose sequence. CustomerAccount's
 **plain-list path does NOT exist on `master` at `bb86b8a`.** The entity
@@ -389,6 +389,18 @@ reported `!! drift (129)` and `test_kg_table_row_counts_match_v1_1`
 would have failed. Fixed at `c87c55e` — both count files moved
 129 → 131. **Caught by inspection (the rebuild's count report),
 not by a committed red test — §V7 records this honestly.**
+
+**Fifteenth correction, at the freeze — the file count is fourteen,
+not thirteen.** Correction 12 said thirteen. The squash merge commit
+`b66607a` is authoritative: `14 files changed, 1489 insertions(+),
+7 deletions(-)`. The 14 include the four NEW files, the six PATCH
+files, the three ALSO files, and the regenerated
+`classifier_menu.sysprompt`. Plus the two live DB actions — the
+`(CustomerAccount, 'none')` `kg_entity_tool` row and the two
+`entity_synonym` rows, both applied to the live DB during the walk
+(the seed carried the `entity_synonym` rows already; §V0-history
+correction 13). Fourteen git files, two live DB actions. Recorded
+here as the freeze's last count correction.
 
 This is the **sixth** such correction in seven PRs. The pattern
 established across PRs #1–#6 holds: the meeting's row describes a
