@@ -255,6 +255,94 @@ def _is_sampleable_po_request(prompt: str) -> bool:
     return True
 
 
+# Phase 3, PR #6 — sample-and-disclose for ReceivablesInvoice.
+#
+# The fourth entity in the sequence after PRs #1 (PurchaseOrder),
+# #3 (Invoice), and #4 (StandardReceipt) that added a parser-side
+# signal to permit a filter-less list, and the FIRST of them whose
+# signal is not a verb whitelist. The SME's design (MEETING §1) is
+# fire the query, bound the sample, disclose it, tell the user how
+# to narrow — for ANY phrasing of a filter-less request, because
+# the user's wording is not the signal. A verb whitelist would
+# miss `get all AR invoices` (the brief's own canonical prompt)
+# unless `get all` happened to be on the list.
+#
+# The helper's real question: given the model has already produced
+# a filter-less ReceivablesInvoice intent, is there any reason to
+# treat this as a dropped identifier? Two conditions answer it:
+#
+#   (a) The intent already targets ReceivablesInvoice with
+#       filters=[] and include=[]. The model's judgement, made.
+#   (b) The prompt carries no by-id-shaped numeric token — the one
+#       shape that could bind to `by_id` and therefore be a dropped
+#       identifier rather than a collection request.
+#
+# If both, set intent.list_all=True. If not, leave it — the
+# planner guard (planner.py) refuses a filter-less intent with
+# list_all=False as a missing identifier, which is the correct
+# shape for a dropped-id prompt.
+#
+# The disqualifier reuses _PO_NUMBER_RE and _BARE_NUMBER_RE. The
+# first is a no-op on AR prompts (it requires the word `po`); the
+# second catches bare 3+ digit runs, which is exactly the shape a
+# CustomerTransactionId has in a prompt. No new regex is needed:
+# the disqualifier is the same `_SAMPLEABLE_PO_DISQUALIFIERS`
+# pattern _is_sampleable_po_request uses, applied to the same
+# regexes.
+_RECEIVABLES_INVOICE_DISQUALIFIERS = (_PO_NUMBER_RE, _BARE_NUMBER_RE)
+
+
+def _is_filter_less_receivables_invoice_request(
+    prompt: str, intent: Any
+) -> bool:
+    """True when the intent is a genuine filter-less AR-invoice list.
+
+    Takes the PROMPT and the INTENT, not just the prompt. The
+    check is about the intent's shape — the model has already
+    decided the query is in-scope and produced `target_entity=
+    ReceivablesInvoice, filters=[], include=[]`. The helper's job
+    is to recognise that shape and rule out the one competing
+    reading (a by-id prompt the model dropped the id from),
+    NOT to inspect the user's phrasing for a list verb.
+
+    Two conditions, in order:
+      (a) The intent targets ReceivablesInvoice with no filters
+          and no include. If either is present, this is not the
+          filter-less shape and the helper returns False (the
+          by_id path or an edge-include path owns those).
+      (b) The prompt carries no by-id-shaped numeric token. A
+          bare 3+ digit run (not a plausible year) is a dropped
+          identifier: the user named one invoice, the model gave
+          no filter. Return False so the guard refuses it as a
+          missing identifier rather than sample 25 of 173k
+          unrelated AR invoices.
+
+    The wording the user typed is IRRELEVANT to this check. It
+    does not matter whether they said 'list', 'get', 'show',
+    'all', or nothing. The shape of the intent and the absence of
+    a by-id token are the whole signal.
+    """
+    if getattr(intent, "target_entity", None) != "ReceivablesInvoice":
+        return False
+    if getattr(intent, "filters", None):
+        return False
+    if getattr(intent, "include", None):
+        return False
+
+    p = prompt.lower()
+    for regex in _RECEIVABLES_INVOICE_DISQUALIFIERS:
+        for m in regex.finditer(p):
+            n = m.group()
+            if regex is _BARE_NUMBER_RE:
+                # Same year-exemption as _is_explicit_po_list and
+                # _is_sampleable_po_request: a bare year is not an
+                # identifier. Non-year 3+ digit runs are.
+                if len(n) == 4 and n.startswith("20"):
+                    continue
+            return False
+    return True
+
+
 def _is_all_digit_customer_value(value: Any) -> bool:
     """True when a by_customer_name value is actually an account number.
 
@@ -912,6 +1000,30 @@ def parse(
                     continue
                 if any(_t in prompt.lower() for _t in _triggers):
                     intent.include.append(_child)
+
+    # --- ReceivablesInvoice filter-less list signal (PR #6) ---
+    #
+    # The sibling of the PurchaseOrder block above. That block sets
+    # list_all=True when the prompt names a PO child without naming
+    # a specific PO; this one sets it when the MODEL has already
+    # produced a filter-less ReceivablesInvoice intent and the prompt
+    # carries no by-id-shaped number. The two conditions are
+    # different in kind: the PO block inspects the prompt for a
+    # child noun, this block inspects the INTENT for a filter-less
+    # shape. See _is_filter_less_receivables_invoice_request above
+    # for why the second formulation is the correct one for AR.
+    #
+    # Deliberately NOT sharing _is_explicit_po_list: the PO helper
+    # is a verb whitelist and has the known gap `get all POs`
+    # refuses. PR #6 does not widen that helper (out of scope,
+    # recorded in receivables_invoice.md §Deviations), and does not
+    # introduce a second verb whitelist for AR. The shape check is
+    # what the sequence actually needs.
+    if intent.target_entity == "ReceivablesInvoice":
+        if _is_filter_less_receivables_invoice_request(
+            prompt, intent
+        ):
+            intent.list_all = True
 
     # --- Include correction (BUG-1) ---
     from spire.nl_parser.vocabulary import strip_po_supplier_include
