@@ -1,8 +1,8 @@
 # Phase 3 — Sample-and-disclose: StandardReceipt
 
 **Branch:** `Phase3-StandardReceipt-Sample`
-**PR:** TBD (filled when the PR is opened, per FIX_PLAN.md §8 step 8)
-**State:** open
+**PR:** #206 (filled when the PR is opened, per FIX_PLAN.md §8 step 8)
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 4 — the fourth entity in the
 seven-PR sample-and-disclose sequence. StandardReceipt's **scoped** path
 already samples on `master`: `synthesizer.py` returns a local
@@ -501,8 +501,6 @@ requirement), PR #2's, and PR #3's.
 | V8 | **deferred** | one green run on the positive prompt; N≥20 sweep deferred, same class as PR #1–3 |
 | V9 | not required | no `.sysprompt` change on the branch |
 
-**State:** open. PR number filled at close, per `FIX_PLAN.md` §8 step 9.
-
 ## Deviations
 
 ### Unscoped StandardReceipt is refused by design
@@ -607,4 +605,4 @@ Sibling prompts (existing or to-be-written) for the same shape:
   former, and it is the one an SME is likely to phrase first ("receipts
   for X at Y").
 
-**State:** open. PR number filled at close, per `FIX_PLAN.md` §8 step 9.
+**State:** closed. PR number filled at close, per `FIX_PLAN.md` §8 step 9.
