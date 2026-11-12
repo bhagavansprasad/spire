@@ -30,13 +30,19 @@ filter-less intent reaches the new tool; adds a new sysprompt block
 `b_ar_invoices.sysprompt` teaching the filter-less shape (with an
 `order.manifest` entry after `b_ar_invoice_by_id`) and runs the V9
 `--validate` sweep against all 240 prompts; adds a `narrowing_tip`
-field to `ReceivablesInvoiceResponse` and a guarded
-`narrowing_tip=` kwarg at the ReceivablesInvoice plain-list branch in
-`synthesizer.py` — **the tip ships empty by construction on this pod**
+field to `ReceivablesInvoiceResponse` and a **new plain-list branch**
+in `synthesizer.py` — the branch is added **before** the existing
+`single_parent_shape` block (which requires exactly one parent row
+and cannot fire on a 25-row sample), mirroring PR #5's CreditMemo
+branch position; the branch carries a guarded `narrowing_tip=`
+kwarg — **the tip ships empty by construction on this pod**
 because the entity-level filter set is `['by_id']` and
 `['by_id']` minus `by_id` is `{}`, so `build_narrowing_tip(set(), ...)`
 returns `""`; and locks the shape with a red-then-green test at
-`tests/test_sample_and_disclose_receivables_invoice.py`. The field
+`tests/test_sample_and_disclose_receivables_invoice.py`. The change
+spans **ten source and evidence files** — one more than the
+meeting row's inventory suggested, because the plain-list branch had
+to be written rather than wired: see §V0-history. The field
 exists for contract uniformity with the five prior entities (Supplier,
 PurchaseOrder, Invoice, StandardReceipt, CreditMemo) and seeds the
 future KG-filter-set PR that will add a real narrowing filter.
@@ -99,6 +105,33 @@ extension and tip block as if they would fire. On this pod they will
 not: the parser has no shape to extend, and the tip is empty by
 construction. The wiring is the fetcher plus the KG row plus the
 sysprompt block plus the guard.
+
+**Second correction, from the code-bundle read + the red log.** The
+first correction above named the wiring; it did not name one file
+the wiring needs. The `ReceivablesInvoice` synthesizer branch that
+exists on master is `single_parent_shape(outputs, (...))`, which
+requires **exactly one parent row** and attaches child buckets
+(lines, tax lines, DFF). A 25-row plain AR-invoice list has no
+parent-plus-children shape — it falls through that branch entirely
+and reaches the LLM at the bottom of `synthesize_response`.
+
+Evidence: the red test at
+`tests/test_sample_and_disclose_receivables_invoice.py::test_plain_receivables_invoice_list_builds_locally_no_llm`
+fails on master with `AssertionError: synthesize_response called the
+LLM on a plain AR-invoice list` — the mock LLM is reached for a
+25-row bucket with no children. The failure is not a missing field;
+it is a missing branch.
+
+The fix is therefore **two synthesizer changes, not one**: a new
+plain-list branch (positioned **before** the existing
+`single_parent_shape` block, mirroring where PR #5's CreditMemo
+branch sits relative to the CustomerAccount branch) plus the
+`narrowing_tip` field the first correction already named. The
+`plain_receivables_invoice_bucket` detector follows the same shape
+as `plain_credit_memo_bucket` / `plain_invoice_bucket`: one bucket,
+any row count, rows carry `CustomerTransactionId`. The existing
+`single_parent_shape` branch stays for the one-invoice-plus-children
+shape (AR-P2).
 
 This is the **fifth** such correction in six PRs. The pattern
 established across PRs #2–#5 holds: the meeting's row describes a
