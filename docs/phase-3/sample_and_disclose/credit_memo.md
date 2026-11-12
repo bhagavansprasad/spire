@@ -182,7 +182,7 @@ non-empty set requires a KG `kg_entity_filter` insert plus a
 filter — a separate PR with its own V0 and its own V-walk, not PR #5's
 scope. Deferred to that branch.
 
-### `capability.py` `_FILTER_GUIDANCE["CreditMemo"]` is a live but narrow finding
+### `capability.py` `_FILTER_GUIDANCE["CreditMemo"]` is live
 
 `_FILTER_GUIDANCE["CreditMemo"]` (`("Narrow by customer name instead.",
 "credit memos for ABC Application Software")`) advises narrowing by a
@@ -278,6 +278,27 @@ Result (green): **byte-identical shape to V1.**
 The extractor fires the same way on both phrasings. V2 green on one
 run; a second run was not made (paraphrase non-determinism is V8's
 domain, deferred).
+
+### Extended prompt set (10 prompts)
+
+The two-phrasing check above was widened to ten prompts. All ten
+captured to `/tmp/vx_*.txt`. Three facts confirmed live that V1/V2 did
+not cover:
+
+- **`top 5 credit memos` fires the F-016 `list_limit` extractor.**
+  `tool_args: {'limit': 5}`, `Showing 5 of 2,261 credit memos.` The
+  `_LIMIT_CAPABLE_TOOLS` entry for `list_receivables_credit_memos`
+  reaches the tool.
+- **The `b_credit_memos.sysprompt` EXCEPTION clause is honoured.**
+  `total value of credit memos` and `total credit memo value` route to
+  `CreditMemo` with **no aggregate block**.
+- **The customer-scoped boundary holds across three paraphrases.**
+  `for customer ABC Application Software`, `'s credit memos`,
+  `for Lee Supplies` all route to `CustomerAccount` +
+  `by_customer_name` + `AccountCreditMemo`. None leaks to `CreditMemo`.
+
+The extended set also proved the `capability.py` finding live, and
+surfaced two further out-of-scope findings. All three in §Deviations.
 
 ## V3 — Siblings unchanged (Supplier, PO, Invoice)
 
@@ -416,6 +437,21 @@ No `.sysprompt` block was changed in this PR. Confirmed on the branch:
 Per PR #1's precedent (`_is_explicit_po_list` is code-only and had no
 V9 requirement), PR #2's, PR #3's, and PR #4's: pure-Python fix, no
 `.sysprompt` change, no `--validate` sweep required.
+
+### Count-path pluralisation on non-`s`-plural entities
+
+`how many credit memos are there` answers `There are 2261 creditmemos.`
+`_build_count_response` in `synthesizer/aggregation.py` uses
+`f"...{target_entity.lower()}s."`; `"CreditMemo".lower()` is
+`"creditmemo"`. Correct for `suppliers` / `invoices`; wrong for
+`CreditMemo`. `local_summary._count_phrase` exists and does not reach
+this path. Separate `aggregation.py` branch; not PR #5's scope.
+
+### `top 5 credit memos`'s SQL projection carries an unmapped arg
+
+The SQL projection for a `limit=5` fetch shows
+`WHERE -- unmapped tool_arg: limit=5;`. Known SQL emitter class.
+Pointer to `SQL_EMITTER_MULTIFIELD_ITERATION.md`. No action here.
 
 ## V-walk state
 
