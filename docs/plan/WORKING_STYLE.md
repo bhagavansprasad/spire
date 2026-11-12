@@ -247,6 +247,32 @@ For the procedural checklist that accompanies this file, see
     not pasted anything, and there is nothing to look at. Cell 2 exists
     to catch that.
 
+15.3.1. **Multi-file commits are N two-cell patches, then one commit.**
+    When a single commit lands N files, do not deliver it as one big
+    patch followed by a commit. Deliver it as N file-by-file patches,
+    each as its own cell pair (cell A writes the file and stages it;
+    cell B reads the file back from disk), and only after all N files
+    are green does a final cell commit them together.
+
+    The failure this prevents is the one PR #4's Fix B records: a
+    patch that did not land, and the test the patch was supposed to
+    un-red did not catch it, because the test exercised the behaviour
+    rather than the file contents. Read-back per file catches a
+    non-landed patch at the file where it happened; a commit-then-
+    verify catches it only after N−1 other files have landed in a
+    commit that does not build. The cost is N extra verify cells;
+    the saving is (N−1) other files never seeing a broken commit.
+
+    The rule applies to the file, not the commit. A single-file
+    commit is one cell pair then the commit; a seven-file commit is
+    seven cell pairs then the commit. The commit message names the
+    logical unit (`green 1`, `green 2`, …), not the file count.
+
+    What is forbidden: batching multiple files into one cell because
+    the files are "small" or "related." The rule is not about size —
+    it is about attributing a non-landed patch to its own file, at
+    the moment of the failure, rather than to the commit.
+
 ### 15.4 The patch/verify contract, promoted from the brief
 
 The per-window brief carries three rules that belong in the rulebook
@@ -308,6 +334,130 @@ evidence; the block is what the user is verifying.
     prints nothing in the terminal if the whole heredoc is being pasted
     as one cell; only the following prompt tells the reader something
     went wrong, and only if the reader knows to check.
+
+### 15.4.1 Worked example — a §15.4 cell pair, and the loop §15.3.1 names
+
+This is what §15.4's four postconditions look like in practice, and
+what §15.3.1's multi-file loop looks like at the level of a single
+file. Both are shown together because in practice they are one
+pattern: the four postconditions are the file's contract, and the
+loop is the commit's.
+
+**Cell A — the edit.** One `python3 - <<'PYEOF'` heredoc. What it does:
+
+  - Read the file as bytes.
+  - Assert every anchor block matches exactly once. `text.count(old) != 1`
+    aborts with the count printed, so a match of 0 or 2 is visible in
+    the failure rather than silent.
+  - Replace.
+  - Write the file.
+  - For a `.py` file: `ast.parse(body)` and an import probe. The four
+    postconditions are necessary, not sufficient, for a `.py` file —
+    PR #6's `print_kg.py` patch satisfied all four and broke Python
+    syntax; the compile check is what caught it.
+  - `git add <path>` — stage, do not commit. The commit is the last
+    cell of the multi-file sequence, per §15.3.1.
+
+  Cell A is one command per line, no `&&` chaining (rule 2.1). If a
+  check fails, `sys.exit(1)` stops the script before writing; the
+  next command in the cell still runs, but the file on disk is
+  unchanged, so the read-back in cell B reports the old content and
+  the failure is attributable to cell A rather than to the file.
+
+**Cell B — the verify.** Four independent shell greps, one per line,
+run in a fresh shell so the output is the file as it is on disk, not
+what cell A claims it wrote:
+
+    grep -n '<new-content-anchor>'     <path>
+    grep -c '<new-content-anchor>'     <path>
+    grep -c '<old-content-anchor>'     <path> || true
+    grep -n '<invariant-anchor>'       <path>
+    wc -l                              <path>
+    git status --short
+
+  The four checks map to §15.4's four postconditions:
+
+  - `grep -n '<new-content-anchor>'` — postcondition (iv): the new
+    block is present after the patch. The `-n` form prints the line
+    number, so the reader sees where it landed, not just that it
+    landed.
+  - `grep -c '<new-content-anchor>'` — postcondition (iv) counted;
+    a value of `1` proves the patch did not duplicate the block. A
+    value of `2+` means an anchor matched more than once — the
+    insertion was applied twice — which is the failure §15.4's
+    "one-line anchor + fenced block" note names.
+  - `grep -c '<old-content-anchor>' <path> || true` — postconditions
+    (i) and (iii): the old block was present before, and is absent
+    after. The `|| true` is mandatory when the expected count is
+    zero (rule 15.4's second paragraph): a `grep -c` that finds
+    nothing exits non-zero, and a cell that `&&`-chains on it stops
+    at the zero-match line even though the zero-match is the
+    desired outcome. Without `|| true`, the desired zero is
+    indistinguishable from a missing file.
+  - `grep -n '<invariant-anchor>'` — a sanity check that the
+    surrounding content still exists, so a patch that landed but
+    clobbered a neighbour shows up.
+  - `wc -l <path>` — the total line count. For a whole-tail rewrite,
+    this is the only cheap guard against a duplicate block that left
+    the anchor counts intact (rule 15.4's closing note: "a whole-tail
+    rewrite can leave a duplicate block. Assert the file's total
+    line count"). For a small patch, the delta is expected and
+    sanity-checked against the reported insert count from cell A.
+  - `git status --short` — the file appears as `M` (staged) or `A`
+    (new file staged) for a cell A that wrote, or `D` (deleted) if
+    the patch removed a file. Silent is wrong at this point: a file
+    that cell A claimed to write but that `git status` does not show
+    as modified means the write did not land in the tree git tracks
+    (wrong path, wrong branch, or an aborted cell A) — a case the
+    greps against the path would not catch if the path were wrong.
+
+  What cell B does NOT do: it does not re-run cell A's script. A
+  fresh run of the edit script against the already-patched file would
+  fail its anchor check (`count != 1`) because the file already has
+  the new content — the "re-run the patch" temptation produces a
+  false negative, not a verification. Cell B reads the file. That is
+  the whole point of the two-cell split: cell A reports what it
+  wrote; cell B reports what is on disk.
+
+  This is why cell B is shell, not Python. The greps read the file in
+  a new process; they cannot see cell A's variables, so they can only
+  report the bytes that landed. The `ast.parse` in cell A is for
+  syntax; the import probe in cell A is for the module graph. Neither
+  replaces the greps; both are necessary (PR #6's `print_kg.py`
+  lesson) and neither is sufficient (§15.4's four postconditions are
+  the file's contract; `ast.parse` + import is the `.py`-specific
+  superset).
+
+**The loop.** §15.3.1 names the multi-file form of this pattern.
+Concretely, for a commit landing N files:
+
+  - Cell pair 1 for file 1: cell A writes and stages; cell B verifies.
+  - Cell pair 2 for file 2: cell A writes and stages; cell B verifies.
+  - … (repeat for each of the N files)
+  - Final cell: `git status` to confirm the N files are staged, then
+    `git commit -m '<message>'` to land them together.
+
+  If any cell B is red, stop: do not proceed to the next file, do not
+  commit. A red cell B at file k means files 1..k-1 are staged but
+  the commit would land k files where the k-th is broken. That is the
+  state §15.3.1's loop exists to prevent.
+
+  The loop's cost is N cell pairs and N commits' worth of back-and-
+  forth. The saving is (a) every non-landed patch is caught at its
+  own file, not at the commit; (b) a cell B that reveals a wrong
+  anchor (0 matches) or a duplicate (2 matches) never reaches the
+  next file, so files 1..k-1 remain in a good state for the next
+  attempt; and (c) the final `git status` before commit shows
+  exactly the N files the commit message names, so a commit that
+  accidentally stages a scratch file (a `personas.yaml` edit, a
+  `traces/` write) is visible.
+
+  The rule is not about ceremony. It is that a commit landing N files
+  is N decisions, each of which can be wrong in a file-local way, and
+  the only way to attribute a wrong decision to its own file is to
+  verify the file before the commit. Verifying the commit as a whole
+  attributes N−1 correct decisions and 1 wrong one to the same
+  commit, after the fact.
 
 ## Evidence standard for findings (S0–S11)
 
