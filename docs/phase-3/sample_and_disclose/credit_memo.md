@@ -1,8 +1,8 @@
 # Phase 3 — Sample-and-disclose: CreditMemo
 
 **Branch:** `Phase3-CreditMemo-Sample`
-**PR:** pending
-**State:** draft
+**PR:** #207
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 5 — the fifth entity in the
 seven-PR sample-and-disclose sequence. CreditMemo already samples on
 `master`: the `list_receivables_credit_memos` tool returns the newest N
@@ -468,4 +468,4 @@ Pointer to `SQL_EMITTER_MULTIFIELD_ITERATION.md`. No action here.
 | V8 | deferred | N≥20 sweep deferred to MCP migration PR |
 | V9 | not required | no `.sysprompt` change (`git diff` confirms 0 lines) |
 
-**State:** draft.
+**State:** closed.
