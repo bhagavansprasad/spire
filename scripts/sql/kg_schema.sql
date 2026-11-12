@@ -1066,6 +1066,16 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'distributions', 'PODistribu
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memo',  'CreditMemo', 'AR credit memo (sell-side).');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'credit memos', 'CreditMemo', 'Plural form.');
 
+-- PR #7: CustomerAccount entity synonyms. The classifier menu is
+-- generated from entity_synonym rows; without these, a prompt that
+-- names "customer account(s)" without naming the exact class name
+-- routes to receivables on the substring alone, and a paraphrase
+-- that leaves the substring out does not route at all. Confirmed at
+-- bb86b8a that the menu carried only "CustomerAccount" as a bare
+-- class name and the seed carried no entity_synonym rows for it.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'customer account',  'CustomerAccount', 'A customer account on receivablesCustomerAccountActivities.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'customer accounts', 'CustomerAccount', 'Plural form.');
+
 
 -- AR-P5 (prompt 7). NOTE the bare terms 'credit memo'/'credit memos' are
 -- already bound to CreditMemo (AR-P4, the top-level recent-memos list).
@@ -1191,6 +1201,12 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'get_customer_account_by_name',
   'Resolves a customer name to their account(s) via q=CustomerName= (exact) on receivablesCustomerAccountActivities. Returns all matching accounts as a list; the edge traversal iterates them.'
 );
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'CustomerAccount',
+  'none',
+  'search_customer_accounts',
+  'PR #7 / Phase 3 sample-and-disclose: the plain-list fetcher for the CustomerAccount entity. Lists the most recent N customer accounts (orderBy=CustomerName:asc, server-side) up to `limit`, with the collection count lifted onto ToolResult.total_available. Read-only; no filters. The sibling by_customer_name and by_account_number resolvers fetch one customer''s account; this one samples the collection. The two are NOT interchangeable, and a filter-less CustomerAccount intent routes here.'
+);
 -- AR-P4 Credit Memo
 INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
   'CreditMemo',
@@ -1211,7 +1227,7 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Account-number resolver for CustomerAccount. Same tool as the by-name resolver; the filter type selects the query clause (AccountNumber vs CustomerName). Returns the account(s) whose AccountNumber matches exactly. Registered as its own (entity, filter_type) row because the planner looks up the fetcher by the filter type it picked.'
 );
 
-PROMPT Seeded kg_entity_tool (12 rows).
+PROMPT Seeded kg_entity_tool (13 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool

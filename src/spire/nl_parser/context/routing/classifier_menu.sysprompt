@@ -21,7 +21,7 @@ receivables:
   AccountReceipt (aka: account receipt, account receipts, receipt, receipts)
   AccountReceiptApplication (aka: account receipt application, account receipt applications, receipt application, receipt applications)
   CreditMemo (aka: credit memo, credit memos)
-  CustomerAccount
+  CustomerAccount (aka: customer account, customer accounts)
   CustomerTransaction
   ReceivablesInvoice (aka: AR invoice, AR invoices, receivables invoice, receivables invoices)
   ReceivablesInvoiceLine (aka: invoice line, invoice lines)
