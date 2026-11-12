@@ -128,12 +128,14 @@ from spire.synthesizer.aggregation import (  # noqa: F401
 )
 from spire.synthesizer.ar import (  # noqa: F401
     build_credit_memo_records,
+    build_customer_account_plain_records,
     build_customer_account_records,
     build_invoice_dff,
     build_receivables_invoice_plain_records,
     build_receivables_invoice_records,
     build_standard_receipt_records,
     plain_credit_memo_bucket,
+    plain_customer_account_bucket,
     plain_receivables_invoice_bucket,
     single_parent_shape,
 )
@@ -1509,6 +1511,94 @@ def synthesize_response(
                     ),
                     truncation_notes=notes,
                 )
+
+    # Plain customer-account list: no LLM. PR #7.
+    #
+    # The mirror of the plain-credit-memo / plain-invoice / plain-PO /
+    # plain-supplier / plain-AR-invoice branches above, for the
+    # CustomerAccount entity. A 25-row sample of customer accounts has
+    # NO parent-plus-children shape — the only CustomerAccount branch
+    # on master before this was single_parent_shape, which requires
+    # len(outputs[parent]) == 1. A plain list of 25 therefore fell
+    # through to the LLM. This branch claims that shape and builds the
+    # records locally, the same way the sibling branches do for their
+    # entities.
+    #
+    # The narrowing_tip is "" by construction on this pod: the KG's
+    # entity-level filter set for CustomerAccount is
+    # ['by_account_number', 'by_customer_name'], both fetch-one, so
+    # ['by_account_number', 'by_customer_name'] minus those two is {}.
+    # build_narrowing_tip(set(), ...) returns "" before it inspects
+    # total_available. The field exists for contract uniformity
+    # (Invoice, StandardReceipt, Supplier, PurchaseOrder, CreditMemo
+    # and ReceivablesInvoice all carry it) and seeds the future
+    # KG-filter-set PR. PR #5 (CreditMemo) and PR #6 (ReceivablesInvoice)
+    # are the precedents.
+    #
+    # This branch goes BEFORE the single_parent_shape branch below, not
+    # after. The two shapes are structurally disjoint: this one fires on
+    # a single-bucket account list, single_parent_shape fires on the
+    # one-account-plus-children shape. Ordering this one first means the
+    # plain-list case never has a chance to be stolen by a future change
+    # to single_parent_shape that loosens its row-count check.
+    ca_plain_bucket = (
+        plain_customer_account_bucket(outputs)
+        if target_entity == "CustomerAccount"
+        else None
+    )
+    if ca_plain_bucket is not None:
+        rows = outputs[ca_plain_bucket]
+        total_available, notes = _local_truncation(
+            ca_plain_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        return CustomerAccountResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="customer accounts",
+                    # Exactly the columns the display renders for a
+                    # CustomerAccountResponse (formatters.py's
+                    # CustomerAccountResponse branch).
+                    displayed_fields=[
+                        "CustomerName", "AccountNumber",
+                        "TotalOpenReceivablesForAccount",
+                        "TotalTransactionsDueForAccount",
+                    ],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                    truncated=_bucket_truncated(
+                        ca_plain_bucket, truncation_by_step,
+                        metadata_by_step,
+                    ),
+                    labels={
+                        "CustomerName": "Customer",
+                        "AccountNumber": "AccountNumber",
+                        "TotalOpenReceivablesForAccount":
+                            "Open Receivables",
+                        "TotalTransactionsDueForAccount":
+                            "Transactions Due",
+                    },
+                )
+            ),
+            customer_accounts=build_customer_account_plain_records(rows),
+            truncation_notes=notes,
+            # Sample-only guard, mirroring Invoice (d7d78c5),
+            # StandardReceipt (3d7f4b6), CreditMemo (35a0095) and
+            # ReceivablesInvoice (PR #6). The tip is "" on both
+            # branches today; the guard is correct for the future KG
+            # change that gives CustomerAccount a real narrowing
+            # filter to name.
+            narrowing_tip=(
+                build_narrowing_tip(
+                    set(),
+                    total_available,
+                    entity_label="customer accounts",
+                )
+                if total_available is not None
+                and len(rows) < total_available
+                else ""
+            ),
+        )
 
     # Customer account, with whichever children were fetched.
     #

@@ -447,6 +447,19 @@ class CustomerAccountResponse(BaseModel):
         "Empty if none.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) — tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set. On this pod CustomerAccount has no "
+        "entity-level narrowing filters beyond by_customer_name and "
+        "by_account_number (both fetch-one, not narrowing filters), "
+        "so the tip ships empty by construction; the field exists for "
+        "contract uniformity with Invoice, StandardReceipt, Supplier, "
+        "PurchaseOrder, CreditMemo and ReceivablesInvoice.",
+    )
 
 
 class StandardReceiptResponse(BaseModel):
@@ -652,6 +665,35 @@ def plain_receivables_invoice_bucket(outputs: dict[str, list[dict]]) -> str | No
     return None
 
 
+def plain_customer_account_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the customer-account bucket when this is a PLAIN account list.
+
+    The mirror of plain_receivables_invoice_bucket / plain_credit_memo_bucket
+    / plain_invoice_bucket, for the CustomerAccount entity. "Plain" means
+    one bucket of customer-account rows and nothing else, so every field
+    the response needs is already on those rows. Returns None the moment
+    there is more than one bucket: a customer-account query that also
+    fetched children (transactions, credit memos, receipts, applications)
+    is the single_parent_shape case (one parent row + children), not here.
+
+    Deliberately conservative, same as the siblings: returning None too
+    often costs tokens; returning a wrong bucket costs correctness.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    # Signature fields: AccountId + AccountNumber identify a customer-account
+    # row. AccountId alone would also match a CustomerTransaction row (that
+    # row has TransactionId, not AccountId, so the pair is the discriminator);
+    # AccountNumber alone is unique enough, but the pair is safer.
+    if "AccountId" in first and "AccountNumber" in first:
+        return name
+    return None
+
+
 def build_receivables_invoice_plain_records(
     rows: list[dict],
 ) -> list["ReceivablesInvoiceRecord"]:
@@ -696,6 +738,54 @@ def build_receivables_invoice_plain_records(
                 balance=float(row.get("InvoiceBalanceAmount") or 0),
                 lines=[],
                 dff=None,
+            )
+        )
+    return records
+
+
+def build_customer_account_plain_records(
+    rows: list[dict],
+) -> list["CustomerAccountRecord"]:
+    """Executor customer-account rows -> CustomerAccountRecord, for the
+    plain-list path (one account per row, no children).
+
+    Pure: no LLM, no I/O. The mirror of build_receivables_invoice_plain_records
+    for CustomerAccount. The multi-row, children-attached case is
+    build_customer_account_records (unchanged, still reached via
+    single_parent_shape on the one-account-plus-children shape).
+
+    Every field the response needs is on the row, because the new
+    search_customer_accounts fetcher projects the same fields as
+    get_customer_account_by_name. This is a rename, not a
+    reconstruction, and there is no cross-bucket join.
+
+    transactions, credit_memos, receipts and applications stay empty
+    BY DESIGN: the plain-list path fetched no children. A query that
+    DOES fetch children is the single_parent_shape case and goes
+    through build_customer_account_records, not here.
+
+    The total-transactions-due field can be a four-decimal-place
+    value (1179915.3225) that does not terminate in IEEE-754; float()
+    here is a straight copy of a value the pod already rounded in
+    transit, and the rounding guards elsewhere still apply.
+    """
+    records: list[CustomerAccountRecord] = []
+    for row in rows:
+        records.append(
+            CustomerAccountRecord(
+                account_id=row.get("AccountId") or 0,
+                account_number=str(row.get("AccountNumber") or ""),
+                customer_name=str(row.get("CustomerName") or ""),
+                open_receivables=float(
+                    row.get("TotalOpenReceivablesForAccount") or 0
+                ),
+                transactions_due=float(
+                    row.get("TotalTransactionsDueForAccount") or 0
+                ),
+                transactions=[],
+                credit_memos=[],
+                receipts=[],
+                applications=[],
             )
         )
     return records

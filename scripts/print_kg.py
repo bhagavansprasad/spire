@@ -127,7 +127,7 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 12,
+        "expected_rows": 13,
     },
     {
         "name": "kg_entity_filter",

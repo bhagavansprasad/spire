@@ -71,6 +71,9 @@ from spire.mcp_server.tools.receivables_invoice_by_id import (
 from spire.mcp_server.tools.search_receivables_invoices import (
     search_receivables_invoices as _search_receivables_invoices,
 )
+from spire.mcp_server.tools.search_customer_accounts import (
+    search_customer_accounts as _search_customer_accounts,
+)
 from spire.mcp_server.tools.receivables_invoice_lines import (
     get_receivables_invoice_lines as _get_receivables_invoice_lines,
 )
@@ -738,6 +741,39 @@ async def search_receivables_invoices(limit: int = 25) -> dict:
     """
     async with FusionClient(_persona) as client:
         result = await _search_receivables_invoices(client, limit=limit)
+        return result.to_dict()
+
+
+@mcp.tool()
+async def search_customer_accounts(limit: int = 25) -> dict:
+    """List recent customer accounts, filter-less, alphabetically by CustomerName.
+
+    The plain-list fetcher for the CustomerAccount entity (PR #7 /
+    Phase 3 sample-and-disclose). Called with no filters — the only
+    call shape; this is the filter-less fetcher, by design — it
+    returns up to `limit` customer accounts ordered by CustomerName
+    ascending, plus the collection total on `total_available` so a
+    caller can honestly say "25 of 435" rather than "25 customer
+    accounts".
+
+    This is the filter-less sibling of get_customer_account_by_name:
+    that resolves ONE customer (by name or by account number) to
+    their account; this samples the collection. A resolver prompt
+    routes to that tool; a filter-less list prompt routes here.
+
+    Args:
+        limit: Max account records to return. Default 25. Ordered
+            server-side, so this is a true first-N of the alphabetical
+            collection, not a page slice.
+
+    Returns:
+        A ToolResult dict: items (each carrying AccountId,
+        AccountNumber, CustomerName, CustomerId, balances),
+        total_available (the collection count), limit_applied,
+        truncated. Empty items means the pod has no customer accounts.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_customer_accounts(client, limit=limit)
         return result.to_dict()
 
 

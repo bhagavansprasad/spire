@@ -359,7 +359,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 129,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 12,
+        "kg_entity_tool": 13,
         "kg_entity_filter": 37,
         "kg_edge_tool": 16,
     }
