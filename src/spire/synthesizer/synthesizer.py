@@ -161,6 +161,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
     _PURCHASE_ORDER_FILTER_LABELS,
+    _INVOICE_FILTER_LABELS,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -1116,6 +1117,12 @@ def synthesize_response(
             ),
             invoices=build_invoice_records(rows),
             truncation_notes=notes,
+            narrowing_tip=build_narrowing_tip(
+                set(_INVOICE_FILTER_LABELS),
+                total_available,
+                entity_label="invoices",
+                labels_map=_INVOICE_FILTER_LABELS,
+            ),
         )
 
     # PO with its children: no LLM.

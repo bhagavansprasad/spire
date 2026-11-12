@@ -346,6 +346,14 @@ class InvoiceResponse(BaseModel):
         description="One entry per invoice in the final set. Empty if none.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) \u2014 tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set.",
+    )
 
 
 class PurchaseOrderResponse(BaseModel):
@@ -1475,6 +1483,22 @@ _PURCHASE_ORDER_FILTER_LABELS: dict[str, str] = {
     "updated_in_last_n_months": "last-updated date",
     "lifecycle_status": "lifecycle",
     "by_id": "PO number",
+}
+
+# Phase 3, PR #3 — the Invoice sibling of the Supplier and PO maps.
+# Mirrors the two above. by_id is not an Invoice filter; the Invoice
+# equivalent is invoice_number, which is a narrowing filter a reader
+# can put a value into, so it earns a label.
+_INVOICE_FILTER_LABELS: dict[str, str] = {
+    "supplier": "supplier",
+    "purchase_order": "purchase order",
+    "invoice_number": "invoice number",
+    "invoice_date": "invoice date",
+    "older_than_n_months": "invoice date",
+    "created_in_last_n_months": "invoice date",
+    "unpaid": "unpaid",
+    "overdue": "overdue",
+    "pending": "pending approval",
 }
 
 
