@@ -1,7 +1,7 @@
 # SPIRE — window handoff
 
-**Window close:** 2026-11-12 (PR #3 close).
-**Tip:** `master` at `5f9b554` (freeze of `invoice.md` for PR #3).
+**Window close:** 2026-11-12 (PR #4 close).
+**Tip:** `master` at `5eadf7b` (merge commit for PR #206, StandardReceipt).
 **Branch:** `master` (clean working tree except untracked evidence
 files under repo root; `personas.yaml` local-only, never staged).
 
@@ -21,6 +21,7 @@ three PRs are merged:
 | #203 | `2a23906` | PurchaseOrder (anchor) | `purchase_order.md` |
 | #204 | `850feb5` | Supplier | `supplier.md` |
 | #205 | `3f3ff11` | Invoice | `invoice.md` |
+| #206 | `5eadf7b` | StandardReceipt | `standard_receipt.md` |
 
 Post-merge docs commits on `master`: `05d7978` (freeze
 `supplier.md`), `983a7fb` (handoff to PR #3), `9724282` (resume
@@ -30,14 +31,17 @@ docs correction), `5f9b554` (freeze `invoice.md`).
 
 ## Resume state — what is next
 
-The next window starts **PR #4** (the fourth entity from
+The next window starts **PR #5** (the fifth entity from
 `MEETING_2026-11-10_sample_and_disclose.md` §6) on a fresh branch
-off `master` at `5f9b554` or its current successor.
+off `master` at `5eadf7b` or its current successor.
 
-The V0 for PR #4 must be based on a **read of `master`**, not on the
-meeting's row. PR #2's V0 correction (`7b7bb51`) and PR #3's
-`invoice.md` V0 both established this: the meeting describes what
-the meeting said; master's code is what the PR must react to.
+The V0 for PR #5 must be based on a **read of `master`**, not on the
+meeting's row. PR #2's V0 correction (`7b7bb51`), PR #3's
+`invoice.md` V0, and PR #4's `standard_receipt.md` V0 (which
+corrected the meeting §6 row-4 Verify column — the unscoped
+`get all receipts` case is refused by design, not satisfiable from
+master without changing the tool and the planner guard) all proved
+that lesson.
 
 ### Two carry-forward notes
 
@@ -46,7 +50,9 @@ the meeting said; master's code is what the PR must react to.
 - **V-walk will surface defects the unit tests do not catch.** PR
   #1 found three (Fix A/B/C in `purchase_order.md` §Deviations).
   PR #2 found three (Fix D-a/D-b/E in `supplier.md` §Deviations).
-  PR #3 found one (V3c in `invoice.md` §V3 and §Deviations). Expect
+  PR #3 found one (V3c in `invoice.md` §V3 and §Deviations). PR #4
+  found one (Fix P in `standard_receipt.md` §Deviations — the
+  empty-truncated summary narrating the cap as the cause). Expect
   at least one per PR. The tests you write at step 4 are the tests
   PR #N **starts** with, not the tests it needs.
 
