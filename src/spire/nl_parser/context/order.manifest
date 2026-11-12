@@ -23,6 +23,7 @@ receivables/b_ar_invoices.sysprompt
 receivables/b_ar_invoice_lines.sysprompt
 receivables/b_ar_tax_lines.sysprompt
 receivables/b_ar_dff.sysprompt
+receivables/b_customer_accounts.sysprompt
 receivables/b_customer_invoices.sysprompt
 receivables/b_account_balance.sysprompt
 receivables/b_credit_memos.sysprompt
