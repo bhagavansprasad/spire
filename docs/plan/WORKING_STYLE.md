@@ -247,11 +247,54 @@ For the procedural checklist that accompanies this file, see
     not pasted anything, and there is nothing to look at. Cell 2 exists
     to catch that.
 
+### 15.4 The patch/verify contract, promoted from the brief
+
+The per-window brief carries three rules that belong in the rulebook
+alongside §15.3. They apply to every patch cell this project produces.
+
+**Four postconditions on every patch cell.** A patch cell's verifier
+checks four things, not one: **(i)** the old block is present before
+the patch, **(ii)** the text changed, **(iii)** the old block is
+absent after the patch, **(iv)** the new block is present after the
+patch. A patch that checks only (iv) proves nothing about what it
+removed; the failure shape is a "verified" cell over a file that
+still contains the old text. This is the failure mode that
+motivated the rule.
+
+**`|| true` after any `grep -c` that legitimately expects zero.** A
+`grep -c` that finds nothing exits non-zero, and a cell written with
+`&&` chains or a guard clause will stop at the zero-match line even
+when the zero-match is the *desired* result. Write
+`grep -c 'pattern' file || true` when the expected count is zero,
+and state in the cell's text that zero is the expected outcome. A
+reader — and a shell — treats `0` on the first line and `0` on the
+twentieth identically; the `|| true` distinguishes them.
+
+**One-line anchor + fenced block.** A paste block for a human to
+review (not to run — running is the patch cell's job) is presented
+as: a single-line anchor naming what it is, then a fenced block
+containing the content, then the four verification commands from the
+first rule above. The anchor tells the reader which `#`-level or
+section marker this block belongs to. The fence is ``` for content
+with no inner fences, `~~~` for content that contains ``` (rule 4
+governs the fence choice). The four commands are the user's
+evidence; the block is what the user is verifying.
+
     Every cell-2 verification should include at least one grep for the
     new content and at least one grep confirming the old content is
     absent. If the patch was supposed to remove `X` and add `Y`, then
     cell 2 checks both. Without this pairing, a patch that silently
     writes a partial file looks identical to a patch that succeeded.
+    **Anchor on the invariant character, not the predicted end of
+    line.** A `grep -cE '^def name$'` verifies nothing if the file's
+    function definitions end with `():` — the `$` after `name`
+    matches nothing, and the cell reports a false `0`. Anchor on
+    the character that is invariant across every occurrence the
+    pattern should match: `^def name\(`, because `(` is the only
+    character guaranteed to be present after the name. Same
+    principle for any anchor pattern that expects `$` at the end of
+    a line whose content the pattern only partially predicts.
+
     **Both cells in the same reply.** Cell 1 and Cell 2 are
     delivered together, in one reply, in that order. The user runs
     cell 1, then cell 2, then pastes cell 2's output. What is
@@ -442,6 +485,19 @@ are walked in order and it is shown which passed. Any time the question
 The lesson is not "F-006 was hard." It is that a label ("drift") was
 treated as a finding before a harm had been shown. S1 is the step that
 was skipped.
+
+### 14.1 Out-of-scope classes get one line, not a §Deviations section
+
+When a PR's V-walk surfaces a defect that belongs to a **pre-existing
+finding class with its own finding file** — e.g. the SQL emitter
+defects recorded in `SQL_EMITTER_MULTIFIELD_ITERATION.md` — the PR's
+`§Deviations` records **one line** pointing at the finding file, not
+a description of the defect. The defect and its fix live in the
+finding file and its future window; the fix rides its own branch and
+PR. A `§Deviations` paragraph that enumerates instances of a known
+class expands the PR and duplicates the finding file. It is not the
+PR's job to re-record what the finding file already says, and a
+deferred class is not a PR blocker.
 
 16. **Every window opens with a ledger reconciliation.** Before
     picking the next FIX_PLAN row, list recently-merged PRs and
