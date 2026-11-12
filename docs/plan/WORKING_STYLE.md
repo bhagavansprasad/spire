@@ -36,6 +36,19 @@ For the procedural checklist that accompanies this file, see
     decides whether a fix landed, a build — any command whose
     next-step meaning changes if the output surprises you.
 
+    **The shape of a cell: one command per line, no `&&` chaining.**
+    A cell is a block of commands the user pastes and runs together.
+    Each command stands on its own line; the shell executes them in
+    order. `&&` chaining is discouraged because it makes a mid-cell
+    failure stop the rest of the chain silently — the shell shows
+    only the failing command's error, and the commands after it
+    never ran. A newline-separated cell shows each command's own
+    output, so a mid-cell failure is visible at the line where it
+    happened. When a run's outcome genuinely depends on the previous
+    command's output, it takes its own cell (per §2.1's "split on
+    uncertainty"); when the outcome is predetermined, the commands
+    belong in one newline-separated block.
+
 2.2. **The user pastes once per cell when the shape is obvious.**
     When the commands in a cell are all obvious (2.1), the user runs
     them together and returns ONE output block — not one per
@@ -239,6 +252,14 @@ For the procedural checklist that accompanies this file, see
     absent. If the patch was supposed to remove `X` and add `Y`, then
     cell 2 checks both. Without this pairing, a patch that silently
     writes a partial file looks identical to a patch that succeeded.
+    **Both cells in the same reply.** Cell 1 and Cell 2 are
+    delivered together, in one reply, in that order. The user runs
+    cell 1, then cell 2, then pastes cell 2's output. What is
+    forbidden is asking the user to run cell 1, wait for a reply
+    that delivers cell 2, then run cell 2 — that costs an extra
+    round trip and lets the user lose the verify command between
+    turns. Two cells, one reply; not two replies, one cell each.
+
     Rule 15.1's "capture everything, then grep" applies to the patch
     script's own output too — a `SystemExit` from `count != 1` checks
     prints nothing in the terminal if the whole heredoc is being pasted
