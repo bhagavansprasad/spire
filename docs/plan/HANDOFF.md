@@ -1,8 +1,11 @@
 # SPIRE — window-36 handoff
 
-**Window type:** design + investigation + one reverted attempt. **Zero
-commits merged.** `master` is unchanged at `fa57bc2` from this window's
-open to its close.
+**Window type:** design + investigation + one reverted attempt.
+**Zero feature commits merged in this window.** `master` has moved
+since this window's open: PR #203 merged at `2a23906`, PR #204
+merged at `850feb5`, and two docs commits followed (`05d7978`
+froze supplier.md; `983a7fb` handed STATUS.md off to PR #3).
+Current tip `983a7fb`.
 
 **Working tree at close:**
 
@@ -17,7 +20,8 @@ were reverted before any commit. `git status` is the evidence.
 **Predecessor:** the window-35 handoff (Invoice status filters, PR
 #192). That window's work is intact on `master`; nothing in it is
 touched by this one.
-**master tip:** `fa57bc2` (unchanged since before this window opened)
+**master tip:** `983a7fb` (two PR merges and two docs commits ahead of
+this window's open)
 **Successor:** the next window's handoff.
 
 ---

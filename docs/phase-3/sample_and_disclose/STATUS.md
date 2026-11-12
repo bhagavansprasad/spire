@@ -3,18 +3,15 @@
 **Window state at last update.** Read this first when resuming. It is
 the resume surface; the per-PR evidence files are the durable record.
 
-**Last updated:** 2026-11-11
-**Branch:** `Phase3-PurchaseOrder-Sample` — **merged** to `master`
-at `2a23906` as PR #203. The branch on origin may be deleted; the
-work is on `master`.
-**Base:** `master` at `a78c00b`
-**Branch commits:** `2681217` (failing test, V7 evidence base),
-`c71488d` (MCP conflict finding, not a fix)
-**Uncommitted (four, the PR's source change set):**
-`src/spire/nl_parser/parser.py`, `src/spire/synthesizer/p2p.py`,
-`src/spire/synthesizer/synthesizer.py`,
-`tests/test_sample_and_disclose_po.py`
-**Uncommitted (NOT part of the PR):** `personas.yaml` — a local
+**Last updated:** 2026-11-12
+**Branch:** `Phase3-Invoice-Sample` — newly created for PR #3
+(Invoice). Base commit `983a7fb`.
+**Merged:** PR #203 (PurchaseOrder) at `2a23906`; PR #204 (Supplier)
+at `850feb5`.
+**Post-merge docs commits:** `05d7978` (froze `supplier.md` at
+`State: closed`), `983a7fb` (this file — PR #3 hand-off).
+**Base for this window:** `master` at `983a7fb`.
+**Uncommitted (NOT part of any PR):** `personas.yaml` — a local
 credential change made outside this work. Do not stage it. Do not
 commit it.
 
@@ -169,14 +166,17 @@ parent fields per call). The output contains
 
 which is not valid SQL.
 
-**Permanent fix** (separate PR, separate window): the overlay's
-`kg_sql_join` rows must declare the named binds for multi-field
-iteration, or `_emit_step` in `sql_emitter.py` needs a new shape. It
-is a real design change, not a patch.
+**Permanent fix** (separate PR, separate window): `_emit_step` in
+`sql_emitter.py` needs a new shape. The overlay's `kg_sql_join` rows
+are already correct; the defect is that `_emit_step` treats a
+multi-field sentinel set as if it were a single-field one. It is a
+real design change, not a patch. The finding file records the
+three candidate shapes and the recommended one (`FilterSpec.value_kind`).
 
 **Finding recorded:** `docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md`
-(NOT yet written — **next window must write it before touching the
-emitter**; the finding is recorded here in the interim).
+— landed at `fe5a41f` on the PR #2 branch, on `master` at `850feb5`.
+Out of scope for PR #3; a dedicated PR fixes §1 and §2 of that
+finding.
 
 **Why deferred:** the SQL emitter is diagnostic-only (per
 `docs/design/SQL_OVERLAY_POC.md`, "SQL execution is deliberately

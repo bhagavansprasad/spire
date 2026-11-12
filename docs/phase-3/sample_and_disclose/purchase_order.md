@@ -3,7 +3,7 @@
 **Branch:** `Phase3-PurchaseOrder-Sample`
 **PR:** TBD (this file is committed before the branch exists; PR number
 added when the PR is opened, per FIX_PLAN.md §8 step 8)
-**State:** in-progress
+**State:** closed
 **Finding:** meeting capture §1 — `get po with distribution details`
 refuses with `missing_identifier`; an SME would answer it. Rule 28
 defect.
