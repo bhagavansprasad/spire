@@ -4,8 +4,9 @@
 the resume surface; the per-PR evidence files are the durable record.
 
 **Last updated:** 2026-11-12
-**Branch:** `Phase3-CreditMemo-Sample` — PR #5 merged.
-Merge commit `4d301c4`.
+**Branch:** `Phase3-ReceivablesInvoice-Sample` — PR #6 open (opened
+against `master` at `3b27bf1`'s ancestor `2327fd0`; the branch tip is
+`c9df032`, nine commits past the merge point).
 **Merged:** PR #203 (PurchaseOrder) at `2a23906`; PR #204 (Supplier)
 at `850feb5`; PR #205 (Invoice) at `3f3ff11`; PR #206 (StandardReceipt)
 at `5eadf7b`; PR #207 (CreditMemo) at `4d301c4`.
@@ -47,6 +48,7 @@ durable record for each is its evidence file, frozen at
 | #205 | `3f3ff11` | Invoice |
 | #206 | `5eadf7b` | StandardReceipt |
 | #207 | `4d301c4` | CreditMemo |
+| #208 | `TBD` | ReceivablesInvoice (PR #6, open) |
 
 Post-merge docs commits: `05d7978` (froze `supplier.md`),
 `983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
@@ -97,6 +99,32 @@ advance), `341b9f9` (PR #5 extended prompt set findings), `5ef278c`
   Two out-of-scope findings recorded in `credit_memo.md` §Deviations
   (`capability.py` `_FILTER_GUIDANCE["CreditMemo"]` live; count-path
   pluralisation).
+- **PR #208 (ReceivablesInvoice — PR #6, open).** Established that the
+  plain-list AR-invoice path does **not** exist on master at `c8580c4`:
+  no filter-less fetcher, no `(ReceivablesInvoice, 'none')` KG row, no
+  filter-less sysprompt rule, and the planner guard refuses a
+  filter-less intent before Block 1. PR #6 is a real wiring PR (the
+  second after PR #1): a new fetcher `search_receivables_invoices`, a
+  new `kg_entity_tool` row (first KG touch in the sequence), a new
+  sysprompt block `b_ar_invoices.sysprompt`, a planner guard relaxation
+  for `list_all`, a `narrowing_tip` field on `ReceivablesInvoiceResponse`
+  and a **new plain-list branch** in the synthesizer (before
+  `single_parent_shape`, which cannot fire on a 25-row sample), a new
+  parser helper `_is_filter_less_receivables_invoice_request` that sets
+  `list_all=True` when the model has already produced the filter-less
+  shape and the prompt carries no by-id-shaped number, and — discovered
+  at V9 — a `server.py` registration. **The tip ships empty by
+  construction** on this pod (`['by_id']` minus `by_id` is `{}`), same
+  shape as PR #5. **V9 required** (first sysprompt change in the
+  sequence) and **V9-full discovered to be impossible on this branch**:
+  the `--validate` flag the briefs name does not exist on
+  `promptkit.py`. V9-scoped ran six prompts and all six are green;
+  V9-full is deferred to the MCP migration PR with the tool's absence
+  recorded as a queue item. The V-walk surfaced one **wiring defect**
+  (`server.py` registration omitted; `Unknown tool` in the V9-scoped
+  run) and the write-up records it as the pattern that future PRs in
+  the sequence must carry forward: module + registration + KG row land
+  together, before V9.
 
 ### Next
 
@@ -228,7 +256,16 @@ blocking the next window:
 5. **MCP migration PR** — V6/V8 of PRs #1, #2, #3 all deferred to
    it. Still unscheduled.
 6. **PR #6 onward** — the next entity from the seven-PR sequence,
-   ReceivablesInvoice.
+   ReceivablesInvoice (PR #6, open).
+7. **`--validate` tool does not exist.** The briefs' V9 mechanism —
+   `promptkit.py --validate` against the full prompt corpus — was never
+   implemented on this branch. PRs #1–#5 never surfaced its absence
+   because their sysprompts were untouched (`V9: not required`); PR #6
+   is the first PR that needs V9 and the first that discovers the
+   missing mechanism. V9-scoped (a chosen subset run with
+   `--show-parser --show-planner` and inspected for shape) is what
+   PR #6 used. Building `--validate` proper is its own tooling PR;
+   recorded in `receivables_invoice.md` §V9.
 
 
 ## Pointers
