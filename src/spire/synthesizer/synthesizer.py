@@ -161,6 +161,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_suppliers_with_open_pos_and_buyers,
     build_narrowing_tip,
     _PURCHASE_ORDER_FILTER_LABELS,
+    _INVOICE_FILTER_LABELS,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -1116,6 +1117,22 @@ def synthesize_response(
             ),
             invoices=build_invoice_records(rows),
             truncation_notes=notes,
+            # V3c: the tip is for a SAMPLE (examined < total). A
+            # complete fetch (by-number, or any scoped result where
+            # every matching row was returned) is not a sample, so
+            # the tip must be empty. The guard is sample-only: on
+            # V1/V2 shapes (25 of 2,689) it fires; on V3c (1 of 1)
+            # and on complete fetches (3 of 3) it returns "".
+            narrowing_tip=(
+                build_narrowing_tip(
+                    set(_INVOICE_FILTER_LABELS),
+                    total_available,
+                    entity_label="invoices",
+                    labels_map=_INVOICE_FILTER_LABELS,
+                )
+                if total_available is not None and len(rows) < total_available
+                else ""
+            ),
         )
 
     # PO with its children: no LLM.
