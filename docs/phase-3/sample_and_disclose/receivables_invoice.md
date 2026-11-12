@@ -215,9 +215,283 @@ PR #1 needed no correction because it was a genuine wiring PR whose
 meeting row matched master's gap on every axis. PR #6 is the second
 such PR, but with the PR #5 tip-caveat layered on top.
 
+## V1 — Reproducer (live)
+
+Prompt: `get all AR invoices` against `fa-esll-saasfademo1`, run after
+the MCP server was restarted to pick up the PR #6 changes
+(WORKING_STYLE §22.1). Saved transcript at
+`/tmp/pr6_v9_scoped/get_all_ar_invoices.txt`.
+
+Result (green):
+
+- Intent: `target_entity: ReceivablesInvoice`, no filters, no include.
+  The parser helper `_is_filter_less_receivables_invoice_request`
+  inspected the intent and the raw prompt, found no by-id-shaped
+  number, and set `intent.list_all = True`.
+- Plan: one step, `search_receivables_invoices`, `tool_args: {}` (the
+  tool's default limit of 25 applies).
+- Answer: `Showing 25 of 200,748 AR invoices.` — 25 rows, newest first
+  (server-side `orderBy=TransactionDate:desc`).
+- **No `─── Tip ───` block.** `grep -cE 'Tip' /tmp/pr6_v9_scoped/get_all_ar_invoices.txt`
+  → `0`. The `narrowing_tip` field is on the response and empty by
+  construction; the renderer's `if tip:` gate suppressed the block.
+  This is the intended Shape A positive case.
+
+**The V1 assertion is the answering, and the absence of a Tip block.**
+PR #6 adds the field and the guarded kwarg; the field's value is `""`
+because the ReceivablesInvoice entity-level filter set is `['by_id']`,
+and `['by_id']` minus `by_id` is `{}`. The `Showing 25 of 200,748`
+count is the pod's `totalResults` at this run; the pod has drifted from
+the 173,531 the bundle read recorded. That drift is real and harmless:
+the fetcher reports the live total, not a cached one. A Tip block
+would be the defect — the tip should not fire when it has no filter
+types to name.
+
+The `no overlay entity for this tool — SQL not emitted` line in the
+diagnostic `SQL projection:` output is a **pre-existing gap in the
+SQL overlay**, not a PR #6 defect: `sql_overlay.py` has no entry for
+`search_receivables_invoices`, so the emitter declines to project SQL
+for the step. See §Deviations for the one-line pointer. The POC's
+scope note declares per-step SQL a projection, not executable.
+
+## V2 — Paraphrase
+
+Prompt: `show me recent receivables invoices` against the same pod.
+Saved transcript at `/tmp/pr6_v9_scoped/show_me_recent_receivables_invoices.txt`.
+
+The sysprompt's first rule teaches this shape; V1 used `get all AR
+invoices` and V2 uses a different phrasal verb (`show me`) plus a
+different adjective (`recent`) to confirm the helper fires on the shape
+and not on a verb. The design of the helper makes this expected: it does
+not inspect the prompt for verbs at all, so a phrasing it has never
+seen fires the same way as one it has.
+
+Result (green): **byte-identical shape to V1.**
+
+- Intent: `ReceivablesInvoice`, no filters, no include.
+- Plan: one step, `search_receivables_invoices`, `tool_args: {}`.
+- Answer: `Showing 25 of 200,748 AR invoices.` — same count as V1; the
+  pod's total did not drift between the two runs.
+- No `─── Tip ───` block.
+
+The helper fires the same way on both phrasings. V2 green on one run.
+
+## V3 — Siblings (unchanged)
+
+The PR #6 change touches `ar.py` (field), `synthesizer.py` (branch),
+`parser.py` (helper), `server.py` (registration), `planner.py` (guard
+relaxation), `kg_schema.sql` + live DB (one row), and the sysprompt +
+manifest. None of these reach the Supplier, PurchaseOrder, Invoice,
+StandardReceipt, or CreditMemo tip call sites. The sibling paths are
+unchanged by construction.
+
+V3 confirmed on the sibling `unpaid invoices` golden (V5 below) and by
+the four-file synth blast-radius run at V6 (`97 passed, 1 deselected`,
+matching PRs #2, #4, and #5's count exactly). No sibling tip was
+examined in isolation here; the blast-radius count is the evidence.
+
+## V4 — Negative (customer-scoped routes away from the plain-list branch)
+
+Prompt: `Show me AR invoices for customer ABC Corporation Americas`.
+Saved transcript at
+`/tmp/pr6_v9_scoped/show_me_ar_invoices_for_customer_abc_corporation_americas.txt`.
+
+The parser's `b_customer_invoices.sysprompt` teaches: a customer-scoped
+AR-invoice question routes to `CustomerAccount` with `by_customer_name`
+and `CustomerTransaction` in include, not to the plain-list path. This
+V-step confirms the boundary — the new sysprompt block does not steal
+the prompt.
+
+Result (green):
+
+- Intent: `target_entity: CustomerAccount`; filter `{type:
+  by_customer_name, value: 'ABC Corporation Americas'}`; include
+  `['CustomerTransaction']`.
+- Plan: **not** `search_receivables_invoices`. It is the account
+  resolver plus the transaction traversal, unchanged from before PR
+  #6.
+- No Tip block (`CustomerAccountResponse` has no `narrowing_tip`
+  field; the renderer never emits one on this path).
+
+The parser boundary is intact: naming a customer routes away from the
+plain-list branch, away from `search_receivables_invoices`, and onto
+the account-child path.
+
+The refusal path is also verified as unchanged by the contract:
+
+Prompt: `show me contract renewals due next quarter`. Saved transcript
+at `/tmp/pr6_v9_scoped/show_me_contract_renewals_due_next_quarter.txt`.
+Result: `Reason: Contract isn't something I know about.` — the same
+UNKNOWN_ENTITY refusal PRs #1–#5 recorded. Unchanged.
+
+## V5 — Goldens (Intent-only)
+
+Same scope PRs #1–#5 used: compare each golden's `Intent:` block to
+the current pipeline's. Full-output byte-diff is not achievable (pod
+drift, `sql_emitter` block, supplier 1256 rename) — Intent is the shape
+decision.
+
+| Golden | Prompt | Result |
+|---|---|---|
+| `count_suppliers.txt` | `Count of suppliers` | **MATCH** — `Supplier`, `count_only: True` |
+| `po_2144_and_lines.txt` | `Show PO 2144 and its lines` | **MATCH** — `PurchaseOrder`, `by_id: 2144`, `include: ['PurchaseOrderLine']` |
+| `suppliers_with_open_pos.txt` | `Which suppliers have open purchase orders?` | **MATCH** — `Supplier`, `has_open_PO: True` |
+
+The three prompts route to Supplier count, PurchaseOrder by_id, and
+Supplier with has_open_PO — none route to ReceivablesInvoice, so PR
+#6's changes (all in `ar.py`, `synthesizer.py`, `parser.py`,
+`server.py`, `planner.py`, and the sysprompt) do not reach them. Same
+scope-boundary reasoning `supplier.md` §V5 and `invoice.md` §V5 used.
+
+## V6 — pytest (scoped + synth blast-radius; full deferred)
+
+**V6-full cannot run to completion on this environment.** Same class
+as PRs #1–#5: the `mcp 2.x` / `langchain-mcp-adapters 0.3.1` conflict
+breaks `tests/test_agent_runner.py` collection. Deferred to the MCP
+migration PR.
+
+V6 was run in the two scoped forms:
+
+| Layer | Command | Result |
+|---|---|---|
+| scoped | `pytest -q tests/test_sample_and_disclose_receivables_invoice.py` | **`6 passed`** |
+| synth blast-radius | four files: `test_synthesizer`, `test_synthesizer_supplier_records`, `test_synthesizer_truncation_narration`, `test_synthesizer_aggregation` | **`97 passed, 1 deselected`** |
+
+Saved logs: `/tmp/t_pr6_v6_scoped.log`, `/tmp/t_pr6_v6_synth.log`.
+
+**The `97 passed, 1 deselected` count matches PRs #2, #4, and #5
+exactly** for the same four-file set. PR #6's six-file change did not
+perturb the synthesizer surface those files cover.
+
+What is **not** established: whether some test in the full suite
+regresses for reasons PR #6 caused indirectly. Same gap PRs #1–#5
+recorded; the same `MCP_DEPENDENCY_CONFLICT.md` blocks its resolution.
+
+## V7 — Test fails without the fix
+
+Six source commits on the branch, each landed in order and each with
+the red-then-green evidence at its step:
+
+- **`802b675`** — `docs(phase-3): receivables_invoice.md — correct V0
+  (plain-list branch); test(phase-3): receivables_invoice — failing
+  red test for PR #6`. Committed **before** the fix. The test at
+  `tests/test_sample_and_disclose_receivables_invoice.py` had **five
+  failing, one passing** at that commit (`/tmp/t_pr6_red.log`):
+  `ModuleNotFoundError` on `search_receivables_invoices`, `AttributeError`
+  on `narrowing_tip`, and `AssertionError` on `_forbidden_llm` (called
+  the LLM on a plain AR list) — exactly the three shapes the fix lands.
+- **`054ca3a`** — `ar.py` `narrowing_tip` field + fetcher module +
+  `synthesizer.py` plain-list branch + KG seed row + KG count files +
+  live DB row. After this commit: `6 passed`.
+- **`3b27bf1`** — `planner.py` guard relaxed for `list_all`. The
+  behaviour check on the relaxed guard was V1's live run — the plan
+  reaches `search_receivables_invoices`.
+- **`e9b7b26`**, **`69a77c7`** — V0-history corrections. Documentation,
+  not code.
+- **`231256b`** — sysprompt block + manifest entry. The V9-scoped
+  sweep at V9 is what this commit's correctness rests on.
+- **`4c88c6b`** — parser helper + wiring. The behaviour check for its
+  three canonical cases printed eleven PASS lines, confirming the
+  shape-based design.
+- **`80719e9`** — `server.py` registration + `print_kg.py` trailing-comma
+  repair. The V9 re-runs after restart prove the registration works.
+
+The red-green pair is the standard FIX_PLAN §8 step 3 discipline: red
+committed before green, both pytest-run (or behaviour-checked for
+code paths pytest does not exercise), neither a post-hoc stash.
+
+## V8 — N-run reproducibility (deferred)
+
+Deferred alongside V6. A 20-run sweep of `get all AR invoices` would
+test whether the parser's model produces the filter-less intent
+deterministically (it is a stochastic LLM call per run) and whether
+the helper's disqualifier fires the same way across phrasing
+variations the model produces from an identical prompt. The single V1
+and V2 runs are each green; the N≥20 sweep is deferred to the same
+window that lands the MCP migration.
+
+## V9 — --validate (REQUIRED; the mechanism does not exist on this branch)
+
+**V9 is required for PR #6 — the first `.sysprompt` change in the
+sequence.** The brief's V9 step names `python scripts/promptkit.py
+--validate` against all 240 prompts.
+
+**`--validate` does not exist on this branch.** Verified two ways:
+
+- `python scripts/promptkit.py --help` lists every option it accepts,
+  and `--validate` is not among them.
+- `grep -rln 'validate' scripts/` finds no implementation of the
+  flag on `promptkit.py` or any of its manifest runners.
+
+The briefs for PRs #1–#5 named the `--validate` sweep as the V9
+mechanism, but those PRs were `V9: not required` (sysprompts
+untouched), so the mechanism's absence was never surfaced. PR #6 is
+the first PR that needs V9, and it is the PR that discovers the tool
+does not exist.
+
+### V9-scoped (green)
+
+Six prompts run end to end with `--show-parser --show-planner`, chosen
+to cover the changed path and its four neighbours:
+
+| Prompt | Intent | Plan | Answer |
+|---|---|---|---|
+| `get all AR invoices` | ReceivablesInvoice, no filters | `search_receivables_invoices` | `Showing 25 of 200,748 AR invoices.` |
+| `show me recent receivables invoices` | ReceivablesInvoice, no filters | `search_receivables_invoices` | `Showing 25 of 200,748 AR invoices.` |
+| `Get the AR invoice with CustomerTransactionId 300000248096352` | ReceivablesInvoice, `by_id` | `get_receivables_invoice_by_id` | unchanged |
+| `Show me AR invoices for customer ABC Corporation Americas` | CustomerAccount, `by_customer_name` | `get_customer_account_by_name` → … | unchanged |
+| `show me contract renewals due next quarter` | — | — | `Reason: Contract isn't something I know about.` |
+| `show the AR invoice with CustomerTransactionId … and its lines` | ReceivablesInvoice, `by_id` | `get_receivables_invoice_by_id` → `get_receivables_invoice_lines` | unchanged |
+
+The two filter-less prompts prove the PR #6 feature: the model
+produces the intent, the helper sets `list_all`, the guard accepts,
+the executor reaches the new tool, the tool returns a sample with the
+honest total. The four neighbours prove no regression on the paths PR
+#6 did not touch.
+
+Saved transcripts at `/tmp/pr6_v9_scoped/*.txt`.
+
+### V9-full (deferred — the tool does not exist)
+
+The 240-prompt `--validate` sweep is deferred to the MCP migration PR,
+because the tool it invokes is absent from `promptkit.py`. A queue
+item records this:
+
+> **`--validate` tool does not exist.** The briefs' V9 mechanism was
+> never implemented on `promptkit.py` or any of its manifest runners.
+> The V9-scoped shape (a chosen subset of prompts run with
+> `--show-parser --show-planner` and inspected for shape) is what
+> PRs that require V9 have been doing. Building `--validate` proper is
+> its own tooling PR.
+
 ## Deviations
 
 *(Populated as the V-walk runs. Empty at V0 commit.)*
+
+### The tip is empty by construction on this pod
+
+`build_narrowing_tip` returns `""` when its `filter_types` argument
+produces no labels — before it inspects `total`. The ReceivablesInvoice
+entity-level filter set on this pod is `['by_id']`, so every
+ReceivablesInvoice response PR #6 produces carries `narrowing_tip=""`.
+The field is correct; its positive branch is unreachable today. Wiring
+it to a non-empty set requires a KG `kg_entity_filter` insert plus a
+`search_receivables_invoices` signature extension that takes the new
+filter — a separate PR with its own V0 and its own V-walk, not PR #6's
+scope. Deferred to that branch. Same class as PR #5 (CreditMemo); the
+two empty-tip cases share the shape.
+
+### Out of scope — `sql_overlay.py` has no `search_receivables_invoices` entry
+
+The SQL projection for a `search_receivables_invoices` step prints
+`-- Step 1: search_receivables_invoices (no overlay entity for this
+tool — SQL not emitted)`. The `sql_overlay.py` module has no entry in
+`_ENTITIES` / `_FILTERS` / the `not_expressible` set for the new
+fetcher. The SQL overlay is diagnostic-only per `SQL_OVERLAY_POC.md`
+(the POC's scope note declares per-step SQL a projection, not
+executable), so this is not a PR #6 blocker and not a defect in the
+fetcher. Adding the entry belongs with the SQL overlay work; pointer
+for that window.
 
 ### Out of scope — `_is_explicit_po_list` verb-set gap (`get all POs`)
 
@@ -240,16 +514,16 @@ Local credential edit, never staged, not part of any PR.
 
 | V | Status | Note |
 |---|---|---|
-| V0 | **done** | opened with the meeting row's prescription; corrected on reading `master` at `c8580c4` to reflect the absent plain-list path, the empty-by-construction tip, and the new-tool shape |
-| V1 | pending | reproducer — `get all AR invoices` and the `get all receivables invoices` paraphrase |
-| V2 | pending | paraphrase — different trigger wording |
-| V3 | pending | siblings unchanged (Supplier / PO / Invoice / StandardReceipt / CreditMemo tips) |
-| V4 | pending | negative — customer-scoped AR-invoice routes to `CustomerAccount`, unscoped refusal boundary |
-| V5 | pending | goldens (Intent-only) |
-| V6 | pending | pytest scoped + synth blast-radius; full deferred to MCP migration PR |
-| V7 | pending | red-then-green test pair |
-| V8 | pending | N≥20 — parser changes, deferred alongside V6 per PRs #1–#5 |
-| V9 | **required** | first `.sysprompt` change in the sequence — `--validate` against all 240 prompts |
+| V0 | **done** | opened with the meeting row's prescription; corrected on reading `master` at `c8580c4` (three corrections: plain-list branch, empty-by-construction tip, parser helper as shape-check-not-verb-whitelist) |
+| V1 | **green** | `get all AR invoices` — 25 of 200,748, plan `search_receivables_invoices`, no Tip block (correct) |
+| V2 | **green** | `show me recent receivables invoices` — byte-identical shape to V1 |
+| V3 | **green** | sibling paths unchanged — confirmed by the V6 blast-radius count matching PRs #2, #4, #5 exactly |
+| V4 | **green** | customer-scoped prompt routes to `CustomerAccount`, refusal on `contract renewals` unchanged |
+| V5 | **green** | three golden Intents matched |
+| V6 | scoped + synth **green**; full **deferred** | branch tests `6 passed`; synth blast-radius `97 passed, 1 deselected`; full-suite blocked by MCP conflict |
+| V7 | **green** | seven commits — red at `802b675` (5 failed, 1 passed), green at `054ca3a` (6 passed), every intermediate documented |
+| V8 | **deferred** | N≥20 sweep deferred to MCP migration PR |
+| V9 | scoped **green**; full **deferred** | six-prompt scoped sweep covers the feature and four neighbours; `--validate` does not exist on this branch (recorded in §V9 and as a queue item) |
 
 ## Not checked
 
