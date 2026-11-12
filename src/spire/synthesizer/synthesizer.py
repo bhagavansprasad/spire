@@ -1338,6 +1338,23 @@ def synthesize_response(
             total_credit=total_credit,
             total_credit_note=total_note,
             truncation_notes=notes,
+            # PR #5: sample-only tip, guarded the same way as Invoice
+            # (d7d78c5) and StandardReceipt (3d7f4b6). On this pod the
+            # CreditMemo entity-level filter set is [], so
+            # build_narrowing_tip(set(), ...) returns "" by its own
+            # `if not labels: return ""` guard before it inspects
+            # total_available. The positive branch is unreachable
+            # today; the guard is correct for the future KG change
+            # that gives CreditMemo filters to name.
+            narrowing_tip=(
+                build_narrowing_tip(
+                    set(),
+                    total_available,
+                    entity_label="credit memos",
+                )
+                if total_available is not None and len(rows) < total_available
+                else ""
+            ),
         )
 
     # AR invoice with its lines: no LLM.

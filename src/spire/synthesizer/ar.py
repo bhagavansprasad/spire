@@ -514,6 +514,18 @@ class CreditMemoListResponse(BaseModel):
         "value. Exactly one of the two is ever set.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) — tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set. On this pod CreditMemo has no "
+        "entity-level filters in kg_entity_filter, so the tip ships "
+        "empty by construction; the field exists for contract "
+        "uniformity with Invoice, StandardReceipt, Supplier and "
+        "PurchaseOrder.",
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────
