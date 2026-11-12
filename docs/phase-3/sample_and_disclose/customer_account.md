@@ -58,7 +58,9 @@ on this pod** because the entity-level filter set is
 `['by_account_number', 'by_customer_name']`, both fetch-one, so
 `build_narrowing_tip(set(), ...)` returns `""`; adds an
 `entity_synonym` seed row for `customer account` / `customer accounts`
-to `kg_schema.sql` and regenerates
+to `kg_schema.sql` [see §V0-history correction 13 — the seed row was
+already present at `bb86b8a`; the missing side was the live DB, and
+this window applied the rows there before regenerating] and regenerates
 `src/spire/nl_parser/context/routing/classifier_menu.sysprompt` via
 `scripts/build_classifier_context.py` — the menu currently carries
 `CustomerAccount` as a bare class name with no colloquial synonyms,
@@ -67,12 +69,16 @@ classifies only by the substring and `show me customer accounts`
 leaves the classifier with no synonym to match; adds the three new
 files to `context_bundles.yaml` (bundle `mcp_server_tools`,
 `parser_context`, `tests`) to keep `tests/test_bundle_manifest.py`
-green; and locks the shape with a red-then-green test at
+green [see §V0-history correction 11 — `context_bundles.yaml` was NOT
+touched; `test_bundle_manifest.py` is red on `bb86b8a` for pre-existing
+reasons PR #7 does not repair]; and locks the shape with a red-then-green test at
 `tests/test_sample_and_disclose_customer_account.py`. The change
 spans **fourteen files plus one live DB row** — four more than the
 brief's inventory suggested, because the plain-list branch, the
 classifier-menu regeneration, and the bundle manifest had to be
-written rather than wired: see §V0-history. The tip field exists
+written rather than wired: see §V0-history [correction 12 below
+corrects the count: **thirteen files plus one live DB action**, because
+`context_bundles.yaml` was not touched]. The tip field exists
 for contract uniformity with the six prior entities (Supplier,
 PurchaseOrder, Invoice, StandardReceipt, CreditMemo, ReceivablesInvoice)
 and seeds the future KG-filter-set PR that will add a real narrowing
@@ -228,7 +234,8 @@ takes `(prompt, intent)` — not `prompt` alone — because one of its two
 inputs is the model's already-produced intent, and the check is about
 that intent's shape.
 
-**Sixth correction, from the classifier-menu read.** The parser's
+**Sixth correction, from the classifier-menu read — AMENDED at the
+V-walk (correction 13).** The parser's
 `_is_filter_less_customer_account_request` assumes the classifier has
 already routed the prompt to `receivables`. That assumption is only
 sound if the classifier's menu contains the phrase
@@ -237,39 +244,57 @@ sound if the classifier's menu contains the phrase
 carries `CustomerAccount` as a bare class name — no `(aka: customer
 account, customer accounts, ...)` synonyms — while sibling entities
 (`ReceivablesInvoice`, `CreditMemo`, `AccountReceipt`, etc.) carry
-several. `kg_schema.sql` has no `entity_synonym` row mapping
-"customer account" / "customer accounts" to `CustomerAccount`; the
-grep at `bb86b8a` finds only `entity_synonym` rows for
-`AccountCreditMemo` and `AccountReceiptApplication`. That is why the
-brief's third failing prompt — `list all customers` — relies on the
-classifier matching the substring `customers` against the entity
-descriptions rather than against a synonym; and it is why
-`show me customer accounts` (a paraphrase of the brief's own second
-prompt) is classified less reliably than the exact entity name.
+several.
 
-The fix is a KG `entity_synonym` seed insert for
-`customer account` / `customer accounts` and a run of
-`scripts/build_classifier_context.py` to regenerate
-`classifier_menu.sysprompt`. The generated menu then carries the
-synonyms, and the classifier matches the phrase — not the substring —
-for both canonical prompts and paraphrases.
+**The original correction claimed the seed carried no
+`entity_synonym` rows for `CustomerAccount`. That was wrong.** At
+the V-walk (correction 13) the seed was read directly and the two
+rows were **already present** at `kg_schema.sql:1075-1076`:
+`('entity_synonym', 'customer account', 'CustomerAccount', ...)` and
+`('entity_synonym', 'customer accounts', 'CustomerAccount', ...)`.
+The gap was on the **live DB** side — the two rows were in the seed
+but had never been applied to the live DB at `bb86b8a`'s state, and
+`build_classifier_context.py` had not been run since. The menu
+carried a bare class name because the live DB's `entity_synonym`
+rows for `CustomerAccount` were 0.
 
-**Seventh correction, from the bundle-manifest read.**
-`tests/test_bundle_manifest.py:77` (test_every_tracked_file_is_in_a_bundle)
-iterates tracked files, subtracts excluded/allowlisted paths, and
-asserts every remaining file is in `context_bundles.yaml`. The four
-new tracked files PR #7 adds (`search_customer_accounts.py`,
-`b_customer_accounts.sysprompt`,
-`test_sample_and_disclose_customer_account.py`, `customer_account.md`)
-trip that test unless the yaml is updated. The evidence file
-(`customer_account.md`) follows the six sibling evidence files
-(`credit_memo.md`, `invoice.md`, `purchase_order.md`,
-`receivables_invoice.md`, `standard_receipt.md`, `supplier.md`), which
-`test_bundle_manifest.py` accepts — either they are excluded or they
-are in a bundle. Whichever the pattern, `customer_account.md` follows
-it. The three code files land in bundles `mcp_server_tools`,
-`parser_context`, `tests` respectively. **The yaml edit is an eleventh
-file.**
+The fix is therefore not a seed edit. It is: apply the two seed rows
+to the live DB (idempotent, pre-checked — PR #7's commit-6 Cell B),
+then run `scripts/build_classifier_context.py` (PR #7's commit-6
+Cell C). The generated menu carries the synonyms, and the classifier
+matches the phrase — not the substring — for both canonical prompts
+and paraphrases. **Verified at the V-walk: `classifier_menu.sysprompt:24`
+now reads `CustomerAccount (aka: customer account, customer accounts)`,
+committed at `80c7bf0`.**
+
+**Seventh correction, from the bundle-manifest read — REPLACED at the
+V-walk (correction 11).** The original correction claimed PR #7 must
+add three entries to `context_bundles.yaml` or
+`test_bundle_manifest.py` fails. **That was wrong, and the correction
+is retracted.**
+
+`tests/test_bundle_manifest.py:77`
+(`test_every_tracked_file_is_in_a_bundle`) does iterate `git ls-files`
+and assert every tracked non-excluded non-allowlisted file is in some
+bundle. But the test is **red on `bb86b8a` before PR #7** — the
+missing-files list runs to dozens of entries that predate Phase 3:
+`.dockerignore`, `.env.example`, `Dockerfile`, `Quick_how_to_run.md`,
+`docker-compose.dev.yml`, `docker-compose.yml`, `spire-docker.sh`,
+`spire-host.sh`, `docs/runbooks/rotate-fusion-password.md`, the four
+`docs/spire-prism/*.md` files, `prompts/PROMPT_COUNTS.md`,
+`prompts/rerun/rerun_01_failed.txt`, PR #6's
+`search_receivables_invoices.py` and `b_ar_invoices.sysprompt`, all six
+`test_sample_and_disclose_*.py` files, `test_sql_overlay_coverage.py`,
+and more. PR #7's three new tracked files
+(`search_customer_accounts.py`, `b_customer_accounts.sysprompt`,
+`test_sample_and_disclose_customer_account.py`) would join that list;
+they do not cause it.
+
+**PR #7 does not touch `context_bundles.yaml`.** Bundling them is a
+separate PR's work — the same repair the pre-existing red needs for
+every other unbundled file. §Deviations records the fact as one line,
+per §14.1. The original correction's "the yaml edit is an eleventh
+file" is retracted; there is no yaml edit.
 
 **Eighth correction, at V0 close — the file count is fourteen, not
 ten.** The brief's "ten files" counts the four NEW, six PATCH, and
@@ -286,7 +311,8 @@ PATCH already counted — the `entity_synonym` seed row. Summed:
   `print_kg.py`)
 - 1 `context_bundles.yaml` PATCH
 - 1 `classifier_menu.sysprompt` regeneration
-= **fourteen files**
+= **fourteen files** [AMENDED at the V-walk — correction 12: thirteen
+files, because `context_bundles.yaml` is not touched]
 
 Plus one live DB action: `INSERT INTO kg_entity_tool VALUES
 ('CustomerAccount', 'none', 'search_customer_accounts', ...)`.
@@ -320,6 +346,50 @@ question by precedent: the tip sits at the call-site kwarg
 with no helper. PR #7 follows — the same call-site pattern, in the
 plain-list branch that lands before `single_parent_shape`.
 
+**Eleventh correction, at the V-walk — `context_bundles.yaml` is not
+touched.** The original seventh correction claimed the yaml must list
+PR #7's three new files. That claim is retracted; see the replacement
+text of correction 7 above. `test_bundle_manifest.py` is red on
+`bb86b8a` before PR #7 for dozens of pre-existing unbundled files;
+PR #7's three new files would join that list, not cause it. Repairing
+the manifest is a separate PR's work.
+
+**Twelfth correction, at the V-walk — the file count is thirteen, not
+fourteen.** The original eighth correction added `context_bundles.yaml`
+to the count. With correction 11 removing it, the count is:
+
+- 4 NEW (brief)
+- 5 files PATCH (brief's six PATCH minus `kg_entity_tool`, KG data)
+- 3 ALSO files (brief: `kg_schema.sql`, `test_kg_metadata.py`,
+  `print_kg.py`)
+- 1 `classifier_menu.sysprompt` regeneration
+= **thirteen files**
+
+Plus one live DB action (`(CustomerAccount, 'none')` row), plus the two
+`entity_synonym` rows applied to the live DB during commit 6 (neither a
+git file).
+
+**Thirteenth correction, at the V-walk — the `entity_synonym` seed
+rows were already present.** Correction 6's original claim that the
+seed carried no rows for `CustomerAccount` was wrong; the rows sit at
+`kg_schema.sql:1075-1076`. The live DB at `bb86b8a`'s state carried
+zero `entity_synonym` rows for `CustomerAccount`, which is why the
+classifier menu was stale. Commit 6 applied the two rows to the live
+DB and regenerated the menu (committed at `80c7bf0`); the seed was
+untouched by PR #7.
+
+**Fourteenth correction, at the V-walk — the `kg_vocabulary` count
+drift was commit 3's seed edit.** Commit 3's Cell 5 added the two
+`entity_synonym` rows to `kg_schema.sql`, moving the seed's
+`kg_vocabulary` row count from 129 to 131. The two count files
+(`tests/test_kg_metadata.py`, `scripts/print_kg.py`) still expected
+129. The drift was latent until the KG rebuild (this window) applied
+the 131-row seed to the live DB, at which point `print_kg.py --count`
+reported `!! drift (129)` and `test_kg_table_row_counts_match_v1_1`
+would have failed. Fixed at `c87c55e` — both count files moved
+129 → 131. **Caught by inspection (the rebuild's count report),
+not by a committed red test — §V7 records this honestly.**
+
 This is the **sixth** such correction in seven PRs. The pattern
 established across PRs #1–#6 holds: the meeting's row describes a
 wiring change, and master's code is nearly always either "already
@@ -329,91 +399,114 @@ does not exist yet — the row named it correctly, and mis-described
 the rest." PR #1 needed no correction because it was a genuine wiring
 PR whose meeting row matched master's gap on every axis. PR #6 was
 the second such PR, with the PR #5 tip-caveat layered on top. PR #7
-is the third, with the classifier-menu and bundle-manifest
-corrections on top.
+is the third — and the first in seven where the V-walk corrected the
+V0-history's own corrections (6, 7, 8 amended in place; 11–14
+appended). Correction 7's retraction is a new shape: a correction
+that was itself wrong and was replaced, not merely supplemented.
 
 ## V1 — Reproducer (live)
 
-TBD — populated when the V-walk runs.
+Three prompts run against `fa-esll-saasfademo1` after the dev MCP
+server was restarted at PID `114560` (WORKING_STYLE §22.1). Transcripts
+saved to `/tmp/pr7_v1_{all,get,list}.txt`. All three green,
+byte-identical shape:
 
-Three prompts at the brief's `WHAT IS KNOWN` section, all expected
-green after the fix:
+- Intent `CustomerAccount`, no filters, no include.
+- Plan `Step 1: search_customer_accounts`, `tool_args: {}`.
+- Answer `Showing 25 of 571 customer accounts.`
+- No `─── Tip ───` block. `Truncation:` block present at line 62, of
+  the standard `_local_truncation` shape
+  (`customer_accounts: 571 total in source; 25 returned.`) — the
+  shape PR #1–#6 produce on a plain-list 25-row sample.
 
-- `show me all customer accounts`
-- `get all customer accounts`
-- `list all customers`
-
-Each expected to produce:
-- Intent: `target_entity: CustomerAccount`, no filters, no include
-- Plan: one step, `search_customer_accounts`, `tool_args: {}`
-- Answer: `Showing 25 of N customer accounts.` (N = live pod total)
-- No `─── Tip ───` block (empty by construction, per §V0-history)
+The three verb forms (`show me all`, `get all`, `list all`) produced
+the same shape, because the helper inspects the intent, not the
+wording — the design property §V0-history's fifth correction
+established. **571** is the live pod count at run time; PR #6's read
+recorded 435, and the fetcher reports the live `totalResults`, not a
+cached one.
 
 ## V2 — Paraphrase
 
-TBD.
+Prompt `show me recent customer accounts`. Transcript at
+`/tmp/pr7_v2_paraphrase.txt`. Green, byte-identical to V1:
+`CustomerAccount` no filters; `search_customer_accounts`;
+`Showing 25 of 571 customer accounts.`; `Truncation:` block;
+no Tip.
 
-Expected: a paraphrase that exercises the same shape. Candidate:
-`show me recent customer accounts`. The helper's design makes this
-expected: it does not inspect the prompt for verbs, so a phrasing it
-has never seen fires the same way as one it has.
+`recent` is a recency adjective with no explicit N. The sysprompt's
+first rule (`b_customer_accounts.sysprompt`) names this phrasing as
+a trigger, and the helper fires on the resulting filter-less intent.
 
 ## V3 — Siblings (unchanged)
 
 The PR #7 change touches `ar.py` (field + detector + builder),
 `synthesizer.py` (branch), `parser.py` (helper), `server.py`
-(registration), `kg_schema.sql` + live DB (one row),
-`classifier_menu.sysprompt` (regenerated), `context_bundles.yaml`
-(three new lines), and the new sysprompt + manifest. None of these
-reach the Supplier, PurchaseOrder, Invoice, StandardReceipt,
-CreditMemo, or ReceivablesInvoice tip call sites. The sibling paths
+(registration), the live DB (two `entity_synonym` rows applied, one
+`(CustomerAccount, 'none')` row — the seed was already correct on
+both sides, §V0-history corrections 13 and 14), the regenerated
+`classifier_menu.sysprompt`, and the two count files. It does not
+touch `context_bundles.yaml` (§V0-history correction 11). None of
+these reach the Supplier, PurchaseOrder, Invoice, StandardReceipt,
+CreditMemo or ReceivablesInvoice tip call sites. The sibling paths
 are unchanged by construction.
 
-V3 confirmed by the four-file synth blast-radius run at V6
-(expected `97 passed, 1 deselected`, matching PRs #2, #4, #5, #6).
+V3 confirmed by the V6 blast-radius: four synthesizer files,
+`97 passed, 1 deselected in 0.30s`, matching PRs #2, #4, #5, #6
+exactly. See §V6.
 
 ## V4 — Negative (customer-scoped routes away from the plain-list branch)
 
-TBD.
+Two V4 controls plus two refusals. Transcripts at
+`/tmp/pr7_v4_{balance,ar_inv,balance_only,contract}.txt`. All four
+green:
 
-Two live V4 controls from the brief:
+- **`account balance for ABC Application Software`** — Intent
+  `CustomerAccount`, `by_customer_name` filter, `balance_only: True`.
+  Plan `Step 1: get_customer_account_by_name` (the resolver, **not**
+  `search_customer_accounts`). Answer the balance figures. No Tip.
+  `b_account_balance.sysprompt` is what routes this away from the
+  filter-less shape.
+- **`AR invoices for ABC Corporation Americas`** — Intent
+  `CustomerAccount`, `by_customer_name`, `include: ['CustomerTransaction']`.
+  Plan `Step 1: get_customer_account_by_name` → `Step 2:
+  get_customer_transactions`. No Tip. `b_customer_invoices.sysprompt`
+  routes it away.
+- **`show me all customer accounts balance`** — correctly refused
+  `missing_identifier`. `Reason:   I can look up customer accounts,
+  but this doesn't say which one.` Solution and Example are the
+  `_FALLBACK[MISSING_IDENTIFIER]` lines (§Deviations one-liner).
+- **`show me contract renewals due next quarter`** — unchanged
+  `UNKNOWN_ENTITY` refusal, same flavor as PRs #1–#6. §V9 records
+  a wording variance across runs.
 
-- `account balance for ABC Application Software` — must route to
-  `get_customer_account_by_name`, not to `search_customer_accounts`
-- `AR invoices for ABC Corporation Americas` — must route to
-  `get_customer_account_by_name` → `get_customer_transactions`, not
-  to `search_customer_accounts`
-
-Both currently work; PR #7 must not regress either. This is the
-mechanism correction (§V0-history correction 9): the sysprompt's
-customer-scoped rules are what tells the helper "this prompt is not
-a filter-less list."
-
-Plus the correctly-refused prompt:
-
-- `show me all customer accounts balance` — must stay refused with
-  `missing_identifier`. The balance-only shape requires a customer
-  name; the refusal is correct.
-
-Plus the unchanged-refusal control:
-
-- `show me contract renewals due next quarter` — must stay refused
-  with `Reason: Contract isn't something I know about.`
+**Why the two controls are the mechanism, not a regression net.**
+The helper sets `list_all=True` on any intent targeting
+`CustomerAccount` with `filters=[]` and `include=[]` and no
+account-number-shaped token. Its correctness depends on **nothing
+else** producing that shape for a customer-scoped prompt — because
+if anything did, the helper would treat a customer-scoped prompt as
+a filter-less list and answer by listing every customer. The
+sysprompt's customer-scoped rules (`b_account_balance`,
+`b_customer_invoices`, `b_customer_credit_memos`,
+`b_account_receipts`, `b_receipt_applications`) are what make it
+safe. Both controls green is the mechanism proof. §V0-history
+correction 9 records the reasoning.
 
 ## V5 — Goldens (Intent-only)
 
-TBD.
+Three goldens compared at `/tmp/pr7_v5_*.txt`. All **MATCH**
+byte-for-byte on the Intent block, filters and includes included:
 
-Same scope PRs #1–#6 used: compare each golden's `Intent:` block to
-the current pipeline's. Three goldens expected MATCH:
-
-| Golden | Prompt | Expected |
-|---|---|---|
-| `count_suppliers.txt` | `Count of suppliers` | `Supplier`, `count_only: True` |
-| `po_2144_and_lines.txt` | `Show PO 2144 and its lines` | `PurchaseOrder`, `by_id: 2144`, `include: ['PurchaseOrderLine']` |
-| `suppliers_with_open_pos.txt` | `Which suppliers have open purchase orders?` | `Supplier`, `has_open_PO: True` |
+| Golden | Golden Intent | Current Intent | Result |
+|---|---|---|---|
+| `count_suppliers.txt` | `Supplier`, `count_only: True` | same | **MATCH** |
+| `po_2144_and_lines.txt` | `PurchaseOrder`, `by_id: '2144'`, `include: ['PurchaseOrderLine']` | same | **MATCH** |
+| `suppliers_with_open_pos.txt` | `Supplier`, `has_open_PO: True` | same | **MATCH** |
 
 None route to CustomerAccount, so PR #7's changes do not reach them.
+Same scope-boundary reasoning `supplier.md` §V5, `invoice.md` §V5,
+`standard_receipt.md` §V5 and `receivables_invoice.md` §V5 used.
 
 ## V6 — pytest (scoped + synth blast-radius; full deferred)
 
@@ -422,29 +515,81 @@ as PRs #1–#6: the `mcp 2.x` / `langchain-mcp-adapters 0.3.1` conflict
 breaks `tests/test_agent_runner.py` collection. Deferred to the MCP
 migration PR.
 
-V6 will be run in the two scoped forms:
+V6 was run in the two scoped forms:
 
-| Layer | Command | Expected |
+| Layer | Command | Result |
 |---|---|---|
-| scoped | `pytest -q tests/test_sample_and_disclose_customer_account.py` | `6 passed` |
-| synth blast-radius | four files: `test_synthesizer`, `test_synthesizer_supplier_records`, `test_synthesizer_truncation_narration`, `test_synthesizer_aggregation` | `97 passed, 1 deselected` |
+| scoped | `pytest -q tests/test_sample_and_disclose_customer_account.py` | **`6 passed in 0.17s`** |
+| synth blast-radius | four files: `test_synthesizer`, `test_synthesizer_supplier_records`, `test_synthesizer_truncation_narration`, `test_synthesizer_aggregation` | **`97 passed, 1 deselected in 0.30s`** |
 
-The `97 passed, 1 deselected` count matches PRs #2, #4, #5, #6
-exactly for the same four-file set.
+Saved logs: `/tmp/t_pr7_v6_scoped.log`, `/tmp/t_pr7_v6_synth.log`.
+
+**The `97 passed, 1 deselected` count matches PRs #2, #4, #5, #6
+exactly** for the same four-file set. PR #7's two synthesizer files
+did not perturb the synthesizer surface those four files cover.
 
 ## V7 — Test fails without the fix
 
-TBD — populated as the six red-then-green commits land:
+Standard FIX_PLAN §8 step 3 discipline: red first, green after,
+neither a post-hoc stash. The actual commit sequence on the branch:
 
-- red: `docs(phase-3): customer_account.md — correct V0` + failing test
-- green 1: fetcher module + `ar.py` field + `synthesizer.py` branch +
-  KG seed row + KG count files + live DB row
-- green 2 (parser): helper + wiring
-- green 3 (sysprompt): `b_customer_accounts.sysprompt` + manifest entry
-- green 4 (server): registration + any `print_kg.py` repair
-- green 5 (classifier): `entity_synonym` seed + regenerated
-  `classifier_menu.sysprompt`
-- green 6 (bundle): `context_bundles.yaml` three new entries
+**Red.** `392b6d4` — `test(phase-3): customer_account — failing red
+test for PR #7`. `tests/test_sample_and_disclose_customer_account.py`
+had **`6 failed in 0.48s`** at that commit (`/tmp/t_pr7_red.log`):
+`AttributeError: 'CustomerAccountResponse' object has no attribute
+'narrowing_tip'` on four of the six; `AssertionError:
+synthesize_response called the LLM on a plain customer-account list`
+on the reproducer; `AssertionError` on the customer-scoped routing
+test. Exactly the three shapes the fix lands.
+
+**Green 1.** `dbc6117` — `feat(phase-3): customer_account —
+fetcher, KG row, plain-list branch (green 1)`. Seven files: fetcher
+module, `server.py` registration, `ar.py` field + detector +
+builder, `synthesizer.py` plain-list branch, `kg_schema.sql` seed row
+and `PROMPT Seeded kg_entity_tool (12 rows) → (13 rows)` banner,
+`tests/test_kg_metadata.py` and `scripts/print_kg.py` count files,
+plus the live DB `(CustomerAccount, 'none')` INSERT. After this
+commit: **`6 passed in 0.12s`** (`/tmp/t_pr7_green1.log`). The
+three-file trio (module + registration + KG row) landed together,
+satisfying §15.3.1 carry-forward rule #2. The synthesizer's four
+changes (field + detector + builder + branch before
+`single_parent_shape`) landed here, so the six tests pass.
+
+**Green 2.** `eedf499` — `feat(phase-3): customer_account — parser
+helper and wiring (green 2)`. One file: `parser.py`'s
+`_CUSTOMER_ACCOUNT_DISQUALIFIERS` tuple, the
+`_is_filter_less_customer_account_request` helper, and the wiring
+block in `parse()`. The six unit tests still pass here (they do not
+depend on `parser.py`); green 2's load-bearing proof is V1's three
+live prompts.
+
+**Green 3.** `cd84df9` — `feat(phase-3): customer_account —
+filter-less sysprompt block and manifest entry (green 3)`. Two
+files: `b_customer_accounts.sysprompt`, `order.manifest`.
+
+**Green 4.** `80c7bf0` — `feat(phase-3): customer_account —
+regenerate classifier menu (green 4)`. One file: the regenerated
+`classifier_menu.sysprompt`. The two `entity_synonym` rows were
+applied to the live DB (idempotent, verified) before the
+`scripts/build_classifier_context.py` run; the seed was already
+correct (§V0-history correction 13).
+
+**V-walk-surfaced defect fix.** `c87c55e` — `fix(phase-3):
+customer_account — kg_vocabulary count 129→131 (V-walk surfaced)`.
+The `kg_vocabulary` count drift was commit 3's seed edit
+(§V0-history correction 14); caught by `print_kg.py --count`
+reporting `!! drift (129)` after the KG rebuild applied the 131-row
+seed to the live DB. The fix moves both count files 129 → 131.
+**The red is the `!! drift` transcript line, not a committed failing
+test** — the count check was run *after* the fix, not before. This
+is the first PR in the sequence where a V-walk defect's red is
+inferred from inspection rather than a committed failing test.
+Recorded honestly rather than retrofitted with a synthetic commit.
+
+**Rulebook capture.** `72e6f7c` — `docs(working-style): capture
+§15.3.1 multi-file loop and §15.4.1 worked example`. Not a
+defect-fix commit; captures the discipline this PR executed under.
+Rides the branch, lands with the PR.
 
 ## V8 — N-run reproducibility (deferred)
 
@@ -468,23 +613,33 @@ it accepts and `--validate` is not among them;
 `grep -rln 'validate' scripts/` finds no implementation). PR #7
 inherits that finding and uses the V9-scoped pattern.
 
-### V9-scoped (TBD)
+### V9-scoped (green)
 
-Six prompts run end to end with `--show-parser --show-planner`, chosen
-to cover the changed path and its neighbours:
+Six prompts run end to end with `--show-parser --show-planner`,
+covering the changed path and its five neighbours. Saved transcripts
+at `/tmp/pr7_v9_scoped/*.txt`.
 
-- `get all customer accounts` — expected green (V1 reproducer)
-- `show me recent customer accounts` — expected green (V2 paraphrase)
-- `account balance for ABC Application Software` — expected unchanged
-  (V4 control)
-- `AR invoices for ABC Corporation Americas` — expected unchanged
-  (V4 control)
-- `show me all customer accounts balance` — expected unchanged
-  refusal
-- `show me contract renewals due next quarter` — expected unchanged
-  refusal
+| Prompt | Intent | Plan | Answer |
+|---|---|---|---|
+| `get all customer accounts` | CustomerAccount, no filters | `search_customer_accounts` | `Showing 25 of 571 customer accounts.` |
+| `show me recent customer accounts` | CustomerAccount, no filters | `search_customer_accounts` | `Showing 25 of 571 customer accounts.` |
+| `account balance for ABC Application Software` | CustomerAccount, `by_customer_name`, `balance_only: True` | `get_customer_account_by_name` | unchanged |
+| `AR invoices for ABC Corporation Americas` | CustomerAccount, `by_customer_name`, `include: ['CustomerTransaction']` | `get_customer_account_by_name` → `get_customer_transactions` | unchanged |
+| `show me all customer accounts balance` | — | — | `Reason:   I can look up customer accounts, but this doesn't say which one.` |
+| `show me contract renewals due next quarter` | — | — | `Reason:   that kind of record isn't something I know about.` |
 
-Saved transcripts to `/tmp/pr7_v9_scoped/*.txt` when run.
+The two filter-less prompts prove the feature end to end. The two
+V4 controls prove the customer-scoped boundary holds. The two
+refusals prove the parse gate holds.
+
+**Wording variance on the contract-renewals refusal, one run.**
+V4's transcript says `Contract isn't something I know about.`;
+V9-scoped's says `that kind of record isn't something I know about.`
+Same flavor (`UNKNOWN_ENTITY`); the wording differs by whether the
+model populated `unanswerable_entity` on its self-declared refusal.
+`capability.py` drives the wording; PR #7 does not touch
+`capability.py` and is not responsible for the variance. Recorded
+here so a future window sees it as PR #7 saw it.
 
 ### V9-full (deferred — the tool does not exist)
 
@@ -495,27 +650,84 @@ proper is its own tooling PR.
 
 ## Deviations
 
-*(Populated as the V-walk runs. Empty at V0 commit.)*
+### Out of scope — `capability.py` has no `_IDENTIFIER_GUIDANCE['CustomerAccount']` entry
+
+The correctly-refused `show me all customer accounts balance`
+returns `missing_identifier` with the generic
+`_FALLBACK[MISSING_IDENTIFIER]` Solution and Example lines, because
+`capability.py` has no entity-specific entry for `CustomerAccount`.
+Adding one belongs with the existing capability.py queue item
+(item 4, `_FILTER_GUIDANCE['CreditMemo']` live). Not a PR #7 fix.
+
+### Out of scope — `test_bundle_manifest.py` is red on master (pre-existing)
+
+`test_bundle_manifest.py::test_every_tracked_file_is_in_a_bundle`
+fails on `bb86b8a` for dozens of tracked files that predate PR #7
+(`Dockerfile`, `spire-docker.sh`, PR #6's
+`search_receivables_invoices.py` and `b_ar_invoices.sysprompt`, all
+six `test_sample_and_disclose_*.py`, `test_sql_overlay_coverage.py`,
+and more). PR #7's three new files join the same list; they do not
+cause it. PR #7 does not touch `context_bundles.yaml`. Repairing the
+manifest comprehensively is a separate PR. See §V0-history
+correction 11.
+
+### Out of scope — `_is_explicit_po_list` verb-set gap (`get all POs`)
+
+Same finding as PR #6 §Deviations. Queue item 9. Not fixed here.
+
+### KG rebuilt from seed during PR #7's window
+
+`python scripts/rebuild_kg.py` was run once during V-walk
+preparation. It dropped and re-created every KG table from
+`kg_schema.sql`, so the live DB is now the seed by construction.
+Any prior live-only drift (per `test_kg_metadata.py`'s own
+docstring, the KG has had live-only rows before) is gone. Seed and
+live DB agree. Recorded here so a future window knows the state.
+
+### `personas.yaml` in the working tree
+
+Local credential edit, never staged, not part of any PR.
 
 ## V-walk state
 
 | V | Status | Note |
 |---|---|---|
-| V0 | **done** | opened with the meeting row's prescription; corrected on reading `master` at `bb86b8a` (ten corrections — synthesizer is four changes, filtered_fields threading, parser helper as shape-check-not-verb-whitelist, parser helper load-bearing with sysprompt, classifier menu is stale for customer account(s), context_bundles.yaml must list three new files, file count fourteen not ten, V4 is the mechanism, meeting §8.5 closed by precedent) |
-| V1 | **pending** | three canonical prompts; expected green with plan `search_customer_accounts` and `Showing 25 of N` |
-| V2 | **pending** | paraphrase; expected green |
-| V3 | **pending** | sibling paths unchanged; expected 97/1 blast-radius |
-| V4 | **pending** | two controls + two refusals; expected unchanged |
-| V5 | **pending** | three golden Intents; expected MATCH |
-| V6 | **pending** | branch tests 6/6; synth blast-radius 97/1; full-suite blocked by MCP conflict |
-| V7 | **pending** | six red-then-green commits documented |
+| V0 | **done** | ten corrections at V0; four more amended/replaced/appended at the V-walk — see §V0-history corrections 6, 7, 8, and 11–14 |
+| V1 | **green** | three canonical prompts, `Showing 25 of 571 customer accounts.`, plan `search_customer_accounts`, no Tip, `Truncation:` block |
+| V2 | **green** | `show me recent customer accounts` — byte-identical to V1 |
+| V3 | **green** (folded into V6) | sibling paths unchanged; V6 blast-radius is V3's evidence |
+| V4 | **green** | two controls hold (resolver path, not `search_customer_accounts`); balance-only correctly refused; `contract renewals` unchanged refusal |
+| V5 | **green** | three golden Intents matched byte-identically |
+| V6 | scoped + synth **green**; full **deferred** | scoped `6 passed in 0.17s`; blast-radius `97 passed, 1 deselected in 0.30s` |
+| V7 | **green** | red at `392b6d4` (`6 failed`) → green 1 at `dbc6117` (`6 passed`); greens 2–4 at `eedf499`, `cd84df9`, `80c7bf0`; V-walk defect fix at `c87c55e` (red inferred from `print_kg.py --count`, not committed); rulebook capture at `72e6f7c` |
 | V8 | **deferred** | N≥20 sweep deferred to MCP migration PR |
-| V9 | **pending** | scoped six-prompt sweep; `--validate` does not exist on this branch |
+| V9 | scoped **green**; full **deferred** | six-prompt sweep; `--validate` does not exist on this branch |
 
 ## Not checked
 
-TBD
+- **V6-full** — `pytest -q` against the full suite — deferred to the
+  MCP migration PR, same class as PRs #1–#6. The `mcp 2.x` /
+  `langchain-mcp-adapters 0.3.1` conflict breaks
+  `tests/test_agent_runner.py` collection.
+- **V8** — the N≥20 reproducibility sweep — deferred alongside
+  V6-full. The single V1 and V2 runs are each green; the sweep would
+  test whether the parser's model produces the filter-less intent
+  deterministically and whether the helper's disqualifier fires the
+  same way across phrasing variations.
+- **V9-full** — the 240-prompt `--validate` sweep — deferred;
+  `--validate` does not exist on this branch (PR #6 §V9; queue item
+  7). V9-scoped is the substitute.
+- **The full `test_bundle_manifest.py` repair** — red before PR #7
+  (see §Deviations); PR #7 does not repair it.
+- **The `capability.py` `_IDENTIFIER_GUIDANCE['CustomerAccount']`
+  entry** — §Deviations, not a PR #7 fix.
+- **The `contract renewals` refusal wording variance** — noted in
+  §V9-scoped; not investigated to a root cause.
 
 ## S11 — Coverage expansion
 
-TBD
+The three V1/V2 filter-less prompts plus the two V4 controls are the
+shape this PR samples. The same prompts are in the V9-scoped set
+above. A future prompt-set window can add "show me all <entity>"
+across every sampleable entity from MEETING §2, but that is the
+seven-PR sequence's coverage, not PR #7's.
