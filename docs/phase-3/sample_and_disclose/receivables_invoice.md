@@ -1,0 +1,142 @@
+# Phase 3 — Sample-and-disclose: ReceivablesInvoice
+
+**Branch:** `Phase3-ReceivablesInvoice-Sample`
+**PR:** TBD (this file is committed before the branch exists; PR number
+added when the PR is opened, per FIX_PLAN.md §8 step 8)
+**State:** open
+**Finding:** MEETING_2026-11-10 §6 row 6 — the sixth entity in the
+seven-PR sample-and-disclose sequence. ReceivablesInvoice's
+**plain-list path does NOT exist on `master` at `c8580c4`.** The entity
+has one fetcher (`get_receivables_invoice_by_id`), reached only by
+`by_id`; the KG's entity-level filter set is `['by_id']`; the parser
+teaches no filter-less shape (every ReceivablesInvoice-rooted sysprompt
+rule names `by_id`, every customer-scoped rule routes to
+`CustomerAccount`); the planner guard refuses a filter-less
+ReceivablesInvoice intent before Block 1; and no `kg_entity_tool` row
+exists for `(ReceivablesInvoice, 'none')`. PR #6 is therefore a **real
+wiring PR** — the second in the sequence after PR #1 — and V9 is
+required (the first `.sysprompt` change in the sequence).
+
+## V0 — Fix statement
+
+PR #6 adds a filter-less AR-invoice fetcher
+`search_receivables_invoices` (new file
+`src/spire/mcp_server/tools/search_receivables_invoices.py`, registered
+in `server.py`), inserts a `kg_entity_tool` row for
+`(ReceivablesInvoice, 'none')` — the **first KG touch in the
+sequence** — so the entity advertises a filter-less fetch the planner
+will honour; relaxes the ReceivablesInvoice planner guard so a
+filter-less intent reaches the new tool; adds a new sysprompt block
+`b_ar_invoices.sysprompt` teaching the filter-less shape (with an
+`order.manifest` entry after `b_ar_invoice_by_id`) and runs the V9
+`--validate` sweep against all 240 prompts; adds a `narrowing_tip`
+field to `ReceivablesInvoiceResponse` and a guarded
+`narrowing_tip=` kwarg at the ReceivablesInvoice plain-list branch in
+`synthesizer.py` — **the tip ships empty by construction on this pod**
+because the entity-level filter set is `['by_id']` and
+`['by_id']` minus `by_id` is `{}`, so `build_narrowing_tip(set(), ...)`
+returns `""`; and locks the shape with a red-then-green test at
+`tests/test_sample_and_disclose_receivables_invoice.py`. The field
+exists for contract uniformity with the five prior entities (Supplier,
+PurchaseOrder, Invoice, StandardReceipt, CreditMemo) and seeds the
+future KG-filter-set PR that will add a real narrowing filter.
+
+## V0 — history
+
+The original V0 would have been the meeting §6 row-6 prescription
+above, corrected on reading `master` at `c8580c4`. Preserved here per
+the `supplier.md` §V0-history precedent so the branch's own record of
+what it first claimed is not lost:
+
+> The parser will set `intent.list_all=True` for a ReceivablesInvoice
+> intent that names no narrowing filter, via a sibling extractor beside
+> `_is_explicit_po_list` and `_is_sampleable_po_request`; the planner's
+> existing ReceivablesInvoice path will then permit a bounded 25-row
+> sample; `ReceivablesInvoiceResponse` will gain a `narrowing_tip`
+> field so the sample discloses itself and tells the user how to
+> narrow.
+
+**Why it was wrong.** Read from `master` at `c8580c4`:
+
+- The parser has **no filter-less ReceivablesInvoice shape** to extend.
+  Every sysprompt rule that targets `ReceivablesInvoice` names `by_id`
+  (`b_ar_invoice_by_id.sysprompt`, `b_ar_invoice_lines.sysprompt`,
+  `b_ar_tax_lines.sysprompt`, `b_ar_dff.sysprompt`); every
+  customer-scoped rule (`b_customer_invoices.sysprompt`,
+  `b_account_receipts.sysprompt`) routes to `CustomerAccount`. There is
+  nothing for a sibling extractor to detect — the parser already declines
+  to produce a filter-less ReceivablesInvoice intent.
+- `ReceivablesInvoiceResponse` (`ar.py:140`) carries `summary`,
+  `receivables_invoices`, `truncation_notes` — no `narrowing_tip` — and
+  the tip will be **empty by construction** on this pod, because the KG
+  entity-level filter set for `ReceivablesInvoice` is `['by_id']`
+  (confirmed by `_entity_level_filter_types().get('ReceivablesInvoice',
+  set())` at `c8580c4`), so `['by_id']` minus `by_id` is `{}`.
+  `build_narrowing_tip` returns `""` on an empty filter set before it
+  ever inspects `total`. The field exists for contract uniformity with
+  the five prior entities and seeds the future KG-filter-set PR; it will
+  not fire on this pod.
+- There is **no filter-less AR-invoice fetcher** on master.
+  `receivables_invoice_by_id.py` is the only fetcher reached by the
+  entity, and it is reached only by `by_id`. Every other
+  `receivablesInvoices`-path file (`receivables_invoice_lines.py`,
+  `receivables_invoice_tax_lines.py`,
+  `receivables_invoice_transaction_dff.py`) is a **child** fetcher, not
+  a filter-less parent fetcher.
+- There is **no `kg_entity_tool` row** for `(ReceivablesInvoice,
+  'none')`. The KG does not advertise a filter-less fetch the planner
+  could honour, and the planner guard on `ReceivablesInvoice` refuses a
+  filter-less intent before Block 1 — so even if the parser produced
+  one, the plan would not be built.
+- The real work is therefore a **new fetcher** plus a **new KG row**
+  plus a **new sysprompt block** plus a **relaxed planner guard** — not
+  an extension of an existing path. The tip field is a contract-
+  uniformity addition on top.
+
+**The correction is the finding.** The meeting row named the **new
+tool** correctly (`search_receivables_invoices`) — and named the parser
+extension and tip block as if they would fire. On this pod they will
+not: the parser has no shape to extend, and the tip is empty by
+construction. The wiring is the fetcher plus the KG row plus the
+sysprompt block plus the guard.
+
+This is the **fifth** such correction in six PRs. The pattern
+established across PRs #2–#5 holds: the meeting's row describes a
+wiring change, and master's code is nearly always either "already
+samples locally, add one small shape, and one structural caveat"
+(PRs #2–#5) or, as here and at PR #1, "the tool the row names does not
+exist yet — the row named it correctly, and mis-described the rest."
+PR #1 needed no correction because it was a genuine wiring PR whose
+meeting row matched master's gap on every axis. PR #6 is the second
+such PR, but with the PR #5 tip-caveat layered on top.
+
+## Deviations
+
+*(Populated as the V-walk runs. Empty at V0 commit.)*
+
+### `personas.yaml` in the working tree
+
+Local credential edit, never staged, not part of any PR.
+
+## V-walk state
+
+| V | Status | Note |
+|---|---|---|
+| V0 | **done** | opened with the meeting row's prescription; corrected on reading `master` at `c8580c4` to reflect the absent plain-list path, the empty-by-construction tip, and the new-tool shape |
+| V1 | pending | reproducer — `get all AR invoices` and the `get all receivables invoices` paraphrase |
+| V2 | pending | paraphrase — different trigger wording |
+| V3 | pending | siblings unchanged (Supplier / PO / Invoice / StandardReceipt / CreditMemo tips) |
+| V4 | pending | negative — customer-scoped AR-invoice routes to `CustomerAccount`, unscoped refusal boundary |
+| V5 | pending | goldens (Intent-only) |
+| V6 | pending | pytest scoped + synth blast-radius; full deferred to MCP migration PR |
+| V7 | pending | red-then-green test pair |
+| V8 | pending | N≥20 — parser changes, deferred alongside V6 per PRs #1–#5 |
+| V9 | **required** | first `.sysprompt` change in the sequence — `--validate` against all 240 prompts |
+
+## Not checked
+
+TBD
+
+## S11 — Coverage expansion
+
+TBD
