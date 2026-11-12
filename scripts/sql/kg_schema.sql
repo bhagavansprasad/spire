@@ -1178,6 +1178,12 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Fetches ONE AR invoice by CustomerTransactionId via q= on the collection. Single-path (no TransactionNumber fallback - no P2 prompt needs it). Returns None when the id matches nothing.'
 );
 
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'ReceivablesInvoice',
+  'none',
+  'search_receivables_invoices',
+  'PR #6 / Phase 3 sample-and-disclose: the plain list fetcher for the AR-invoice entity. Lists the most recent N AR invoices (orderBy=TransactionDate:desc, server-side) up to `limit`, with the collection count lifted onto ToolResult.total_available. Read-only; no filters. The sibling by_id fetcher above fetches one invoice; this one samples the collection. The two are NOT interchangeable, and a filter-less AR-invoice intent routes here.'
+);
 
 INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
   'CustomerAccount',
@@ -1205,7 +1211,7 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Account-number resolver for CustomerAccount. Same tool as the by-name resolver; the filter type selects the query clause (AccountNumber vs CustomerName). Returns the account(s) whose AccountNumber matches exactly. Registered as its own (entity, filter_type) row because the planner looks up the fetcher by the filter type it picked.'
 );
 
-PROMPT Seeded kg_entity_tool (11 rows).
+PROMPT Seeded kg_entity_tool (12 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool

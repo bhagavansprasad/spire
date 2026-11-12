@@ -147,6 +147,19 @@ class ReceivablesInvoiceResponse(BaseModel):
         "Empty if none.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) — tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set. On this pod ReceivablesInvoice has no "
+        "entity-level narrowing filters beyond by_id (which is a "
+        "fetch-one, not a narrowing filter), so the tip ships empty "
+        "by construction; the field exists for contract uniformity "
+        "with Invoice, StandardReceipt, Supplier, PurchaseOrder and "
+        "CreditMemo.",
+    )
 
 
 class CustomerAccountTransactionInfo(BaseModel):
@@ -599,6 +612,93 @@ def plain_credit_memo_bucket(outputs: dict[str, list[dict]]) -> str | None:
     if "CustomerTransactionId" in first and "CreditMemoCurrency" in first:
         return name
     return None
+
+
+def plain_receivables_invoice_bucket(outputs: dict[str, list[dict]]) -> str | None:
+    """Name of the AR-invoice bucket when this is a PLAIN invoice list.
+
+    The mirror of plain_supplier_bucket / plain_po_bucket /
+    plain_invoice_bucket / plain_credit_memo_bucket, for the AR-invoice
+    entity. "Plain" means one bucket of AR-invoice rows and nothing
+    else, so every field the response needs is already on those rows.
+    Returns None the moment there is more than one bucket: an
+    AR-invoice query that also fetched lines, tax lines or a DFF is a
+    multi-bucket shape and stays on single_parent_shape (which requires
+    exactly one parent row), not here.
+
+    Deliberately conservative, same as the siblings: returning None
+    too often costs tokens; returning a wrong bucket costs correctness.
+
+    WHY THIS EXISTS AND single_parent_shape DOES NOT SUFFICE
+    single_parent_shape requires len(outputs[parent]) == 1 — one AR
+    invoice plus its children. A 25-row plain list of AR invoices has
+    no parent-plus-children shape, so it falls through that branch
+    entirely. Before this function existed, such a bucket reached the
+    LLM path. This is the detector that lets it build locally.
+    """
+    if len(outputs) != 1:
+        return None
+    name, rows = next(iter(outputs.items()))
+    if not rows or not isinstance(rows[0], dict):
+        return None
+    first = rows[0]
+    # Signature fields: CustomerTransactionId + InvoiceCurrencyCode are
+    # the pair that identifies an AR-invoice row. InvoiceCurrencyCode
+    # specifically — not EnteredAmount — because a credit memo also
+    # carries CustomerTransactionId (they share the id space) and a
+    # detector keyed on that alone would claim the wrong bucket.
+    if "CustomerTransactionId" in first and "InvoiceCurrencyCode" in first:
+        return name
+    return None
+
+
+def build_receivables_invoice_plain_records(
+    rows: list[dict],
+) -> list["ReceivablesInvoiceRecord"]:
+    """Executor AR-invoice rows -> ReceivablesInvoiceRecord, for the
+    plain-list path (one invoice per row, no children).
+
+    Pure: no LLM, no I/O. The mirror of build_credit_memo_records for
+    the plain-list case. The multi-row, children-attached case is
+    build_receivables_invoice_records (unchanged, still reached via
+    single_parent_shape on the one-invoice-plus-children shape).
+
+    Every field the response needs is on the row, because the new
+    search_receivables_invoices fetcher projects the same fields as
+    receivables_invoice_by_id — see that module's _PROJECTED_FIELDS.
+    This is a rename, not a reconstruction, and there is no cross-
+    bucket join.
+
+    lines and dff stay empty BY DESIGN: the plain-list path fetched
+    no children. A query that DOES fetch children is the
+    single_parent_shape case and goes through
+    build_receivables_invoice_records, not here.
+    """
+    records: list[ReceivablesInvoiceRecord] = []
+    for row in rows:
+        records.append(
+            ReceivablesInvoiceRecord(
+                customer_transaction_id=(
+                    row.get("CustomerTransactionId") or 0
+                ),
+                transaction_number=str(
+                    row.get("TransactionNumber") or ""
+                ),
+                transaction_date=str(
+                    row.get("TransactionDate") or ""
+                ),
+                bill_to_customer_name=str(
+                    row.get("BillToCustomerName") or ""
+                ),
+                status=str(row.get("InvoiceStatus") or ""),
+                currency=str(row.get("InvoiceCurrencyCode") or ""),
+                amount=float(row.get("EnteredAmount") or 0),
+                balance=float(row.get("InvoiceBalanceAmount") or 0),
+                lines=[],
+                dff=None,
+            )
+        )
+    return records
 
 
 # ─────────────────────────────────────────────────────────────────────
