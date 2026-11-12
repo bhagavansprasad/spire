@@ -227,3 +227,59 @@ def test_complete_fetch_does_not_carry_narrowing_tip():
         f"narrowing_tip must be empty when all matching rows were "
         f"returned; got {result.narrowing_tip!r}"
     )
+
+
+# ---------------------------------------------------------------------
+# V3b coverage lock — the empty result carries no tip.
+#
+# Exercised live in V3b (`invoices for supplier 1252 over 999999999`):
+# empty result, no tip, no truncation block. This test locks that
+# behaviour in PR #3's own file.
+# ---------------------------------------------------------------------
+
+
+def test_empty_invoice_list_carries_no_tip():
+    """An empty Invoice result has no tip.
+
+    Two paths converge on empty: the all-buckets-empty shortcut (no
+    truncation block at all) and the plain-invoice branch with a
+    truncation entry of total 0. Both must produce empty
+    narrowing_tip. V3b live evidence at t_v3b_invoice_empty.txt
+    (though that file was produced under the pre-fix `d964bb6`;
+    the guard from d7d78c5 (`len(rows) < total_available`) preserves
+    the empty case since 0 < 0 is False).
+    """
+    # Case 1: empty invoices bucket, no truncation entry (all-buckets
+    # empty shortcut).
+    outputs = {"invoices": []}
+    result = synthesize_response(
+        outputs,
+        target_entity="Invoice",
+        llm=_forbidden_llm(),
+    )
+    assert isinstance(result, InvoiceResponse)
+    assert result.narrowing_tip == "", (
+        f"empty result (no truncation) must have empty narrowing_tip; "
+        f"got {result.narrowing_tip!r}"
+    )
+
+    # Case 2: empty invoices bucket with a truncation entry of total 0.
+    outputs = {"invoices": []}
+    truncation = {
+        "invoices": {
+            "total_available": 0,
+            "truncated": False,
+            "limit_applied": 25,
+        }
+    }
+    result = synthesize_response(
+        outputs,
+        target_entity="Invoice",
+        truncation_by_step=truncation,
+        llm=_forbidden_llm(),
+    )
+    assert isinstance(result, InvoiceResponse)
+    assert result.narrowing_tip == "", (
+        f"empty result (total 0) must have empty narrowing_tip; "
+        f"got {result.narrowing_tip!r}"
+    )
