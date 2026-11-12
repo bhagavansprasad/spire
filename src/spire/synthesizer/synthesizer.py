@@ -162,6 +162,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_narrowing_tip,
     _PURCHASE_ORDER_FILTER_LABELS,
     _INVOICE_FILTER_LABELS,
+    _STANDARD_RECEIPT_FILTER_LABELS,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -1546,6 +1547,26 @@ def synthesize_response(
                 ),
                 standard_receipts=build_standard_receipt_records(rows),
                 truncation_notes=notes,
+                # PR #4: sample-only guard, mirroring the Invoice
+                # call site's V3c fix (d7d78c5). The tip fires only when
+                # the answer is a SAMPLE (examined < total), not on a
+                # complete fetch. The `if ft != "by_id"` exclusion is a
+                # no-op on StandardReceipt today (the KG has no by_id
+                # entity-level filter for it) — kept for pattern
+                # consistency so a future KG change does not silently
+                # widen the tip.
+                narrowing_tip=(
+                    build_narrowing_tip(
+                        {ft for ft in _entity_level_filter_types().get(
+                            "StandardReceipt", set()
+                        ) if ft != "by_id"},
+                        total_available,
+                        entity_label="receipts",
+                        labels_map=_STANDARD_RECEIPT_FILTER_LABELS,
+                    )
+                    if total_available is not None and len(rows) < total_available
+                    else ""
+                ),
             )
 
     if llm is None:
