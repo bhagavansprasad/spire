@@ -446,6 +446,14 @@ class StandardReceiptResponse(BaseModel):
         "Empty if none.",
     )
     truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only "
+        "when the answer is a SAMPLE (examined < total) \u2014 tells the "
+        "reader the full scan is slow and lists the entity-level "
+        "filters that would narrow it. Empty when the answer already "
+        "covers the full set.",
+    )
 
 class CreditMemoRecord(BaseModel):
     """One credit memo in a credit-memo-rooted response."""

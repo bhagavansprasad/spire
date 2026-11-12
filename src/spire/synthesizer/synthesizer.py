@@ -162,6 +162,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     build_narrowing_tip,
     _PURCHASE_ORDER_FILTER_LABELS,
     _INVOICE_FILTER_LABELS,
+    _STANDARD_RECEIPT_FILTER_LABELS,
 )
 from spire.synthesizer.prompts import (  # noqa: F401
     _SYSTEM_PROMPT_BY_ENTITY,
@@ -554,6 +555,14 @@ def synthesize_response(
         # truncation / metadata maps; this reads it and says so.
         truncated = _truncated_steps(truncation_by_step, metadata_by_step)
         if truncated:
+            # Fix P (V-walk-surfaced, PR #4). Over 0 rows, the cap is
+            # NOT the reason the answer is empty: zero rows matched
+            # within it, so "the search was capped before examining all
+            # matching records, so more may exist" asserts a cause the
+            # data does not support. The plain "no matching criteria"
+            # wording is the honest summary for an empty result; the
+            # truncation_notes below still disclose the cap, so nothing
+            # is hidden.
             notes: list[str] = []
             for name, entry in truncated:
                 total = entry.get("total_available")
@@ -566,26 +575,10 @@ def synthesize_response(
                     f"capped before examining all of them, so the result "
                     f"is a sample, not the whole."
                 )
-            # Name the source total in the summary only when the tool
-            # reported one. The standard_receipts tool returns
-            # total_available=None when its client-side site filter
-            # exceeded the overfetch cap, so the common case is unknown;
-            # say that plainly rather than inventing a figure.
-            first_total = truncated[0][1].get("total_available")
-            if isinstance(first_total, int):
-                summary = (
-                    f"No {label} found in the examined sample. The source "
-                    f"holds {first_total:,} record(s); the search was "
-                    f"capped before examining all of them, so more may "
-                    f"match the filter."
-                )
-            else:
-                summary = (
-                    f"No {label} found in the examined sample. The search "
-                    f"was capped before examining all matching records, so "
-                    f"more may exist beyond the examined window."
-                )
-            return empty_schema(summary=summary, truncation_notes=notes)
+            return empty_schema(
+                summary=f"No {label} found matching the criteria.",
+                truncation_notes=notes,
+            )
 
         return empty_schema(
             summary=f"No {label} found matching the criteria.",
@@ -1546,6 +1539,26 @@ def synthesize_response(
                 ),
                 standard_receipts=build_standard_receipt_records(rows),
                 truncation_notes=notes,
+                # PR #4: sample-only guard, mirroring the Invoice
+                # call site's V3c fix (d7d78c5). The tip fires only when
+                # the answer is a SAMPLE (examined < total), not on a
+                # complete fetch. The `if ft != "by_id"` exclusion is a
+                # no-op on StandardReceipt today (the KG has no by_id
+                # entity-level filter for it) — kept for pattern
+                # consistency so a future KG change does not silently
+                # widen the tip.
+                narrowing_tip=(
+                    build_narrowing_tip(
+                        {ft for ft in _entity_level_filter_types().get(
+                            "StandardReceipt", set()
+                        ) if ft != "by_id"},
+                        total_available,
+                        entity_label="receipts",
+                        labels_map=_STANDARD_RECEIPT_FILTER_LABELS,
+                    )
+                    if total_available is not None and len(rows) < total_available
+                    else ""
+                ),
             )
 
     if llm is None:

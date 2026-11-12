@@ -1501,6 +1501,19 @@ _INVOICE_FILTER_LABELS: dict[str, str] = {
     "pending": "pending approval",
 }
 
+# Phase 3, PR #4 — the StandardReceipt sibling of the three maps above.
+# The two keys are exactly the KG's entity-level filter set for
+# StandardReceipt, read at 6b299d0 via _entity_level_filter_types():
+#     ['customer_name', 'customer_site']
+# StandardReceipt has no by_id filter in the KG's entity-level set, so
+# the tip call site's `if ft != "by_id"` exclusion is a no-op here — it
+# is kept anyway, matching the pattern, so a future KG change that adds
+# by_id does not silently widen the tip.
+_STANDARD_RECEIPT_FILTER_LABELS: dict[str, str] = {
+    "customer_name": "customer name",
+    "customer_site": "customer site",
+}
+
 
 def build_narrowing_tip(
     filter_types: set[str],
