@@ -17,110 +17,66 @@ commit it.
 
 ---
 
-## Issue A — the feature (this branch)
+## Issue A — the feature (all three PRs merged)
 
-PR #1 of the seven-PR sequence in
-`docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6:
-**PurchaseOrder sample-and-disclose**, the anchor PR.
+PRs #203 (PurchaseOrder, anchor), #204 (Supplier), #205 (Invoice)
+have all merged. The seven-PR sample-and-disclose sequence's first
+three rows are done. The durable record for each is its evidence
+file, frozen at `State: closed`:
 
-### What is done
+- `docs/phase-3/sample_and_disclose/purchase_order.md` — `#203`
+- `docs/phase-3/sample_and_disclose/supplier.md` — `#204`
+- `docs/phase-3/sample_and_disclose/invoice.md` — `#205`
 
-- Evidence file opened on `master` (V0 only): `purchase_order.md`.
-- Failing test committed on branch: `2681217`.
-- Source change set (uncommitted, above): the sibling extractor
-  `_is_sampleable_po_request` in `parser.py`, `_PURCHASE_ORDER_FILTER_LABELS`
-  + `labels_map` parameter + `narrowing_tip` field in `p2p.py`, PO tip
-  blocks (with `lifecycle_status` excluded) in `synthesizer.py`.
-- Test file `tests/test_sample_and_disclose_po.py` has 12 tests,
-  all passing.
-- Three fixes landed after the initial V-walk failures:
-  - Fix A: `build_narrowing_tip` de-duplicates labels (`sorted(set(labels))`)
-    so four PO filters sharing "creation date" do not repeat the label.
-  - Fix B: the two PO tip call sites in `synthesizer.py` exclude
-    `lifecycle_status` alongside `by_id`. `lifecycle_status` is a
-    fetch-by-value filter, not a narrowing filter; suggesting it in a
-    sample tip is noise.
-  - Fix C: replaced a tautological `test_build_narrowing_tip_excludes_
-    lifecycle_status` with a `synthesize_response`-level test that
-    actually exercises the caller-side exclusion.
+### Merge SHAs
 
-### V-walk state
-
-| Step | State | Note |
+| PR | Merge commit | Entity |
 |---|---|---|
-| V0 — fix statement | done | in `purchase_order.md` |
-| V1 — reproducer (live) | **green** | `get po with distribution details` → 25-row sample + tip `creation date, last-updated date, status, supplier` |
-| V2 — paraphrase | **green** | `show purchase orders with their schedules` → 2-step plan, `POSchedule` child, same tip; reproduced twice |
-| V3 — sibling unchanged | **green** | `list all purchase orders` → 1-step plan, empty include (no over-reach by the new extractor) |
-| V4 — negative still refuses | **green** | V4a `show me PO 2144` → `by_id` fetch, 1 record, no tip; V4b `get all addresses` → `missing_identifier` refusal |
-| V5 — goldens unchanged | **green** | three intents matched (`count_suppliers`, `po_2144_and_lines`, `suppliers_with_open_pos`); full-file drift explained (SQL projection block predates goldens; pod supplier count 431→395) |
-| V6 — full pytest | **deferred** | blocked by MCP dependency conflict; pointer below; branch's own tests: `12 passed` |
-| V7 — test fails without fix | **green** | commit `2681217` is the red evidence |
-| V8 — N≥20 | **deferred** | depends on V6; same MCP conflict |
-| V9 — `--validate` | **not required** | no `.sysprompt` changed in this PR |
+| #203 | `2a23906` | PurchaseOrder (anchor) |
+| #204 | `850feb5` | Supplier |
+| #205 | `3f3ff11` | Invoice |
 
-### Next concrete action
+Post-merge docs commits: `05d7978` (froze `supplier.md`),
+`983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
+`5f9b554` (froze `invoice.md`).
 
-**This branch is done.** PR #204 merged to `master` at `850feb5`.
-The V-walk for what could run in that window is complete (V1–V5,
-V7, V9 green; V6 scoped + narrow + synth-blast-radius green, full
-deferred; V8 partial at N=4). The evidence file
-(`supplier.md`) is frozen at `State: closed`.
+### What each PR proved
 
-The next window starts **PR #3 (Invoice sample-and-disclose)**,
-the third row of the seven-PR sequence in
-`docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6:
+- **PR #203 (PurchaseOrder).** Introduced the bounded sample path
+  (`_is_sampleable_po_request` beside `_is_explicit_po_list`),
+  `narrowing_tip` on `PurchaseOrderResponse`, and the `labels_map`
+  parameter on `build_narrowing_tip`. V-walk found three defects
+  the unit tests did not catch (Fix A/B/C in
+  `purchase_order.md` §Deviations).
+- **PR #204 (Supplier).** Established that Supplier **already
+  sampled** on `master`; PR #2 became coverage + one new shape
+  (the multi-child builder `build_suppliers_with_children`). V-walk
+  found three defects (Fix D-a/D-b/E in `supplier.md` §Deviations).
+- **PR #205 (Invoice).** Established that the plain-list Invoice
+  path **already samples** on `master`; PR #3 added the
+  `narrowing_tip` field, `_INVOICE_FILTER_LABELS`, and a
+  sample-only guard (`len(rows) < total_available`) at the
+  plain-invoice return. V-walk found one defect (V3c — the tip
+  fired on a 1-row complete fetch; fixed at `d7d78c5`).
 
-    git checkout -b Phase3-Invoice-Sample
+### Next
 
-Prerequisites and first tasks, in order:
+The seven-PR sequence continues with PR #4 onward — the next
+entity from `MEETING_2026-11-10_sample_and_disclose.md` §6. A new
+window opens the branch from `master` at `5f9b554` (or its
+successor). The V0 must be based on a read of `master`, not on the
+meeting's row; PR #2's `7b7bb51` correction and PR #3's
+`invoice.md` V0 both proved that lesson.
 
-1. **Read** `MCP_DEPENDENCY_CONFLICT.md` before any work. If the
-   MCP migration has landed as its own PR by then, V6 and V8 are
-   unblocked for PR #3; if not, they are deferred again the same
-   way PR #1 and PR #2 deferred them.
-2. **Check the Issue C finding is on `master`** —
-   `docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md`
-   landed on `master` as part of PR #204 (commit `fe5a41f` on the
-   branch, `850feb5` on `master`). It is a finding only; the
-   emitter is not fixed. Do not fix it in PR #3 — it is a future
-   window's PR, not Invoice's.
-3. **Open the PR #3 evidence file** —
-   `docs/phase-3/sample_and_disclose/invoice.md` — with V0 only,
-   same pattern as `supplier.md` was opened. The V0 statement
-   must be based on a read of `master`'s current Invoice path
-   (does `plain_invoice_bucket` already sample? Does the tip fire?
-   Is there a guard?) — **not** on the meeting's prescription.
-   The meeting §6 row 3 names the shape ("Extend extractor;
-   `sample_all=True` arg on `search_invoices`; `narrowing_tip` on
-   `InvoiceResponse`; tip block"), but the V0 may discover the
-   shape is different on `master` — exactly as PR #2's V0
-   correction at `7b7bb51` discovered Supplier already sampled and
-   PR #2 became a coverage + one-new-shape PR, not a wiring
-   change.
-4. **Write the failing test first** — `tests/test_sample_and_disclose_invoice.py`.
-   Red before fix, per `FIX_PLAN.md` §8 step 3. Read
-   `test_sample_and_disclose_supplier.py` first: its five original
-   tests (plain list, two-bucket join, four-bucket join, empty,
-   multi-child) are the coverage template. Do not assume Invoice
-   will be the same shape as Supplier — the Invoice path already
-   carries a `narrowing_tip` field on its response, but whether
-   the tip is *populated* on `master` is the question PR #2
-   had to answer for Supplier, and PR #3 must answer it for
-   Invoice.
+**Two carry-forward notes from PR #1/#2/#3:**
 
-**Two carry-forward notes from PR #2.**
-
-- **`personas.yaml`.** Confirm `git status` is clean before
-  staging anything in the new window. It is a local credential
-  edit; it does not go into any PR.
-- **V-walk will surface defects the unit tests do not catch.**
-  PR #1 found three (Fix A/B/C); PR #2 found three more (Fix
-  D-a, D-b, E). Expect the same on PR #3. Read `supplier.md`
-  §Deviations for the shape of those fixes: a live-run surface, a
-  targeted fix commit, a re-run that proves the fix. Do not
-  assume the tests you write at step 4 are the tests PR #3
-  needs; they are the tests PR #3 *starts* with.
+- **`personas.yaml`.** Local credential edit. Confirm `git status`
+  is clean before staging anything. It does not go into any PR.
+- **V-walk is not a rubber stamp.** PR #1 found three defects the
+  unit tests did not catch; PR #2 found three; PR #3 found one
+  (V3c). Expect at least one V-walk-surfaced fix per PR. The test
+  you write at step 4 is the test PR #N *starts* with, not the
+  test it needs.
 
 ---
 
@@ -204,6 +160,27 @@ user explicitly chose to defer.
 
 ---
 
+## Queue
+
+Items surfaced during PRs #1–#3 that are not yet scheduled, none
+blocking the next window:
+
+1. **`STATUS.md` body migration** — this commit closes it.
+2. **`HANDOFF.md` rewrite** — the sibling docs commit (next cell).
+3. **Parser: AP-invoice-lines include** — PR #3's V3a refused
+   `show invoices for supplier 1252 and their lines` with
+   `Invoice lines for AP invoices are not supported`. A parser-
+   sysprompt window can add the include; multi-bucket Invoice
+   coverage depends on it.
+4. **SQL overlay: Invoice FilterSpecs** — `invoice_date_before`,
+   `unpaid` (and likely `overdue`, `pending`) absent from
+   `kg_sql_filter`. Same class as the multi-field-iteration
+   finding; belongs with the SQL emitter fix window.
+5. **MCP migration PR** — V6/V8 of PRs #1, #2, #3 all deferred to
+   it. Still unscheduled.
+6. **PR #4 onward** — the next entity from the seven-PR sequence.
+
+
 ## Pointers
 
 - This PR's evidence: `docs/phase-3/sample_and_disclose/purchase_order.md`
@@ -211,4 +188,6 @@ user explicitly chose to defer.
 - The V0–V9 standard: `docs/fixes/FIX_PLAN.md` §6
 - The working cadence: `docs/plan/WORKING_STYLE.md` §15.3
 - Issue B (MCP): `docs/phase-3/sample_and_disclose/MCP_DEPENDENCY_CONFLICT.md`
-- Issue C (SQL emitter): **not yet written** — see §Issue C above
+- Issue C (SQL emitter): finding file at
+  `SQL_EMITTER_MULTIFIELD_ITERATION.md` (landed `fe5a41f`); fix is a
+  future window's PR
