@@ -19,6 +19,7 @@ procurement/b_po_supplier_details.sysprompt
 procurement/b_po_by_id.sysprompt
 procurement/b_po_lines.sysprompt
 receivables/b_ar_invoice_by_id.sysprompt
+receivables/b_ar_invoices.sysprompt
 receivables/b_ar_invoice_lines.sysprompt
 receivables/b_ar_tax_lines.sysprompt
 receivables/b_ar_dff.sysprompt

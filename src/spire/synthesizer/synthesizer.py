@@ -130,9 +130,11 @@ from spire.synthesizer.ar import (  # noqa: F401
     build_credit_memo_records,
     build_customer_account_records,
     build_invoice_dff,
+    build_receivables_invoice_plain_records,
     build_receivables_invoice_records,
     build_standard_receipt_records,
     plain_credit_memo_bucket,
+    plain_receivables_invoice_bucket,
     single_parent_shape,
 )
 from spire.synthesizer.local_summary import local_list_summary
@@ -1353,6 +1355,91 @@ def synthesize_response(
                     entity_label="credit memos",
                 )
                 if total_available is not None and len(rows) < total_available
+                else ""
+            ),
+        )
+
+    # Plain AR-invoice list: no LLM. PR #6.
+    #
+    # The mirror of the plain-credit-memo / plain-invoice / plain-PO /
+    # plain-supplier branches above, for the AR-invoice entity. A 25-row
+    # sample of AR invoices has NO parent-plus-children shape — the only
+    # ReceivablesInvoice branch on master before this was
+    # single_parent_shape, which requires len(outputs[parent]) == 1. A
+    # plain list of 25 therefore fell through to the LLM. This branch
+    # claims that shape and builds the records locally, the same way
+    # the sibling branches do for their entities.
+    #
+    # The narrowing_tip is "" by construction on this pod: the KG's
+    # entity-level filter set for ReceivablesInvoice is ['by_id'], and
+    # ['by_id'] minus 'by_id' is {}. build_narrowing_tip(set(), ...)
+    # returns "" before it inspects total_available. The field exists
+    # for contract uniformity (Invoice, StandardReceipt, Supplier,
+    # PurchaseOrder, CreditMemo all carry it) and seeds the future KG
+    # filter-set PR. PR #5 (CreditMemo) is the precedent.
+    #
+    # This branch goes BEFORE the single_parent_shape branch below, not
+    # after. The two shapes are structurally disjoint: this one fires on
+    # a single-bucket AR list, single_parent_shape fires on the
+    # one-invoice-plus-children shape. Ordering this one first means the
+    # plain-list case never has a chance to be stolen by a future change
+    # to single_parent_shape that loosens its row-count check.
+    ar_plain_bucket = (
+        plain_receivables_invoice_bucket(outputs)
+        if target_entity == "ReceivablesInvoice"
+        else None
+    )
+    if ar_plain_bucket is not None:
+        rows = outputs[ar_plain_bucket]
+        total_available, notes = _local_truncation(
+            ar_plain_bucket, rows, truncation_by_step, metadata_by_step
+        )
+        return ReceivablesInvoiceResponse(
+            summary="\n".join(
+                local_list_summary(
+                    rows,
+                    entity_label="AR invoices",
+                    # Exactly the columns the display renders for an
+                    # AR-invoice row (formatters.py's
+                    # ReceivablesInvoiceResponse branch).
+                    displayed_fields=[
+                        "TransactionNumber", "EnteredAmount",
+                        "InvoiceCurrencyCode", "TransactionDate",
+                        "BillToCustomerName", "InvoiceStatus",
+                    ],
+                    filtered_fields=filtered_fields,
+                    total_available=total_available,
+                    truncated=_bucket_truncated(
+                        ar_plain_bucket, truncation_by_step,
+                        metadata_by_step,
+                    ),
+                    labels={
+                        "TransactionNumber": "Transaction",
+                        "EnteredAmount": "Amount",
+                        "InvoiceCurrencyCode": "Currency",
+                        "TransactionDate": "Date",
+                        "BillToCustomerName": "Customer",
+                        "InvoiceStatus": "Status",
+                    },
+                )
+            ),
+            receivables_invoices=build_receivables_invoice_plain_records(
+                rows
+            ),
+            truncation_notes=notes,
+            # Sample-only guard, mirroring Invoice (d7d78c5) and
+            # StandardReceipt (3d7f4b6) and CreditMemo (35a0095).
+            # The tip is "" on both branches today; the guard is
+            # correct for the future KG change that gives the entity
+            # a real narrowing filter to name.
+            narrowing_tip=(
+                build_narrowing_tip(
+                    set(),
+                    total_available,
+                    entity_label="AR invoices",
+                )
+                if total_available is not None
+                and len(rows) < total_available
                 else ""
             ),
         )

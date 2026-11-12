@@ -118,12 +118,16 @@ TABLES: list[dict] = [
     {
         "name": "kg_entity_tool",
         "purpose": "Maps (entity_name, filter_type) to the MCP tool the "
-                   "executor calls to fetch that entity with that filter.",
+                   "executor calls to fetch that entity with that filter. "
+                   "ReceivablesInvoice carries two rows since PR #6: "
+                   "by_id (get_receivables_invoice_by_id) and none "
+                   "(search_receivables_invoices), the latter the plain "
+                   "list fetcher for a sample-and-disclose.",
         "columns": ["entity_name", "filter_type", "mcp_tool_name", "notes"],
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 11,
+        "expected_rows": 12,
     },
     {
         "name": "kg_entity_filter",

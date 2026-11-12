@@ -334,6 +334,18 @@ async def test_kg_table_row_counts_match_v1_1():
     on these entities too (the synonym is global; it needed the target
     columns to exist).
 
+    PR #6 (Phase 3 sample-and-disclose, ReceivablesInvoice) added the
+    filter-less AR-invoice fetcher as a SECOND entity tool for the
+    entity, alongside the existing by_id row: +1 entity tool
+    (ReceivablesInvoice/none -> search_receivables_invoices, 11->12).
+    Nothing else moved — no new entity, field, edge, edge tool or
+    filter. ReceivablesInvoice was already a valid target via its
+    by_id row, so is_valid_target did not need a new row to become
+    true; this row is the FILTER-LESS fetcher, which the plain-list
+    synthesizer branch (synthesizer.py) now reaches for a 25-row
+    AR-invoice sample. Paired with the kg_schema.sql seed change so
+    a future rebuild_kg.py preserves the row.
+
     NOTE the counts in this test are one of FOUR places that must move
     together, not two as earlier notes implied: this dict,
     scripts/print_kg.py's expected_rows, and the two
@@ -347,7 +359,7 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_pattern": 3,
         "kg_vocabulary": 129,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 11,
+        "kg_entity_tool": 12,
         "kg_entity_filter": 37,
         "kg_edge_tool": 16,
     }

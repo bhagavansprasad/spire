@@ -68,6 +68,9 @@ from spire.mcp_server.tools.purchase_order_lines import (
 from spire.mcp_server.tools.receivables_invoice_by_id import (
     get_receivables_invoice_by_id as _get_receivables_invoice_by_id,
 )
+from spire.mcp_server.tools.search_receivables_invoices import (
+    search_receivables_invoices as _search_receivables_invoices,
+)
 from spire.mcp_server.tools.receivables_invoice_lines import (
     get_receivables_invoice_lines as _get_receivables_invoice_lines,
 )
@@ -703,6 +706,38 @@ async def get_receivables_invoice_transaction_dff(
         result = await _get_receivables_invoice_transaction_dff(
             client, customer_transaction_id=customer_transaction_id, limit=limit
         )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def search_receivables_invoices(limit: int = 25) -> dict:
+    """List recent AR invoices, newest first, filter-less.
+
+    The plain-list fetcher for the ReceivablesInvoice entity (PR #6 /
+    Phase 3 sample-and-disclose). Called with no filters — the only
+    call shape; this is the filter-less fetcher, by design — it
+    returns up to `limit` AR invoices ordered by TransactionDate
+    descending, plus the collection total on `total_available` so a
+    caller can honestly say "25 of 1,343" rather than "25 AR
+    invoices".
+
+    This is the filter-less sibling of get_receivables_invoice_by_id:
+    that fetches ONE invoice by CustomerTransactionId; this samples
+    the collection. A by_id prompt routes to that tool; a filter-less
+    list prompt routes here.
+
+    Args:
+        limit: Max invoice records to return. Default 25. Ordered
+            server-side, so this is a true top-N of the newest
+            invoices, not a page slice.
+
+    Returns:
+        A ToolResult dict: items (newest first), total_available (the
+        collection count), limit_applied, truncated. Empty items means
+        the pod has no AR invoices.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_receivables_invoices(client, limit=limit)
         return result.to_dict()
 
 

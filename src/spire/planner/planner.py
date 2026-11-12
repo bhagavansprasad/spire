@@ -232,19 +232,39 @@ def generate_plan(
                 )
             )
 
-    # ReceivablesInvoice is a valid root only for a single-invoice fetch
-    # (by_id on CustomerTransactionId). Like PurchaseOrder it has no
-    # unfiltered default fetcher (no (ReceivablesInvoice,'none') row), and
-    # the collection holds 173k invoices — a root without an id would scan
-    # the whole pod. AR's only root ref is by_id: unlike PO there is no
-    # date-bound list filter on this endpoint (BillToCustomerName/Number
-    # are not queryable, so customer listing goes via the account path, not
-    # here). Refuse cleanly and point at the account path for listing.
+    # ReceivablesInvoice roots two ways since PR #6.
+    #
+    # (a) SINGLE-INVOICE FETCH — a by_id filter on CustomerTransactionId.
+    #     This is unchanged: it is the AR-invoice analogue of the
+    #     PurchaseOrder by_id path, and the get_receivables_invoice_by_id
+    #     fetcher serves it.
+    #
+    # (b) FILTER-LESS PLAIN LIST — the sixth entity in the Phase 3
+    #     sample-and-disclose sequence. PR #6 added
+    #     search_receivables_invoices as the (ReceivablesInvoice, 'none')
+    #     fetcher (server-side orderBy=TransactionDate:desc, limit=25,
+    #     honest totalResults). An intent that reaches here with no
+    #     filters, no children, and intent.list_all=True is exactly the
+    #     shape `get all AR invoices` produces; the parser sets
+    #     list_all=True from the raw prompt (same deterministic post-LLM
+    #     extractor as PR #1's _is_explicit_po_list), and the sysprompt
+    #     block b_ar_invoices.sysprompt teaches the model to leave
+    #     target_entity=ReceivablesInvoice and filters=[] on those
+    #     phrasings.
+    #
+    # A truly filter-less intent with list_all=False is a PO Query the
+    # parser dropped the identifier from — the same #32 fault (b) shape
+    # PurchaseOrder's guard refuses. It must refuse here too: dumping
+    # 25 of 173k unrelated AR invoices is not an answer.
+    #
+    # The PO guard above and this one are deliberately parallel: both
+    # accept `filters=[] and list_all=True` as a bounded list, both
+    # refuse `filters=[] and list_all=False` as a dropped identifier.
     if intent.target_entity == "ReceivablesInvoice":
         has_root_ref = any(
             f.get("type") == "by_id" for f in intent.filters
         )
-        if not has_root_ref:
+        if not has_root_ref and not intent.list_all:
             # A ReceivablesInvoice root with no id is a MISSING_IDENTIFIER
             # decline — the user named the record type but not WHICH one.
             # Raise it structured so plan_node routes it into state["refusal"]
