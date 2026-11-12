@@ -1,12 +1,10 @@
 # SPIRE — window handoff
 
-**Window close:** 2026-11-12 (PR #6 open; merge pending).
-**Tip:** `master` at `2327fd0` (docs commit that opened PR #6's V0).
-The PR #6 branch `Phase3-ReceivablesInvoice-Sample` is **10 commits
-ahead of `master`** at tip `2215cd0`, **open** as PR #6 against
-`master`.
-**Branch:** `Phase3-ReceivablesInvoice-Sample` (working tree clean;
-`personas.yaml` local-only, never staged).
+**Window close:** 2026-11-12 (PR #6 merged).
+**Tip:** `master` at `0eb05b4` (merge commit for PR #208,
+ReceivablesInvoice).
+**Branch:** `master` (clean working tree; `personas.yaml` local-only,
+never staged).
 
 This file is the resume surface. Per `WORKING_STYLE.md` §1, read it
 before any other file when opening a new window.
@@ -26,7 +24,7 @@ five PRs are merged:
 | #205 | `3f3ff11` | Invoice | `invoice.md` |
 | #206 | `5eadf7b` | StandardReceipt | `standard_receipt.md` |
 | #207 | `4d301c4` | CreditMemo | `credit_memo.md` |
-| #6 (this branch) | `TBD — merge pending` | ReceivablesInvoice | `receivables_invoice.md` |
+| #208 | `0eb05b4` | ReceivablesInvoice | `receivables_invoice.md` |
 
 Post-merge docs commits on `master`: `05d7978` (freeze
 `supplier.md`), `983a7fb` (handoff to PR #3), `9724282` (resume

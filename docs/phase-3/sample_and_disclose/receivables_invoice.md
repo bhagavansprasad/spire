@@ -1,9 +1,8 @@
 # Phase 3 — Sample-and-disclose: ReceivablesInvoice
 
 **Branch:** `Phase3-ReceivablesInvoice-Sample`
-**PR:** TBD (this file is committed before the branch exists; PR number
-added when the PR is opened, per FIX_PLAN.md §8 step 8)
-**State:** open
+**PR:** #208 (merged 0eb05b4)
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 6 — the sixth entity in the
 seven-PR sample-and-disclose sequence. ReceivablesInvoice's
 **plain-list path does NOT exist on `master` at `c8580c4`.** The entity

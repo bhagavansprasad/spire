@@ -4,9 +4,8 @@
 the resume surface; the per-PR evidence files are the durable record.
 
 **Last updated:** 2026-11-12
-**Branch:** `Phase3-ReceivablesInvoice-Sample` — PR #6 open (opened
-against `master` at `3b27bf1`'s ancestor `2327fd0`; the branch tip is
-`c9df032`, nine commits past the merge point).
+**Branch:** `Phase3-ReceivablesInvoice-Sample` — PR #6 merged at
+`0eb05b4`.
 **Merged:** PR #203 (PurchaseOrder) at `2a23906`; PR #204 (Supplier)
 at `850feb5`; PR #205 (Invoice) at `3f3ff11`; PR #206 (StandardReceipt)
 at `5eadf7b`; PR #207 (CreditMemo) at `4d301c4`.
@@ -48,7 +47,7 @@ durable record for each is its evidence file, frozen at
 | #205 | `3f3ff11` | Invoice |
 | #206 | `5eadf7b` | StandardReceipt |
 | #207 | `4d301c4` | CreditMemo |
-| #208 | `TBD` | ReceivablesInvoice (PR #6, open) |
+| #208 | `0eb05b4` | ReceivablesInvoice |
 
 Post-merge docs commits: `05d7978` (froze `supplier.md`),
 `983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
