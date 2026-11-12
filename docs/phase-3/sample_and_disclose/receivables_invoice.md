@@ -26,7 +26,12 @@ in `server.py`), inserts a `kg_entity_tool` row for
 `(ReceivablesInvoice, 'none')` — the **first KG touch in the
 sequence** — so the entity advertises a filter-less fetch the planner
 will honour; relaxes the ReceivablesInvoice planner guard so a
-filter-less intent reaches the new tool; adds a new sysprompt block
+filter-less intent reaches the new tool; adds a new parser helper
+`_is_explicit_receivables_invoice_list(prompt)` in `parser.py`
+(the third parser-side addition in the sequence, after PR #1's
+`_is_explicit_po_list` and `_is_sampleable_po_request`) that sets
+`intent.list_all=True` for a genuine filter-less AR-invoice list
+prompt; adds a new sysprompt block
 `b_ar_invoices.sysprompt` teaching the filter-less shape (with an
 `order.manifest` entry after `b_ar_invoice_by_id`) and runs the V9
 `--validate` sweep against all 240 prompts; adds a `narrowing_tip`
@@ -132,6 +137,36 @@ as `plain_credit_memo_bucket` / `plain_invoice_bucket`: one bucket,
 any row count, rows carry `CustomerTransactionId`. The existing
 `single_parent_shape` branch stays for the one-invoice-plus-children
 shape (AR-P2).
+
+**Third correction, from the parser bundle read at V0 stage.** The
+second correction added the plain-list branch in `synthesizer.py`.
+Reading the parser bundle showed the branch is only half the
+mechanism: `intent.list_all` is a `planner.models.Intent` field, not
+a `draft.DraftIntent` field, so the model cannot set it. The
+planner guard's relaxed condition — `not has_root_ref and not
+intent.list_all` — therefore depends on the parser setting the flag
+from the raw prompt, exactly as `PurchaseOrder`'s guard already
+does (see `_is_explicit_po_list` in `parser.py`).
+
+The sysprompt block teaches the model which phrasings are
+answerable (so it produces `target_entity=ReceivablesInvoice`,
+`filters=[]` instead of a `missing_identifier` refusal). The new
+helper converts that filter-less intent into a list by setting
+`list_all=True`. Without the block, the model refuses the canonical
+prompt. Without the helper, the intent is produced but the guard
+refuses it. **Both are load-bearing.** PR #6's file inventory is
+therefore **eleven**, not ten: `parser.py` joins the source files.
+
+The helper is a **sibling**, not an extension of
+`_is_explicit_po_list`. The two entities disqualify on different
+identifier shapes (an integer after `PO` is an OrderNumber; an
+integer after `AR invoice` is a CustomerTransactionId) and their
+regexes differ. Widening `_is_explicit_po_list` would silently
+change PO behaviour in an AR-invoice commit, which PR #6 does not
+own and cannot V-walk. The parallel-pair pattern (one function per
+entity, same call shape) is what PR #1 used when it added
+`_is_sampleable_po_request` beside `_is_explicit_po_list` rather
+than renaming.
 
 This is the **fifth** such correction in six PRs. The pattern
 established across PRs #2–#5 holds: the meeting's row describes a
