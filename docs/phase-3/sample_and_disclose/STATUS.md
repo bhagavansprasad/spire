@@ -4,13 +4,17 @@
 the resume surface; the per-PR evidence files are the durable record.
 
 **Last updated:** 2026-11-12
-**Branch:** `Phase3-Invoice-Sample` — newly created for PR #3
-(Invoice). Base commit `983a7fb`.
+**Branch:** `Phase3-StandardReceipt-Sample` — PR #4 merged.
+Merge commit `5eadf7b`.
 **Merged:** PR #203 (PurchaseOrder) at `2a23906`; PR #204 (Supplier)
-at `850feb5`.
+at `850feb5`; PR #205 (Invoice) at `3f3ff11`; PR #206 (StandardReceipt)
+at `5eadf7b`.
 **Post-merge docs commits:** `05d7978` (froze `supplier.md` at
-`State: closed`), `983a7fb` (this file — PR #3 hand-off).
-**Base for this window:** `master` at `983a7fb`.
+`State: closed`), `983a7fb` (PR #3 `STATUS.md` hand-off), `9724282`
+(PR #3 resume-docs correction), `5f9b554` (froze `invoice.md`), this
+commit and the `HANDOFF.md` commit below (PR #4 `STATUS.md`/`HANDOFF.md`
+advance).
+**Base for this window:** `master` at `5eadf7b`.
 **Uncommitted (NOT part of any PR):** `personas.yaml` — a local
 credential change made outside this work. Do not stage it. Do not
 commit it.
@@ -35,6 +39,7 @@ file, frozen at `State: closed`:
 | #203 | `2a23906` | PurchaseOrder (anchor) |
 | #204 | `850feb5` | Supplier |
 | #205 | `3f3ff11` | Invoice |
+| #206 | `5eadf7b` | StandardReceipt |
 
 Post-merge docs commits: `05d7978` (froze `supplier.md`),
 `983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
@@ -61,22 +66,27 @@ Post-merge docs commits: `05d7978` (froze `supplier.md`),
 
 ### Next
 
-The seven-PR sequence continues with PR #4 onward — the next
+The seven-PR sequence continues with PR #5 onward — the next
 entity from `MEETING_2026-11-10_sample_and_disclose.md` §6. A new
-window opens the branch from `master` at `5f9b554` (or its
+window opens the branch from `master` at `5eadf7b` (or its
 successor). The V0 must be based on a read of `master`, not on the
-meeting's row; PR #2's `7b7bb51` correction and PR #3's
-`invoice.md` V0 both proved that lesson.
+meeting's row; PR #2's `7b7bb51` correction, PR #3's
+`invoice.md` V0, and PR #4's `standard_receipt.md` V0
+(which corrected the meeting §6 row-4 Verify column — the unscoped
+`get all receipts` case is refused by design, not satisfiable from
+master without changing the tool and the planner guard) all proved
+that lesson.
 
-**Two carry-forward notes from PR #1/#2/#3:**
+**Two carry-forward notes from PR #1/#2/#3/#4:**
 
 - **`personas.yaml`.** Local credential edit. Confirm `git status`
   is clean before staging anything. It does not go into any PR.
 - **V-walk is not a rubber stamp.** PR #1 found three defects the
   unit tests did not catch; PR #2 found three; PR #3 found one
-  (V3c). Expect at least one V-walk-surfaced fix per PR. The test
-  you write at step 4 is the test PR #N *starts* with, not the
-  test it needs.
+  (V3c); PR #4 found one (Fix P — the empty-truncated summary
+  narrating the cap as the cause). Expect at least one
+  V-walk-surfaced fix per PR. The test you write at step 4 is the
+  test PR #N *starts* with, not the test it needs.
 
 ---
 
