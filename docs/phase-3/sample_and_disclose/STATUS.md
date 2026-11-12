@@ -127,17 +127,21 @@ advance), `341b9f9` (PR #5 extended prompt set findings), `5ef278c`
 
 ### Next
 
-The seven-PR sequence continues with PR #6 onward — the next entity
-from `MEETING_2026-11-10_sample_and_disclose.md` §6,
-ReceivablesInvoice. A new window opens the branch from `master` at
-`4d301c4` (or its successor). The V0 must be based on a read of
+The seven-PR sequence continues with **PR #7** — the seventh and last
+entity from `MEETING_2026-11-10_sample_and_disclose.md` §6,
+CustomerAccount. A new window opens the branch from `master` at
+`0eb05b4` (or its successor). The V0 must be based on a read of
 `master`, not on the meeting's row; PR #2's `7b7bb51` correction, PR
 #3's `invoice.md` V0, PR #4's `standard_receipt.md` V0 (the unscoped
-`get all receipts` case is refused by design), and PR #5's
+`get all receipts` case is refused by design), PR #5's
 `credit_memo.md` V0 (the tip ships empty by construction because the
-KG has no CreditMemo entity-level filters) all proved that lesson.
+KG has no CreditMemo entity-level filters), and PR #6's
+`receivables_invoice.md` V0 (three corrections — plain-list branch,
+empty-by-construction tip, parser helper as shape-check-not-verb-
+whitelist) all proved that lesson. **Read `receivables_invoice.md`
+§V0-history before opening PR #7's V0.**
 
-**Two carry-forward notes from PR #1/#2/#3/#4/#5:**
+**Three carry-forward notes, updated through PR #6:**
 
 - **`personas.yaml`.** Local credential edit. Confirm `git status`
   is clean before staging anything. It does not go into any PR.
@@ -148,10 +152,22 @@ KG has no CreditMemo entity-level filters) all proved that lesson.
   (the tip is empty by construction and never fires), but the
   extended prompt set surfaced two out-of-scope findings
   (`capability.py` `_FILTER_GUIDANCE["CreditMemo"]` live;
-  `aggregation.py` count-path pluralisation) — the V-walk is still
-  where the real fix set lives. Expect at least one
+  `aggregation.py` count-path pluralisation); PR #6 found one wiring
+  defect (`server.py` registration omitted — `Unknown tool:
+  'search_receivables_invoices'` in the V9-scoped sweep). The V-walk
+  is still where the real fix set lives. Expect at least one
   V-walk-surfaced fix per PR. The test you write at step 4 is the
   test PR #N *starts* with, not the test it needs.
+- **For a wiring PR, the module + registration + KG row land
+  together, before V9.** A new MCP tool needs three files in lockstep
+  — the module, the `server.py` registration, and (for a
+  KG-advertised tool) the `kg_entity_tool` row. Landing the module
+  and KG row without the registration leaves the executor calling a
+  tool the server does not expose; the failure shows up as `Unknown
+  tool` from the executor, mid-plan, after the parser and planner
+  have both succeeded. A `.py` patch's verify also includes
+  `ast.parse` + `import` — the four §15.4 postconditions are
+  necessary, not sufficient, for a `.py` file.
 
 ---
 
