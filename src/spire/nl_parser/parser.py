@@ -343,6 +343,97 @@ def _is_filter_less_receivables_invoice_request(
     return True
 
 
+# Phase 3, PR #7 — sample-and-disclose for CustomerAccount.
+#
+# The sibling of _is_filter_less_receivables_invoice_request (PR #6)
+# for the CustomerAccount entity. Same shape check, same disqualifier
+# pattern, one difference: the disqualifier is _BARE_NUMBER_RE ALONE,
+# not (_PO_NUMBER_RE, _BARE_NUMBER_RE). _PO_NUMBER_RE matches
+# "po 123" / "po #123" / "po123"; on a CustomerAccount prompt the
+# word "po" never appears, so that regex can never fire. Including it
+# would be a check that is provably dead — misleading to a future
+# reader who assumes it protects something.
+#
+# The disqualifier's shape: an account-number-shaped numeric token —
+# a 3+ digit run that is not a plausible year. On a CustomerAccount
+# prompt the only identifiers that bind to the resolver are a
+# customer name (a proper noun — routed by the sysprompt's
+# customer-scoped rules, NOT by this helper) or an account number
+# (a digit run — the case this helper declines to fire on, because
+# the account number is a dropped identifier, not a filter-less
+# list request). See _is_all_digit_customer_value below for the
+# downstream correction that turns by_customer_name(digits) into
+# by_account_number.
+_CUSTOMER_ACCOUNT_DISQUALIFIERS = (_BARE_NUMBER_RE,)
+
+
+def _is_filter_less_customer_account_request(
+    prompt: str, intent: Any
+) -> bool:
+    """True when the intent is a genuine filter-less CustomerAccount list.
+
+    Takes the PROMPT and the INTENT, not just the prompt. The check is
+    about the intent's shape — the model has already decided the query
+    is in-scope and produced `target_entity=CustomerAccount,
+    filters=[], include=[]`. The helper's job is to recognise that
+    shape and rule out the one competing reading (a by-account-number
+    prompt the model dropped the identifier from), NOT to inspect the
+    user's phrasing for a list verb.
+
+    Two conditions, in order:
+      (a) The intent targets CustomerAccount with no filters and no
+          include. If either is present, this is not the filter-less
+          shape and the helper returns False (the resolver path or an
+          edge-include path owns those).
+      (b) The prompt carries no by-account-number-shaped numeric
+          token. A bare 3+ digit run (not a plausible year) is a
+          dropped identifier: the user named one account, the model
+          gave no filter. Return False so the downstream (and the
+          planner's handling of a CustomerAccount intent with no
+          filter) refuses it rather than sampling the collection.
+
+    The wording the user typed is IRRELEVANT to this check. It does
+    not matter whether they said 'list', 'get', 'show', 'all', or
+    nothing. The shape of the intent and the absence of a
+    by-account-number token are the whole signal.
+
+    Proper-noun customer names are disambiguated by the SYSPROMPT's
+    customer-scoped rules, not by this helper. A prompt naming a
+    customer ("account balance for ABC Application Software") routes
+    to the resolver via b_account_balance.sysprompt or
+    b_customer_invoices.sysprompt, so the intent that reaches this
+    helper is already resolver-shaped (by_customer_name filter
+    present), and condition (a) fails. This helper is the last check;
+    the sysprompt does the routing.
+
+    See receivables_invoice.md §V0-history (fourth correction) for
+    the reasoning that produces the shape. The parallel to
+    _is_filter_less_receivables_invoice_request is deliberate; the
+    two are the same check on different entities.
+    """
+    if getattr(intent, "target_entity", None) != "CustomerAccount":
+        return False
+    if getattr(intent, "filters", None):
+        return False
+    if getattr(intent, "include", None):
+        return False
+
+    p = prompt.lower()
+    for regex in _CUSTOMER_ACCOUNT_DISQUALIFIERS:
+        for m in regex.finditer(p):
+            n = m.group()
+            if regex is _BARE_NUMBER_RE:
+                # Same year-exemption as _is_explicit_po_list,
+                # _is_sampleable_po_request and
+                # _is_filter_less_receivables_invoice_request: a bare
+                # year is not an identifier. Non-year 3+ digit runs
+                # are.
+                if len(n) == 4 and n.startswith("20"):
+                    continue
+            return False
+    return True
+
+
 def _is_all_digit_customer_value(value: Any) -> bool:
     """True when a by_customer_name value is actually an account number.
 
@@ -1021,6 +1112,29 @@ def parse(
     # what the sequence actually needs.
     if intent.target_entity == "ReceivablesInvoice":
         if _is_filter_less_receivables_invoice_request(
+            prompt, intent
+        ):
+            intent.list_all = True
+
+    # --- CustomerAccount filter-less list signal (PR #7) ---
+    #
+    # The sibling of the ReceivablesInvoice block above, for the
+    # CustomerAccount entity. Same shape check, same pattern: the
+    # model has already produced a filter-less intent, the helper
+    # inspects that intent and rules out a dropped-identifier shape,
+    # and on a pass sets intent.list_all=True so the planner reaches
+    # the new (CustomerAccount, 'none') KG row.
+    #
+    # Deliberately NOT sharing _is_filter_less_receivables_invoice_request:
+    # the two entities have different disqualifiers (AR-invoice is
+    # disqualified by a by_id-shaped number, and reuses the full
+    # _PO_NUMBER_RE, _BARE_NUMBER_RE tuple; CustomerAccount is
+    # disqualified by an account-number-shaped number alone, because
+    # _PO_NUMBER_RE can never fire on a customer-account prompt). See
+    # _is_filter_less_customer_account_request above for the full
+    # reasoning and the receivables_invoice.md §V0-history citation.
+    if intent.target_entity == "CustomerAccount":
+        if _is_filter_less_customer_account_request(
             prompt, intent
         ):
             intent.list_all = True
