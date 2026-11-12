@@ -4,33 +4,39 @@
 the resume surface; the per-PR evidence files are the durable record.
 
 **Last updated:** 2026-11-12
-**Branch:** `Phase3-StandardReceipt-Sample` — PR #4 merged.
-Merge commit `5eadf7b`.
+**Branch:** `Phase3-CreditMemo-Sample` — PR #5 merged.
+Merge commit `4d301c4`.
 **Merged:** PR #203 (PurchaseOrder) at `2a23906`; PR #204 (Supplier)
 at `850feb5`; PR #205 (Invoice) at `3f3ff11`; PR #206 (StandardReceipt)
-at `5eadf7b`.
+at `5eadf7b`; PR #207 (CreditMemo) at `4d301c4`.
 **Post-merge docs commits:** `05d7978` (froze `supplier.md` at
 `State: closed`), `983a7fb` (PR #3 `STATUS.md` hand-off), `9724282`
-(PR #3 resume-docs correction), `5f9b554` (froze `invoice.md`), this
-commit and the `HANDOFF.md` commit below (PR #4 `STATUS.md`/`HANDOFF.md`
-advance).
-**Base for this window:** `master` at `5eadf7b`.
+(PR #3 resume-docs correction), `5f9b554` (froze `invoice.md`),
+`e7d31b2` (froze `standard_receipt.md`), `0c9f3ec` (PR #4
+`STATUS.md` advance), `7e786c7` (PR #4 `HANDOFF.md` advance),
+`341b9f9` (PR #5 extended prompt set findings), `5ef278c` (froze
+`credit_memo.md`), this commit and the `HANDOFF.md` commit below
+(PR #5 `STATUS.md`/`HANDOFF.md` advance).
+**Base for this window:** `master` at `4d301c4`.
 **Uncommitted (NOT part of any PR):** `personas.yaml` — a local
 credential change made outside this work. Do not stage it. Do not
 commit it.
 
 ---
 
-## Issue A — the feature (all three PRs merged)
+## Issue A — the feature (all five PRs merged)
 
-PRs #203 (PurchaseOrder, anchor), #204 (Supplier), #205 (Invoice)
-have all merged. The seven-PR sample-and-disclose sequence's first
-three rows are done. The durable record for each is its evidence
-file, frozen at `State: closed`:
+PRs #203 (PurchaseOrder, anchor), #204 (Supplier), #205 (Invoice),
+#206 (StandardReceipt), #207 (CreditMemo) have all merged. The
+seven-PR sample-and-disclose sequence's first five rows are done. The
+durable record for each is its evidence file, frozen at
+`State: closed`:
 
 - `docs/phase-3/sample_and_disclose/purchase_order.md` — `#203`
 - `docs/phase-3/sample_and_disclose/supplier.md` — `#204`
 - `docs/phase-3/sample_and_disclose/invoice.md` — `#205`
+- `docs/phase-3/sample_and_disclose/standard_receipt.md` — `#206`
+- `docs/phase-3/sample_and_disclose/credit_memo.md` — `#207`
 
 ### Merge SHAs
 
@@ -40,10 +46,14 @@ file, frozen at `State: closed`:
 | #204 | `850feb5` | Supplier |
 | #205 | `3f3ff11` | Invoice |
 | #206 | `5eadf7b` | StandardReceipt |
+| #207 | `4d301c4` | CreditMemo |
 
 Post-merge docs commits: `05d7978` (froze `supplier.md`),
 `983a7fb` (handoff to PR #3), `9724282` (resume docs correction),
-`5f9b554` (froze `invoice.md`).
+`5f9b554` (froze `invoice.md`), `e7d31b2` (froze `standard_receipt.md`),
+`0c9f3ec` (PR #4 `STATUS.md` advance), `7e786c7` (PR #4 `HANDOFF.md`
+advance), `341b9f9` (PR #5 extended prompt set findings), `5ef278c`
+(froze `credit_memo.md`).
 
 ### What each PR proved
 
@@ -63,28 +73,56 @@ Post-merge docs commits: `05d7978` (froze `supplier.md`),
   sample-only guard (`len(rows) < total_available`) at the
   plain-invoice return. V-walk found one defect (V3c — the tip
   fired on a 1-row complete fetch; fixed at `d7d78c5`).
+- **PR #206 (StandardReceipt).** Established that the SCOPED
+  StandardReceipt path already samples on `master`; PR #4 added the
+  `narrowing_tip` field, `_STANDARD_RECEIPT_FILTER_LABELS` (two
+  entries — the KG's entity-level set for this entity), and the
+  sample-only guard at the StandardReceipt return. The unscoped case
+  stays refused by design (recorded in
+  `standard_receipt.md` §Deviations). V-walk found one defect (Fix P
+  — the empty-truncated summary narrating the cap as the cause; fixed
+  at `3d7f4b6`).
+- **PR #207 (CreditMemo).** Established that the plain-list
+  CreditMemo path already samples on `master`; PR #5 added the
+  `narrowing_tip` field and the guarded kwarg at the CreditMemo
+  return. **The tip ships empty by construction on this pod** — the
+  CreditMemo entity-level filter set in `kg_entity_filter` is `[]`,
+  so `build_narrowing_tip(set(), ...)` returns `""` before it inspects
+  `total_available`. The field exists for contract uniformity with
+  the four prior entities and seeds the future KG-filter-set PR that
+  will make it fire. The extended prompt set (ten prompts) confirmed
+  the F-016 `list_limit` extractor works on CreditMemo, the
+  `b_credit_memos.sysprompt` aggregation EXCEPTION clause is honoured,
+  and the customer-scoped boundary holds across three paraphrases.
+  Two out-of-scope findings recorded in `credit_memo.md` §Deviations
+  (`capability.py` `_FILTER_GUIDANCE["CreditMemo"]` live; count-path
+  pluralisation).
 
 ### Next
 
-The seven-PR sequence continues with PR #5 onward — the next
-entity from `MEETING_2026-11-10_sample_and_disclose.md` §6. A new
-window opens the branch from `master` at `5eadf7b` (or its
-successor). The V0 must be based on a read of `master`, not on the
-meeting's row; PR #2's `7b7bb51` correction, PR #3's
-`invoice.md` V0, and PR #4's `standard_receipt.md` V0
-(which corrected the meeting §6 row-4 Verify column — the unscoped
-`get all receipts` case is refused by design, not satisfiable from
-master without changing the tool and the planner guard) all proved
-that lesson.
+The seven-PR sequence continues with PR #6 onward — the next entity
+from `MEETING_2026-11-10_sample_and_disclose.md` §6,
+ReceivablesInvoice. A new window opens the branch from `master` at
+`4d301c4` (or its successor). The V0 must be based on a read of
+`master`, not on the meeting's row; PR #2's `7b7bb51` correction, PR
+#3's `invoice.md` V0, PR #4's `standard_receipt.md` V0 (the unscoped
+`get all receipts` case is refused by design), and PR #5's
+`credit_memo.md` V0 (the tip ships empty by construction because the
+KG has no CreditMemo entity-level filters) all proved that lesson.
 
-**Two carry-forward notes from PR #1/#2/#3/#4:**
+**Two carry-forward notes from PR #1/#2/#3/#4/#5:**
 
 - **`personas.yaml`.** Local credential edit. Confirm `git status`
   is clean before staging anything. It does not go into any PR.
 - **V-walk is not a rubber stamp.** PR #1 found three defects the
   unit tests did not catch; PR #2 found three; PR #3 found one
   (V3c); PR #4 found one (Fix P — the empty-truncated summary
-  narrating the cap as the cause). Expect at least one
+  narrating the cap as the cause); PR #5 found zero IN-SCOPE defects
+  (the tip is empty by construction and never fires), but the
+  extended prompt set surfaced two out-of-scope findings
+  (`capability.py` `_FILTER_GUIDANCE["CreditMemo"]` live;
+  `aggregation.py` count-path pluralisation) — the V-walk is still
+  where the real fix set lives. Expect at least one
   V-walk-surfaced fix per PR. The test you write at step 4 is the
   test PR #N *starts* with, not the test it needs.
 
@@ -175,7 +213,8 @@ user explicitly chose to defer.
 Items surfaced during PRs #1–#3 that are not yet scheduled, none
 blocking the next window:
 
-1. **`STATUS.md` body migration** — this commit closes it.
+1. **`STATUS.md` body migration** — closed (PR #3 by `9724282`;
+   PR #4 and PR #5 completed by this commit).
 2. **`HANDOFF.md` rewrite** — the sibling docs commit (next cell).
 3. **Parser: AP-invoice-lines include** — PR #3's V3a refused
    `show invoices for supplier 1252 and their lines` with
@@ -188,12 +227,13 @@ blocking the next window:
    finding; belongs with the SQL emitter fix window.
 5. **MCP migration PR** — V6/V8 of PRs #1, #2, #3 all deferred to
    it. Still unscheduled.
-6. **PR #4 onward** — the next entity from the seven-PR sequence.
+6. **PR #6 onward** — the next entity from the seven-PR sequence,
+   ReceivablesInvoice.
 
 
 ## Pointers
 
-- This PR's evidence: `docs/phase-3/sample_and_disclose/purchase_order.md`
+- This PR's evidence: `docs/phase-3/sample_and_disclose/credit_memo.md`
 - The seven-PR design: `docs/plan/MEETING_2026-11-10_sample_and_disclose.md` §6
 - The V0–V9 standard: `docs/fixes/FIX_PLAN.md` §6
 - The working cadence: `docs/plan/WORKING_STYLE.md` §15.3
