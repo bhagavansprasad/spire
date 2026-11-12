@@ -1,9 +1,8 @@
 # Phase 3 — Sample-and-disclose: Invoice
 
 **Branch:** `Phase3-Invoice-Sample`
-**PR:** TBD (this file is committed before the PR is opened; PR number
-added when the PR is opened, per FIX_PLAN.md §8 step 8)
-**State:** in-progress
+**PR:** #205
+**State:** closed
 **Finding:** MEETING_2026-11-10 §6 row 3 — the third entity in the
 seven-PR sample-and-disclose sequence. The Invoice plain-list path
 already samples on `master`: `synthesizer.py:1088–1113` returns a
