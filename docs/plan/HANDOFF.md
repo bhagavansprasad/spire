@@ -48,6 +48,24 @@ meeting's row. PR #2's V0 correction (`7b7bb51`), PR #3's
 `credit_memo.md` V0 (the tip ships empty by construction because the
 KG has no CreditMemo entity-level filters) all proved that lesson.
 
+**PR #6 scope, established by a read of `master` at `168e48a`:**
+
+- `ReceivablesInvoice`'s entity-level filter set is `['by_id']` — the
+  tip ships empty by construction, same shape as PR #5.
+- No filter-less AR-invoice fetcher exists: `receivables_invoice_by_id.py`
+  is the only fetcher, reached only by `by_id`.
+- No parser sysprompt block teaches a filter-less `ReceivablesInvoice`
+  shape; every AR-invoice rule names `by_id`, and every customer-scoped
+  rule routes to `CustomerAccount`.
+- The planner guard on `ReceivablesInvoice` refuses filter-less intents
+  before Block 1, and no `kg_entity_tool` row exists for
+  `(ReceivablesInvoice, 'none')`.
+- **PR #6 is a real wiring PR, not "coverage + one small shape":** new
+  tool `search_receivables_invoices`, new KG `kg_entity_tool` row
+  (first in the sequence), new `b_ar_invoices.sysprompt` block, planner
+  guard relaxation, response field, synthesizer kwarg. **V9 is
+  required** (first sysprompt change in the sequence).
+
 ### Two carry-forward notes (updated through PR #5)
 
 - **`personas.yaml`.** Local credential edit. Confirm `git status`
