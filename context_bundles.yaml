@@ -12,21 +12,31 @@ bundles:
   - personas.example.yaml
   - src/spire/config.py
   - src/spire/diagnostics.py
-  - docs/plan/Doc_B_Index.md
   - docs/plan/Phase_01_Audit_and_Baseline.md
-  - docs/plan/Phase_02_Correctness.md
-  - docs/plan/Phase_04_Structure.md
   - docs/plan/PLAN.md
   - docs/plan/TEMPLATE_Session_Entry.md
   - docs/plan/WORKING_STYLE.md
   - docs/plan/SESSION_STARTUP_CHECKLIST.md
   - docs/plan/HANDOFF.md
+  # Phase-3 sample-and-disclose evidence and finding files. All ten
+  # are live: the seven evidence files (PR #1-#7), the two finding
+  # files (MCP conflict, SQL emitter multifield iteration), and
+  # STATUS.md. Added 2026-11-13 to reconcile the bundle with the
+  # source tree.
+  - docs/phase-3/sample_and_disclose/STATUS.md
+  - docs/phase-3/sample_and_disclose/purchase_order.md
+  - docs/phase-3/sample_and_disclose/supplier.md
+  - docs/phase-3/sample_and_disclose/invoice.md
+  - docs/phase-3/sample_and_disclose/standard_receipt.md
+  - docs/phase-3/sample_and_disclose/credit_memo.md
+  - docs/phase-3/sample_and_disclose/customer_account.md
+  - docs/phase-3/sample_and_disclose/receivables_invoice.md
+  - docs/phase-3/sample_and_disclose/MCP_DEPENDENCY_CONFLICT.md
+  - docs/phase-3/sample_and_disclose/SQL_EMITTER_MULTIFIELD_ITERATION.md
   # Canonical entry point for a new window. Its sibling
   # docs/spire-robustness/SESSION_HANDOVER.md was listed alongside it
   # until 2026-09-24; the split was reconciled in window 18 and the
   # sibling file was removed from the repo.
-  - docs/fixes/FIXES.md
-  - docs/fixes/FIX_PLAN.md
   - docs/prompts/SURFACE.md
   - docs/design/ARCHITECTURE.md
   - docs/design/SQL_OVERLAY_POC.md
@@ -63,7 +73,6 @@ bundles:
   - docs/plan/HANDOFF.md
   - docs/plan/WORKING_STYLE.md
   - docs/plan/SESSION_STARTUP_CHECKLIST.md
-  - docs/fixes/FIX_PLAN.md
   - docs/design/ARCHITECTURE.md
   - docs/design/FEATURES.md
   - docs/design/SQL_OVERLAY_POC.md
@@ -74,7 +83,6 @@ bundles:
   # procedure is being looked up. Grep, do not read whole.
   reference:
   - docs/plan/PLAN.md
-  - docs/fixes/FIXES.md
   - docs/reference/spire_fusion_endpoints_reference.md
 
   # ── the historical record ──
@@ -84,61 +92,9 @@ bundles:
   # window need this to know where it is and what to do next? Yes
   # -> plan. No -> history.
   history:
-  - docs/plan/Doc_B_Index.md
   - docs/plan/Phase_01_Audit_and_Baseline.md
-  - docs/plan/Phase_02_Correctness.md
-  - docs/plan/Phase_04_Structure.md
   - docs/plan/TEMPLATE_Session_Entry.md
-  - docs/audit/phase-1-audit.md
   - docs/prompts/SURFACE.md
-  - docs/audit/findings/README.md
-  - docs/audit/findings/F-052.md
-  - docs/audit/findings/F-053.md
-  - docs/audit/findings/F-054.md
-  - docs/audit/findings/F-055.md
-  - docs/audit/findings/F-056.md
-  - docs/audit/findings/F-057.md
-  - docs/audit/findings/F-058.md
-  - docs/audit/findings/F-059.md
-  - docs/phase-2/fixes/F-053.md
-  - docs/phase-2/fixes/F-055.md
-  - docs/phase-2/fixes/F-056.md
-  - docs/phase-2/fixes/F-058.md
-  - docs/fixes/evidence/F-003.txt
-  - docs/fixes/evidence/F-012-F036-F044.txt
-  - docs/fixes/evidence/F-044.txt
-  - docs/fixes/evidence/F-045.txt
-  - docs/fixes/evidence/F-046-F047-F048.txt
-  - docs/fixes/evidence/F-049.txt
-  - docs/fixes/evidence/F-051.txt
-  - docs/fixes/evidence/Reg-30.txt
-  - docs/audit/golden/count_suppliers.txt
-  - docs/audit/golden/po_2144_and_lines.txt
-  - docs/audit/golden/suppliers_with_open_pos.txt
-  - docs/audit/log_analysis/_plan.md
-  - docs/audit/log_analysis/_generalization_plan.md
-  - docs/audit/log_analysis/20260925_150333/RUN.md
-  - docs/audit/log_analysis/20260925_150333/_candidates.md
-  - docs/audit/log_analysis/20260925_150333/_index.md
-  - docs/audit/log_analysis/20260925_150333/_action_items.md
-  - docs/audit/log_analysis/20260925_150333/_touched.md
-  - docs/audit/log_analysis/20260925_150333/_step6_regression.md
-  - docs/audit/log_analysis/20260925_150333/child_as_root.md
-  - docs/audit/log_analysis/20260925_150333/columns.md
-  - docs/audit/log_analysis/20260925_150333/date_filters.md
-  - docs/audit/log_analysis/20260925_150333/dipstick.md
-  - docs/audit/log_analysis/20260925_150333/fields_and_include.md
-  - docs/audit/log_analysis/20260925_150333/lifecycle.md
-  - docs/audit/log_analysis/20260925_150333/modes.md
-  - docs/audit/log_analysis/20260925_150333/payables.md
-  - docs/audit/log_analysis/20260925_150333/payables_procurement.md
-  - docs/audit/log_analysis/20260925_150333/payables_supplier.md
-  - docs/audit/log_analysis/20260925_150333/procurement.md
-  - docs/audit/log_analysis/20260925_150333/procurement_supplier.md
-  - docs/audit/log_analysis/20260925_150333/receivables.md
-  - docs/audit/log_analysis/20260925_150333/refusals.md
-  - docs/audit/log_analysis/20260925_150333/supplier.md
-  - docs/audit/log_analysis/20260925_150333/truncation.md
   prompts:
   # Module folders — smoke / verify / exhaust per capability.
   - prompts/supplier/supplier_smoke.txt
@@ -340,6 +296,8 @@ bundles:
   - src/spire/mcp_server/tools/account_receipts.py
   - src/spire/mcp_server/tools/account_receipt_applications.py
   - src/spire/mcp_server/tools/standard_receipts.py
+  - src/spire/mcp_server/tools/search_customer_accounts.py
+  - src/spire/mcp_server/tools/search_receivables_invoices.py
   - src/spire/mcp_server/tools/aggregate_standard_receipts_by_method.py
   - src/spire/mcp_server/tools/rank_customer_accounts_by_exposure.py
   - src/spire/mcp_server/tools/rank_invoices_by_amount.py
@@ -405,9 +363,11 @@ bundles:
   - src/spire/nl_parser/context/receivables/b_account_receipts.sysprompt
   - src/spire/nl_parser/context/receivables/b_ar_dff.sysprompt
   - src/spire/nl_parser/context/receivables/b_ar_invoice_by_id.sysprompt
+  - src/spire/nl_parser/context/receivables/b_ar_invoices.sysprompt
   - src/spire/nl_parser/context/receivables/b_ar_invoice_lines.sysprompt
   - src/spire/nl_parser/context/receivables/b_ar_tax_lines.sysprompt
   - src/spire/nl_parser/context/receivables/b_credit_memos.sysprompt
+  - src/spire/nl_parser/context/receivables/b_customer_accounts.sysprompt
   - src/spire/nl_parser/context/receivables/b_customer_credit_memos.sysprompt
   - src/spire/nl_parser/context/receivables/b_customer_invoices.sysprompt
   - src/spire/nl_parser/context/receivables/b_receipt_applications.sysprompt
@@ -555,6 +515,16 @@ bundles:
   - tests/test_bundle_manifest.py
   - tests/test_f058_period_bounds.py
   - tests/test_sql_emitter.py
+  - tests/test_sql_overlay_coverage.py
+  # Phase-3 sample-and-disclose test files for PRs #3-#7 (the three
+  # earlier ones are already listed above under
+  # tests/test_sample_and_disclose_po.py,
+  # test_sample_and_disclose_supplier.py, and
+  # test_sample_and_disclose_invoice.py).
+  - tests/test_sample_and_disclose_standard_receipt.py
+  - tests/test_sample_and_disclose_credit_memo.py
+  - tests/test_sample_and_disclose_customer_account.py
+  - tests/test_sample_and_disclose_receivables_invoice.py
 
   # ── Phase 4d: API + UI clients (built ahead of schedule per Doc A §10.7) ──
   api_ui:
