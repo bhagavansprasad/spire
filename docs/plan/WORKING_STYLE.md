@@ -675,10 +675,10 @@ deferred class is not a PR blocker.
 
 ## Dev / runtime separation
 
-19. **Runtime clone at `~/pocs/spire-runtime` is never disturbed.**
+19. **Runtime clone at `~/aura/spire-runtime` is never disturbed.**
     Ports 3001/3002/3003. Testers reach it via ngrok.
 
-20. **Dev tree at `~/pocs/spire` uses 4001/4002/4003.** Set by the
+20. **Dev tree at `~/aura/spire` uses 4001/4002/4003.** Set by the
     `spire()` shell function from `SPIRE-PORTS.env`. The two sets are
     `X00Y`, X=3 for runtime and 4 for dev.
 
