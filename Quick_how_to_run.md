@@ -52,6 +52,26 @@ export GEMINI_API_KEY="..."
 ./spire-docker.sh --logs api
 ```
 
+## ngrok Tunnel (spire-api / spire-ui)
+
+The public dev tunnels are managed by `~/spire/ngrok-util.sh`. It reads the
+snap config at `~/snap/ngrok/current/.config/ngrok/ngrok.yml`, which is a
+symlink to the durable file `~/snap/ngrok/common/ngrok.yml` (survives
+`snap refresh`).
+
+Config defines two named tunnels:
+
+- `spire-api` → `http://localhost:5001`
+- `spire-ui`  → `http://localhost:5002`
+
+```bash
+~/spire/ngrok-util.sh status      # print live tunnel URLs (default)
+~/spire/ngrok-util.sh start       # start all tunnels in the config (background)
+~/spire/ngrok-util.sh stop        # stop the agent started by this script
+~/spire/ngrok-util.sh restart     # stop then start
+~/spire/ngrok-util.sh help        # usage, file paths, and notes
+```
+
 ## Build Knowledge Graph
 
 ```bash
@@ -219,3 +239,35 @@ python scripts/promptkit.py --run --prompt "Top 5 suppliers by spend this year"
 # 5. Complex (Receivables path resolution)
 python scripts/promptkit.py --run --prompt "Show me AR invoices for customer ABC Corporation Americas"
 ```
+
+## Re-load cloud instance
+
+```bash
+# From Laptop (local machine):
+ssh prismdev@52.156.104.21
+password: Mylife@2026!
+
+# on the VM
+cd ~/spire
+
+# update the personas.yaml manually
+### follow steps what you are doing now as it is
+
+# Reload KG
+python scripts/rebuild_kg.py
+
+# restart SPIRE
+./spire-docker.sh --restart
+sleep 20
+
+# check
+docker ps --filter name=spire- --format ' {{.Names}} {{.Status}}' | sort
+curl -s http://127.0.0.1:5001/status | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:5001/prompt \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"Count of suppliers"}'
+
+# ngrok status (do not restart unless pgrep prints nothing)
+~/spire/ngrok-util.sh status
+pgrep -af 'ngrok start'
+```bash
