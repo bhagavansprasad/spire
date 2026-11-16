@@ -1,0 +1,144 @@
+# === Group 6 — Aggregates scoped by a date range ===
+# Delta tested: the same aggregate runs unbounded (QA row 38 works),
+# and a count with an explicit date range works (QA rows 23, 24), but
+# an aggregate (sum/rank) scoped to a rolling or "current" window is
+# refused as an unsupported aggregation-with-date operation (QA rows
+# 9, 15, 19, 21 are the same cluster as Group 3; this group adds the
+# non-"current" aggregate-with-date cases).
+
+# QA row 40
+count of suppliers, credit memos, invoices, purchase orders
+# QA row 73
+What is the total value of credit memos?
+# QA row 35
+Give me sum of total value po 2144 both 1 &2 lines
+# QA row 36
+For PO 2144, retrieve line 1 and line 2 amounts and calculate their combined total. Display both individual amounts and the final sum.
+# CONTROLS — these work
+# QA row 38
+what is the toltal value of PO 2144
+# QA row 23
+Give the count of purchase orders created from October 1 through October 8, 2026.
+# QA row 24
+Give the count of open purchase orders created from October 1 through October 8, 2026.
+
+
+# === Group 7 — Vocabulary gaps (status / threshold / payment terms / cross-pillar) ===
+# Delta tested: several sibling statuses work (draft, hold, rejected,
+# withdrawn, closed-for-receiving/invoicing — QA rows 50, 52) while
+# others are refused: "finally closed" (KeyError, QA row 51), "pending
+# approval/signature/acknowledgment" (QA row 49). Also covers the
+# unadopted threshold adjectives (large/big/heavy invoices, QA row 42),
+# payment-terms filters (net 30, QA rows 47, 48), and cross-pillar
+# entities absent from the KG (contracts, employees, customers,
+# inventory, assets, journals, projects — QA rows 75–86).
+
+# QA row 49
+purchase orders pending approval
+# QA row 49
+purchase orders pending signature
+# QA row 49
+purchase orders pending acknowledgment
+# QA row 51
+purchase orders finally closed
+# QA row 42
+which suppliers have large invoices
+# QA row 42
+suppliers with big invoices
+# QA row 47
+suppliers with net 30 payment terms
+# QA row 48
+PO's with net 30 payment terms
+# QA rows 75–86 — out-of-scope entities, one representative each
+show me contract renewals
+which contracts are up for renewal
+list our agreements
+show me our employees
+list all customers
+show me product inventory
+list our fixed assets
+show me journal entries
+list all projects
+# CONTROLS — sibling statuses that work
+# QA row 50
+withdrawn purchase orders
+# QA row 50
+rejected purchase orders
+# QA row 50
+purchase orders on hold
+# QA row 52
+purchase orders closed for receiving
+# QA row 52
+purchase orders closed for invoicing
+
+
+# === Group 8 — Degenerate / edge inputs ===
+# Delta tested: an explicit "0" in a months parameter crashes the guard
+# with a raw string (QA row 44), a future date is a legitimate empty
+# answer but the tester asked for "unable, not empty" (QA row 71),
+# and bare "purchase orders" / "list purchase orders" are inconsistent
+# (QA row 45 refuses, QA row 46 times out, while PR #1's
+# `_is_explicit_po_list` should have made "list purchase orders"
+# work).
+
+# QA row 44
+purchase orders older than 0 months
+# QA row 71
+purchase orders created after 2050-01-01
+# QA row 45
+purchase orders
+# QA row 46
+list purchase orders
+# QA row 72
+purchase orders
+# QA row 53
+Have all purchase orders been fully received and paid?
+# CONTROL — single-PO lifecycle, works
+# QA row 54
+Has PO 701337 been fully received, fully invoiced, and fully paid?
+
+
+# === Group 9 — Crashes / system errors ===
+# Delta tested: two prompts in the QA sheet produce system-level
+# failures rather than refusals. QA row 33 died on a `traces` directory
+# permission error during synthesis; QA row 51 died on a bare KeyError
+# from `_load_filter_defs` / vocab lookup (`ERROR: plan: "No vocab for
+# ('po_status', 'FINALLY CLOSED')"`). The row 51 prompt is already in
+# Group 7; this group re-runs row 33 so the crash path is captured
+# in a full log alongside the synthesizer's saved trace.
+
+# QA row 33
+Retrieve all POs created from October 1, 2026, through October 9, 2026, inclusive, and show the PO number, creation date, supplier, buyer, status, and total value.
+
+
+# === Group 10 — Column projection with a date range ===
+# Delta tested: a date-range PO list with `po numbers and created date
+# in ascending order` works (QA row 30), but adding `total values` to
+# the same shape is PARTIALLY_WORKING (QA row 31 — the range is
+# honoured, the columns are not). Included the working sibling
+# (QA row 30) so the run shows the column-specific delta.
+
+# QA row 31
+List POs created between October 1, 2026, and October 8, 2026, with PO numbers and total values.
+# QA row 30 — CONTROL, this one works
+List POs created between October 1, 2026, and October 8, 2026, with PO numbers and created date in ascending order.
+
+
+# === Group 11 — PO total-value arithmetic on a multi-line PO ===
+# Delta tested: the single-value PO total works (QA row 38), but
+# summing line amounts across a multi-line PO does not (QA rows 35,
+# 36). QA row 37 is a partial: status/buyer/supplier are shown, BU is
+# not — which is a projection omission, not an arithmetic one. All
+# three go here so one run captures the whole "PO 2144 detail" family.
+
+# QA row 35
+Give me sum of total value po 2144 both 1 &2 lines
+# QA row 36
+For PO 2144, retrieve line 1 and line 2 amounts and calculate their combined total. Display both individual amounts and the final sum.
+# QA row 37
+Retrieve purchase order 2144 and show its status, buyer, supplier, business unit, and total amount.
+# CONTROL — this one works
+# QA row 34
+Retrieve purchase order 2144 and show its status, buyer, supplier, business unit, and total amount.
+# QA row 38 — CONTROL, this one works
+what is the toltal value of PO 2144

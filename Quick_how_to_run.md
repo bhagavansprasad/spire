@@ -219,3 +219,35 @@ python scripts/promptkit.py --run --prompt "Top 5 suppliers by spend this year"
 # 5. Complex (Receivables path resolution)
 python scripts/promptkit.py --run --prompt "Show me AR invoices for customer ABC Corporation Americas"
 ```
+
+## Re-load cloud instance
+
+```bash
+# From Laptop (local machine):
+ssh prismdev@52.156.104.21
+password: Mylife@2026!
+
+# on the VM
+cd ~/spire
+
+# update the personas.yaml manually
+### follow steps what you are doing now as it is
+
+# Reload KG
+python scripts/rebuild_kg.py
+
+# restart SPIRE
+./spire-docker.sh --restart
+sleep 20
+
+# check
+docker ps --filter name=spire- --format ' {{.Names}} {{.Status}}' | sort
+curl -s http://127.0.0.1:5001/status | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:5001/prompt \
+-H 'content-type: application/json' \
+-d '{"prompt":"Count of suppliers"}'
+
+# ngrok status (do not restart unless pgrep prints nothing)
+~/ngrok-urls.sh
+pgrep -af 'ngrok start'
+```bash
