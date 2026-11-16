@@ -52,6 +52,25 @@ export GEMINI_API_KEY="..."
 ./spire-docker.sh --logs api
 ```
 
+## ngrok Tunnel (spire-api / spire-ui)
+
+The public dev tunnels are managed by `~/spire/ngrok-util.sh`. It reads the
+snap config at `~/snap/ngrok/current/.config/ngrok/ngrok.yml`, which is a
+symlink to the durable file `~/snap/ngrok/common/ngrok.yml` (survives
+`snap refresh`).
+
+Config defines two named tunnels:
+
+- `spire-api` → `http://localhost:5001`
+- `spire-ui`  → `http://localhost:5002`
+
+```bash
+~/spire/ngrok-util.sh status      # print live tunnel URLs (default)
+~/spire/ngrok-util.sh start       # start all tunnels in the config (background)
+~/spire/ngrok-util.sh stop        # stop the agent started by this script
+~/spire/ngrok-util.sh restart     # stop then start
+~/spire/ngrok-util.sh help        # usage, file paths, and notes
+
 ## Build Knowledge Graph
 
 ```bash
@@ -244,10 +263,10 @@ sleep 20
 docker ps --filter name=spire- --format ' {{.Names}} {{.Status}}' | sort
 curl -s http://127.0.0.1:5001/status | python3 -m json.tool
 curl -s -X POST http://127.0.0.1:5001/prompt \
--H 'content-type: application/json' \
--d '{"prompt":"Count of suppliers"}'
+  -H 'content-type: application/json' \
+  -d '{"prompt":"Count of suppliers"}'
 
 # ngrok status (do not restart unless pgrep prints nothing)
-~/ngrok-urls.sh
+~/spire/ngrok-util.sh status
 pgrep -af 'ngrok start'
 ```bash
