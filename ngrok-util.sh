@@ -15,6 +15,8 @@ set -euo pipefail
 PIDFILE="$HOME/.ngrok-agent.pid"
 LOGFILE="$HOME/ngrok-agent.log"
 ADMIN_URL="http://127.0.0.1:4040/api/tunnels"
+CONFIG="$HOME/snap/ngrok/current/.config/ngrok/ngrok.yml"
+COMMON_CONFIG="$HOME/snap/ngrok/common/ngrok.yml"
 SCRIPT_PATH="$HOME/spire/ngrok-util.sh"
 
 usage() {
@@ -39,17 +41,87 @@ Files:
   Script      $SCRIPT_PATH
   PID file    $PIDFILE
   Log file    $LOGFILE   (tail -f to follow)
-  Config      ~/snap/ngrok/current/.config/ngrok/ngrok.yml
-              -> symlink to ~/snap/ngrok/common/ngrok.yml
+  Config      $CONFIG
+              -> symlink to $COMMON_CONFIG
 
 Notes:
   - No systemd / no auto-start on boot. Add
         @reboot $SCRIPT_PATH start
     to 'crontab -e' if you want start-on-boot without systemd.
   - If a 'snap refresh ngrok' breaks the config symlink, re-create it:
-        ln -sfn ~/snap/ngrok/common/ngrok.yml \\
-                ~/snap/ngrok/current/.config/ngrok/ngrok.yml
+        ln -sfn $COMMON_CONFIG $CONFIG
+
+Recovery — if the config is missing:
+
+  1) Create $COMMON_CONFIG with this structure (never commit a real token):
+
+       version: "3"
+       agent:
+           authtoken: <PASTE_TOKEN_FROM_DASHBOARD>
+
+       tunnels:
+         spire-api:
+           proto: http
+           addr: 5001
+         spire-ui:
+           proto: http
+           addr: 5002
+
+  2) Paste the authtoken from https://dashboard.ngrok.com/get-started/your-authtoken
+  3) chmod 600 $COMMON_CONFIG
+  4) ln -sfn $COMMON_CONFIG $CONFIG
+  5) ngrok config check
 EOF
+}
+
+config_present() { [ -e "$CONFIG" ] && [ -r "$CONFIG" ]; }
+
+config_missing_msg() {
+  cat >&2 <<EOF
+ERROR: ngrok config not found or unreadable:
+       $CONFIG
+
+Fix options:
+  a) If you have a good copy elsewhere:
+       mkdir -p \$HOME/snap/ngrok/common
+       cp /path/to/ngrok.yml $COMMON_CONFIG
+       chmod 600 $COMMON_CONFIG
+       ln -sfn $COMMON_CONFIG $CONFIG
+
+  b) To recreate from scratch, run:  $(basename "$0") help
+     and follow the "Recovery" section.
+EOF
+}
+
+config_is_detached() {
+  # True if $CONFIG exists but is not the symlink to $COMMON_CONFIG.
+  [ -e "$CONFIG" ] || return 1
+  local resolved link
+  resolved=$(readlink -f "$CONFIG" 2>/dev/null || true)
+  link=$(readlink "$CONFIG" 2>/dev/null || true)
+  # If it's a symlink pointing at COMMON, we're fine.
+  if [ "$link" = "$COMMON_CONFIG" ]; then
+    return 1
+  fi
+  return 0
+}
+
+preflight_start() {
+  if ! config_present; then
+    config_missing_msg
+    return 1
+  fi
+  if config_is_detached; then
+    echo "WARNING: $CONFIG is not linked to $COMMON_CONFIG" >&2
+    echo "         It may be a revision-local config that a 'snap refresh'" >&2
+    echo "         will overwrite. Re-link with:" >&2
+    echo "           ln -sfn $COMMON_CONFIG $CONFIG" >&2
+  fi
+  if ! ngrok config check >/dev/null 2>&1; then
+    echo "WARNING: 'ngrok config check' failed; ngrok may not start cleanly." >&2
+    echo "         Run 'ngrok config check' for details." >&2
+  fi
+  return 0
 }
 
 print_urls() {
@@ -82,6 +154,7 @@ is_running() {
 }
 
 do_start() {
+  preflight_start || return 1
   if is_running; then
     echo "ngrok agent already running:" >&2
     pgrep -af 'ngrok start' >&2 || true
@@ -131,6 +204,14 @@ do_stop() {
 }
 
 do_status() {
+  if ! config_present; then
+    echo "ngrok config: MISSING ($CONFIG)"
+    echo "  run '$(basename "$0") help' for recovery steps" >&2
+  elif config_is_detached; then
+    echo "ngrok config: present but NOT linked to $COMMON_CONFIG"
+    echo "  re-link: ln -sfn $COMMON_CONFIG $CONFIG"
+  fi
+
   if is_running; then
     echo "ngrok agent: running"
     pgrep -af 'ngrok start' || true
