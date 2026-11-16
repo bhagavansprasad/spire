@@ -70,6 +70,7 @@ Config defines two named tunnels:
 ~/spire/ngrok-util.sh stop        # stop the agent started by this script
 ~/spire/ngrok-util.sh restart     # stop then start
 ~/spire/ngrok-util.sh help        # usage, file paths, and notes
+```
 
 ## Build Knowledge Graph
 
