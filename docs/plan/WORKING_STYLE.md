@@ -883,3 +883,27 @@ are in `_next_window.md`.
 ---
 
 *End of working style.*
+---
+
+## Per-diagnostic context bundles (§1 addition, 2026-11-17)
+
+The `context_bundles.yaml` static bundles serve session startup — a
+resuming window reading state. A **per-diagnostic bundle** is the
+second mode, and is sanctioned:
+
+- **Ad-hoc via `--files`.** When a specific failure needs the files that
+  touch it plus its on-disk evidence, bundle exactly those:
+  `python build_context.py --files a.py b.py request.xml --name diag_x`.
+  The output is `context_out/diag_x.md`, which the window reads.
+- **Named for the diagnostic, not `adhoc`.** `diag_2144`, `fusion_err`,
+  `sql_diag` — the name is how a future session recognises what was
+  looked at.
+- **Raw artifacts ride with the code.** A diagnostic's on-disk evidence
+  (a request/response pair, a log, a captured output) goes in the same
+  bundle as the code. A `.xlsx` or `.zip` cannot be read; text-extract
+  first (openpyxl, `xmllint`, `pandas.read_excel().to_csv()`), then
+  bundle the text.
+
+This is what the `P.AMOUNT` window used (`sql_diag`, `fusion_err`,
+`current_overlay_and_emitter`, `schema_po_subset`). The static bundles
+are not replaced; they are joined by a second, smaller mode.

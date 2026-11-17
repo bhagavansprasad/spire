@@ -322,14 +322,20 @@ def print_line_report(
             if not (repo_root / rel).is_file():
                 missing.setdefault(rel, []).append(name)
 
-    rows: list[tuple[int | None, Path, list[str]]] = []
+    # (code-line count, size in bytes, rel path, bundle names)
+    rows: list[tuple[int | None, int | None, Path, list[str]]] = []
     for rel, names in owners.items():
-        rows.append((count_code_lines(repo_root / rel), rel, names))
+        abs_path = repo_root / rel
+        try:
+            size = abs_path.stat().st_size
+        except OSError:
+            size = None
+        rows.append((count_code_lines(abs_path), size, rel, names))
     for rel, names in missing.items():
-        rows.append((None, rel, names))
+        rows.append((None, None, rel, names))
 
     # Descending by count; unreadable and missing files sort last.
-    rows.sort(key=lambda r: (r[0] is None, -(r[0] or 0), str(r[1])))
+    rows.sort(key=lambda r: (r[0] is None, -(r[0] or 0), str(r[2])))
 
     if not rows:
         print("\nNo .py files found in the selected bundle(s).\n")
@@ -339,22 +345,32 @@ def print_line_report(
     print()
     print(f"Code lines (.py only, blanks and # comments excluded) — {scope}")
     print()
-    print(f"{'Lines':>9}  {'File':<58} Bundles")
-    print("-" * 100)
+    print(f"{'Lines':>9}  {'Size':>9}  {'File':<58} Bundles")
+    print("-" * 111)
 
     counted = 0
-    for count, rel, names in rows:
+    total_bytes = 0
+    for count, size, rel, names in rows:
         shown = "[missing]" if count is None else f"{count:,}"
+        size_shown = "-" if size is None else format_size(size)
         if count is not None:
             counted += count
-        print(f"{shown:>9}  {str(rel):<58} {', '.join(sorted(set(names)))}")
+        if size is not None:
+            total_bytes += size
+        print(
+            f"{shown:>9}  {size_shown:>9}  {str(rel):<58} "
+            f"{', '.join(sorted(set(names)))}"
+        )
 
-    print("-" * 100)
-    n_files = sum(1 for c, _, _ in rows if c is not None)
-    print(f"{counted:>9,}  across {n_files} file(s)")
-    n_missing = sum(1 for c, _, _ in rows if c is None)
+    print("-" * 111)
+    n_files = sum(1 for c, _, _, _ in rows if c is not None)
+    print(
+        f"{counted:>9,}  {format_size(total_bytes):>9}  "
+        f"across {n_files} file(s)"
+    )
+    n_missing = sum(1 for c, _, _, _ in rows if c is None)
     if n_missing:
-        print(f"{'':>9}  {n_missing} listed file(s) missing from disk")
+        print(f"{'':>9}  {'':>9}  {n_missing} listed file(s) missing from disk")
     print()
 
 
