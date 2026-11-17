@@ -44,10 +44,10 @@ export GEMINI_API_KEY="..."
 ```
 
 ```bash
-./spire-docker.sh --start dev
+./spire-docker.sh --start production
 ./spire-docker.sh --status
-./spire-docker.sh --stop dev
-./spire-docker.sh --restart dev
+./spire-docker.sh --stop production
+./spire-docker.sh --restart production
 ./spire-docker.sh --build
 ./spire-docker.sh --logs api
 ```
