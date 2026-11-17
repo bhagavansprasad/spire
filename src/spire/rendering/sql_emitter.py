@@ -77,6 +77,9 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
     # Iterating steps: the primary arg is $iteration_value. Handled in
     # the per-arg loop below via FilterSpec, same as any other arg.
     parameterized = step.iterate_over is not None
+    multi_field = bool(
+        step.iterate_over and step.iterate_over.get("fields")
+    )
 
     for arg_name, arg_value in step.tool_args.items():
         if arg_name == "include_addresses":
@@ -94,6 +97,8 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
             # execution time.
             fspec = overlay.filters.get((step.tool_name, arg_name))
             if fspec is None:
+                if multi_field:
+                    continue
                 where.append(
                     f"-- unmapped iteration arg: {arg_name}"
                 )
@@ -214,6 +219,11 @@ def _resolve_value(
         return fspec.value_map.get(key)
     if fspec.vocab_kind is not None:
         return overlay.literals.get((fspec.vocab_kind, key))
+    if fspec.value_kind == "numeric":
+        try:
+            return str(int(key))
+        except (TypeError, ValueError):
+            pass
     safe = key.replace("'", "''")
     return f"'{safe}'"
 
@@ -292,6 +302,9 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     #   4. unknown args — emitted as a comment so nothing is silently
     #      dropped.
     top_n_value: int | None = None
+    multi_field = bool(
+        step.iterate_over and step.iterate_over.get("fields")
+    )
     for arg_name, arg_value in step.tool_args.items():
         if arg_name in spec.skip_args:
             continue
@@ -306,6 +319,8 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
         if arg_value == ITERATION_SENTINEL:
             fspec = overlay.filters.get((step.tool_name, arg_name))
             if fspec is None:
+                if multi_field:
+                    continue
                 where.append(f"-- unmapped iteration arg: {arg_name}")
                 continue
             where.append(

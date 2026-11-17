@@ -1,0 +1,163 @@
+# ============================================================
+# Diagnostic prompt set — QA date/superlative/AR-parity failures
+# ============================================================
+#
+# Source: QA sheet (86 prompts). This file selects and regroups the
+# failures and their near-identical working siblings, so one promptkit
+# run produces both the failing prompt and the control in the same log.
+#
+# Layout: groups are delimited by a `# === Group N — ... ===` comment
+# followed by a one-line description of the delta being tested. Each
+# prompt is preceded by a `# QA row N` comment naming its provenance.
+#
+# Each prompt appears exactly once, in the group whose working sibling
+# best isolates its failure mode. Cross-group prompts (e.g. "recent AR
+# invoices" is both "superlative" and "AR parity") are placed in AR
+# parity, because that group's control (the PO equivalent) is the
+# sharper delta.
+#
+# Run:
+#   python scripts/promptkit.py --run \
+#     --prompt-file prompts/diagnostics/date_qa_grouping.txt \
+#     > t_date_qa_run_1.txt 2>&1
+#
+# Per WORKING_STYLE §15.1: capture the COMPLETE stdout+stderr to a
+# file, then grep/sed from the file. Do NOT pipe through a filter at
+# capture time.
+#
+# ============================================================
+
+
+# === Group 1 — Relative day windows (last N days / yesterday) ===
+# Delta tested: "last N months" works (QA row 5); "last N days" does
+# not (QA rows 1, 2, 4). The parser/sysprompt teaches a months-based
+# window, and the intent-validator may reject a days-based window the
+# same way it rejects "0 months". Group includes the working months
+# control so the run reproduces both sides in one pass.
+
+# QA row 1
+Give the suppliers which are created in last 30 days
+# QA row 2
+Show the new suppliers created within last 30 days
+# QA row 4
+purchase orders created in the last 7 days
+# QA row 22
+How many purchase orders were created yesterday?
+# QA row 43
+invoices in the last 0 months
+# QA row 43 (sibling — "0 months" on suppliers)
+suppliers with no invoices in the last 0 months
+# QA row 44
+purchase orders updated in the last 0 months
+# CONTROL (QA row 5) — this one works
+purchase orders in the last 6 months
+
+
+# === Group 2 — Specific point-in-time (single date / day+month+year) ===
+# Delta tested: month+year works (QA row 6), a date RANGE works
+# (QA rows 30, 32), but a single calendar DAY fails (QA rows 3, 7, 26,
+# 27, 28, 29). Included working siblings: September 2026 (month+year),
+# and a date range (Oct 1–Oct 8 2026).
+
+# QA row 3
+show the suppliers created on July, 15th 2026.
+# QA row 7
+show the suppliers created on 15th july, 2026.
+# QA row 26
+Give the count of purchase orders created on October 1, 2026.
+# QA row 27
+Display the po's created on 10/01/2026
+# QA row 28
+show me all Purchase Orders created on 10/20/2026.
+# QA row 29
+List POs created on October 1, 2026.
+# QA row 30
+List POs created between October 1, 2026, and October 8, 2026, with PO numbers and created date in ascending order.
+# QA row 32
+Show me all purchase orders created between October 1, 2026, and October 9, 2026.
+# CONTROL (QA row 6) — this one works
+show the suppliers created in September, 2026
+# CONTROL (QA row 8) — this one works
+List of suppliers created in 2026 in ascending order, with supplier, supplier number and creation date
+
+
+# === Group 3 — "Current" / "this" period words (quarter, month, period) ===
+# Delta tested: "this month" works (QA row 20), "current status" works
+# when "currently" modifies a status (QA rows 16, 17, 18), but "this
+# quarter" / "current period" / "current calendar month" as a date
+# anchor fails (QA rows 9, 14, 15, 19, 21). The keyword "currently"
+# is load-bearing for the status case, not the date case.
+
+# QA row 9
+Calculate PO value by supplier for the current calendar quarter and rank suppliers from highest to lowest.
+# QA row 14
+Give me an overview of our purchase orders for the current period.
+# QA row 15
+Count POs created from the first day of the current calendar month through today and return the count and exact date range.
+# QA row 19
+Calculate the total value of all purchase orders created during the current quarter/ month.
+# QA row 21
+How many purchase orders were in this quarter
+# CONTROL (QA row 20) — this one works
+How many purchase orders were created this month?
+# CONTROL (QA row 16) — "currently" as status modifier, works
+List purchase orders currently in Closed status.
+# CONTROL (QA row 17) — "currently" as status modifier, works
+List purchase orders currently in open status
+# CONTROL (QA row 18) — "currently" as status modifier, works
+List purchase orders currently incomplete status.
+
+
+# === Group 4 — Superlatives (latest / most recent / newest) ===
+# Delta tested: an explicit year filter works for suppliers (QA row 8),
+# but "latest" / "most recent" applied to suppliers does not (QA rows
+# 10, 11). The PO equivalent works (QA row 59), so the delta is entity
+# + superlative, not superlative alone. Included AR controls
+# (QA rows 56, 58, 60) are placed in Group 5, not here — this group is
+# the PO-vs-Supplier superlative delta.
+
+# QA row 10
+Who is the latest created supplier
+# QA row 11
+Find most recently created supplier?
+# QA row 59 — CONTROL, this one works (PO with "latest")
+latest PO's
+# QA row 61 — CONTROL, this one works (credit memo with "latest")
+Show the 5 latest credit memos.
+
+
+# === Group 5 — AR-invoice parity with PO/Supplier ===
+# Delta tested: the same prompt shape works against POs and/or suppliers
+# but fails against `ReceivablesInvoice` (QA rows 56, 58, 60, 62, 63,
+# 65, 67, 69). The `ReceivablesInvoice` entity has a by-id fetcher but
+# a filter-less list path is refused (PR #6's domain), and several
+# list-shaped filters are absent. Each failing AR prompt below has a
+# working PO/supplier sibling in the same group.
+
+# QA row 56
+List the 5 most recent AR invoices,
+# QA row 58
+Show the latest AR invoice
+# QA row 60
+List the 5 most recent customer transactions.
+# QA row 62
+List completed AR invoices.
+# QA row 63
+List incomplete AR invoices.
+# QA row 65
+Find AR invoices created in August 2026.
+# QA row 67
+Find AR invoices created between August 1, 2026 and August 31, 2026.
+# QA row 69
+List AR invoices with an amount greater than 1000.
+# CONTROLS — the PO/supplier siblings that work
+# QA row 57
+Recent Purchase Orders
+# QA row 64
+incomplete purchase orders
+# QA row 66
+show the suppliers created in September, 2026
+# QA row 68
+show the po's created in September, 2026 with po Id and creation date
+# QA row 70
+suppliers with invoice amount greater than 10000

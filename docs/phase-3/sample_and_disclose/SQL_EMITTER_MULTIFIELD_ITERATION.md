@@ -272,3 +272,164 @@ not re-derive them.
 ---
 
 *End of finding file.*
+
+---
+
+## 6. Resolution — landed 2026-11-13
+
+Both defects and both extensions recorded in §1 and §2 are fixed on
+branch `Phase3-SQL-Emitter-Multifield-Fix`, merged via PR #210.
+The commit is `5a853e6`. This section is the resolution record; §1–§5
+above are unchanged as the finding as originally observed.
+
+### 6.1 Defect 1 — multi-field iteration (fixed)
+
+Fix site: `_emit_step` in `src/spire/rendering/sql_emitter.py`.
+The multi-field shape is detected from `step.iterate_over` having a
+`"fields"` key rather than `"field"` — the same dispatch
+`executor.py::_collect_iteration_values` uses. On the multi-field
+path, sibling sentinel args with no FilterSpec are skipped: the
+primary arg's FilterSpec template already names every predicate, so
+the siblings must not each be appended as independent
+`-- unmapped iteration arg` comments.
+
+The trailing `;` landing on the `line_location_id` comment (§1.2)
+is fixed by the same change — with the comments gone, the
+terminator lands on the executable `LINE_LOCATION_ID = :line_location_id`
+line.
+
+Post-fix diff, prompts 1 and 3 (identical shape):
+
+    < WHERE D.PO_HEADER_ID = :iteration_value AND D.PO_LINE_ID = :po_line_id AND D.LINE_LOCATION_ID = :line_location_id
+    <   AND -- unmapped iteration arg: po_line_id
+    <   AND -- unmapped iteration arg: line_location_id;
+    ---
+    > WHERE D.PO_HEADER_ID = :iteration_value AND D.PO_LINE_ID = :po_line_id AND D.LINE_LOCATION_ID = :line_location_id;
+
+Three lines become one; both halves of §1.2 fixed on the same line.
+
+### 6.2 Defect 2 — numeric-literal quoting (fixed)
+
+Fix site: `_resolve_value` in `src/spire/rendering/sql_emitter.py`.
+**Candidate A** from §2.4: `FilterSpec.value_kind` (`"numeric"`
+/ `"string"` / `None`, opt-in, `None` preserves current quoted
+behaviour). Fourteen numeric-id FilterSpecs in `sql_overlay.py`
+tagged `value_kind="numeric"`. `value_map` and `vocab_kind` remain
+ahead of `value_kind` — those routes already emit correct output
+and do not need the numeric branch.
+
+Post-fix diff, prompt 2:
+
+    < WHERE P.PO_HEADER_ID = '2144';
+    ---
+    > WHERE P.PO_HEADER_ID = 2144;
+
+One line changed, quoted literal to unquoted. No other line in the
+statement moved — the fix did not over-reach into any other binding.
+
+### 6.3 §1.1.c — `_emit_aggregation_step`'s sibling defect (fixed)
+
+`_emit_aggregation_step` in the same file carried the same sentinel
+loop shape — a per-arg fallthrough emitting `-- unmapped iteration
+arg: <name>` for an unmapped sentinel. Fixed with the same
+`multi_field` guard, per this file's own §4 instruction: *"If a
+future window finds a second entry in the same shape, it should be
+recorded here as §1.1.c, not opened as a new finding — same defect,
+same fix, same file."* No aggregation tool currently iterates, so
+the branch is defensive — but leaving it live while fixing its
+sibling would reintroduce the defect the moment an aggregation tool
+gains an iteration.
+
+### 6.4 §1.1.d — `search_suppliers_by_site_bu`'s missing FilterSpec (fixed)
+
+Not recorded in §1–§5 but the same defect shape: `search_suppliers_
+by_site_bu`'s `supplier_id` sentinel had no FilterSpec. Pre-patch
+the step emitted `-- unmapped iteration arg: supplier_id` where
+`S.VENDOR_ID = :iteration_value` belonged — the parent Supplier's
+`SupplierId` (VENDOR_ID) is exactly what the sites table joins on.
+
+FilterSpec added:
+
+    ("search_suppliers_by_site_bu", "supplier_id"): FilterSpec(
+        tool_name="search_suppliers_by_site_bu",
+        arg_name="supplier_id",
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        value_kind="numeric",
+        assumption="supplier_site_by_parent_vendor_id",
+    ),
+
+This closed a pre-existing red test, `test_shape_4_suppliers_
+with_site_in_bu`, whose original `":supplier_id"` assertion was
+aspirational — the sentinel branch hardcodes `value=":iteration_
+value"`, so `:supplier_id` cannot appear under any correct call.
+The test is corrected in the same PR to assert
+`S.VENDOR_ID = :iteration_value` (what the new FilterSpec emits) and
+the accompanying `ASSUMPTION [supplier_site_by_parent_vendor_id]`
+block.
+
+### 6.5 Gap 3 — Invoice FilterSpecs (out of scope)
+
+Deferred. Gap 3 is the absence of `kg_sql_filter` rows for the
+Invoice-side filters `invoice_date_before`, `unpaid`, `overdue`,
+and `pending`. It is a schema-and-seed change — a KG rebuild — and
+per `docs/design/SQL_OVERLAY_COMPLETENESS.md` Phase 1 it belongs in
+a phase-driven POC-2 window, not a defect-fix PR. The deferral is
+recorded here as one line, per WORKING_STYLE §14.1, and the fix will
+ride its own branch and PR when scheduled.
+
+### 6.6 Verification
+
+Pre-fix and post-fix transcripts captured for three reproducer
+prompts (`/tmp/sql_prefix_<n>.txt` and `/tmp/sql_postfix_<n>.txt`,
+not committed). The three diffs of the SQL projection blocks show
+the defect shape present before and absent after:
+
+  - Prompt 1 and Prompt 3: `-- unmapped iteration arg: po_line_id`
+    and `-- unmapped iteration arg: line_location_id` gone; the
+    terminator on the executable line.
+  - Prompt 2: `PO_HEADER_ID = '2144'` → `PO_HEADER_ID = 2144`.
+
+The five post-fix greps (all zero on the defect shapes; one on the
+numeric form; zero on the trailing-`;`-on-comment shape) are the
+load-bearing evidence. The emitted SQL was not executed against the
+pod — execution is deliberately out per `SQL_OVERLAY_POC.md`.
+
+### 6.7 Process notes
+
+Two cell-shape failures during this window, recorded so future
+windows can recognise the pattern:
+
+  - The first commit-then-branch attempt placed `git checkout -b`
+    and `git commit -F -` in one paste cell across a `MSGEOF`
+    heredoc boundary. The shell ran the commit before the
+    checkout, moving local `master` to `5a853e6`. Corrected with
+    `git reset --hard 0ffde8f` on `master`; `origin/master` was
+    never touched. WORKING_STYLE §2.1's 'one command per cell'
+    rule applies across heredoc ends — a heredoc end is a command
+    boundary.
+  - Two earlier cell-A attempts for `sql_emitter.py` did not land,
+    because the anchors were exercised but the write was suppressed
+    by a script-level failure whose stderr was not visible from the
+    verify cell. Cell B for every patch now includes
+    `git diff --stat HEAD` for the patched file, so a non-landed
+    patch shows as `0 files changed` alongside the greps that would
+    also fail. That is the verification pattern for future patch
+    cells.
+
+### 6.8 Where to look next
+
+  - `tests/test_sql_emitter.py` — the twelve tests pin the two
+    defects and their fixes, plus the corrected `test_shape_4`
+    (a pre-existing red test that this PR also closes).
+  - `src/spire/rendering/sql_emitter.py` — `_emit_step`,
+    `_emit_aggregation_step`, `_resolve_value` are the three fix
+    sites; each has an inline comment naming this file and the
+    defect.
+  - `src/spire/kg/sql_overlay.py` — `FilterSpec.value_kind` and
+    the fourteen numeric-id FilterSpecs. The
+    `supplier_site_by_parent_vendor_id` assumption is at
+    `_ASSUMPTIONS`.
+  - `docs/design/SQL_OVERLAY_COMPLETENESS.md` Phase 1 — where the
+    Gap 3 deferral is recorded as scheduled work.
+
+*End of resolution.*

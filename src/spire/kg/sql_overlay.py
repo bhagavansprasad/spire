@@ -28,6 +28,13 @@ class FilterSpec:
     vocab_kind: str | None = None
     requires_join: tuple[str, str] | None = None
     assumption: str | None = None
+    # Candidate A from SQL_EMITTER_MULTIFIELD_ITERATION.md §2.4:
+    # the FilterSpec declares the value's type so _resolve_value
+    # emits a numeric column's literal unquoted. "numeric" / "string"
+    # / None (None == current behaviour, quoted string). Ignored when
+    # value_map or vocab_kind is set — those routes dominate and the
+    # quoted/ mapped output is already correct there.
+    value_kind: str | None = None
 
 
 @dataclass
@@ -470,6 +477,19 @@ _FILTERS = {
         vocab_kind="supplier_site_bu",
         assumption="bu_literal_from_overlay",
     ),
+    # §1.1.d (SQL_EMITTER_MULTIFIELD_ITERATION.md §4 extension): the
+    # iterated sentinel on search_suppliers_by_site_bu is `supplier_id`,
+    # substituted from the parent Supplier's SupplierId. There was no
+    # FilterSpec for it, so _emit_step emitted `-- unmapped iteration
+    # arg: supplier_id` where the predicate belonged. SupplierId is
+    # POZ_SUPPLIERS.VENDOR_ID; the sites table joins on VENDOR_ID.
+    ("search_suppliers_by_site_bu", "supplier_id"): FilterSpec(
+        tool_name="search_suppliers_by_site_bu",
+        arg_name="supplier_id",
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        value_kind="numeric",
+        assumption="supplier_site_by_parent_vendor_id",
+    ),
     ("search_suppliers_by_classification", "classification"): FilterSpec(
         tool_name="search_suppliers_by_classification",
         arg_name="classification",
@@ -518,6 +538,7 @@ _FILTERS = {
         tool_name="get_receivables_invoice_by_id",
         arg_name="customer_transaction_id",
         predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
+        value_kind="numeric",
         assumption="ar_id_maps_to_customer_trx_id",
     ),
 
@@ -526,12 +547,14 @@ _FILTERS = {
         tool_name="get_purchase_order_lines",
         arg_name="po_header_id",
         predicate_template="{alias}.PO_HEADER_ID = {value}",
+        value_kind="numeric",
         assumption="po_child_by_header_id",
     ),
     ("get_purchase_order_schedules", "po_header_id"): FilterSpec(
         tool_name="get_purchase_order_schedules",
         arg_name="po_header_id",
         predicate_template="{alias}.PO_HEADER_ID = {value}",
+        value_kind="numeric",
         assumption="po_schedule_columns_from_reference",
     ),
     ("get_purchase_order_distributions", "po_header_id"): FilterSpec(
@@ -542,6 +565,7 @@ _FILTERS = {
             "AND {alias}.PO_LINE_ID = :po_line_id "
             "AND {alias}.LINE_LOCATION_ID = :line_location_id"
         ),
+        value_kind="numeric",
         assumption="po_distribution_three_way_filter",
     ),
 
@@ -550,6 +574,7 @@ _FILTERS = {
         tool_name="get_receivables_invoice_lines",
         arg_name="customer_transaction_id",
         predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
+        value_kind="numeric",
         assumption="ar_line_by_customer_trx_id",
     ),
 
@@ -558,6 +583,7 @@ _FILTERS = {
         tool_name="get_purchase_order_by_id",
         arg_name="po_header_id",
         predicate_template="{alias}.PO_HEADER_ID = {value}",
+        value_kind="numeric",
         assumption="po_by_id",
     ),
 
@@ -566,6 +592,7 @@ _FILTERS = {
         tool_name="get_buyer",
         arg_name="buyer_id",
         predicate_template="{alias}.PERSON_ID = {value}",
+        value_kind="numeric",
         assumption="buyer_person_id",
     ),
     ("get_receivables_invoice_tax_lines", "customer_transaction_id"): FilterSpec(
@@ -576,12 +603,14 @@ _FILTERS = {
             "AND {alias}.CUST_TRX_LINE_ID = :line_id "
             "AND {alias}.ACCOUNT_CLASS = 'TAX'"
         ),
+        value_kind="numeric",
         assumption="ar_tax_line_filter",
     ),
     ("get_receivables_invoice_transaction_dff", "customer_transaction_id"): FilterSpec(
         tool_name="get_receivables_invoice_transaction_dff",
         arg_name="customer_transaction_id",
         predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
+        value_kind="numeric",
         assumption="ar_dff_columns_uncertain",
     ),
     # list_receivables_credit_memos takes no filter; it is a top-N list.
@@ -598,6 +627,7 @@ _FILTERS = {
         tool_name="get_customer_transactions",
         arg_name="account_id",
         predicate_template="{alias}.CUSTOMER_ID = {value}",
+        value_kind="numeric",
         assumption="customer_transaction_by_customer_id",
     ),
     ("get_account_credit_memos", "account_id"): FilterSpec(
@@ -606,6 +636,7 @@ _FILTERS = {
         predicate_template=(
             "{alias}.CUSTOMER_ID = {value} AND {alias}.CLASS = 'CM'"
         ),
+        value_kind="numeric",
         assumption="account_credit_memo_by_customer_class",
     ),
     ("get_account_receipts", "account_id"): FilterSpec(
@@ -614,6 +645,7 @@ _FILTERS = {
         predicate_template=(
             "{alias}.PAY_FROM_CUSTOMER = {value}"
         ),
+        value_kind="numeric",
         assumption="account_receipt_by_pay_from_customer",
     ),
     ("get_account_receipt_applications", "account_id"): FilterSpec(
@@ -623,6 +655,7 @@ _FILTERS = {
             "{alias}.CUSTOMER_TRX_ID IN "
             "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE BILL_TO_CUSTOMER_ID = {value})"
         ),
+        value_kind="numeric",
         assumption="account_receipt_application_by_customer",
     ),
     ("search_standard_receipts", "customer_name"): FilterSpec(
@@ -761,6 +794,12 @@ _ASSUMPTIONS = {
     "bu_literal_from_overlay": (
         "Business-unit name resolves to a numeric BU_ID from "
         "kg_sql_literal."
+    ),
+    "supplier_site_by_parent_vendor_id": (
+        "The iterated supplier_id on search_suppliers_by_site_bu "
+        "is POZ_SUPPLIERS.VENDOR_ID; the sites table joins on "
+        "VENDOR_ID. Substituted from the parent Supplier row's "
+        "SupplierId, which is the same column."
     ),
     "classification_literal_from_overlay": (
         "Classification display string resolves to a LOOKUP_CODE via "
