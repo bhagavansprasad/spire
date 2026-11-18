@@ -22,7 +22,7 @@ Read top to bottom. Everything is evidence-backed by pasted output from this win
 
 ---
 
-## 1. What this window found — six reversals of Phase 1's assumptions
+## 1. What this window found — six reversals of Phase 1's assumptions, and two derived findings
 
 Each is a claim the Phase 1 handover made that the pod contradicts, followed by the evidence and the working consequence. These belong in the closure handover per WORKING_STYLE §29.
 
@@ -61,6 +61,8 @@ Three candidate explanations (not resolved this window):
 
 **Consequence:** the sweep's headline ("10 of 22 entities have at least one invalid column") survives. Its per-entity named column is treated as a **hint**, not as authoritative. **Every projected column of the remaining 8 sweep-flagged entities is verified against `t_task2_all.txt` regardless of what the sweep named.** That's the pattern established this window.
 
+**Confirmed ×3 (2026-11-18).** See R-8 for the consolidated evidence (Buyer, PurchaseOrder, PurchaseOrderLine) and the promotion to a drafting rule. Contact (§3.2) had one sweep-named failure and one actual bug — not understated, because the table was shallow enough that the first failure was the only one. The pattern breaks whenever the table is wider.
+
 ### R-4 — Buyer's structural model was wrong, not just column-level
 
 Overlay's Buyer spec projected four columns:
@@ -90,6 +92,28 @@ The Address entity projects `L.COUNTRY`. The pod confirms `VARCHAR2(8)` — an I
 `src/spire/mcp_server/tools/supplier_contacts.py` was read for how it uses the Contact entity. Grep found no `SELECT`, no `select_columns`, no `_ENTITIES` reference, no `HZ_PARTIES` — imports are `httpx`, `FusionClient`, `ToolResult`. The tool issues REST calls and reshapes responses.
 
 **Consequence:** some entities in `_ENTITIES` are **swept-only** — the sweep tests them, no production MCP tool emits them. The Contact bug fixed this window matters for the sweep and any future SQL-emitter path, but does not change what `supplier_contacts.py` returns today. **Which of the 22 entities the SQL emitter actually produces is a separate question** — deferred, not blocking Task 4's role maps. Recorded so the next window does not assume "overlay bug fixed ⇒ production behavior changed."
+
+### R-7 — `PO_HEADERS_ALL` is a stub view with no ordered-total carrier
+
+Discovered while drafting PurchaseOrder's role map. `PO_HEADERS_ALL` does not carry `AUTHORIZATION_STATUS` (the sweep-named failure), `AMOUNT` (Phase 1 §2's second suspect), or `DISPLAY_NAME` — three of six projected columns absent.
+
+Sibling-view search (SCHEMA_DISCOVERY_METHOD §9.3) across the eleven `PO_HEADERS%` objects — `PO_HEADERS_ALL`, `_ALL_SEC`, `_ARCHIVE_ALL`, `_ARCHIVE_ALL_SEC`, `_DRAFT_ALL`, `_DRAFT_ALL_SEC`, `_GT`, `_INTERFACE`, `_INTERFACE_SEC`, plus two synonyms — surfaced only `AMOUNT_LIMIT`, `AMOUNT_RELEASED`, `BLANKET_TOTAL_AMOUNT`, `MIN_RELEASE_AMOUNT`. Ceilings, released amounts, floors — never the ordered total. No operational or sibling view on this pod carries it.
+
+**Consequence:** `PO_HEADERS_ALL` is a stub view, same shape as `PER_ALL_PEOPLE_F` (R-2, R-4). This is a persistent pod property, not a one-off. Any role whose semantics require "the header-level total" must be derived from children. `PO_LINES_ALL.AMOUNT` is the leaf, and `(SELECT SUM(L.AMOUNT) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)` is the only correct substitute on this pod. Drove the `kg_derived_projection` mechanism (Q6). Expect the same pattern on `AP_INVOICES_ALL` and `RA_CUSTOMER_TRX_ALL` when those entities are drafted.
+
+### R-8 — the sweep's per-entity first-failure list is a hint, never a count
+
+Confirmed on three entities checked to full depth. Each sweep entry names one column; each entity had more.
+
+| Entity | Sweep named | Actual absent |
+|---|---|---|
+| Buyer | `B.EMAIL_ADDRESS` | 3 of 4 |
+| PurchaseOrder | `P.AUTHORIZATION_STATUS` | 3 of 6 |
+| PurchaseOrderLine | `L.STATUS_LOOKUP_CODE` | 5 of 10 |
+
+Contact (Phase 2 §3.2) had one sweep-named failure and one actual bug — not understated, but only because the table was shallow. The pattern breaks whenever the table is wider than the sweep's first-failure trap catches.
+
+**Consequence:** promoted to a drafting rule. No entity's role map is drafted from the sweep. Every projected column is verified against `t_task2_all.txt` per SCHEMA_DISCOVERY_METHOD §6, and every join key per §7. The rule lives in the `KG_ROLE_MAPS.md` header so a future window drafting an entity cannot miss it. The sweep's §4 output remains useful as an "is this entity flagged at all" pre-filter; it is not useful as a column-level count.
 
 ---
 
@@ -254,19 +278,33 @@ Roles are the semantic names the current `select_columns` uses, plus a physical 
 
 ---
 
-## 5. Open design questions the §3.1 build needs resolved
+## 5. Design decisions the §3.1 build needs resolved
 
-These are decisions the KG schema (§3.1) needs answered before code. They are not this window's fixes — the next window resolves them before writing `kg_schema.sql`.
+These are decisions the KG schema (§3.1) needs answered before code. Q2, Q3, Q4 and Q6 were resolved in the window that drafted PurchaseOrder and PurchaseOrderLine (2026-11-18). Q1 and Q5 remain open with a named deferral.
 
 **Q1 — `pk_column` placement.** Phase 1 §3.1 adds only `fusion_table` to `kg_entity`. The overlay also carries `pk_column` per entity — same class of fact (a physical name). Recommendation: add `kg_entity.pk_column` alongside `fusion_table`, populated by the same build step. Alternative: leave `pk_column` in the overlay, accepting that one physical-name authoring path stays open.
 
+**Deferred (2026-11-18)** to the §3.1 build. Not resolved in this window because the answer interacts with Q6's `kg_derived_projection` shape — a derived role has no physical column, so whether a per-entity PK belongs on `kg_entity`, `kg_sql_column`, or split between them depends on the full schema. Decide at §3.1 with all rows visible.
+
 **Q2 — `predicate_template` surface.** `EntitySpec` (which `vars()` dumps) has no `predicate_template` field. The WHERE-clause columns that Phase 1 §3.3 says to resolve via `kg_sql_column` live on a separate `FilterSpec` structure elsewhere in `sql_overlay.py`. Next window's first action on §3.3 is to locate `FilterSpec` and read it.
+
+**Resolved (2026-11-18).** `FilterSpec` is a dataclass at `sql_overlay.py:23` with `predicate_template: str` at line 26. Filters are keyed `(tool_name, filter_name)` in `_FILTERS` at line 444, **not** by entity — one entity spans multiple tools (Supplier has three: `search_suppliers`, `search_suppliers_by_site_bu`, `search_suppliers_by_classification`). §3.3's predicate-column resolution is three steps, not one: (1) `tool_name → entity_name` via `tool_to_entity`; (2) `entity.base_joins → alias→table map` (`JOIN HZ_PARTIES HP ON ...` → `HP = HZ_PARTIES`); (3) `kg_sql_column` lookup on `(entity_name, table, column)`. Same mechanism as `select_columns`, plus the alias translation. No schema change needed for §3.3.
 
 **Q3 — `kg_sql_column` keying.** PK is `(entity_name, physical_table, column_name)` per Phase 1 §3.1. Same physical table under multiple entities yields multiple rows — e.g. `HZ_PARTIES` under Supplier, Address, Contact will have three rows per column. Correct: the table is joined differently per entity. But confirm the intent, because it means `kg_sql_column` row count is larger than "sum of all tables' columns."
 
+**Resolved (2026-11-18).** PK `(entity_name, physical_table, column_name)` stands as written in Phase 1 §3.1. Same physical table under multiple entities yields multiple rows, correctly — the table is joined differently per entity, and `is_default_projection` is per-entity. Note for §3.2 only, not §3.1: if every column of every joined table is carried with `is_default_projection='N'` for non-projections (SCHEMA_DISCOVERY_METHOD §8), the row count is "sum over entities of all joined-table columns," larger than "sum of all tables' columns." Confirm the intent at §3.2 build.
+
 **Q4 — nullable join key.** `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` (Contact's join right-side) is `NULLABLE='Y'`. An inner join drops site rows whose `PARTY_SITE_ID` is NULL, and their contacts vanish silently. Option accepted this window: **add a build self-check that counts NULL `PARTY_SITE_ID` rows on `POZ_SUPPLIER_SITES_ALL_M` and requires zero.** If non-zero on the pod, revisit join semantics. Alternative (LEFT JOIN, NULL supplier_id for such rows) rejected as shipping surprises the caller.
 
+**Resolved (2026-11-18).** Build self-check accepted as written, and **extended to every nullable join key in any `base_joins`**, not only Contact's. Each nullable key gets a §3.4 build check counting NULLs on the joining-side table; non-zero fails the build. LEFT JOIN + NULL propagation remains rejected. At time of writing, two nullable keys are known: `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` (Contact) and `PO_HEADERS_ALL.VENDOR_ID` (PurchaseOrder). The mechanism is per-key, not per-entity — later entities extend the list.
+
 **Q5 — entity-vs-tool surface mismatch.** R-6 shows `supplier_contacts.py` uses REST, not the overlay. Which of the 22 entities the SQL emitter actually produces is unresolved. Not blocking Task 4 (KG carries columns; emitter reads them if/when it emits), but is required before §3.3's emitter change is testable. Next window's first action on §3.3: `grep -l sql_overlay src/spire/mcp_server/tools/*.py` to identify overlay-consuming tools.
+
+**Deferred (2026-11-18)** to §3.3. First action unchanged; not run in this window. Task 4 work does not depend on the answer.
+
+**Q6 — roles with no direct column carrier.** Discovered during PurchaseOrder drafting. `PO_HEADERS_ALL.AMOUNT` does not exist on the pod, and no sibling view across the eleven `PO_HEADERS%` objects carries the ordered total (R-7). Same class will recur on PurchaseOrderLine (`TOTAL_TAX`, `TOTAL`) and on the receivables DFF entities per Phase 2 §4.
+
+**Resolved (2026-11-18).** Derived projections live in a new sibling table `kg_derived_projection`, keyed `(entity_name, role_name)`, columns `expression VARCHAR2(4000)` and `is_default_projection CHAR(1)`. The expression carries a correlated scalar subquery in the form `(SELECT ... FROM <child> <alias> WHERE <alias>.<fk> = <base_alias>.<pk>)`. Every physical column inside the expression is validated against `kg_sql_column` at build — the expression is not a new unvalidated hand-authored name, it is an expression over validated ones. §3.4's check walks both tables. §3.3's emitter gains one branch: role → `kg_sql_column` lookup, else role → `kg_derived_projection` expression, else error. Q1 and Q3 are undisturbed by this addition.
 
 ---
 
