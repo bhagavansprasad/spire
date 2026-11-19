@@ -8,6 +8,7 @@ live KG-schema work queue)
 **Status:** Open — F-073 (customer_site filter), F-072 (account balances),
 F-075 (UnappliedAmount) fixed this window; F-061 decided (leave);
 F-076 (BU scoping) new Candidate; no regressions
+**Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 

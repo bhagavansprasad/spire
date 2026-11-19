@@ -2,7 +2,7 @@
 
 **For:** the next window resuming this work.
 **Created:** 2026-11-18, after 11 of 22 role maps were drafted.
-**Companions:** `HANDOVER_KG_SCHEMA.md` (Phase 1 strategy/design), `HANDOVER_KG_SCHEMA_PHASE2.md` (Tasks 1–3 + reversals), `KG_ROLE_MAPS.md` (drafted role maps), `SCHEMA_DISCOVERY_METHOD.md` (procedure).
+**Companions:** `HANDOVER_KG_SCHEMA.md` (Phase 1 strategy/design), `HANDOVER_KG_SCHEMA_PHASE2.md` (Tasks 1–3 + reversals), `KG_ROLE_MAPS.md` (drafted role maps), `SCHEMA_DISCOVERY_METHOD.md` (procedure), `SESSION_STATUS_2026-11-19.md` (point-in-time status snapshot: repo/KG/test/runtime state + open queue).
 
 This document is the **pending-work register**. The handovers carry what was done and why; this carries what is left and in what order. When an item here is finished, strike it and cite where its result landed.
 
