@@ -16,19 +16,23 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
 | Task 4 — role maps | **13 of 22** drafted (added CustomerTransaction + ReceivablesInvoice, 2026-11-19; F-066 + F-067 fixed) |
-| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — 11/57/4 rows (see §0.2); gap register fully reversed (61/61 bound) |
+| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **13/71/7** rows (was 11/57/4 at PR #212); gap register fully reversed |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
-| §3.3 — emitter reads from KG | **3.3a complete** (select_columns + derived from KG; commit `6b247e9`). **3.3b filter/aggregation part complete** (stale `AUTHORIZATION_STATUS`/`SUM(AMOUNT)` → `DOCUMENT_STATUS`/derived line-amount, 2026-11-19). **3.3b Receivables part blocked** on the 11 role maps (task 5) |
+| §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads any entity with KG rows (13 drafted) — the 9 remaining Receivables still hand-authored |
 | §3.4 — build self-check | **not started** |
 
 ### 0.2 Branch / merge record (2026-11-19)
 
-- Work landed on branch `KG-Schema-Corpus`, merged to `master` via
-  **PR #212** (merge commit `6755d3d`, 2026-11-19).
-- The branch is left in place; **next window starts a new branch off
-  `master`** (per `COPILOT_WORKING_STYLE.md` — window discipline).
-- `kg_entity_sql`=11, `kg_sql_column`=57, `kg_derived_projection`=4.
-  Full suite at merge: 1343 passed, 11 xfailed, 0 failed.
+- **PR #212** (`KG-Schema-Corpus`) merged to `master` (merge commit
+  `6755d3d`, 2026-11-19) — carried 11/57/4 SQL satellites, gap register
+  reversed.
+- **Current branch `Phase3-F060-Amount-Carrier`** (pushed to origin,
+  NOT yet a PR) carries this window's fixes. Started from `master` at
+  `1fc369a`. Commits: F-060, F-064, F-065, F-066 (record), F-066+F-067
+  (role maps). **Open a PR from this branch to `master`** when the 11
+  Receivables role maps (or a coherent subset) are done.
+- Satellite counts now: `kg_entity_sql`=13, `kg_sql_column`=71,
+  `kg_derived_projection`=7.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 
