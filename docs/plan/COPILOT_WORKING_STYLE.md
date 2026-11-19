@@ -80,6 +80,37 @@ evidence, rather than asking the user to run a second cell.
   (d) record open findings in `docs/fixes/FIX_PLAN.md`, (e) give the user
   the "paste into new window" resume brief.
 
+**The resume brief is a fixed shape.** Every window close emits ONE
+paste-in block with exactly these sections, in order:
+
+1. `RESUME — <task> (SPIRE), next window` header.
+2. **Branch instructions** — the exact `git checkout master && git pull
+   --ff-only origin master && git checkout -b <branch>` to run. The new
+   branch name follows `Phase{N}-{Descriptive}`; state it explicitly.
+3. **Python interpreter + validator** — always
+   `/home/bhagavan/virtenv/spire/bin/python` (not bare `python`) and
+   `./runsql.sh "<SQL>"`.
+4. **FILES TO READ (in this order)** — an explicit bulleted list of
+   absolute-or-repo-relative paths, most-important first: the pending
+   register, role maps, FIX_PLAN, discovery method, working style, then
+   the code files the task edits, then the scratch/evidence artifacts
+   (`t_*`). Never assume the next window will discover files by grep;
+   name them so the next session reads directly.
+5. **DONE (last window)** — what landed, with branch/commit/PR and any
+   row-count changes (satellites `kg_entity_sql`/`kg_sql_column`/
+   `kg_derived_projection`).
+6. **NEXT TASK** — ordered list; call out HARD/last items.
+7. **OPEN findings** — the FIX_PLAN queue + any backlog.
+8. **RULES** — the validation bar (emitted SQL must run AND agree with
+   REST; verify every column against `t_task2_all.txt`; xfail + FIX_PLAN
+   note for deferred failures; restart API/MCP after `src/spire/` edits).
+
+The brief goes into the user's message verbatim; it is the only
+context-carrying artifact across windows, so completeness beats brevity.
+If untracked scratch files (`t_*`) are load-bearing for the next task,
+either name them in FILES TO READ or commit them — never leave them
+implicit.
+
 ### Documentation
 
 - Doc A is frozen (status/deviation notes only). Doc B is split into
