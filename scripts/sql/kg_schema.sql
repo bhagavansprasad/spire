@@ -1672,8 +1672,8 @@ PROMPT Seeded kg_entity_filter (37 rows).
 -- one vocabulary, no snake_case role names.
 --
 --   22 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
---  128 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---    9 kg_derived_projection — correlated scalar subqueries.
+--  127 kg_sql_column rows   — direct columns, is_default_projection='Y'.
+--   10 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1745,7 +1745,9 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'ShipToLocation', 'PO_LINE_LOCATIONS_ALL', 'SHIP_TO_LOCATION_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'RequestedDeliveryDate', 'PO_LINE_LOCATIONS_ALL', 'NEED_BY_DATE', 'DATE', 7, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'Quantity', 'PO_LINE_LOCATIONS_ALL', 'QUANTITY', 'NUMBER', 22, 'Y');
-INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'Amount', 'PO_LINE_LOCATIONS_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
+-- F-062: POSchedule.Amount -> PO_LINE_LOCATIONS_ALL.AMOUNT was a stub
+-- (NULL on 99.95% of rows); the schedule extended amount is derived as
+-- line UNIT_PRICE x schedule QUANTITY (see kg_derived_projection below).
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'ScheduleStatus', 'PO_LINE_LOCATIONS_ALL', 'SCHEDULE_STATUS', 'VARCHAR2', 100, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'ReceivedQuantity', 'PO_LINE_LOCATIONS_ALL', 'QUANTITY_RECEIVED', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'BilledQuantity', 'PO_LINE_LOCATIONS_ALL', 'QUANTITY_BILLED', 'NUMBER', 22, 'Y');
@@ -1861,8 +1863,19 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 -- ---- kg_derived_projection (5 rows) ----
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'L.UNIT_PRICE * L.QUANTITY', 'Y');
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'TotalTax', '(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', '(L.UNIT_PRICE * L.QUANTITY) + (SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
+-- F-063: the old TotalTax/Total carriers read SUM(PO_LINE_LOCATIONS_ALL.
+-- ESTIMATED_TAX_AMOUNT), which is NULL on ALL 310,952 schedule rows — a
+-- complete stub — so TotalTax/Total were NULL on every line. The real
+-- line tax is RECOVERABLE_TAX + NONRECOVERABLE_TAX on PO_DISTRIBUTIONS_ALL
+-- (verified exact vs REST on POs 2144, 65, 300000133123880); NVL(...,0)
+-- yields 0 (not NULL) when a line has no distributions / no tax.
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'TotalTax', 'NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', '(L.UNIT_PRICE * L.QUANTITY) + NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)', 'Y');
+-- F-062: POSchedule.Amount = line UNIT_PRICE x schedule QUANTITY
+-- (schedule is a shipment of a portion of the line; verified vs REST on
+-- PO 300000133123880: line 300000133123881 qty 738/3/86 -> 12064.824 /
+-- 49.044 / 1405.928).
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('POSchedule', 'Amount', '(SELECT L.UNIT_PRICE FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PODistribution', 'StatusCode', '(SELECT L.LINE_STATUS FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = D.PO_LINE_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'EnteredAmount', '(SELECT SUM(S.AMOUNT_DUE_ORIGINAL) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceBalanceAmount', '(SELECT SUM(S.AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
@@ -1871,6 +1884,6 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (128 rows), kg_derived_projection (9 rows).
+PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (127 rows), kg_derived_projection (10 rows).
 
 -- ============================================================

@@ -162,31 +162,51 @@ not `TAX_EXCLUSIVE_PRICE`. Decisive pod evidence:
 
 ### F-062 — `POSchedule.amount` binds to `PO_LINE_LOCATIONS_ALL.AMOUNT`, also a stub
 
-**Status:** Confirmed. Not fixed — schedule-level carrier needs a separate
-discovery decision.
+**Status:** Fixed (2026-11-19). Carrier = derived `line UNIT_PRICE × schedule
+QUANTITY`.
 
 `PO_LINE_LOCATIONS_ALL.AMOUNT` is NULL on 310,807 of 310,947 rows (99.95%)
 — the same R-7 stub shape as F-060. `POSchedule.Amount` (`kg_sql_column`
 → `AMOUNT`, `is_default_projection='Y'`) therefore emits NULL where REST
 returns a schedule amount. `PO_LINE_LOCATIONS_ALL` has **no** `UNIT_PRICE`
 (ORA-00904), so the schedule extended amount cannot be derived on-table;
-it needs a join back to `PO_LINES_ALL` via `PO_LINE_ID`
-(`L.UNIT_PRICE × S.QUANTITY`, schedule quantity). That derivation (and the
-schedule-amount semantics vs line amount) must be verified against REST
-before binding — deferred to the POSchedule role-map pass.
+it needs a join back to `PO_LINES_ALL` via `PO_LINE_ID`.
 
-### F-063 — `Total`/`TotalTax` return NULL, not 0, when the schedule tax is NULL
+**Resolution (2026-11-19).** The `AMOUNT` `kg_sql_column` row is removed
+and replaced with a `kg_derived_projection`:
+`(SELECT L.UNIT_PRICE FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY`.
+The multiplier is the **schedule** quantity (a schedule is a shipment of a
+portion of the line), verified exact against REST on PO 300000133123880:
+line 300000133123881 qty 738/3/86 → 12064.824 / 49.044 / 1405.928, all
+equal REST `Amount`. Row counts: `kg_sql_column` 128→127,
+`kg_derived_projection` 9→10.
 
-**Status:** Observation (pre-existing, not introduced by F-060).
+### F-063 — `Total`/`TotalTax` read a stub tax column, NULL on every line
 
-`TotalTax` = `(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) …)` returns NULL (not 0)
-when the line's schedules carry a NULL `ESTIMATED_TAX_AMOUNT` (PO 2144 has
-schedule rows with NULL tax), so `Total` = `Ordered + NULL` = NULL. This
-was already flagged in `KG_ROLE_MAPS.md` §PurchaseOrderLine ("NULL, not 0,
-for a line with no schedules"); F-060's carrier fix did not change the
-NULL-propagation behavior of the tax subquery. If REST returns `TotalTax=0`
-and `Total=Ordered` in this case, an `NVL(SUM(…), 0)` is warranted — a
-separate decision, not part of F-060.
+**Status:** Fixed (2026-11-19). Reclassified from observation to
+Confirmed bug: the tax carrier was a complete stub.
+
+`TotalTax` = `(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) …)` read
+`PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT`, which is NULL on **all
+310,952** schedule rows (a complete stub, not just "NULL when tax is
+unset"). So `TotalTax` and `Total` (= `Ordered + NULL`) were NULL on
+**every** PO line, while REST returns real tax. The original framing
+("NULL, not 0, when the schedule tax is NULL") understated it: the column
+is never populated, so the SQL path was wrong everywhere, not just on
+tax-less lines.
+
+**Resolution (2026-11-19).** The line tax is `RECOVERABLE_TAX +
+NONRECOVERABLE_TAX` on `PO_DISTRIBUTIONS_ALL`, summed over the line's
+distributions. Both derived projections now use
+`NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)`.
+Verified exact against REST: PO 2144 line 1 → TotalTax 3135 / Total 36135
+(REST 3135 / 36135); PO 65 line 2 → 1045.4 / 6272.4; PO 300000133123880
+(multi-distribution) lines 300000133123881/…888/…893 → 2298.37 / 2605.46 /
+73461.53, all equal REST `TotalTax`/`Total`. The `NVL(…, 0)` returns 0
+(not NULL) for the 5,189 lines with no distributions and 10 lines whose
+distribution tax is all-NULL — and those no-distribution lines largely
+sit on POs REST 404s on (e.g. 300000048657237), so they are not a
+SQL-vs-REST divergence source.
 
 ### F-061 — buyer name format: SQL `DISPLAY_NAME` ≠ REST `Buyer`
 

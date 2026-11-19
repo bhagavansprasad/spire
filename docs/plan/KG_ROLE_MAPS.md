@@ -121,6 +121,16 @@ The table above is left as the historical (wrong) draft; the seed in
 `scripts/sql/kg_schema.sql` carries the fix. Full record:
 `docs/fixes/FIX_PLAN.md` F-060.
 
+**F-063 correction (2026-11-19).** The `total_tax`/`total` tax subquery
+read `SUM(PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT)`, which is NULL on
+**all 310,952** schedule rows — a complete stub, not an estimate. So
+`TotalTax` and `Total` were NULL on every line. The real line tax is
+`RECOVERABLE_TAX + NONRECOVERABLE_TAX` on `PO_DISTRIBUTIONS_ALL`, summed
+over the line's distributions and NVL-wrapped to 0. Both projections now
+use
+`NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)`.
+Full record: `docs/fixes/FIX_PLAN.md` F-063.
+
 ### POSchedule (`PO_LINE_LOCATIONS_ALL`)
 
 `kg_entity`: `(POSchedule, PO_LINE_LOCATIONS_ALL, LINE_LOCATION_ID)`
@@ -153,6 +163,15 @@ The table above is left as the historical (wrong) draft; the seed in
 **Filter.** `("get_purchase_order_schedules","po_header_id")` → `{alias}.PO_HEADER_ID = {value}` on alias `S` → `PO_LINE_LOCATIONS_ALL.PO_HEADER_ID` (col 33, N). Verified present directly on the table — **no subquery, no join change.** The `"po_schedule_columns_from_reference"` assumption held on the filter side; first filter in the corpus whose column was not pre-verified from another entity, and the only clean case.
 
 **Observations.** `requested_delivery_date` is semantically ambiguous: the pod carries `REQUESTED_SHIP_DATE` (10), `PROMISED_SHIP_DATE` (11), `NEED_BY_DATE` (47), `PROMISED_DATE` (48). `NEED_BY_DATE` chosen — arrival-side, matches "delivery." If the overlay intended the buyer-requested ship side, `REQUESTED_SHIP_DATE` is correct; revisit if downstream consumer clarifies. `schedule_number` returns `NUMBER` where a caller may format as text. Additional quantities exist if later roles need them: `QUANTITY_SHIPPED` (155), `QUANTITY_ACCEPTED` (40), `QUANTITY_REJECTED` (41), `QUANTITY_CANCELLED` (43), `SHIPPING_UOM_QUANTITY` (274). `ESTIMATED_TAX_AMOUNT` (58) — same column used by PurchaseOrderLine's `total_tax` — is available at schedule level if a schedule-tax role is ever wanted. `PO_LINE_ID` (34, N) present, enabling downstream traversal to lines without a `base_joins` change.
+
+**F-062 correction (2026-11-19).** The `amount → PO_LINE_LOCATIONS_ALL.AMOUNT`
+row above was **wrong**: `AMOUNT` is a stub (NULL on 99.95% of rows) and
+the table has no `UNIT_PRICE`. The corrected carrier is a derived
+projection (see `kg_derived_projection`): `(SELECT L.UNIT_PRICE FROM
+PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY` — line
+`UNIT_PRICE` × **schedule** `QUANTITY`. The table above is left as the
+historical (wrong) draft; the seed in `scripts/sql/kg_schema.sql` carries
+the fix. Full record: `docs/fixes/FIX_PLAN.md` F-062.
 
 ### PODistribution (`PO_DISTRIBUTIONS_ALL`)
 

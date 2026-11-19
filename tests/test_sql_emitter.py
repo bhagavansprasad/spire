@@ -284,3 +284,32 @@ def test_standard_receipt_uses_left_join_for_nullable_pay_from_customer():
         "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
         "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
     ]
+
+
+def test_poschedule_amount_is_derived_not_stub_amout():
+    """F-062: PO_LINE_LOCATIONS_ALL.AMOUNT is a stub (NULL on 99.95% of
+    rows), so POSchedule.Amount must derive line UNIT_PRICE x schedule
+    QUANTITY, not bind the stub AMOUNT column."""
+    plan = [Step(1, "get_purchase_order_schedules", {"po_header_id": "2144"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert (
+        "(SELECT L.UNIT_PRICE FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY"
+        in body
+    )
+    # The stub AMOUNT column must not be selected as a bare column.
+    assert "S.AMOUNT" not in body
+
+
+def test_purchase_order_line_tax_is_from_distributions_not_schedule_stub():
+    """F-063: PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT is NULL on ALL
+    310,952 schedule rows (a complete stub), so the line TotalTax/Total
+    must read PO_DISTRIBUTIONS_ALL.RECOVERABLE_TAX + NONRECOVERABLE_TAX,
+    NVL-wrapped to 0 when a line has no distributions / no tax."""
+    plan = [Step(1, "get_purchase_order_lines", {"po_header_id": "2144"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "RECOVERABLE_TAX + D.NONRECOVERABLE_TAX" in body
+    assert "NVL(" in body
+    # The stub ESTIMATED_TAX_AMOUNT carrier must be gone.
+    assert "ESTIMATED_TAX_AMOUNT" not in body
