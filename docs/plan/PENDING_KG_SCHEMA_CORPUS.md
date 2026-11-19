@@ -19,20 +19,25 @@ This document is the **pending-work register**. The handovers carry what was don
 | §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **22/128/9** rows (was 13/71/7 at PR #213); all 22 entities drafted |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
 | §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads all 22 entities with KG rows |
-| §3.4 — build self-check | **not started** |
+| §3.4 — build self-check | **complete** — `scripts/validate_kg_schema.py` (9 derived projections validated; 6 nullable keys checked; 1 open: F-074) |
 
 ### 0.2 Branch / merge record (2026-11-19)
 
 - **PR #212** (`KG-Schema-Corpus`) merged to `master` (merge commit
   `6755d3d`, 2026-11-19) — carried 11/57/4 SQL satellites, gap register
   reversed.
-- **Current branch `Phase3-F060-Amount-Carrier`** (pushed to origin,
-  NOT yet a PR) carries this window's fixes. Started from `master` at
-  `1fc369a`. Commits: F-060, F-064, F-065, F-066 (record), F-066+F-067
-  (role maps). **Open a PR from this branch to `master`** when the 11
-  Receivables role maps (or a coherent subset) are done.
-- Satellite counts now: `kg_entity_sql`=13, `kg_sql_column`=71,
-  `kg_derived_projection`=7.
+- **PR #213** (`Phase3-F060-Amount-Carrier`) merged to `master` (merge
+  commit `069fb40`) — F-060/F-064/F-065 fixed + CustomerTransaction /
+  ReceivablesInvoice role maps (F-066/F-067).
+- **PR #214** (`Phase3-KG-Receivables-RoleMaps`) merged to `master`
+  (merge commit `a288925`, 2026-11-19) — the 9 remaining Receivables
+  role maps landed (kg_entity_sql 13→22, kg_sql_column 71→128,
+  kg_derived_projection 7→9), plus F-068..F-073.
+- **Current branch `Phase3-Validate-Kg-Schema`** (this window) — §3.4
+  build self-check `scripts/validate_kg_schema.py`; new finding F-074
+  (StandardReceipt `PAY_FROM_CUSTOMER` 39 NULLs).
+- Satellite counts now: `kg_entity_sql`=22, `kg_sql_column`=128,
+  `kg_derived_projection`=9.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 
@@ -150,15 +155,31 @@ For each entity's `fusion_table`, query `ALL_TAB_COLUMNS` on the pod and write i
 
 Per Phase 2 Q4: every nullable join key gets a build check counting NULLs on the joining-side table; require zero; non-zero fails the §3.4 build. LEFT JOIN + NULL propagation remains rejected.
 
-**Known nullable join keys (3), to encode as checks:**
+**Status 2026-11-19 — complete.** The self-check is now
+`scripts/validate_kg_schema.py` (on-demand release/CI). It (a) walks the
+9 `kg_derived_projection` expressions and validates every referenced
+physical column — a `kg_sql_column` carrier is a validated measure; a
+column not in `kg_sql_column` is checked for existence on the pod (a join
+key); a column in neither is a MISSING-column failure (Q6) — and (b) runs
+the 6 nullable-key NULL-count checks below (Q4). Run it with
+`/home/bhagavan/virtenv/spire/bin/python scripts/validate_kg_schema.py`
+(`--kg-only` skips the pod checks).
+
+**Known nullable join keys (6), encoded as checks:**
 
 | Entity | Join key column | Check |
 |---|---|---|
 | Contact | `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` | count NULLs = 0 |
 | PurchaseOrder | `PO_HEADERS_ALL.VENDOR_ID` | count NULLs = 0 **except** `DOCUMENT_STATUS='INCOMPLETE'` (see §4.1) |
 | Invoice | `AP_INVOICES_ALL.VENDOR_ID` | count NULLs = 0 |
+| ReceivablesInvoice | `RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID` | count NULLs = 0 |
+| CreditMemo | `RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID` | count NULLs = 0 (shares the physical column with ReceivablesInvoice) |
+| StandardReceipt | `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` | count NULLs = 0 **— but the pod has 39** (see §4.2, F-074) |
 
-The mechanism is **per-key, not per-entity** — later entities (the Receivables cluster) extend the list. The self-check also walks `kg_derived_projection` expressions, validating every physical column inside each expression against `kg_sql_column` (Phase 2 Q6).
+The mechanism is **per-key, not per-entity**. The self-check also walks
+`kg_derived_projection` expressions, validating every physical column
+inside each expression against `kg_sql_column` (Phase 2 Q6) and against
+the pod for join keys not in `kg_sql_column`.
 
 ### 4.1 Revision 2026-11-19 — `PO_HEADERS_ALL.VENDOR_ID` is not zero-NULL
 
@@ -176,6 +197,26 @@ NULLs" to "zero NULLs **except** on `DOCUMENT_STATUS='INCOMPLETE'` rows."
 
 Evidence: `t_verify_nullable.txt` (counts `0 / 5 / 0`),
 `t_verify_null_vendor_po.txt` (the 5 rows, all INCOMPLETE).
+
+### 4.2 Revision 2026-11-19 — `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` is not zero-NULL
+
+The "count NULLs = 0" check for `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER`
+(the StandardReceipt 6th nullable key) **fails on the pod**: 39 rows of
+79,777 have NULL `PAY_FROM_CUSTOMER`, by `STATUS`: `UNID` 25 (321,177.32),
+`REV` 10 (10,625,331.37), `NSF` 2 (21,000,000), `APP` 2 (1,602.95).
+
+**Not yet decided** (open, F-074). Unlike §4.1's PO case — where all 5
+NULL rows are `DOCUMENT_STATUS='INCOMPLETE'` and dropping them is clearly
+correct — these 39 are unidentified / reversed / bounced / applied
+receipts, which are not obviously "non-real". The inner
+`JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER`
+drops them; whether that is correct (option 1, with a documented
+`exclude` carve-out) or should become LEFT JOIN + NULL propagation or an
+explicit filter is a separate decision. Until it lands,
+`scripts/validate_kg_schema.py` fails on this key by design.
+
+Evidence: `scripts/validate_kg_schema.py` (Q4 check → FAIL, NULLs = 39);
+pod `COUNT(*) TOTAL = 79777`, `COUNT(PAY_FROM_CUSTOMER) NON_NULL = 79738`.
 
 ---
 

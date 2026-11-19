@@ -477,3 +477,54 @@ client-side. Deferred — not a role-map (column) item; belongs to the §3.3b
 Receivables-filter pass. Also open: `AccountReceipt.State` ('Applied'/'Unapplied')
 and `ProcessStatus` ('Open'/'Closed') have no clean single column on
 `AR_CASH_RECEIPTS_ALL` — both dropped, documented in KG_ROLE_MAPS.md §AccountReceipt.
+
+### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (OPEN)
+
+**Status:** Confirmed. Open — not fixed this window. Found by the §3.4
+build self-check (`scripts/validate_kg_schema.py`), which this window wrote.
+
+**S0.** `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` — the StandardReceipt role
+map's 6th nullable join key — is NULL on **39 of 79,777** rows, so the
+entity's inner join `JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID =
+R.PAY_FROM_CUSTOMER` silently drops those 39 receipts.
+
+**S1 (harm).** SQL ≠ REST at the row-count level: the top-level
+`/standardReceipts` list returns receipts with no customer
+(`CustomerName`/`CustomerAccountNumber` null), but the emitted SQL joins
+`HZ_CUST_ACCOUNTS` + `HZ_PARTIES` to project those two columns and drops
+every receipt whose `PAY_FROM_CUSTOMER` is NULL.
+
+**S2 (evidence).** `scripts/validate_kg_schema.py` Q4 check → **FAIL**:
+`StandardReceipt AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER: NULLs = 39`.
+Pod confirmation: `COUNT(*) TOTAL = 79777`, `COUNT(PAY_FROM_CUSTOMER)
+NON_NULL = 79738` → 39 NULL. Characterization by `STATUS`:
+`UNID` 25 (321,177.32), `REV` 10 (10,625,331.37), `NSF` 2 (21,000,000),
+`APP` 2 (1,602.95).
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py` StandardReceipt
+`base_joins` = `JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID =
+R.PAY_FROM_CUSTOMER` (+ `JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID`).
+`KG_ROLE_MAPS.md` §StandardReceipt recorded `PAY_FROM_CUSTOMER` nullable
+(Y) as the "6th nullable join key" but never ran the NULL-count; the §3.4
+validator is the first command to run it, and it is non-zero.
+
+**S4 (root cause).** Unidentified (UNID), reversed (REV), bounced (NSF)
+and two applied (APP) receipts legitimately carry no `PAY_FROM_CUSTOMER`.
+Unlike `PO_HEADERS_ALL.VENDOR_ID` (§4.1 — where the 5 NULL rows are all
+`DOCUMENT_STATUS='INCOMPLETE'` and correctly dropped), these 39 are not
+obviously "non-real" receipts, so the inner-join drop is not clearly
+correct.
+
+**S5 (alternative disproven).** Not a validator bug — the same count is
+reproduced directly on the pod (39 NULL of 79,777), and the other five
+nullable keys all report 0 under the same checker.
+
+**Decision needed (next window).** Same shape as §4.1: (option 1) accept
+the drop with a documented `exclude` carve-out, (option 2) switch
+StandardReceipt to LEFT JOIN with NULL propagation (rejected by Q4 for
+shipping NULLs), or (option 3) filter these receipts out explicitly. Until
+one lands, `validate_kg_schema.py` fails on this key by design.
+
+**S8 (miss record).** The Receivables role-map pass flagged the key as
+nullable but did not run the Q4 NULL-count; the §3.4 self-check (this
+window) is the first command to run it.
