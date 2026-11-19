@@ -224,3 +224,53 @@ OPEN POs; aggregation returns 14 statuses with summed derived amounts.
 This closes the drafted-entities half of §3.3b (filters/aggregations
 resolve to verified carriers). The remaining half — the 11 Receivables
 entities — is blocked on their role maps (task 5).
+
+### F-065 — `search_purchase_orders.supplier_id` filter matched SEGMENT1 (SupplierNumber), not VENDOR_ID (SupplierId)
+
+**Status:** Fixed 2026-11-19 (`Phase3-F060-Amount-Carrier`, found by the
+end-to-end promptkit ↔ runsql verification).
+
+**S0.** The `supplier_id` filter's `predicate_template` matched
+`POZ_SUPPLIERS.SEGMENT1` (the human SupplierNumber) against a value that is
+actually the numeric internal SupplierId (`PO_HEADERS_ALL.VENDOR_ID`), so
+the emitted SQL returned 0 rows where REST returned the supplier's rows.
+
+**S1 (harm).** SQL ≠ REST. Prompt "Which suppliers have open purchase
+orders?" — REST answer: 17 of 25 sampled suppliers have open POs. The
+emitted step-2 SQL (SEGMENT1 = numeric SupplierId) returned 0 rows for
+every supplier, so the SQL path would report **0** suppliers with open POs.
+
+**S2 (evidence).** The tool contract
+(`src/spire/mcp_server/tools/purchase_orders.py`) declares `supplier_id:
+int` = "Exact SupplierId match (numeric)" and sets
+`server_clause=f"SupplierId={supplier_id}"`. The plan iterates
+`iterate_over.field='SupplierId'` (numeric). Against the pod:
+
+    -- CORRECT (REST semantics): VENDOR_ID = 300000047414503 → 274 OPEN rows
+    -- EMITTED (old): SEGMENT1 = 300000047414503 → (no rows returned)
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py`
+`("search_purchase_orders","supplier_id")` FilterSpec's
+`predicate_template="P.VENDOR_ID IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS
+WHERE SEGMENT1 = {value})"`.
+
+**S4 (root cause).** The overlay assumed `supplier_id` could be a
+SupplierNumber; the tool never does — it is the numeric SupplierId. The
+comment and assumption encoded the wrong polarity.
+
+**S5 (alternative disproven).** Not a data quirk — `SEGMENT1='1252'`
+(string) is the SupplierNumber, `VENDOR_ID=300000047414503` (number) is
+the SupplierId; the two live in different columns.
+
+**Fix.** `predicate_template="{alias}.VENDOR_ID = {value}"`,
+assumption → `supplier_maps_to_vendor_id` (already defined, previously
+unused). The old `supplier_number_not_vendor_id` assumption text marked
+OBSOLETE. Regression test
+`test_po_supplier_id_filter_uses_vendor_id_not_segment1`.
+
+**Verification.** `P.VENDOR_ID = 300000047414503 AND DOCUMENT_STATUS='OPEN'`
+returns open POs for Lee Supplies (matches REST).
+
+**S8 (miss record).** The FilterSpec was drafted against the overlay's
+hand-authored assumptions, not the tool signature; the end-to-end
+promptkit ↔ runsql discipline surfaced it in one run.

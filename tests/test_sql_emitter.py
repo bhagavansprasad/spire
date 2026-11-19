@@ -245,3 +245,19 @@ def test_qualify_measure_passes_nested_subquery_through_unchanged():
     assert _qualify_measure(template, "P") == template
     # The plain-column path still qualifies.
     assert _qualify_measure("SUM(INVOICE_AMOUNT)", "P") == "SUM(P.INVOICE_AMOUNT)"
+
+
+def test_po_supplier_id_filter_uses_vendor_id_not_segment1():
+    """F-065: the search_purchase_orders supplier_id arg is the numeric
+    SupplierId (= VENDOR_ID), not the SupplierNumber (SEGMENT1). The old
+    template matched SEGMENT1 against a numeric VENDOR_ID and returned 0
+    rows where REST returned the supplier's open POs."""
+    plan = [Step(1, "search_purchase_orders", {"supplier_id": "300000047414503"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "P.VENDOR_ID = '300000047414503'" in body
+    # SEGMENT1 legitimately appears in the SELECT list (the PO number);
+    # what must be absent is the old WHERE predicate that matched it.
+    assert "SEGMENT1 = '300000047414503'" not in body
+    assert "IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS" not in body
+    assert "ASSUMPTION [supplier_maps_to_vendor_id]" in sql
