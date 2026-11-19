@@ -197,3 +197,51 @@ def test_all_statements_end_with_semicolon():
 def test_determinism():
     plan = [Step(1, "search_suppliers", {"status": "ACTIVE"})]
     assert emit_sql(plan) == emit_sql(plan)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# §3.3b — filter/aggregation columns resolve to verified KG carriers
+# (not hand-authored stub columns). F-060 taught us existence ≠ populated
+# and that a hand-authored column can be absent from the pod entirely.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_po_status_filter_uses_document_status_not_authorization_status():
+    """PO_HEADERS_ALL has DOCUMENT_STATUS, not AUTHORIZATION_STATUS. The
+    filter's predicate_template must name the real column, or the emitted
+    SQL fails ORA-00904 on the pod."""
+    plan = [Step(1, "search_purchase_orders", {"status": "OPEN"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "P.DOCUMENT_STATUS = 'OPEN'" in body
+    assert "AUTHORIZATION_STATUS" not in sql
+
+
+def test_po_status_aggregation_uses_document_status_and_derived_amount():
+    """aggregate_purchase_orders_by_status grouped on the absent
+    AUTHORIZATION_STATUS and summed the absent AMOUNT. Both must be the
+    verified carriers: DOCUMENT_STATUS and the derived line-amount sum."""
+    plan = [Step(1, "aggregate_purchase_orders_by_status", {"top_n": "5"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "GROUP BY P.DOCUMENT_STATUS" in body
+    assert "AUTHORIZATION_STATUS" not in sql
+    assert "SUM(P.AMOUNT)" not in body
+    assert "UNIT_PRICE * L.QUANTITY" in body
+    # The derived measure is a correlated subquery and must NOT be
+    # re-qualified with the base alias (would become SUM(P.(SELECT ...))).
+    assert "P.(SELECT" not in body
+
+
+def test_qualify_measure_passes_nested_subquery_through_unchanged():
+    """A measure whose argument is a correlated subquery already carries
+    its own aliases; _qualify_measure must not prefix the base alias."""
+    from spire.rendering.sql_emitter import _qualify_measure
+
+    template = (
+        "SUM((SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L "
+        "WHERE L.PO_HEADER_ID = P.PO_HEADER_ID))"
+    )
+    assert _qualify_measure(template, "P") == template
+    # The plain-column path still qualifies.
+    assert _qualify_measure("SUM(INVOICE_AMOUNT)", "P") == "SUM(P.INVOICE_AMOUNT)"

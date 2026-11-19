@@ -328,6 +328,10 @@ def _qualify_measure(template: str, alias: str) -> str:
         return template
     fn, inner = m.group(1), m.group(2)
     inner_stripped = inner.strip()
+    # A nested correlated subquery (e.g. a derived amount measure) already
+    # carries its own table aliases — do not prefix it with the base alias.
+    if "SELECT" in inner_stripped.upper():
+        return template
     # COUNT(DISTINCT col)
     if inner_stripped.upper().startswith("DISTINCT "):
         col = inner_stripped[len("DISTINCT "):].strip()

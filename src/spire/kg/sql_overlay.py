@@ -496,7 +496,7 @@ _FILTERS = {
     ("search_purchase_orders", "status"): FilterSpec(
         tool_name="search_purchase_orders",
         arg_name="status",
-        predicate_template="{alias}.AUTHORIZATION_STATUS = {value}",
+        predicate_template="{alias}.DOCUMENT_STATUS = {value}",
         assumption="po_status_maps_to_authorization_status",
     ),
     ("search_purchase_orders", "supplier_id"): FilterSpec(
@@ -745,7 +745,7 @@ _ASSUMPTIONS = {
         "HZ_PARTIES.PARTY_NAME, not POZ_SUPPLIERS.SEGMENT1."
     ),
     "po_status_maps_to_authorization_status": (
-        "PO StatusCode maps to PO_HEADERS_ALL.AUTHORIZATION_STATUS. "
+        "PO StatusCode maps to PO_HEADERS_ALL.DOCUMENT_STATUS. "
         "Confirmed valid values on fa-euth-dev93: 'OPEN', 'CLOSED', "
         "'CLOSED FOR RECEIVING', 'PENDING APPROVAL'."
     ),
@@ -974,8 +974,12 @@ OVERLAY = Overlay(
         "aggregate_purchase_orders_by_status": AggregationSpec(
             tool_name="aggregate_purchase_orders_by_status",
             base_entity="PurchaseOrder",
-            group_by_column="AUTHORIZATION_STATUS",
-            measure_template="SUM(AMOUNT)",
+            group_by_column="DOCUMENT_STATUS",
+            measure_template=(
+                "SUM((SELECT SUM(L.UNIT_PRICE * L.QUANTITY) "
+                "FROM PO_LINES_ALL L "
+                "WHERE L.PO_HEADER_ID = P.PO_HEADER_ID))"
+            ),
             order_desc_by_measure=False,
             assumption="aggregation_measures",
             top_n_arg="top_n",

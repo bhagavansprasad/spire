@@ -18,7 +18,7 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 4 — role maps | **11 of 22** drafted |
 | §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — 11/57/4 rows (see §0.2); gap register fully reversed (61/61 bound) |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
-| §3.3 — emitter reads from KG | **3.3a complete** (select_columns + derived from KG; commit `6b247e9`). **3.3b open** (filters/predicate_template + 11 Receivables) |
+| §3.3 — emitter reads from KG | **3.3a complete** (select_columns + derived from KG; commit `6b247e9`). **3.3b filter/aggregation part complete** (stale `AUTHORIZATION_STATUS`/`SUM(AMOUNT)` → `DOCUMENT_STATUS`/derived line-amount, 2026-11-19). **3.3b Receivables part blocked** on the 11 role maps (task 5) |
 | §3.4 — build self-check | **not started** |
 
 ### 0.2 Branch / merge record (2026-11-19)

@@ -197,3 +197,30 @@ REST returns `Buyer = "Gee, May"` (last, first). Same person, different
 format. Recorded here so a future session does not treat it as a column
 bug. Resolution (if any) is a display/formatting decision, not a schema
 one.
+
+### F-064 — PO-status filter/aggregation named the absent `AUTHORIZATION_STATUS` (fixed §3.3b)
+
+**Status:** Fixed 2026-11-19 (`Phase3-F060-Amount-Carrier`, §3.3b filter
+part).
+
+`PO_HEADERS_ALL` has `DOCUMENT_STATUS`, not `AUTHORIZATION_STATUS` (and no
+`AMOUNT` column — only `AMOUNT_LIMIT`/`AMOUNT_RELEASED`/…). Two live
+hand-authored sites still named the absent column, so the emitted SQL
+failed ORA-00904 on the pod:
+
+1. `search_purchase_orders` status filter — `predicate_template="{alias}.AUTHORIZATION_STATUS = …"`.
+2. `aggregate_purchase_orders_by_status` — `group_by_column="AUTHORIZATION_STATUS"` **and** `measure_template="SUM(AMOUNT)"` (the `AMOUNT` stub again, at the aggregation level).
+
+**Fix:** filter + `group_by_column` → `DOCUMENT_STATUS` (the KG-carried
+`StatusCode` carrier); measure → derived
+`SUM((SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID))`;
+`_qualify_measure` now passes a nested-subquery measure through unchanged
+instead of mangling it into `SUM(P.(SELECT …))`. Three regression tests in
+`tests/test_sql_emitter.py`.
+
+**Verification:** both statements run on the pod — status filter returns
+OPEN POs; aggregation returns 14 statuses with summed derived amounts.
+
+This closes the drafted-entities half of §3.3b (filters/aggregations
+resolve to verified carriers). The remaining half — the 11 Receivables
+entities — is blocked on their role maps (task 5).
