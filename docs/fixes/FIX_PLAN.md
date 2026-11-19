@@ -1,11 +1,12 @@
 # SPIRE — Fix Plan
 
-**Branch:** `Phase3-Fix-Nullable-Keys`
+**Branch:** `Phase3-F073-Receipt-Site-Filter`
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — F-074 / F-062 / F-063 and the §2.3 backlog resolved this
-window; F-061 / F-072 / F-073 remain open
+**Status:** Open — F-073 (customer_site filter), F-072 (account balances),
+F-075 (UnappliedAmount) fixed this window; F-061 decided (leave);
+F-076 (BU scoping) new Candidate; no regressions
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 
@@ -213,13 +214,14 @@ SQL-vs-REST divergence source.
 
 ### F-061 — buyer name format: SQL `DISPLAY_NAME` ≠ REST `Buyer`
 
-**Status:** Observation (S1 border). Cosmetic.
-
-SQL returns `PER_PERSON_NAMES_F.DISPLAY_NAME = "May Gee"` (first last);
-REST returns `Buyer = "Gee, May"` (last, first). Same person, different
-format. Recorded here so a future session does not treat it as a column
-bug. Resolution (if any) is a display/formatting decision, not a schema
-one.
+**Status:** Observation (S1 border). Cosmetic. **Decision 2026-11-19:
+leave as-is.** `PER_PERSON_NAMES_F.DISPLAY_NAME` = "May Gee" while
+`LAST_NAME`/`FIRST_NAME` = "Gee"/"May" on the same row, so REST's
+"Gee, May" is a `LAST_NAME || ', ' || FIRST_NAME` formatting choice, not
+a different carrier. Re-deriving that string would need a name-type +
+effective-date filtered subquery over `PER_PERSON_NAMES_F` for a purely
+cosmetic difference; not worth binding until the display layer asks for
+it. Recorded here so a future session does not treat it as a column bug.
 
 ### F-064 — PO-status filter/aggregation named the absent `AUTHORIZATION_STATUS` (fixed §3.3b)
 
@@ -479,27 +481,139 @@ insert.
 (dropped — no populated segment on this pod) and `__FLEX_Context_DisplayValue`
 (null) are dropped.
 
-### F-072 — `CustomerAccount` balances have no clean carrier (OPEN)
+### F-072 — `CustomerAccount` balances: pinned to ledger-currency aggregates (FIXED)
 
-`TotalOpenReceivablesForAccount` (14418895.83) and
-`TotalTransactionsDueForAccount` (15872395) live on the
-`/receivablesCustomerAccountActivities` service, not `HZ_CUST_ACCOUNTS`.
-`TotalTransactionsDueForAccount` = `SUM(AMOUNT_DUE_REMAINING) WHERE CLASS='INV'`
-(verified exact), but `TotalOpenReceivablesForAccount` does **not** reduce to a
-single clean SUM (all-class remaining 14418344, INV+DM+CM 14419844 — both off by
-~550–950). Both balance roles are **dropped** (no carrier) until the exact
-aggregation is pinned. The four identity fields (`AccountId`, `AccountNumber`,
-`CustomerName`, `CustomerId`) are bound and verified.
+**Status:** Fixed (2026-11-19, `Phase3-F073-Receipt-Site-Filter`).
 
-### F-073 — `StandardReceipt` `customer_site` filter names an absent column (OPEN)
+The previous record said `TotalOpenReceivablesForAccount` "does not reduce
+to a single clean SUM" and dropped both balances. It does reduce — the
+missing variable was **currency**. Both balances are ledger-currency sums
+of `AR_PAYMENT_SCHEDULES_ALL.ACCTD_AMOUNT_DUE_REMAINING`; the
+invoice-currency column misses the GBP→USD conversion.
 
-`search_standard_receipts.customer_site` → `{alias}.CUSTOMER_SITE = {value}`,
-but `AR_CASH_RECEIPTS_ALL` has no `CUSTOMER_SITE` column (only
-`CUSTOMER_SITE_USE_ID`, 51, NUMBER). The tool matches `customer_site`
-client-side. Deferred — not a role-map (column) item; belongs to the §3.3b
-Receivables-filter pass. Also open: `AccountReceipt.State` ('Applied'/'Unapplied')
-and `ProcessStatus` ('Open'/'Closed') have no clean single column on
-`AR_CASH_RECEIPTS_ALL` — both dropped, documented in KG_ROLE_MAPS.md §AccountReceipt.
+**S2 (evidence).** Account 26370: ledger sum over all classes =
+**14,418,895.83** = REST `TotalOpenReceivablesForAccount`; the
+invoice-currency alternative was 14,418,344 (off by 551.83), whose entire
+residual is one payment row: `AMOUNT_DUE_REMAINING` = −1,500 GBP vs
+`ACCTD_AMOUNT_DUE_REMAINING` = **−948.17** USD.
+
+**Aggregations (pinned).**
+
+- `TotalOpenReceivablesForAccount` = `SUM(ACCTD_AMOUNT_DUE_REMAINING)` over
+  **all classes**.
+- `TotalTransactionsDueForAccount` = `SUM(ACCTD_AMOUNT_DUE_REMAINING)`
+  where `CLASS IN ('INV','DM')` **and** `DUE_DATE <= TRUNC(SYSDATE)` —
+  CM and PMT excluded, future-dated installments excluded.
+
+**Verification.** 29 accounts sampled from
+`/receivablesCustomerAccountActivities`, both aggregates compared:
+**0 mismatches** (`t_f072_bulk2.csv`). Zero-schedule accounts return 0
+from REST, hence `NVL(...,0)`. Fix: two `kg_derived_projection` rows on
+`CustomerAccount`; `validate_kg_schema.py` → PASS (12 derived
+projections); emitted SQL for `get_customer_account_by_name` /
+ABC Corporation Americas on the pod returns
+`14,418,895.83` / `15,872,395`, equal to REST.
+
+### F-073 — `StandardReceipt` `customer_site` filter named an absent column (FIXED)
+
+**Status:** Fixed (2026-11-19, `Phase3-F073-Receipt-Site-Filter`).
+
+`search_standard_receipts.customer_site` emitted `{alias}.CUSTOMER_SITE =
+{value}`, but `AR_CASH_RECEIPTS_ALL` has **no** `CUSTOMER_SITE` column —
+the statement raised ORA-00904 on the pod. The only site column is the
+numeric `CUSTOMER_SITE_USE_ID` (18,365 of 79,777 populated), so binding it
+directly would compare an id to a name.
+
+**Decision:** resolve the **name** through the receipt's site chain, as a
+correlated subquery (keeps the four joins out of every StandardReceipt
+query):
+
+```
+{alias}.CUSTOMER_SITE_USE_ID IN (
+  SELECT SU.SITE_USE_ID
+  FROM HZ_CUST_SITE_USES_ALL SU
+  JOIN HZ_CUST_ACCT_SITES_ALL CS ON CS.CUST_ACCT_SITE_ID = SU.CUST_ACCT_SITE_ID
+  JOIN HZ_PARTY_SITES PS ON PS.PARTY_SITE_ID = CS.PARTY_SITE_ID
+  JOIN HZ_LOCATIONS LOC ON LOC.LOCATION_ID = PS.LOCATION_ID
+  WHERE LOC.CITY = {value})
+```
+
+**S2 (evidence).** REST receipts 1 / 2 / 21 (`CustomerSite='Santa Clara'`)
+resolve through their `CUSTOMER_SITE_USE_ID` to `HZ_LOCATIONS.CITY =
+'Santa Clara'`; `HZ_PARTY_SITES.PARTY_SITE_NAME` is NULL on those rows.
+Cardinality: `CITY='Santa Clara'` **within the REST business unit**
+(`ORG_ID=300000046987012`) = **1,735** = REST's 1,735 (`t_f073_count_org.txt`).
+
+**Verification.** Emitted SQL for "receipts for ABC Corporation Americas at
+Santa Clara" executes and returns 745 rows. Compared with the full REST
+set for account 26370 (1,692 rows, 742 Santa Clara): every REST row is
+present with identical Amount/Currency/AccountNumber/CustomerName; the 3
+extra rows are in `ORG_ID=300000047498175`, a business unit REST does not
+expose (`t_f073_emitted_run.csv` diff → only-in-sql = those 3,
+only-in-rest = none). The tool's own 500-row client-filter window happens
+to contain 0 Santa Clara receipts (the newest 500 are null-site), so it
+reports truncated/unknown — the SQL now carries the complete answer.
+Pre-existing BU-scoping divergence recorded as F-076.
+
+**Carry-over — `AccountReceipt.State` / `ProcessStatus`: stay dropped.**
+
+- `State` is a display string with at least four values, not a
+  two-valued applied flag: `STATUS='APP'` → `'Applied'` (1,500/1,500
+  sampled), `'UNAPP'` → `'Unapplied'`, `'NSF'` → `'Nonsufficient funds'`,
+  `'REV'` → `'Reversal user error'`. The REV display text has no carrier
+  on `AR_CASH_RECEIPTS_ALL` (`REVERSAL_REASON_CODE` = 'PAYMENT REVERSAL',
+  no matching `FND_LOOKUPS` meaning), so a code→text CASE cannot
+  reproduce it faithfully.
+- `ProcessStatus` is `'Open'` on the two sampled `'UNAPP'` receipts and
+  `'Closed'` on all APP/REV/NSF samples (1,500+). No column carries it;
+  binding a `STATUS='UNAPP'` heuristic rests on two positive samples.
+
+### F-075 — `AccountReceipt.UnappliedAmount` derivation overstates (FIXED)
+
+**Status:** Fixed (2026-11-19, same branch). Discovered while deciding
+F-073's `State` carry-over.
+
+**S0.** The seeded carrier `AMOUNT - SUM(AR_RECEIVABLE_APPLICATIONS_ALL.
+AMOUNT_APPLIED)` is not REST's `UnappliedAmount` on partially-applied
+receipts.
+
+**S1 (harm).** SQL ≠ REST: the emitted value is larger than REST's.
+
+**S2 (evidence).** Four receipts show REST `UnappliedAmount = 0` while the
+formula yields a positive remainder because the applications table sums to
+less than `AMOUNT`: 619466 (2,305.64 of 2,981 → formula 675.36), 619502
+(59.73), 619524 (139.07), 620488 (3,830.92). The receipt's own PMT
+schedule (`CLASS='PMT'`, 1:1 with receipts — 79,775 schedules for 79,777
+receipts) is exact: `-AMOUNT_DUE_REMAINING`.
+
+**Verification (8/8).** New carrier `NVL((SELECT -S.AMOUNT_DUE_REMAINING
+FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CLASS='PMT' AND
+S.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID), 0)` returns 0 / 0 / 0 / 0 for the
+four above (= REST), 1,135.2 (300000066476397), 550 (300000066476549),
+474.85 (619474), 438.98 (619507) — all equal REST (`t_f072_unapplied_verify.csv`).
+
+### F-076 — emitted SQL is not business-unit scoped (Candidate, OPEN)
+
+**S0.** REST AR collections return only the session's business unit; the
+emitted SQL has no `ORG_ID` filter, so it also counts rows from other BUs.
+
+**S1 (harm).** Row-count and total divergence on multi-org accounts:
+`AR_CASH_RECEIPTS_ALL` holds account 26370 in three orgs — 1,692
+(`300000046987012`, the REST BU) + 605 + 544. The emitted SQL returns 745
+Santa Clara receipts for the account where REST returns 742; the 3 extra
+are `ORG_ID=300000047498175` (`t_f073_outliers.txt`). Same shape for
+account *totals* (2,841 pod vs 1,692 REST) on every AR SQL answer, not
+just site filters.
+
+**S3 (mechanism).** No `ORG_ID`/BU predicate appears in any AR
+`EntitySpec` or `kg_sql_column`; the KG has `BusinessUnit` documented as
+"numeric FK, REST is a name" and dropped.
+
+**S7 (classification).** Candidate. Corpus-wide, needs a deliberate
+decision (bind the session BU via `ORG_ID`, or accept BU-superset answers
+as richer-than-REST and document it) — out of scope for F-073 because it
+is not site-specific. Do **not** fix by guessing a BU id.
+
 
 ### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (FIXED)
 

@@ -414,7 +414,18 @@ REST's top-level `/standardReceipts` **returns** those receipts with
 from `validate_kg_schema.py`'s `NULLABLE_KEYS` (no INNER join left to
 guard). Full record: `docs/fixes/FIX_PLAN.md` F-074.
 
-**Observations.** `ReceiptMethod` is deliberately absent: `RECEIPT_METHOD_ID` (56, NUMBER, N) is a numeric FK; REST returns the display string (e.g. 'Check (Directly/No Remit)') which lives on `AR_RECEIPT_METHODS` (join not mapped). `Status` (`STATUS`='APP') is the top-level status code; REST `Status`='Cleared' is a bank-clearance state with no clean single column — F-061-class display divergence, flagged not fixed. `CustomerSite`, `RemittanceBank*` are not projected (sparse / no mapped join). `customer_site` filter references `{alias}.CUSTOMER_SITE`, which does not exist on `AR_CASH_RECEIPTS_ALL` (only `CUSTOMER_SITE_USE_ID`, 51, NUMBER) — see FIX_PLAN backlog.
+**Observations.** `ReceiptMethod` is deliberately absent: `RECEIPT_METHOD_ID` (56, NUMBER, N) is a numeric FK; REST returns the display string (e.g. 'Check (Directly/No Remit)') which lives on `AR_RECEIPT_METHODS` (join not mapped). `Status` (`STATUS`='APP') is the top-level status code; REST `Status`='Cleared' is a bank-clearance state with no clean single column — F-061-class display divergence, flagged not fixed. `CustomerSite`, `RemittanceBank*` are not projected (sparse / no mapped join).
+
+**`customer_site` filter (F-073, fixed 2026-11-19).** The old predicate
+`{alias}.CUSTOMER_SITE = {value}` named a column that does not exist
+(ORA-00904). The filter now resolves the site **name** through the
+receipt's chain: `CUSTOMER_SITE_USE_ID` → `HZ_CUST_SITE_USES_ALL` →
+`HZ_CUST_ACCT_SITES_ALL` → `HZ_PARTY_SITES` → `HZ_LOCATIONS.CITY`,
+emitted as a correlated subquery. Evidence: REST receipts 1/2/21
+(`CustomerSite='Santa Clara'`) resolve to `CITY='Santa Clara'`
+(`PARTY_SITE_NAME` is NULL), and `CITY='Santa Clara'` inside the REST BU
+(`ORG_ID=300000046987012`) = 1,735 = REST's 1,735. Full record:
+`docs/fixes/FIX_PLAN.md` F-073.
 
 ### AccountReceipt (`AR_CASH_RECEIPTS_ALL`)
 
@@ -436,16 +447,29 @@ guard). Full record: `docs/fixes/FIX_PLAN.md` F-074.
 
 | field | expression |
 |---|---|
-| `UnappliedAmount` | `R.AMOUNT - (SELECT SUM(A.AMOUNT_APPLIED) FROM AR_RECEIVABLE_APPLICATIONS_ALL A WHERE A.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID)` |
+| `UnappliedAmount` | `NVL((SELECT -S.AMOUNT_DUE_REMAINING FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CLASS = 'PMT' AND S.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID), 0)` |
 
-**Bugs fixed (2 of 7).** The hand-authored spec had two defects:
+**Bugs fixed (3 of 7).** The hand-authored spec had two defects, and the
+first `UnappliedAmount` carrier was also wrong:
 
-- `AMOUNT_APPLIED` → **no such column** on `AR_CASH_RECEIPTS_ALL` (ORA-00904). `UnappliedAmount` is derived: `AMOUNT - SUM(applied)`. Verified on receipt 621469: `AMOUNT`=2021.67, `SUM(AMOUNT_APPLIED)`=2021.67 → `UnappliedAmount`=0 = REST.
-- `STATUS` → `State`. **Wrong carrier.** `STATUS`='APP' (approval), not 'Applied'. REST `State` ('Applied'/'Unapplied') is the application state, computed by comparing `AMOUNT` to the applied sum — no single column carries it. `State` is dropped from the projection (see observations).
+- `AMOUNT_APPLIED` → **no such column** on `AR_CASH_RECEIPTS_ALL` (ORA-00904). `UnappliedAmount` is derived (see below). Verified on receipt 621469: `AMOUNT`=2021.67, `SUM(AMOUNT_APPLIED)`=2021.67 → `UnappliedAmount`=0 = REST.
+- `STATUS` → `State`. **Wrong carrier.** `STATUS`='APP' (approval), not 'Applied'. `State` is a free-form display (see observations); dropped from the projection.
+- **F-075 — `UnappliedAmount` carrier corrected.** `AMOUNT - SUM(AR_RECEIVABLE_APPLICATIONS_ALL.AMOUNT_APPLIED)` overstates on partially applied receipts (REST 0 where the applications table sums to less than `AMOUNT`; e.g. 619466: 2,305.64 of 2,981). The receipt's own **PMT schedule** is exact — `-AMOUNT_DUE_REMAINING` (`CLASS='PMT'`, 1:1 with receipts). Verified 8/8: 619466/619502/619524/620488 → 0 = REST; 300000066476397 → 1,135.2; 300000066476549 → 550; 619474 → 474.85; 619507 → 438.98.
 
 **Join keys.** No `base_joins`. Inside the Q6 subquery: `AR_RECEIVABLE_APPLICATIONS_ALL.CASH_RECEIPT_ID` (21, Y) = `AR_CASH_RECEIPTS_ALL.CASH_RECEIPT_ID` (1, N). The left side of the subquery is the base table; no Q4 self-check needed (the subquery is a correlated SUM, dropping nothing from the outer row).
 
-**Observations.** Dropped (no clean carrier, documented): `ReceiptMethod` (numeric FK → display on `AR_RECEIPT_METHODS`), `State` (derived application state), `ProcessStatus` ('Open'/'Closed' — no column on this table), `CustomerSite` (`CUSTOMER_SITE_USE_ID` is numeric, REST is a site name, sparse), `BusinessUnit` (`ORG_ID` is a numeric FK, REST is a name). `AMOUNT` (12, NUMBER, N) is a real populated carrier, not a stub.
+**Observations.** Dropped (no clean carrier, documented): `ReceiptMethod` (numeric FK → display on `AR_RECEIPT_METHODS`), `State`, `ProcessStatus`, `CustomerSite` (`CUSTOMER_SITE_USE_ID` is numeric, REST is a site name, sparse), `BusinessUnit` (`ORG_ID` is a numeric FK, REST is a name). `AMOUNT` (12, NUMBER, N) is a real populated carrier, not a stub.
+
+**`State` / `ProcessStatus` decision (2026-11-19, F-073 carry-over) — stay
+dropped.** `State` is a display string with at least four values, not a
+two-valued flag: `STATUS='APP'` → 'Applied' (1,500/1,500 sampled),
+`'UNAPP'` → 'Unapplied', `'NSF'` → 'Nonsufficient funds', `'REV'` →
+'Reversal user error'. The REV text has no carrier on
+`AR_CASH_RECEIPTS_ALL` (`REVERSAL_REASON_CODE`='PAYMENT REVERSAL'; no
+matching `FND_LOOKUPS` meaning), so a code→text CASE cannot reproduce it.
+`ProcessStatus` is 'Open' only on the two sampled `'UNAPP'` receipts and
+'Closed' on all APP/REV/NSF samples — no column, and two positive samples
+are too thin to bind.
 
 ### CustomerAccount (`HZ_CUST_ACCOUNTS`)
 
@@ -466,13 +490,32 @@ JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 | `CustomerName` | `HZ_PARTIES` | `PARTY_NAME` |
 | `CustomerId` | `HZ_CUST_ACCOUNTS` | `PARTY_ID` |
 
-`kg_derived_projection`: none.
+`kg_derived_projection`, `is_default_projection='Y'`:
+
+| field | expression |
+|---|---|
+| `TotalOpenReceivablesForAccount` | `NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID), 0)` |
+| `TotalTransactionsDueForAccount` | `NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID AND S.CLASS IN ('INV','DM') AND S.DUE_DATE <= TRUNC(SYSDATE)), 0)` |
 
 **Bugs fixed (0 of 4 absent).** Identity verified: `CUST_ACCOUNT_ID` (1, NUMBER, N)=300000047368527, `ACCOUNT_NUMBER` (4, VARCHAR2 120, N)='26370', `PARTY_ID` (2, NUMBER, N)=100000000395797, `HZ_PARTIES.PARTY_NAME`='ABC Corporation Americas' — all equal REST.
 
 **Join keys, verified both sides.** `HZ_CUST_ACCOUNTS.PARTY_ID` (2, N) = `HZ_PARTIES.PARTY_ID` (1, N). Both NOT NULL — no Q4 self-check.
 
-**Observations — balances have NO clean carrier (R-7 at the account level).** `TotalOpenReceivablesForAccount` (14418895.83) and `TotalTransactionsDueForAccount` (15872395) live on the `/receivablesCustomerAccountActivities` service, not on `HZ_CUST_ACCOUNTS`. They are computed aggregates over `AR_PAYMENT_SCHEDULES_ALL`: `TotalTransactionsDueForAccount` = `SUM(AMOUNT_DUE_REMAINING) WHERE CLASS='INV'` (verified **exact**: 15872395), but `TotalOpenReceivablesForAccount` does **not** reduce to a clean single SUM — all-class remaining = 14418344 and INV+DM+CM remaining = 14419844, both off the REST value 14418895.83 by ~550–950. Binding a wrong SUM would violate the SQL-agrees-with-REST bar, so both balance roles are **dropped** (no carrier) until the exact aggregation is pinned. Recorded in FIX_PLAN.
+**Observations — balances are ledger-currency aggregates (F-072, fixed
+2026-11-19).** `TotalOpenReceivablesForAccount` and
+`TotalTransactionsDueForAccount` live on the
+`/receivablesCustomerAccountActivities` service, not on
+`HZ_CUST_ACCOUNTS`, but they are exact sums of
+`AR_PAYMENT_SCHEDULES_ALL.ACCTD_AMOUNT_DUE_REMAINING` (ledger currency —
+the invoice-currency column misses the GBP→USD conversion; account 26370's
+−1,500 GBP payment row is −948.17 USD, the residual that never reconciled):
+
+- `TotalOpenReceivablesForAccount` = `NVL(SUM(ACCTD_AMOUNT_DUE_REMAINING), 0)` over **all classes**.
+- `TotalTransactionsDueForAccount` = `NVL(SUM(ACCTD_AMOUNT_DUE_REMAINING), 0)` where `CLASS IN ('INV','DM') AND DUE_DATE <= TRUNC(SYSDATE)` (CM/PMT and future-dated installments excluded).
+
+Verified 29/29 accounts against REST (0 mismatches); account 26370 →
+14,418,895.83 / 15,872,395 = REST. Both are seeded as `kg_derived_projection`
+rows. Full record: `docs/fixes/FIX_PLAN.md` F-072.
 
 ### AccountCreditMemo (`AR_PAYMENT_SCHEDULES_ALL`)
 

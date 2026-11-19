@@ -16,10 +16,10 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
 | Task 4 — role maps | **22 of 22** drafted (all 11 Receivables done 2026-11-19: ReceivablesInvoiceLine, CreditMemo, StandardReceipt, AccountReceipt, CustomerAccount, AccountCreditMemo, AccountReceiptApplication, ReceivablesTaxLine, ReceivablesInvoiceTransactionDFF) |
-| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **22/127/10** rows (was 13/71/7 at PR #213); all 22 entities drafted |
+| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **22/127/12** rows (was 13/71/7 at PR #213); all 22 entities drafted |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
 | §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads all 22 entities with KG rows |
-| §3.4 — build self-check | **complete** — `scripts/validate_kg_schema.py` (10 derived projections validated; 5 nullable keys checked; F-074 resolved) |
+| §3.4 — build self-check | **complete** — `scripts/validate_kg_schema.py` (12 derived projections validated; 5 nullable keys checked; F-074 resolved) |
 
 ### 0.2 Branch / merge record (2026-11-19)
 
@@ -38,14 +38,20 @@ This document is the **pending-work register**. The handovers carry what was don
   `scripts/validate_kg_schema.py` + new finding F-074 (StandardReceipt
   `PAY_FROM_CUSTOMER` 39 NULLs).
 - Satellite counts now: `kg_entity_sql`=22, `kg_sql_column`=127,
-  `kg_derived_projection`=10 (F-062 moved POSchedule.Amount from a stub
-  `kg_sql_column` row to a derived projection; F-063 rewrote the two
-  PurchaseOrderLine tax projections in place).
-- **Current branch** (this window): `Phase3-Fix-Nullable-Keys` off
-  `master` — resolved F-074 (LEFT JOIN), F-062 (POSchedule.Amount
-  derived), F-063 (tax carrier), and the §2.3 backlog (Q5 emitter surface
-  + stale `:supplier_id` assertion). Commits `b166c25`, `376903f`,
-  `c77207d`; not yet PR'd.
+  `kg_derived_projection`=**12** (F-062 moved POSchedule.Amount to a
+  derived projection; F-063 rewrote the two PurchaseOrderLine tax
+  projections; F-072 added the two CustomerAccount ledger-currency
+  balances; F-075 replaced AccountReceipt.UnappliedAmount).
+- **PR #216** (`Phase3-Fix-Nullable-Keys`) merged to `master`
+  (merge commit `d0aa5b7`, 2026-11-19) — F-074 (LEFT JOIN), F-062
+  (POSchedule.Amount derived), F-063 (tax carrier), §2.3 backlog.
+- **Current branch** (this window): `Phase3-F073-Receipt-Site-Filter`
+  off `master` — F-073 `customer_site` filter resolved through
+  `CUSTOMER_SITE_USE_ID` → `HZ_LOCATIONS.CITY`; F-072 balances pinned
+  (ledger-currency sums, 29/29 accounts); F-075 UnappliedAmount
+  corrected to the PMT schedule; F-061 decided (leave, cosmetic); new
+  F-076 (SQL not BU-scoped) recorded as Candidate. Satellite counts
+  `22/127/12`; `validate_kg_schema.py` PASSES.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 

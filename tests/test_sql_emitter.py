@@ -286,6 +286,83 @@ def test_standard_receipt_uses_left_join_for_nullable_pay_from_customer():
     ]
 
 
+def test_standard_receipt_customer_site_resolves_name_not_absent_column():
+    """F-073: AR_CASH_RECEIPTS_ALL has no CUSTOMER_SITE column — only the
+    numeric CUSTOMER_SITE_USE_ID (18,365/79,777 populated) — so the old
+    ``{alias}.CUSTOMER_SITE = ?`` predicate raised ORA-00904. The site
+    NAME is the receipt's site-use chain's HZ_LOCATIONS.CITY (verified:
+    receipts 1/2/21 -> CITY 'Santa Clara' = REST CustomerSite; 1,735
+    site-wide inside the REST business unit = REST's 1,735)."""
+    plan = [Step(1, "search_standard_receipts", {"customer_site": "Santa Clara"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+
+    # The absent column must not be referenced.
+    assert "R.CUSTOMER_SITE = " not in body
+    # The site name resolves through the receipt -> site-use -> acct-site
+    # -> party-site -> location chain.
+    assert "R.CUSTOMER_SITE_USE_ID IN (SELECT SU.SITE_USE_ID" in body
+    assert "HZ_CUST_SITE_USES_ALL SU" in body
+    assert "HZ_CUST_ACCT_SITES_ALL CS" in body
+    assert "HZ_PARTY_SITES PS" in body
+    assert "HZ_LOCATIONS LOC ON LOC.LOCATION_ID = PS.LOCATION_ID" in body
+    assert "LOC.CITY = 'Santa Clara'" in body
+    assert "ASSUMPTION [standard_receipt_site_client_side]" in sql
+
+
+def test_standard_receipt_customer_name_and_site_both_filter():
+    """A customer-scoped site prompt must constrain both: PARTY_NAME on the
+    customer and the resolved site name on the location chain."""
+    plan = [
+        Step(
+            1,
+            "search_standard_receipts",
+            {"customer_name": "ABC Corporation Americas", "customer_site": "Santa Clara"},
+        )
+    ]
+    body = _strip_comments(emit_sql(plan)[0])
+    assert "HP.PARTY_NAME = 'ABC Corporation Americas'" in body
+    assert "LOC.CITY = 'Santa Clara'" in body
+    assert " AND " in body
+
+
+def test_customer_account_balances_use_ledger_currency_aggregates():
+    """F-072: both CustomerAccount balances are computed aggregates over
+    AR_PAYMENT_SCHEDULES_ALL in LEDGER currency. The invoice-currency sum
+    misses the GBP->USD conversion (account 26370's -1,500 GBP payment row
+    is -948.17 USD, the residual that never reconciled). Verified exact on
+    29 accounts: open = SUM over all classes; transactions due = SUM where
+    CLASS in ('INV','DM') and DUE_DATE <= SYSDATE (CM/PMT and future
+    installments excluded)."""
+    plan = [
+        Step(
+            1,
+            "get_customer_account_by_name",
+            {"customer_name": "ABC Corporation Americas"},
+        )
+    ]
+    body = _strip_comments(emit_sql(plan)[0])
+    assert "SUM(S.ACCTD_AMOUNT_DUE_REMAINING)" in body
+    assert "S.CLASS IN ('INV','DM') AND S.DUE_DATE <= TRUNC(SYSDATE)" in body
+    # The invoice-currency column must not carry either balance.
+    assert "SUM(S.AMOUNT_DUE_REMAINING)" not in body
+    # SUM is NULL for an account with no schedules; REST returns 0.
+    assert "NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING)" in body
+
+
+def test_account_receipt_unapplied_amount_reads_pmt_schedule():
+    """F-075: AMOUNT - SUM(AR_RECEIVABLE_APPLICATIONS_ALL.AMOUNT_APPLIED)
+    overstates on partially-applied receipts (REST reports 0 where the
+    applications table sums to less than AMOUNT). The receipt's own PMT
+    schedule remaining is exact: -AMOUNT_DUE_REMAINING (8/8 receipts equal
+    REST, including 619466 -> 0 and 300000066476397 -> 1135.2)."""
+    plan = [Step(1, "get_account_receipts", {"account_id": "300000047368730"})]
+    body = _strip_comments(emit_sql(plan)[0])
+    assert "SELECT -S.AMOUNT_DUE_REMAINING FROM AR_PAYMENT_SCHEDULES_ALL S" in body
+    assert "S.CLASS = 'PMT'" in body
+    assert "AR_RECEIVABLE_APPLICATIONS_ALL" not in body
+
+
 def test_poschedule_amount_is_derived_not_stub_amout():
     """F-062: PO_LINE_LOCATIONS_ALL.AMOUNT is a stub (NULL on 99.95% of
     rows), so POSchedule.Amount must derive line UNIT_PRICE x schedule

@@ -370,7 +370,7 @@ async def test_kg_table_row_counts_match_v1_1():
         # so kg_entity_field 210->227 and kg_sql_column 40->57.
         "kg_entity_sql": 22,
         "kg_sql_column": 127,
-        "kg_derived_projection": 10,
+        "kg_derived_projection": 12,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted
     # per table and stopped at the first failure, so a phase that moved

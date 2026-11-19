@@ -1673,7 +1673,7 @@ PROMPT Seeded kg_entity_filter (37 rows).
 --
 --   22 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
 --  127 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---   10 kg_derived_projection — correlated scalar subqueries.
+--   12 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1860,7 +1860,7 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceTransactionDFF', 'CustomerTrxId', 'RA_CUSTOMER_TRX_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context', 'RA_CUSTOMER_TRX_ALL', 'ATTRIBUTE_CATEGORY', 'VARCHAR2', 120, 'Y');
 
--- ---- kg_derived_projection (5 rows) ----
+-- ---- kg_derived_projection (12 rows) ----
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'L.UNIT_PRICE * L.QUANTITY', 'Y');
 -- F-063: the old TotalTax/Total carriers read SUM(PO_LINE_LOCATIONS_ALL.
@@ -1880,10 +1880,32 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'EnteredAmount', '(SELECT SUM(S.AMOUNT_DUE_ORIGINAL) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceBalanceAmount', '(SELECT SUM(S.AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CreditMemo', 'EnteredAmount', '(SELECT SUM(L.EXTENDED_AMOUNT) FROM RA_CUSTOMER_TRX_LINES_ALL L WHERE L.CUSTOMER_TRX_ID = C.CUSTOMER_TRX_ID)', 'Y');
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('AccountReceipt', 'UnappliedAmount', 'R.AMOUNT - (SELECT SUM(A.AMOUNT_APPLIED) FROM AR_RECEIVABLE_APPLICATIONS_ALL A WHERE A.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID)', 'Y');
+-- F-075: the old UnappliedAmount carrier AMOUNT - SUM(AMOUNT_APPLIED) overstates.
+-- On 4 partially-applied receipts (619466/619502/619524/620488) the
+-- applications table sums to less than AMOUNT (e.g. 2,305.64 of 2,981) while
+-- REST reports UnappliedAmount = 0 — the remainder was consumed by
+-- applications AR_RECEIVABLE_APPLICATIONS_ALL does not carry. The receipt's
+-- own PMT schedule (CLASS='PMT', 1:1 with receipts) is exact:
+--   -AMOUNT_DUE_REMAINING -> 0 for 619466/619502/619524/620488 (REST 0),
+--   1,135.2 for 300000066476397, 474.85 for 619474, 438.98 for 619507 (all = REST).
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('AccountReceipt', 'UnappliedAmount', 'NVL((SELECT -S.AMOUNT_DUE_REMAINING FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CLASS = ''PMT'' AND S.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID), 0)', 'Y');
+-- F-072: both CustomerAccount balances are computed aggregates over
+-- AR_PAYMENT_SCHEDULES_ALL in LEDGER currency (ACCTD_AMOUNT_DUE_REMAINING).
+-- Invoice-currency sums miss the GBP->USD conversion (account 26370: the
+-- -1,500 GBP payment row is -948.17 USD, which is the residual that never
+-- reconciled). Verified exact on 29 accounts against
+-- /receivablesCustomerAccountActivities (0 mismatches):
+--   TotalOpenReceivablesForAccount    = SUM over ALL classes
+--   TotalTransactionsDueForAccount    = SUM where CLASS in ('INV','DM') AND the
+--                                       installment is due (DUE_DATE <= SYSDATE)
+--                                       (CM and PMT are excluded; future-dated
+--                                       installments are excluded)
+-- Zero-schedule accounts get SUM = NULL; REST returns 0, hence NVL(...,0).
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CustomerAccount', 'TotalOpenReceivablesForAccount', 'NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID), 0)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CustomerAccount', 'TotalTransactionsDueForAccount', 'NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID AND S.CLASS IN (''INV'',''DM'') AND S.DUE_DATE <= TRUNC(SYSDATE)), 0)', 'Y');
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (127 rows), kg_derived_projection (10 rows).
+PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (127 rows), kg_derived_projection (12 rows).
 
 -- ============================================================
