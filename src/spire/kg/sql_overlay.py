@@ -359,9 +359,9 @@ _ENTITIES = {
             ("CA", "CUST_ACCOUNT_ID"),      # AccountId
             ("CA", "ACCOUNT_NUMBER"),
             ("HP", "PARTY_NAME"),           # CustomerName
-            # Balances live on a related view on the pod; the account
-            # row does not carry them directly. Leave out of the base
-            # SELECT until verified against the physical view name.
+            # F-072: the two balances are KG `kg_derived_projection` rows
+            # over AR_PAYMENT_SCHEDULES_ALL (ledger currency, verified
+            # 29/29 vs REST); the account row does not carry them.
         ],
         base_joins=[
             "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
@@ -669,7 +669,24 @@ _FILTERS = {
     ("search_standard_receipts", "customer_site"): FilterSpec(
         tool_name="search_standard_receipts",
         arg_name="customer_site",
-        predicate_template="{alias}.CUSTOMER_SITE = {value}",
+        # AR_CASH_RECEIPTS_ALL has NO CUSTOMER_SITE column (F-073): the old
+        # "{alias}.CUSTOMER_SITE = ?" raised ORA-00904. The only site column
+        # is the numeric CUSTOMER_SITE_USE_ID (18,365/79,777 populated), and
+        # REST's CustomerSite is a NAME. Verified carrier: receipt ->
+        # HZ_CUST_SITE_USES_ALL -> HZ_CUST_ACCT_SITES_ALL -> HZ_PARTY_SITES
+        # -> HZ_LOCATIONS.CITY. Receipts 1/2/21 -> CITY 'Santa Clara' = REST
+        # CustomerSite; PARTY_SITE_NAME is NULL. Cardinality: 1,735 site-wide
+        # inside the REST business unit = REST's 1,735. A correlated subquery
+        # keeps this 4-hop chain out of every StandardReceipt query.
+        predicate_template=(
+            "{alias}.CUSTOMER_SITE_USE_ID IN ("
+            "SELECT SU.SITE_USE_ID FROM HZ_CUST_SITE_USES_ALL SU "
+            "JOIN HZ_CUST_ACCT_SITES_ALL CS "
+            "  ON CS.CUST_ACCT_SITE_ID = SU.CUST_ACCT_SITE_ID "
+            "JOIN HZ_PARTY_SITES PS ON PS.PARTY_SITE_ID = CS.PARTY_SITE_ID "
+            "JOIN HZ_LOCATIONS LOC ON LOC.LOCATION_ID = PS.LOCATION_ID "
+            "WHERE LOC.CITY = {value})"
+        ),
         assumption="standard_receipt_site_client_side",
     ),
 
@@ -922,9 +939,16 @@ _ASSUMPTIONS = {
         "to HZ_CUST_ACCOUNTS and HZ_PARTIES supplies it."
     ),
     "standard_receipt_site_client_side": (
-        "customer_site on AR_CASH_RECEIPTS_ALL is populated but "
-        "sparse; the tool matches it client-side. The emitted SQL adds "
-        "CUSTOMER_SITE = ? to the WHERE clause."
+        "search_standard_receipts applies customer_site client-side over "
+        "the fetched REST rows (composite q= returns a silent zero on this "
+        "endpoint). The emitted SQL resolves the same site NAME through the "
+        "receipt's site-use chain: CUSTOMER_SITE_USE_ID -> "
+        "HZ_CUST_SITE_USES_ALL -> HZ_CUST_ACCT_SITES_ALL -> HZ_PARTY_SITES "
+        "-> HZ_LOCATIONS.CITY. AR_CASH_RECEIPTS_ALL has no CUSTOMER_SITE "
+        "column; binding the numeric CUSTOMER_SITE_USE_ID would compare an "
+        "id to a name. Verified: receipts 1/2/21 -> CITY 'Santa Clara' = "
+        "REST CustomerSite, and 1,735 site-wide rows inside the REST "
+        "business unit equals REST's 1,735."
     ),
     "aggregation_measures": (
         "Every aggregation tool selects a grouped column and a SUM or "
