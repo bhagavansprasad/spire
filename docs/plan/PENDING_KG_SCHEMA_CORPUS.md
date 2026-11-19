@@ -41,8 +41,11 @@ This document is the **pending-work register**. The handovers carry what was don
   `kg_derived_projection`=10 (F-062 moved POSchedule.Amount from a stub
   `kg_sql_column` row to a derived projection; F-063 rewrote the two
   PurchaseOrderLine tax projections in place).
-- **Next branch** (next window): `Phase3-Fix-Nullable-Keys` off `master`
-  — resolve F-074 first.
+- **Current branch** (this window): `Phase3-Fix-Nullable-Keys` off
+  `master` — resolved F-074 (LEFT JOIN), F-062 (POSchedule.Amount
+  derived), F-063 (tax carrier), and the §2.3 backlog (Q5 emitter surface
+  + stale `:supplier_id` assertion). Commits `b166c25`, `376903f`,
+  `c77207d`; not yet PR'd.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 

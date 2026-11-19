@@ -1,10 +1,11 @@
 # SPIRE — Fix Plan
 
-**Branch:** `KG-Schema-Corpus`
+**Branch:** `Phase3-Fix-Nullable-Keys`
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — KG schema corpus in progress; no fix-cluster work started
+**Status:** Open — F-074 / F-062 / F-063 and the §2.3 backlog resolved this
+window; F-061 / F-072 / F-073 remain open
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 
