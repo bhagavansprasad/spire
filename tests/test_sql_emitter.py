@@ -56,7 +56,10 @@ def test_shape_1_active_suppliers():
     plan = [Step(1, "search_suppliers", {"status": "ACTIVE"})]
     sql = emit_sql(plan)[0]
     body = _strip_comments(sql)
-    assert "SELECT P.VENDOR_ID" in body
+    # Order is alphabetical by field_name now that columns come from the
+    # KG (kg_sql_column), not the hand-authored list — so assert presence,
+    # not first-position.
+    assert "P.VENDOR_ID" in body
     assert "HP.PARTY_NAME" in body
     assert "FROM POZ_SUPPLIERS P" in body
     assert "JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID" in body

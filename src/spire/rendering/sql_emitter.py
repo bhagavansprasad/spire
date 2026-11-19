@@ -21,18 +21,104 @@ separate block; they are commentary and are not part of the statement.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 from spire.executor.executor import ITERATION_SENTINEL
 from spire.kg.sql_overlay import (
     OVERLAY,
+    EntitySpec,
     FilterSpec,
     Overlay,
 )
 
+# The KG-backed overlay, built once and cached. For the 11 drafted
+# entities, select_columns + fusion_table + pk_column + derived columns
+# come from the KG (kg_entity_sql / kg_sql_column / kg_derived_projection)
+# rather than hand-authored literals. The 11 Receivables entities have no
+# KG rows and keep their hand-authored specs.
+_kg_overlay_cache: Overlay | None = None
 
-def emit_sql(plan: Iterable[Any], overlay: Overlay = OVERLAY) -> list[str]:
-    """Return one SQL string per Plan step, in order."""
+_JOIN_ALIAS_RE = re.compile(
+    r"(?:LEFT\s+|RIGHT\s+|FULL\s+|INNER\s+)?JOIN\s+"
+    r"([A-Za-z0-9_$#]+)\s+([A-Za-z0-9_$#]+)\s+ON",
+    re.IGNORECASE,
+)
+
+
+def _join_aliases(base_joins: list[str]) -> dict[str, str]:
+    """Map table name -> alias from each ``JOIN <table> <alias> ON`` clause."""
+    out: dict[str, str] = {}
+    for clause in base_joins:
+        for table, alias in _JOIN_ALIAS_RE.findall(clause):
+            out[table] = alias
+    return out
+
+
+def _kg_backed_overlay() -> Overlay:
+    """Build (and cache) the overlay with KG-derived columns for drafted entities.
+
+    Pure w.r.t. the KG: reads the KG once (via the cached loader), then
+    resolves each physical table to its SQL alias from the entity's own
+    alias + base_joins. Emitting SQL from the returned overlay opens no
+    further DB connections.
+    """
+    global _kg_overlay_cache
+    if _kg_overlay_cache is not None:
+        return _kg_overlay_cache
+
+    from spire.kg.kg_sql_loader import load_sql_carriers
+
+    carriers = load_sql_carriers()
+
+    entities: dict[str, EntitySpec] = {}
+    for name, entity in OVERLAY.entities.items():
+        car = carriers.get(name)
+        if car is None:
+            # Receivables entity: no KG rows — keep hand-authored spec.
+            entities[name] = entity
+            continue
+
+        table_to_alias = {entity.fusion_table: entity.alias}
+        table_to_alias.update(_join_aliases(entity.base_joins))
+
+        columns: list[tuple[str, str]] = []
+        for physical_table, column_name in car["columns"]:
+            alias = table_to_alias.get(physical_table, physical_table)
+            columns.append((alias, column_name))
+
+        entities[name] = EntitySpec(
+            name=name,
+            fusion_table=car["fusion_table"] or entity.fusion_table,
+            alias=entity.alias,
+            pk_column=car["pk_column"] or entity.pk_column,
+            select_columns=columns,
+            base_joins=entity.base_joins,
+            derived_columns=list(car["derived"]),
+        )
+
+    _kg_overlay_cache = Overlay(
+        tool_to_entity=OVERLAY.tool_to_entity,
+        entities=entities,
+        filters=OVERLAY.filters,
+        joins=OVERLAY.joins,
+        literals=OVERLAY.literals,
+        assumptions=OVERLAY.assumptions,
+        aggregations=OVERLAY.aggregations,
+        not_expressible=OVERLAY.not_expressible,
+    )
+    return _kg_overlay_cache
+
+
+def emit_sql(plan: Iterable[Any], overlay: Overlay | None = None) -> list[str]:
+    """Return one SQL string per Plan step, in order.
+
+    ``overlay=None`` uses the KG-backed overlay (columns for the drafted
+    entities read from the KG once, then cached). Passing an explicit
+    overlay preserves the pure-function path for callers that supply one.
+    """
+    if overlay is None:
+        overlay = _kg_backed_overlay()
     return [_emit_step(step, overlay) for step in plan]
 
 
@@ -67,7 +153,8 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
     entity = overlay.entities[entity_name]
 
     select_list = ",\n       ".join(
-        f"{a}.{c}" for a, c in entity.select_columns
+        [f"{a}.{c}" for a, c in entity.select_columns]
+        + list(entity.derived_columns)
     )
     from_line = f"FROM {entity.fusion_table} {entity.alias}"
     joins: list[str] = list(entity.base_joins)

@@ -17,6 +17,11 @@ class EntitySpec:
     pk_column: str
     select_columns: list[tuple[str, str]] = field(default_factory=list)
     base_joins: list[str] = field(default_factory=list)
+    # Derived projections (correlated scalar subqueries) appended verbatim
+    # to the SELECT list after select_columns. Populated only by the
+    # KG-backed overlay builder (spire.rendering.sql_emitter); the
+    # hand-authored entities leave this empty.
+    derived_columns: list[str] = field(default_factory=list)
 
 
 @dataclass
