@@ -45,13 +45,13 @@ This document is the **pending-work register**. The handovers carry what was don
 - **PR #216** (`Phase3-Fix-Nullable-Keys`) merged to `master`
   (merge commit `d0aa5b7`, 2026-11-19) — F-074 (LEFT JOIN), F-062
   (POSchedule.Amount derived), F-063 (tax carrier), §2.3 backlog.
-- **Current branch** (this window): `Phase3-F073-Receipt-Site-Filter`
-  off `master` — F-073 `customer_site` filter resolved through
-  `CUSTOMER_SITE_USE_ID` → `HZ_LOCATIONS.CITY`; F-072 balances pinned
-  (ledger-currency sums, 29/29 accounts); F-075 UnappliedAmount
-  corrected to the PMT schedule; F-061 decided (leave, cosmetic); new
-  F-076 (SQL not BU-scoped) recorded as Candidate. Satellite counts
-  `22/127/12`; `validate_kg_schema.py` PASSES.
+- **PR #217** (`Phase3-F073-Receipt-Site-Filter`) merged to `master`
+  (merge commit `8030439`, 2026-11-19) — F-073 `customer_site` filter
+  resolved through `CUSTOMER_SITE_USE_ID` → `HZ_LOCATIONS.CITY`; F-072
+  balances pinned (ledger-currency sums, 29/29 accounts); F-075
+  UnappliedAmount corrected to the PMT schedule; F-061 decided (leave,
+  cosmetic); new F-076 (SQL not BU-scoped) recorded as Candidate.
+  Satellite counts `22/127/12`; `validate_kg_schema.py` PASSES.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 

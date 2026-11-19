@@ -1,6 +1,7 @@
 # SPIRE — Fix Plan
 
-**Branch:** `Phase3-F073-Receipt-Site-Filter`
+**Branch:** `Phase3-F073-Receipt-Site-Filter` (merged to `master` via PR
+#217, merge commit `8030439`)
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
