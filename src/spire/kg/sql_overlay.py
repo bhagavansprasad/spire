@@ -496,20 +496,18 @@ _FILTERS = {
     ("search_purchase_orders", "status"): FilterSpec(
         tool_name="search_purchase_orders",
         arg_name="status",
-        predicate_template="{alias}.AUTHORIZATION_STATUS = {value}",
+        predicate_template="{alias}.DOCUMENT_STATUS = {value}",
         assumption="po_status_maps_to_authorization_status",
     ),
     ("search_purchase_orders", "supplier_id"): FilterSpec(
         tool_name="search_purchase_orders",
         arg_name="supplier_id",
-        # The planner routes an all-digit value here as a SupplierNumber.
-        # Join through POZ_SUPPLIERS to match on SEGMENT1, not the raw
-        # VENDOR_ID, which is a numeric internal id.
-        predicate_template=(
-            "P.VENDOR_ID IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS "
-            "WHERE SEGMENT1 = {value})"
-        ),
-        assumption="supplier_number_not_vendor_id",
+        # The tool's supplier_id arg is the numeric internal SupplierId
+        # (= PO_HEADERS_ALL.VENDOR_ID), NOT the human SupplierNumber
+        # (SEGMENT1). The executor iterates over SupplierId, so matching
+        # SEGMENT1 against a numeric VENDOR_ID returns 0 rows (F-065).
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        assumption="supplier_maps_to_vendor_id",
     ),
 
     # Invoice filters
@@ -745,7 +743,7 @@ _ASSUMPTIONS = {
         "HZ_PARTIES.PARTY_NAME, not POZ_SUPPLIERS.SEGMENT1."
     ),
     "po_status_maps_to_authorization_status": (
-        "PO StatusCode maps to PO_HEADERS_ALL.AUTHORIZATION_STATUS. "
+        "PO StatusCode maps to PO_HEADERS_ALL.DOCUMENT_STATUS. "
         "Confirmed valid values on fa-euth-dev93: 'OPEN', 'CLOSED', "
         "'CLOSED FOR RECEIVING', 'PENDING APPROVAL'."
     ),
@@ -753,14 +751,10 @@ _ASSUMPTIONS = {
         "SupplierId maps to PO_HEADERS_ALL.VENDOR_ID."
     ),
     "supplier_number_not_vendor_id": (
-        "The search_purchase_orders tool takes a supplier reference that "
-        "may be a SupplierNumber (all-digit string like '1252') OR a "
-        "SupplierId (numeric internal id). The plan's supplier_id arg is "
-        "assumed to be a SupplierNumber, so the filter joins through "
-        "POZ_SUPPLIERS.SEGMENT1 rather than comparing against "
-        "PO_HEADERS_ALL.VENDOR_ID directly. If this returns 0 rows on a "
-        "real pod, the value is a numeric SupplierId and the filter "
-        "should fall back to a direct VENDOR_ID comparison."
+        "OBSOLETE (F-065, 2026-11-19): the search_purchase_orders "
+        "supplier_id arg is the numeric SupplierId (VENDOR_ID), not the "
+        "SupplierNumber (SEGMENT1). Retained for the record; no FilterSpec "
+        "references it."
     ),
     "invoice_supplier_maps_to_segment1": (
         "SupplierNumber maps to POZ_SUPPLIERS.SEGMENT1."
@@ -974,8 +968,12 @@ OVERLAY = Overlay(
         "aggregate_purchase_orders_by_status": AggregationSpec(
             tool_name="aggregate_purchase_orders_by_status",
             base_entity="PurchaseOrder",
-            group_by_column="AUTHORIZATION_STATUS",
-            measure_template="SUM(AMOUNT)",
+            group_by_column="DOCUMENT_STATUS",
+            measure_template=(
+                "SUM((SELECT SUM(L.UNIT_PRICE * L.QUANTITY) "
+                "FROM PO_LINES_ALL L "
+                "WHERE L.PO_HEADER_ID = P.PO_HEADER_ID))"
+            ),
             order_desc_by_measure=False,
             assumption="aggregation_measures",
             top_n_arg="top_n",

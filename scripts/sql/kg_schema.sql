@@ -1671,9 +1671,9 @@ PROMPT Seeded kg_entity_filter (37 rows).
 -- SQL satellites key on (entity_name, field_name) from kg_entity_field —
 -- one vocabulary, no snake_case role names.
 --
---   11 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
---   40 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---    4 kg_derived_projection — correlated scalar subqueries.
+--   13 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
+--   71 kg_sql_column rows   — direct columns, is_default_projection='Y'.
+--    7 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1693,6 +1693,8 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Purcha
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('POSchedule',        'PO_LINE_LOCATIONS_ALL',    'LINE_LOCATION_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('PODistribution',    'PO_DISTRIBUTIONS_ALL',     'PO_DISTRIBUTION_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Invoice',           'AP_INVOICES_ALL',          'INVOICE_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CustomerTransaction','AR_PAYMENT_SCHEDULES_ALL','CUSTOMER_TRX_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoice', 'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
 
 -- ---- kg_sql_column (47 rows) ----
 -- Supplier
@@ -1727,7 +1729,6 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Category', 'PO_LINES_ALL', 'CATEGORY_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Quantity', 'PO_LINES_ALL', 'QUANTITY', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Price', 'PO_LINES_ALL', 'UNIT_PRICE', 'NUMBER', 22, 'Y');
-INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'PO_LINES_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'StatusCode', 'PO_LINES_ALL', 'LINE_STATUS', 'VARCHAR2', 100, 'Y');
 -- POSchedule
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'LineLocationId', 'PO_LINE_LOCATIONS_ALL', 'LINE_LOCATION_ID', 'NUMBER', 22, 'Y');
@@ -1764,15 +1765,35 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'Address1', 'HZ_LOCATIONS', 'ADDRESS1', 'VARCHAR2', 960, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'City', 'HZ_LOCATIONS', 'CITY', 'VARCHAR2', 240, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'State', 'HZ_LOCATIONS', 'STATE', 'VARCHAR2', 240, 'Y');
+-- CustomerTransaction (AR_PAYMENT_SCHEDULES_ALL) — F-066 fixed TransactionId->CUSTOMER_TRX_ID.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TransactionId', 'AR_PAYMENT_SCHEDULES_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TransactionNumber', 'AR_PAYMENT_SCHEDULES_ALL', 'TRX_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TransactionClass', 'AR_PAYMENT_SCHEDULES_ALL', 'CLASS', 'VARCHAR2', 80, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TransactionDate', 'AR_PAYMENT_SCHEDULES_ALL', 'TRX_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'PaymentScheduleDueDate', 'AR_PAYMENT_SCHEDULES_ALL', 'DUE_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TotalOriginalAmount', 'AR_PAYMENT_SCHEDULES_ALL', 'AMOUNT_DUE_ORIGINAL', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'TotalBalanceAmount', 'AR_PAYMENT_SCHEDULES_ALL', 'AMOUNT_DUE_REMAINING', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerTransaction', 'InstallmentStatus', 'AR_PAYMENT_SCHEDULES_ALL', 'STATUS', 'VARCHAR2', 120, 'Y');
+-- ReceivablesInvoice (RA_CUSTOMER_TRX_ALL) — F-067: EnteredAmount/InvoiceBalanceAmount derived; InvoiceStatus->COMPLETE_FLAG.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'CustomerTransactionId', 'RA_CUSTOMER_TRX_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'TransactionNumber', 'RA_CUSTOMER_TRX_ALL', 'TRX_NUMBER', 'VARCHAR2', 80, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'BillToCustomerName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'BillToCustomerNumber', 'HZ_CUST_ACCOUNTS', 'ACCOUNT_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceCurrencyCode', 'RA_CUSTOMER_TRX_ALL', 'INVOICE_CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'TransactionDate', 'RA_CUSTOMER_TRX_ALL', 'TRX_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceStatus', 'RA_CUSTOMER_TRX_ALL', 'COMPLETE_FLAG', 'VARCHAR2', 4, 'Y');
 
--- ---- kg_derived_projection (4 rows) ----
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.AMOUNT) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
+-- ---- kg_derived_projection (5 rows) ----
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'L.UNIT_PRICE * L.QUANTITY', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'TotalTax', '(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', 'L.AMOUNT + (SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', '(L.UNIT_PRICE * L.QUANTITY) + (SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PODistribution', 'StatusCode', '(SELECT L.LINE_STATUS FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = D.PO_LINE_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'EnteredAmount', '(SELECT SUM(S.AMOUNT_DUE_ORIGINAL) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceBalanceAmount', '(SELECT SUM(S.AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (57 rows), kg_derived_projection (4 rows).
+PROMPT Seeded kg_entity_sql (13 rows), kg_sql_column (71 rows), kg_derived_projection (7 rows).
 
 -- ============================================================

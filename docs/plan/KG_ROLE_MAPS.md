@@ -103,6 +103,24 @@ JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = BP.PERSON_ID AND PN.NAME_TYPE = 'GL
 
 **Observations.** `ESTIMATED_TAX_AMOUNT` is an estimate; post-invoice actual tax lives as `RECOVERABLE_TAX` (col 152) + `NONRECOVERABLE_TAX` (col 153) on `PO_DISTRIBUTIONS_ALL`. If `actual_tax` is ever a distinct role, the path is `PO_LINES_ALL` → `PO_LINE_LOCATIONS_ALL.LINE_LOCATION_ID` → `PO_DISTRIBUTIONS_ALL.LINE_LOCATION_ID` — a second derived projection, not a substitution of the first. Not drafted today. `total` and `total_tax` return NULL, not 0, for a line with no schedules. `PO_LINES_ALL` carries `AMOUNT` and `UNIT_PRICE` but no `TOTAL`/`TOTAL_TAX` — this is the Fusion shape, not a stub; totals and tax are computed at schedule/distribution level.
 
+**F-060 correction (2026-11-19).** The `amount → PO_LINES_ALL.AMOUNT` row
+above was **wrong**: `AMOUNT` is a stub (NULL on 315,857 / 315,970 rows,
+99.96%), so `Ordered` emitted NULL where REST returned the line amount.
+`TAX_EXCLUSIVE_PRICE` was ruled out as the substitute — it is a *unit*
+price (equals `UNIT_PRICE`), populated on only 14.9% of rows, not the
+extended amount. The corrected carrier is a derived projection:
+
+| role | expression |
+|---|---|
+| `amount` (`Ordered`) | `L.UNIT_PRICE * L.QUANTITY` |
+
+Two dependent expressions that read the stub `L.AMOUNT` were fixed in the
+same pass: `PurchaseOrder.Ordered` → `SUM(L.UNIT_PRICE * L.QUANTITY)`, and
+`PurchaseOrderLine.total` → `(L.UNIT_PRICE * L.QUANTITY) + (tax subquery)`.
+The table above is left as the historical (wrong) draft; the seed in
+`scripts/sql/kg_schema.sql` carries the fix. Full record:
+`docs/fixes/FIX_PLAN.md` F-060.
+
 ### POSchedule (`PO_LINE_LOCATIONS_ALL`)
 
 `kg_entity`: `(POSchedule, PO_LINE_LOCATIONS_ALL, LINE_LOCATION_ID)`
@@ -199,3 +217,76 @@ JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = BP.PERSON_ID AND PN.NAME_TYPE = 'GL
 **Nullable — Q4 self-check required.** `AP_INVOICES_ALL.VENDOR_ID` (col 4, Y). Count NULLs on `AP_INVOICES_ALL.VENDOR_ID`; require zero; non-zero fails the §3.4 build. An inner join on a NULL `VENDOR_ID` silently drops those invoices. Third known nullable join key in the corpus, after `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` (Contact) and `PO_HEADERS_ALL.VENDOR_ID` (PurchaseOrder).
 
 **Observations.** Invoice is the first entity in the corpus with a clean projection (0 absent) and the first whose sweep flag is stale rather than understated. `INVOICE_AMOUNT` (col 10, Y), `INVOICE_DATE` (col 14, Y), `PAYMENT_STATUS_FLAG` (col 25, Y) are nullable — the corresponding roles return NULL where unset. `PAYMENT_STATUS_FLAG` is `VARCHAR2(4)` — a short flag, not a descriptive status; if a consumer needs a status label, a lookup table join is a separate role, not a substitute for this one. No derived projection: `AP_INVOICES_ALL` carries `INVOICE_AMOUNT` directly, unlike `PO_HEADERS_ALL` (R-7) — the stub-view pattern does **not** recur here for the amount role. The R-7 prediction ("expect the same stub shape on AP_INVOICES_ALL") holds only for any header-total role not carried directly; the amount role is carried, so no derivation needed.
+
+---
+
+## Receivables
+
+### CustomerTransaction (`AR_PAYMENT_SCHEDULES_ALL`)
+
+`kg_entity`: `(CustomerTransaction, AR_PAYMENT_SCHEDULES_ALL, CUSTOMER_TRX_ID)`
+
+`base_joins`: `[]` — none. The filter reaches `CUSTOMER_ID` directly.
+
+`kg_sql_column`, `is_default_projection='Y'`:
+
+| field | table | column |
+|---|---|---|
+| `TransactionId` | `AR_PAYMENT_SCHEDULES_ALL` | `CUSTOMER_TRX_ID` |
+| `TransactionNumber` | `AR_PAYMENT_SCHEDULES_ALL` | `TRX_NUMBER` |
+| `TransactionClass` | `AR_PAYMENT_SCHEDULES_ALL` | `CLASS` |
+| `TransactionDate` | `AR_PAYMENT_SCHEDULES_ALL` | `TRX_DATE` |
+| `PaymentScheduleDueDate` | `AR_PAYMENT_SCHEDULES_ALL` | `DUE_DATE` |
+| `TotalOriginalAmount` | `AR_PAYMENT_SCHEDULES_ALL` | `AMOUNT_DUE_ORIGINAL` |
+| `TotalBalanceAmount` | `AR_PAYMENT_SCHEDULES_ALL` | `AMOUNT_DUE_REMAINING` |
+| `InstallmentStatus` | `AR_PAYMENT_SCHEDULES_ALL` | `STATUS` |
+
+`kg_derived_projection`: none.
+
+**Bugs fixed (F-066).** `TransactionId` → `CUSTOMER_TRX_ID` (col 21, `NUMBER(22)`, Y), not `PAYMENT_SCHEDULE_ID` (col 1). REST `TransactionId`=1624374 == `CUSTOMER_TRX_ID`, while `PAYMENT_SCHEDULE_ID`=1398398 on the same row (`TRX_NUMBER`='1471201'). The old map projected `PAYMENT_SCHEDULE_ID` as "InstallmentId" — a REST field that does not exist. Full record: `docs/fixes/FIX_PLAN.md` F-066.
+
+**Verified (all 8).** `TRX_NUMBER` (col 69, `VARCHAR2(120)`, Y), `CLASS` (col 18, `VARCHAR2(80)`, N), `TRX_DATE` (col 70, `DATE`, Y), `DUE_DATE` (col 12, `DATE`, N), `AMOUNT_DUE_ORIGINAL` (col 13, `NUMBER`, N), `AMOUNT_DUE_REMAINING` (col 14, `NUMBER`, N), `STATUS` (col 16, `VARCHAR2(120)`, N). Value agreement confirmed against REST on one row: amount 693.83, balance 0, status `CL`/`Closed`, dates 2026-07-28.
+
+**Filter.** `("get_customer_transactions","account_id")` → `{alias}.CUSTOMER_ID = {value}` → `AR_PAYMENT_SCHEDULES_ALL.CUSTOMER_ID` (col 19, Y). Holds the account's `CUST_ACCOUNT_ID` — account 300000047368527 returns 486 rows, matching REST.
+
+**Observations.** `CUSTOMER_TRX_ID` is nullable (Y) — schedule rows for on-account/receipt items may carry NULL; the tool filters `CLASS='Invoice'` client-side, and those always carry a `CUSTOMER_TRX_ID`. `CLASS` distinguishes Invoice vs credit memo and is **not** queryable server-side (client-side filter). `TransactionId` (`CUSTOMER_TRX_ID`) is the AR transaction id, a different id space from ReceivablesInvoice's `CustomerTransactionId` (`RA_CUSTOMER_TRX_ALL.CUSTOMER_TRX_ID`).
+
+### ReceivablesInvoice (`RA_CUSTOMER_TRX_ALL`)
+
+`kg_entity`: `(ReceivablesInvoice, RA_CUSTOMER_TRX_ALL, CUSTOMER_TRX_ID)`
+
+`base_joins`:
+
+```
+JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = P.BILL_TO_CUSTOMER_ID
+JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
+```
+
+`kg_sql_column`, `is_default_projection='Y'`:
+
+| field | table | column |
+|---|---|---|
+| `CustomerTransactionId` | `RA_CUSTOMER_TRX_ALL` | `CUSTOMER_TRX_ID` |
+| `TransactionNumber` | `RA_CUSTOMER_TRX_ALL` | `TRX_NUMBER` |
+| `BillToCustomerName` | `HZ_PARTIES` | `PARTY_NAME` |
+| `BillToCustomerNumber` | `HZ_CUST_ACCOUNTS` | `ACCOUNT_NUMBER` |
+| `InvoiceCurrencyCode` | `RA_CUSTOMER_TRX_ALL` | `INVOICE_CURRENCY_CODE` |
+| `TransactionDate` | `RA_CUSTOMER_TRX_ALL` | `TRX_DATE` |
+| `InvoiceStatus` | `RA_CUSTOMER_TRX_ALL` | `COMPLETE_FLAG` |
+
+`kg_derived_projection`, `is_default_projection='Y'`:
+
+| field | expression |
+|---|---|
+| `EnteredAmount` | `(SELECT SUM(S.AMOUNT_DUE_ORIGINAL) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)` |
+| `InvoiceBalanceAmount` | `(SELECT SUM(S.AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)` |
+
+**Bugs fixed (3 of 7).**
+
+- `ENTERED_AMOUNT` → derived. `RA_CUSTOMER_TRX_ALL` has no amount column (the R-7 stub-view shape at header level); the invoice amount lives on `AR_PAYMENT_SCHEDULES_ALL.AMOUNT_DUE_ORIGINAL` (sum over the invoice's schedules). Verified: invoice 300000248096352 → `SUM(AMOUNT_DUE_ORIGINAL)`=39969 = REST `EnteredAmount` (also equals `SUM(RA_CUSTOMER_TRX_LINES_ALL.EXTENDED_AMOUNT)`=39969 — schedules chosen because they also carry the balance).
+- `STATUS_TRX` → `COMPLETE_FLAG`. `STATUS_TRX` (col 109) only ever holds `'OP'` (206,653 rows) or NULL — a stub. REST `InvoiceStatus`='Complete' ↔ `COMPLETE_FLAG`='Y' (col 70, `VARCHAR2(4)`, N; Y/N/P). The Y→Complete display mapping is F-061-class (cosmetic), not a data bug.
+- `BillToCustomerNumber` → `HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER` (col 4, `VARCHAR2(120)`, N) — added; the join already carries it, and REST projects it.
+
+**Join keys, verified both sides.** `HZ_CUST_ACCOUNTS.CUST_ACCOUNT_ID` (col 1, N) = `RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID` (col 20, Y). `HZ_CUST_ACCOUNTS.PARTY_ID` (col 2, N) = `HZ_PARTIES.PARTY_ID`. **Left side `BILL_TO_CUSTOMER_ID` is nullable (Y)** — Q4 self-check required (4th nullable join key in the corpus).
+
+**Observations.** `RA_CUSTOMER_TRX_ALL` is the R-7 stub shape at the header level: no amount column, no due date, and a stub status. `InvoiceStatus` displays "Complete" while the SQL emits `COMPLETE_FLAG`='Y' (F-061 class). `DueDate`/`AccountingDate` also live off-header (`AR_PAYMENT_SCHEDULES_ALL`/GL) and are not projected here — a later role can add them as derived projections if a consumer needs them.
