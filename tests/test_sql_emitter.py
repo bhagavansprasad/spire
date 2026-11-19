@@ -114,7 +114,6 @@ def test_shape_3_suppliers_with_addresses():
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(reason="stale :supplier_id assertion, resolves with §3.3 (FIX_PLAN §2.3)", strict=False)
 def test_shape_4_suppliers_with_site_in_bu():
     plan = [
         Step(1, "search_suppliers", {}),
@@ -134,9 +133,10 @@ def test_shape_4_suppliers_with_site_in_bu():
     assert "WHERE" not in _strip_comments(step1)
     assert "FROM POZ_SUPPLIER_SITES_ALL_M S" in step2
     assert "S.PRC_BU_ID = 300000046987012" in step2
-    assert ":supplier_id" in step2
+    assert "S.VENDOR_ID = :iteration_value" in step2
     assert "keep parents where this returns rows" in step2
     assert "ASSUMPTION [bu_literal_from_overlay]" in step2
+    assert "ASSUMPTION [site_supplier_id_maps_to_vendor_id]" in step2
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -261,3 +261,55 @@ def test_po_supplier_id_filter_uses_vendor_id_not_segment1():
     assert "SEGMENT1 = '300000047414503'" not in body
     assert "IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS" not in body
     assert "ASSUMPTION [supplier_maps_to_vendor_id]" in sql
+
+
+def test_standard_receipt_uses_left_join_for_nullable_pay_from_customer():
+    """F-074: AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER is NULL on 39 of
+    79,777 receipts (UNID/REV/NSF/APP). REST's top-level /standardReceipts
+    returns those receipts with NULL CustomerName/CustomerAccountNumber, so
+    the emitted SQL must LEFT JOIN (keep them with NULL customer), not
+    INNER JOIN (silently drop them)."""
+    plan = [Step(1, "search_standard_receipts", {"customer_name": "ABC Corporation Americas"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER" in body
+    assert "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID" in body
+    # The old INNER JOIN (bare "JOIN") must be gone: the only join lines
+    # are the two LEFT JOINs above.
+    join_lines = [
+        l.strip() for l in body.splitlines()
+        if l.strip().startswith("JOIN ") or l.strip().startswith("LEFT JOIN ")
+    ]
+    assert join_lines == [
+        "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
+        "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+    ]
+
+
+def test_poschedule_amount_is_derived_not_stub_amout():
+    """F-062: PO_LINE_LOCATIONS_ALL.AMOUNT is a stub (NULL on 99.95% of
+    rows), so POSchedule.Amount must derive line UNIT_PRICE x schedule
+    QUANTITY, not bind the stub AMOUNT column."""
+    plan = [Step(1, "get_purchase_order_schedules", {"po_header_id": "2144"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert (
+        "(SELECT L.UNIT_PRICE FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY"
+        in body
+    )
+    # The stub AMOUNT column must not be selected as a bare column.
+    assert "S.AMOUNT" not in body
+
+
+def test_purchase_order_line_tax_is_from_distributions_not_schedule_stub():
+    """F-063: PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT is NULL on ALL
+    310,952 schedule rows (a complete stub), so the line TotalTax/Total
+    must read PO_DISTRIBUTIONS_ALL.RECOVERABLE_TAX + NONRECOVERABLE_TAX,
+    NVL-wrapped to 0 when a line has no distributions / no tax."""
+    plan = [Step(1, "get_purchase_order_lines", {"po_header_id": "2144"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "RECOVERABLE_TAX + D.NONRECOVERABLE_TAX" in body
+    assert "NVL(" in body
+    # The stub ESTIMATED_TAX_AMOUNT carrier must be gone.
+    assert "ESTIMATED_TAX_AMOUNT" not in body

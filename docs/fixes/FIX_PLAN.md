@@ -1,10 +1,11 @@
 # SPIRE — Fix Plan
 
-**Branch:** `KG-Schema-Corpus`
+**Branch:** `Phase3-Fix-Nullable-Keys`
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — KG schema corpus in progress; no fix-cluster work started
+**Status:** Open — F-074 / F-062 / F-063 and the §2.3 backlog resolved this
+window; F-061 / F-072 / F-073 remain open
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 
@@ -60,10 +61,12 @@ were removed — the tests pass deterministically.
 
 ### 2.3 Known backlog — owned by the KG-schema-corpus task
 
-| Group | Tests | Cause |
-|---|---|---|
-| Q5 emitter surface | `tests/test_sql_overlay_coverage.py` ×1 | `search_customer_accounts` + `search_receivables_invoices` (the two filter-less sample-and-disclose fetchers) have no SQL overlay entry — the 11 un-drafted Receivables entities are now drafted (2026-11-19); only these two list-all tools remain unmapped |
-| Stale `:supplier_id` assertion | `tests/test_sql_emitter.py::test_shape_4_suppliers_with_site_in_bu` | Site filter emitted no `:supplier_id` bind; assertion predates the KG column work; resolved by §3.3 |
+Both items resolved 2026-11-19 (`Phase3-Fix-Nullable-Keys`).
+
+| Group | Tests | Cause | Status |
+|---|---|---|---|
+| Q5 emitter surface | `tests/test_sql_overlay_coverage.py` ×1 | `search_customer_accounts` + `search_receivables_invoices` (the two filter-less sample-and-disclose fetchers) had no SQL overlay entry | **FIXED** — `tool_to_entity` now maps `search_receivables_invoices → ReceivablesInvoice` and `search_customer_accounts → CustomerAccount`; xfail removed, test green |
+| Stale `:supplier_id` assertion | `tests/test_sql_emitter.py::test_shape_4_suppliers_with_site_in_bu` | Site filter emitted no `:supplier_id` bind — the `supplier_id` iteration arg had no FilterSpec, so the emitted SQL was malformed (`WHERE -- unmapped iteration arg` then `AND`) | **FIXED** — added `("search_suppliers_by_site_bu","supplier_id")` FilterSpec `{alias}.VENDOR_ID = {value}` + `site_supplier_id_maps_to_vendor_id` assumption; the emitted SQL is now `WHERE S.VENDOR_ID = :iteration_value AND S.PRC_BU_ID = …`; xfail removed, test green |
 
 ---
 
@@ -162,31 +165,51 @@ not `TAX_EXCLUSIVE_PRICE`. Decisive pod evidence:
 
 ### F-062 — `POSchedule.amount` binds to `PO_LINE_LOCATIONS_ALL.AMOUNT`, also a stub
 
-**Status:** Confirmed. Not fixed — schedule-level carrier needs a separate
-discovery decision.
+**Status:** Fixed (2026-11-19). Carrier = derived `line UNIT_PRICE × schedule
+QUANTITY`.
 
 `PO_LINE_LOCATIONS_ALL.AMOUNT` is NULL on 310,807 of 310,947 rows (99.95%)
 — the same R-7 stub shape as F-060. `POSchedule.Amount` (`kg_sql_column`
 → `AMOUNT`, `is_default_projection='Y'`) therefore emits NULL where REST
 returns a schedule amount. `PO_LINE_LOCATIONS_ALL` has **no** `UNIT_PRICE`
 (ORA-00904), so the schedule extended amount cannot be derived on-table;
-it needs a join back to `PO_LINES_ALL` via `PO_LINE_ID`
-(`L.UNIT_PRICE × S.QUANTITY`, schedule quantity). That derivation (and the
-schedule-amount semantics vs line amount) must be verified against REST
-before binding — deferred to the POSchedule role-map pass.
+it needs a join back to `PO_LINES_ALL` via `PO_LINE_ID`.
 
-### F-063 — `Total`/`TotalTax` return NULL, not 0, when the schedule tax is NULL
+**Resolution (2026-11-19).** The `AMOUNT` `kg_sql_column` row is removed
+and replaced with a `kg_derived_projection`:
+`(SELECT L.UNIT_PRICE FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY`.
+The multiplier is the **schedule** quantity (a schedule is a shipment of a
+portion of the line), verified exact against REST on PO 300000133123880:
+line 300000133123881 qty 738/3/86 → 12064.824 / 49.044 / 1405.928, all
+equal REST `Amount`. Row counts: `kg_sql_column` 128→127,
+`kg_derived_projection` 9→10.
 
-**Status:** Observation (pre-existing, not introduced by F-060).
+### F-063 — `Total`/`TotalTax` read a stub tax column, NULL on every line
 
-`TotalTax` = `(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) …)` returns NULL (not 0)
-when the line's schedules carry a NULL `ESTIMATED_TAX_AMOUNT` (PO 2144 has
-schedule rows with NULL tax), so `Total` = `Ordered + NULL` = NULL. This
-was already flagged in `KG_ROLE_MAPS.md` §PurchaseOrderLine ("NULL, not 0,
-for a line with no schedules"); F-060's carrier fix did not change the
-NULL-propagation behavior of the tax subquery. If REST returns `TotalTax=0`
-and `Total=Ordered` in this case, an `NVL(SUM(…), 0)` is warranted — a
-separate decision, not part of F-060.
+**Status:** Fixed (2026-11-19). Reclassified from observation to
+Confirmed bug: the tax carrier was a complete stub.
+
+`TotalTax` = `(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) …)` read
+`PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT`, which is NULL on **all
+310,952** schedule rows (a complete stub, not just "NULL when tax is
+unset"). So `TotalTax` and `Total` (= `Ordered + NULL`) were NULL on
+**every** PO line, while REST returns real tax. The original framing
+("NULL, not 0, when the schedule tax is NULL") understated it: the column
+is never populated, so the SQL path was wrong everywhere, not just on
+tax-less lines.
+
+**Resolution (2026-11-19).** The line tax is `RECOVERABLE_TAX +
+NONRECOVERABLE_TAX` on `PO_DISTRIBUTIONS_ALL`, summed over the line's
+distributions. Both derived projections now use
+`NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)`.
+Verified exact against REST: PO 2144 line 1 → TotalTax 3135 / Total 36135
+(REST 3135 / 36135); PO 65 line 2 → 1045.4 / 6272.4; PO 300000133123880
+(multi-distribution) lines 300000133123881/…888/…893 → 2298.37 / 2605.46 /
+73461.53, all equal REST `TotalTax`/`Total`. The `NVL(…, 0)` returns 0
+(not NULL) for the 5,189 lines with no distributions and 10 lines whose
+distribution tax is all-NULL — and those no-distribution lines largely
+sit on POs REST 404s on (e.g. 300000048657237), so they are not a
+SQL-vs-REST divergence source.
 
 ### F-061 — buyer name format: SQL `DISPLAY_NAME` ≠ REST `Buyer`
 
@@ -478,10 +501,9 @@ Receivables-filter pass. Also open: `AccountReceipt.State` ('Applied'/'Unapplied
 and `ProcessStatus` ('Open'/'Closed') have no clean single column on
 `AR_CASH_RECEIPTS_ALL` — both dropped, documented in KG_ROLE_MAPS.md §AccountReceipt.
 
-### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (OPEN)
+### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (FIXED)
 
-**Status:** Confirmed. Open — not fixed this window. Found by the §3.4
-build self-check (`scripts/validate_kg_schema.py`), which this window wrote.
+**Status:** Fixed (2026-11-19). LEFT JOIN with NULL propagation (option 2).
 
 **S0.** `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` — the StandardReceipt role
 map's 6th nullable join key — is NULL on **39 of 79,777** rows, so the
@@ -519,11 +541,31 @@ correct.
 reproduced directly on the pod (39 NULL of 79,777), and the other five
 nullable keys all report 0 under the same checker.
 
-**Decision needed (next window).** Same shape as §4.1: (option 1) accept
-the drop with a documented `exclude` carve-out, (option 2) switch
-StandardReceipt to LEFT JOIN with NULL propagation (rejected by Q4 for
-shipping NULLs), or (option 3) filter these receipts out explicitly. Until
-one lands, `validate_kg_schema.py` fails on this key by design.
+**Decision (2026-11-19).** Option 2 — switch StandardReceipt to LEFT JOIN
+with NULL propagation. Unlike §4.1's PO case (5 NULLs, all
+`DOCUMENT_STATUS='INCOMPLETE'`, correctly dropped), these 39 receipts are
+**not** non-real: REST's top-level `/standardReceipts` returns them with
+`CustomerName`/`CustomerAccountNumber` null (verified on receipt
+`300000066476398`, `STATUS='REV'`). So the correct behavior is to **keep**
+them with NULL customer fields — an INNER JOIN drop is a row-count
+mismatch, and Q4's "LEFT JOIN + NULL propagation rejected" rule applies to
+join keys meant to be non-null, not to a column whose NULLs REST itself
+projects as null.
+
+**Fix applied.** `src/spire/kg/sql_overlay.py` StandardReceipt `base_joins`
+→ `LEFT JOIN HZ_CUST_ACCOUNTS` + `LEFT JOIN HZ_PARTIES`. The
+`NULLABLE_KEYS` entry for StandardReceipt was removed from
+`scripts/validate_kg_schema.py` (no INNER join to guard); its absence is
+documented in the list header.
+
+**Verification.** Emitted SQL shape (`LEFT JOIN …`) returns **79,777** rows
+(the full `AR_CASH_RECEIPTS_ALL` count) vs **79,738** under the old INNER
+JOIN — the 39 null-customer receipts are kept, not dropped. Receipt
+`300000066476398` is returned with NULL `ACCOUNT_NUMBER`/`PARTY_NAME`,
+matching REST's `CustomerName`/`CustomerAccountNumber` = null.
+`scripts/validate_kg_schema.py` → `Result: PASS`. Regression test
+`test_standard_receipt_uses_left_join_for_nullable_pay_from_customer` in
+`tests/test_sql_emitter.py`.
 
 **S8 (miss record).** The Receivables role-map pass flagged the key as
 nullable but did not run the Q4 NULL-count; the §3.4 self-check (this

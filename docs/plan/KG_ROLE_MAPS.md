@@ -121,6 +121,16 @@ The table above is left as the historical (wrong) draft; the seed in
 `scripts/sql/kg_schema.sql` carries the fix. Full record:
 `docs/fixes/FIX_PLAN.md` F-060.
 
+**F-063 correction (2026-11-19).** The `total_tax`/`total` tax subquery
+read `SUM(PO_LINE_LOCATIONS_ALL.ESTIMATED_TAX_AMOUNT)`, which is NULL on
+**all 310,952** schedule rows — a complete stub, not an estimate. So
+`TotalTax` and `Total` were NULL on every line. The real line tax is
+`RECOVERABLE_TAX + NONRECOVERABLE_TAX` on `PO_DISTRIBUTIONS_ALL`, summed
+over the line's distributions and NVL-wrapped to 0. Both projections now
+use
+`NVL((SELECT SUM(D.RECOVERABLE_TAX + D.NONRECOVERABLE_TAX) FROM PO_DISTRIBUTIONS_ALL D WHERE D.PO_LINE_ID = L.PO_LINE_ID), 0)`.
+Full record: `docs/fixes/FIX_PLAN.md` F-063.
+
 ### POSchedule (`PO_LINE_LOCATIONS_ALL`)
 
 `kg_entity`: `(POSchedule, PO_LINE_LOCATIONS_ALL, LINE_LOCATION_ID)`
@@ -153,6 +163,15 @@ The table above is left as the historical (wrong) draft; the seed in
 **Filter.** `("get_purchase_order_schedules","po_header_id")` → `{alias}.PO_HEADER_ID = {value}` on alias `S` → `PO_LINE_LOCATIONS_ALL.PO_HEADER_ID` (col 33, N). Verified present directly on the table — **no subquery, no join change.** The `"po_schedule_columns_from_reference"` assumption held on the filter side; first filter in the corpus whose column was not pre-verified from another entity, and the only clean case.
 
 **Observations.** `requested_delivery_date` is semantically ambiguous: the pod carries `REQUESTED_SHIP_DATE` (10), `PROMISED_SHIP_DATE` (11), `NEED_BY_DATE` (47), `PROMISED_DATE` (48). `NEED_BY_DATE` chosen — arrival-side, matches "delivery." If the overlay intended the buyer-requested ship side, `REQUESTED_SHIP_DATE` is correct; revisit if downstream consumer clarifies. `schedule_number` returns `NUMBER` where a caller may format as text. Additional quantities exist if later roles need them: `QUANTITY_SHIPPED` (155), `QUANTITY_ACCEPTED` (40), `QUANTITY_REJECTED` (41), `QUANTITY_CANCELLED` (43), `SHIPPING_UOM_QUANTITY` (274). `ESTIMATED_TAX_AMOUNT` (58) — same column used by PurchaseOrderLine's `total_tax` — is available at schedule level if a schedule-tax role is ever wanted. `PO_LINE_ID` (34, N) present, enabling downstream traversal to lines without a `base_joins` change.
+
+**F-062 correction (2026-11-19).** The `amount → PO_LINE_LOCATIONS_ALL.AMOUNT`
+row above was **wrong**: `AMOUNT` is a stub (NULL on 99.95% of rows) and
+the table has no `UNIT_PRICE`. The corrected carrier is a derived
+projection (see `kg_derived_projection`): `(SELECT L.UNIT_PRICE FROM
+PO_LINES_ALL L WHERE L.PO_LINE_ID = S.PO_LINE_ID) * S.QUANTITY` — line
+`UNIT_PRICE` × **schedule** `QUANTITY`. The table above is left as the
+historical (wrong) draft; the seed in `scripts/sql/kg_schema.sql` carries
+the fix. Full record: `docs/fixes/FIX_PLAN.md` F-062.
 
 ### PODistribution (`PO_DISTRIBUTIONS_ALL`)
 
@@ -364,8 +383,8 @@ JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 `base_joins`:
 
 ```
-JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER
-JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
+LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER
+LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 ```
 
 `kg_sql_column`, `is_default_projection='Y'`:
@@ -386,6 +405,14 @@ JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 **Bugs fixed (0 of 8 absent).** All eight direct columns present: `CASH_RECEIPT_ID` (1, NUMBER, N), `RECEIPT_NUMBER` (20, VARCHAR2 120, Y), `RECEIPT_DATE` (21, DATE, N), `AMOUNT` (12, NUMBER, N), `CURRENCY_CODE` (15, VARCHAR2 60, N), `STATUS` (18, VARCHAR2 120, Y), `HZ_PARTIES.PARTY_NAME`, `HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER`. `CustomerAccountNumber` added (join-carried; REST projects it).
 
 **Join keys, verified both sides.** `HZ_CUST_ACCOUNTS.CUST_ACCOUNT_ID` (1, N) = `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` (17, Y). **Left side nullable** — 6th nullable join key in the corpus.
+
+**F-074 resolution (2026-11-19).** The join was INNER and silently dropped
+the 39 rows with NULL `PAY_FROM_CUSTOMER` (UNID 25 / REV 10 / NSF 2 / APP 2).
+REST's top-level `/standardReceipts` **returns** those receipts with
+`CustomerName`/`CustomerAccountNumber` null, so the join is now LEFT JOIN
+(NULL propagation, matching REST). The StandardReceipt entry was removed
+from `validate_kg_schema.py`'s `NULLABLE_KEYS` (no INNER join left to
+guard). Full record: `docs/fixes/FIX_PLAN.md` F-074.
 
 **Observations.** `ReceiptMethod` is deliberately absent: `RECEIPT_METHOD_ID` (56, NUMBER, N) is a numeric FK; REST returns the display string (e.g. 'Check (Directly/No Remit)') which lives on `AR_RECEIPT_METHODS` (join not mapped). `Status` (`STATUS`='APP') is the top-level status code; REST `Status`='Cleared' is a bank-clearance state with no clean single column — F-061-class display divergence, flagged not fixed. `CustomerSite`, `RemittanceBank*` are not projected (sparse / no mapped join). `customer_site` filter references `{alias}.CUSTOMER_SITE`, which does not exist on `AR_CASH_RECEIPTS_ALL` (only `CUSTOMER_SITE_USE_ID`, 51, NUMBER) — see FIX_PLAN backlog.
 

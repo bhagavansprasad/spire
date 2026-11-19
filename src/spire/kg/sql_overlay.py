@@ -447,8 +447,14 @@ _ENTITIES = {
             ("HP", "PARTY_NAME"),
         ],
         base_joins=[
-            "JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
-            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+            # LEFT JOIN (not INNER): 39 of 79,777 receipts have NULL
+            # PAY_FROM_CUSTOMER (UNID 25 / REV 10 / NSF 2 / APP 2). REST's
+            # top-level /standardReceipts returns those receipts with NULL
+            # CustomerName/CustomerAccountNumber, so an INNER JOIN would
+            # silently drop them (F-074). NULL propagation is the correct
+            # behavior here, not a drop.
+            "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
+            "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
         ],
     ),
 }
@@ -479,6 +485,12 @@ _FILTERS = {
         arg_name="supplier_name_contains",
         predicate_template="HP.PARTY_NAME LIKE {value}",
         assumption="name_like_on_party_name",
+    ),
+    ("search_suppliers_by_site_bu", "supplier_id"): FilterSpec(
+        tool_name="search_suppliers_by_site_bu",
+        arg_name="supplier_id",
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        assumption="site_supplier_id_maps_to_vendor_id",
     ),
     ("search_suppliers_by_site_bu", "business_unit"): FilterSpec(
         tool_name="search_suppliers_by_site_bu",
@@ -781,6 +793,13 @@ _ASSUMPTIONS = {
         "Business-unit name resolves to a numeric BU_ID from "
         "kg_sql_literal."
     ),
+    "site_supplier_id_maps_to_vendor_id": (
+        "search_suppliers_by_site_bu.supplier_id is the numeric SupplierId "
+        "(the parent supplier), carried as VENDOR_ID on "
+        "POZ_SUPPLIER_SITES_ALL_M. The REST tool reaches sites via the URL "
+        "path /suppliers/{SupplierId}/child/sites; the SQL equivalent "
+        "filters POZ_SUPPLIER_SITES_ALL_M.VENDOR_ID."
+    ),
     "classification_literal_from_overlay": (
         "Classification display string resolves to a LOOKUP_CODE via "
         "kg_sql_literal."
@@ -949,6 +968,8 @@ OVERLAY = Overlay(
         "get_purchase_order_by_id": "PurchaseOrder",
         "search_invoices": "Invoice",
         "get_receivables_invoice_by_id": "ReceivablesInvoice",
+        "search_receivables_invoices": "ReceivablesInvoice",
+        "search_customer_accounts": "CustomerAccount",
         "get_purchase_order_lines": "PurchaseOrderLine",
         "get_purchase_order_schedules": "POSchedule",
         "get_purchase_order_distributions": "PODistribution",

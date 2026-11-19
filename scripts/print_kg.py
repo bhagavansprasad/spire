@@ -91,7 +91,7 @@ TABLES: list[dict] = [
                "is_default_projection FROM kg_sql_column "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 128,
+        "expected_rows": 127,
     },
     {
         "name": "kg_derived_projection",
@@ -105,7 +105,7 @@ TABLES: list[dict] = [
                "is_default_projection FROM kg_derived_projection "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 9,
+        "expected_rows": 10,
     },
     {
         "name": "kg_edge",
