@@ -474,6 +474,20 @@ INSERT INTO kg_entity_field VALUES ('Supplier', 'CreationDate',   'projection', 
 INSERT INTO kg_entity_field VALUES ('Supplier', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only. May be an email or a login id.');
 INSERT INTO kg_entity_field VALUES ('Supplier', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
+-- Site (added 2026-11-19 — reverses the "accept unbound" gap for Site so the
+-- SQL emitter has columns to project; see PENDING_KG_SCHEMA_CORPUS.md).
+-- Field names follow kg_entity's canonical_id_field / display_name_field.
+INSERT INTO kg_entity_field VALUES ('Site', 'SupplierSiteId',   'canonical_id', 'numeric', 'System primary key for the supplier site.');
+INSERT INTO kg_entity_field VALUES ('Site', 'SupplierSite',     'display_name', 'string',  'Supplier site code/name (VENDOR_SITE_CODE).');
+INSERT INTO kg_entity_field VALUES ('Site', 'ProcurementBuId',  'reference',    'numeric', 'Procurement business unit the site belongs to.');
+
+-- Classification (added 2026-11-19 — reverses the "accept unbound" gap for
+-- Classification so the SQL emitter has columns to project).
+INSERT INTO kg_entity_field VALUES ('Classification', 'ClassificationId', 'canonical_id', 'numeric', 'System primary key for the classification.');
+INSERT INTO kg_entity_field VALUES ('Classification', 'SupplierId',       'reference',    'numeric', 'Supplier this classification belongs to (VENDOR_ID).');
+INSERT INTO kg_entity_field VALUES ('Classification', 'Classification',   'display_name', 'string',  'Classification lookup code (e.g. SMALL_BUSINESS).');
+INSERT INTO kg_entity_field VALUES ('Classification', 'Status',          'status',       'string',  'Classification status (e.g. CURRENT).');
+
 -- Invoice
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceId',       'canonical_id', 'numeric', 'System primary key.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceNumber',   'display_id',   'string',  'Human-readable identifier.');
@@ -734,7 +748,7 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (210 rows).
+PROMPT Seeded kg_entity_field (217 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1664,7 +1678,7 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('POSche
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('PODistribution',    'PO_DISTRIBUTIONS_ALL',     'PO_DISTRIBUTION_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Invoice',           'AP_INVOICES_ALL',          'INVOICE_ID');
 
--- ---- kg_sql_column (40 rows) ----
+-- ---- kg_sql_column (47 rows) ----
 -- Supplier
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'SupplierId', 'POZ_SUPPLIERS', 'VENDOR_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'SupplierNumber', 'POZ_SUPPLIERS', 'SEGMENT1', 'VARCHAR2', 120, 'Y');
@@ -1714,6 +1728,15 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PODistribution', 'DistributionNumber', 'PO_DISTRIBUTIONS_ALL', 'DISTRIBUTION_NUM', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PODistribution', 'POChargeAccount', 'PO_DISTRIBUTIONS_ALL', 'DEST_CHARGE_ACCOUNT_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PODistribution', 'Ordered', 'PO_DISTRIBUTIONS_ALL', 'AMOUNT_ORDERED', 'NUMBER', 22, 'Y');
+-- Site
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Site', 'SupplierSiteId', 'POZ_SUPPLIER_SITES_ALL_M', 'VENDOR_SITE_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Site', 'SupplierSite', 'POZ_SUPPLIER_SITES_ALL_M', 'VENDOR_SITE_CODE', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Site', 'ProcurementBuId', 'POZ_SUPPLIER_SITES_ALL_M', 'PRC_BU_ID', 'NUMBER', 22, 'Y');
+-- Classification
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'ClassificationId', 'POZ_BUS_CLASSIFICATIONS', 'CLASSIFICATION_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'SupplierId', 'POZ_BUS_CLASSIFICATIONS', 'VENDOR_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Classification', 'POZ_BUS_CLASSIFICATIONS', 'LOOKUP_CODE', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Status', 'POZ_BUS_CLASSIFICATIONS', 'STATUS', 'VARCHAR2', 4, 'Y');
 
 -- ---- kg_derived_projection (4 rows) ----
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.AMOUNT) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
@@ -1723,6 +1746,6 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (40 rows), kg_derived_projection (4 rows).
+PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (47 rows), kg_derived_projection (4 rows).
 
 -- ============================================================

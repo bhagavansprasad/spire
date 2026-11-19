@@ -111,10 +111,27 @@ Per Phase 2 Q4: every nullable join key gets a build check counting NULLs on the
 | Entity | Join key column | Check |
 |---|---|---|
 | Contact | `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` | count NULLs = 0 |
-| PurchaseOrder | `PO_HEADERS_ALL.VENDOR_ID` | count NULLs = 0 |
+| PurchaseOrder | `PO_HEADERS_ALL.VENDOR_ID` | count NULLs = 0 **except** `DOCUMENT_STATUS='INCOMPLETE'` (see §4.1) |
 | Invoice | `AP_INVOICES_ALL.VENDOR_ID` | count NULLs = 0 |
 
 The mechanism is **per-key, not per-entity** — later entities (the Receivables cluster) extend the list. The self-check also walks `kg_derived_projection` expressions, validating every physical column inside each expression against `kg_sql_column` (Phase 2 Q6).
+
+### 4.1 Revision 2026-11-19 — `PO_HEADERS_ALL.VENDOR_ID` is not zero-NULL
+
+The "count NULLs = 0" check for `PO_HEADERS_ALL.VENDOR_ID` **fails on the
+pod**: 5 rows have NULL `VENDOR_ID`, all with `DOCUMENT_STATUS='INCOMPLETE'`
+(PO_HEADER_IDs `300000186856532`, `300000186856537`, `300000192322260`,
+`300000265577099`, `300000303465673`; SEGMENT1 `163737`, `711231`, `52257`,
+`NL411565`, `PU283348`).
+
+**Decision (option 1):** accept the omission. An incomplete PO with no vendor
+is not yet a "real" PO; the inner `JOIN POZ_SUPPLIERS S ON S.VENDOR_ID =
+P.VENDOR_ID` silently drops exactly these 5 rows, which is correct. LEFT JOIN
++ NULL propagation remains rejected (Q4). The self-check refines from "zero
+NULLs" to "zero NULLs **except** on `DOCUMENT_STATUS='INCOMPLETE'` rows."
+
+Evidence: `t_verify_nullable.txt` (counts `0 / 5 / 0`),
+`t_verify_null_vendor_po.txt` (the 5 rows, all INCOMPLETE).
 
 ---
 

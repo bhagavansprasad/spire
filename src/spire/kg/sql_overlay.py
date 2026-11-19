@@ -146,10 +146,12 @@ _ENTITIES = {
         pk_column="VENDOR_CONTACT_ID",
         select_columns=[
             ("CT", "VENDOR_CONTACT_ID"),
-            ("CT", "VENDOR_ID"),
+            ("PS", "VENDOR_ID"),
             ("CT", "PARTY_SITE_ID"),
         ],
-        base_joins=[],
+        base_joins=[
+            "JOIN POZ_SUPPLIER_SITES_ALL_M PS ON PS.PARTY_SITE_ID = CT.ORG_PARTY_SITE_ID",
+        ],
     ),
     "PurchaseOrder": EntitySpec(
         name="PurchaseOrder",
@@ -160,7 +162,7 @@ _ENTITIES = {
             ("P", "PO_HEADER_ID"),
             ("P", "SEGMENT1"),
             ("HP", "PARTY_NAME"),
-            ("BP", "DISPLAY_NAME"),
+            ("PN", "DISPLAY_NAME"),
             ("P", "AUTHORIZATION_STATUS"),
             ("P", "AMOUNT"),
         ],
@@ -169,6 +171,9 @@ _ENTITIES = {
             "JOIN HZ_PARTIES HP ON HP.PARTY_ID = S.PARTY_ID",
             "JOIN PER_ALL_PEOPLE_F BP ON BP.PERSON_ID = P.AGENT_ID "
             "AND SYSDATE BETWEEN BP.EFFECTIVE_START_DATE AND BP.EFFECTIVE_END_DATE",
+            "JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = BP.PERSON_ID "
+            "AND PN.NAME_TYPE = 'GLOBAL' "
+            "AND SYSDATE BETWEEN PN.EFFECTIVE_START_DATE AND PN.EFFECTIVE_END_DATE",
         ],
     ),
     "Invoice": EntitySpec(
@@ -282,11 +287,15 @@ _ENTITIES = {
         pk_column="PERSON_ID",
         select_columns=[
             ("B", "PERSON_ID"),
-            ("B", "EMPLOYEE_NUMBER"),      # PersonNumber
-            ("B", "DISPLAY_NAME"),
-            ("B", "EMAIL_ADDRESS"),        # WorkEmail
+            ("B", "PERSON_NUMBER"),
+            ("PN", "DISPLAY_NAME"),
+            ("EA", "EMAIL_ADDRESS"),
         ],
-        base_joins=[],
+        base_joins=[
+            "JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = B.PERSON_ID "
+            "AND PN.NAME_TYPE = 'GLOBAL'",
+            "JOIN PER_EMAIL_ADDRESSES EA ON EA.EMAIL_ADDRESS_ID = B.PRIMARY_EMAIL_ID",
+        ],
     ),
     "ReceivablesTaxLine": EntitySpec(
         name="ReceivablesTaxLine",
