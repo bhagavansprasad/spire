@@ -33,11 +33,14 @@ This document is the **pending-work register**. The handovers carry what was don
   (merge commit `a288925`, 2026-11-19) — the 9 remaining Receivables
   role maps landed (kg_entity_sql 13→22, kg_sql_column 71→128,
   kg_derived_projection 7→9), plus F-068..F-073.
-- **Current branch `Phase3-Validate-Kg-Schema`** (this window) — §3.4
-  build self-check `scripts/validate_kg_schema.py`; new finding F-074
-  (StandardReceipt `PAY_FROM_CUSTOMER` 39 NULLs).
+- **PR #215** (`Phase3-Validate-Kg-Schema`) merged to `master` (merge
+  commit `29ed948`, 2026-11-19) — §3.4 build self-check
+  `scripts/validate_kg_schema.py` + new finding F-074 (StandardReceipt
+  `PAY_FROM_CUSTOMER` 39 NULLs).
 - Satellite counts now: `kg_entity_sql`=22, `kg_sql_column`=128,
   `kg_derived_projection`=9.
+- **Next branch** (next window): `Phase3-Fix-Nullable-Keys` off `master`
+  — resolve F-074 first.
 
 ### 0.3 F-060 — FIXED 2026-11-19 (branch `Phase3-F060-Amount-Carrier`)
 
