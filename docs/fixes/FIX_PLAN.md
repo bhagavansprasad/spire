@@ -1,0 +1,75 @@
+# SPIRE — Fix Plan
+
+**Branch:** `KG-Schema-Corpus`
+**Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
+not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
+live KG-schema work queue)
+**Status:** Open — KG schema corpus in progress; no fix-cluster work started
+**Scope:** Deferred test failures recorded here so they are not lost, plus
+the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
+
+---
+
+## 1. Purpose
+
+A single live queue of deferred/known test failures and their
+disposition, so a future session does not re-derive "why does the suite
+show these red?" This file is a *note of record*, not a re-listing of the
+retired Phase 2 fix plan. The KG-schema-corpus work items live in
+`docs/plan/PENDING_KG_SCHEMA_CORPUS.md`; only the test-failure deferrals
+are recorded here.
+
+---
+
+## 2. Deferred test failures (2026-11-19)
+
+Recorded from a full `pytest` run (1375 collected) against the
+`KG-Schema-Corpus` branch. These are **deferred, not fixed now**; each
+group names its cause and its owning file.
+
+### 2.1 Environmental — Oracle session churn (`ORA-12516`)
+
+**Tests:** `tests/test_planner.py` (up to 13 of its `test_generate_plan_*`
+tests, non-deterministic count across runs).
+
+**Cause:** `src/spire/planner/kg_db.py:82` opens a fresh
+`oracledb.connect()` per KG lookup (deliberate "no pooling" per the
+docstring). A full planner file run churns ~1300 connections in ~5s; the
+pod's `processes=200` (~85 background, ~115 free) cannot reclaim fast
+enough, so tests late in the file hit the listener cap.
+
+**Evidence:** `pytest -k "original_track_a"` alone → **7 passed**; the
+same tests fail only inside the full-file run. Error is
+`DPY-6000: Listener refused connection (Similar to ORA-12516)` at
+connection-open time, before any test logic.
+
+**Disposition:** deferred. Not a KG-schema defect. Real fix is connection
+pooling in `kg_db.py` (design debt) or raising the pod `processes` limit.
+File separately; do not fold into the KG-schema task.
+
+### 2.2 Real code bugs — deferred to their own fix windows
+
+| Group | Tests | Cause |
+|---|---|---|
+| F-015 narration | `tests/test_f015_empty_bucket_truncation.py` ×2 | Empty capped-fetch result narrated as clean "nothing found"; source total not named |
+| Parser assembly drift | `tests/test_parser_context_assembly.py` ×3 | Preamble block count 52 vs 50; module/direct-vs-literal divergence |
+| Bundle manifest drift | `tests/test_bundle_manifest.py` ×2 | Files (`.dockerignore`, `Dockerfile`, `.env.example`, `.github/copilot-instructions.md`, …) not in any bundle; stale bundle entries |
+| Supplier-contacts pod data | `tests/test_supplier_contacts_tool.py` ×2 | Pod now returns 2 administrative contacts; test asserts 1 |
+
+### 2.3 Known backlog — owned by the KG-schema-corpus task
+
+| Group | Tests | Cause |
+|---|---|---|
+| Q5 emitter surface | `tests/test_sql_overlay_coverage.py` ×1 | `search_customer_accounts` + `search_receivables_invoices` have no SQL overlay entry — the 11 un-drafted Receivables entities |
+| Stale `:supplier_id` assertion | `tests/test_sql_emitter.py::test_shape_4_suppliers_with_site_in_bu` | Site filter emitted no `:supplier_id` bind; assertion predates the KG column work; resolved by §3.3 |
+
+---
+
+## 3. Fixed in this branch (for the record, not open)
+
+- `tests/test_agent_runner.py` collection error — guarded legacy
+  `spire.agent.runner` import with `pytest.importorskip`
+  (`langchain-mcp-adapters` requires `mcp<2`; app is on mcp 2.x +
+  fastmcp 4.x).
+- `tests/test_kg_metadata.py` row counts — `kg_entity_field` 210→217;
+  added the 3 SQL satellites to the count contract.
