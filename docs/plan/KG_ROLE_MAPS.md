@@ -102,3 +102,100 @@ JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = BP.PERSON_ID AND PN.NAME_TYPE = 'GL
 **Filter.** `("get_purchase_order_lines","po_header_id")` → `{alias}.PO_HEADER_ID = {value}` on alias `L` → `PO_LINES_ALL.PO_HEADER_ID` (col 75, N). Clean.
 
 **Observations.** `ESTIMATED_TAX_AMOUNT` is an estimate; post-invoice actual tax lives as `RECOVERABLE_TAX` (col 152) + `NONRECOVERABLE_TAX` (col 153) on `PO_DISTRIBUTIONS_ALL`. If `actual_tax` is ever a distinct role, the path is `PO_LINES_ALL` → `PO_LINE_LOCATIONS_ALL.LINE_LOCATION_ID` → `PO_DISTRIBUTIONS_ALL.LINE_LOCATION_ID` — a second derived projection, not a substitution of the first. Not drafted today. `total` and `total_tax` return NULL, not 0, for a line with no schedules. `PO_LINES_ALL` carries `AMOUNT` and `UNIT_PRICE` but no `TOTAL`/`TOTAL_TAX` — this is the Fusion shape, not a stub; totals and tax are computed at schedule/distribution level.
+
+### POSchedule (`PO_LINE_LOCATIONS_ALL`)
+
+`kg_entity`: `(POSchedule, PO_LINE_LOCATIONS_ALL, LINE_LOCATION_ID)`
+
+`base_joins`: `[]` — none. The filter reaches `PO_HEADER_ID` directly on this table; no join needed.
+
+`kg_sql_column`, `is_default_projection='Y'`:
+
+| role | table | column |
+|---|---|---|
+| `line_location_id` | `PO_LINE_LOCATIONS_ALL` | `LINE_LOCATION_ID` |
+| `schedule_number` | `PO_LINE_LOCATIONS_ALL` | `SHIPMENT_NUM` |
+| `ship_to_location_id` | `PO_LINE_LOCATIONS_ALL` | `SHIP_TO_LOCATION_ID` |
+| `requested_delivery_date` | `PO_LINE_LOCATIONS_ALL` | `NEED_BY_DATE` |
+| `quantity` | `PO_LINE_LOCATIONS_ALL` | `QUANTITY` |
+| `amount` | `PO_LINE_LOCATIONS_ALL` | `AMOUNT` |
+| `status` | `PO_LINE_LOCATIONS_ALL` | `SCHEDULE_STATUS` |
+| `received_quantity` | `PO_LINE_LOCATIONS_ALL` | `QUANTITY_RECEIVED` |
+| `billed_quantity` | `PO_LINE_LOCATIONS_ALL` | `QUANTITY_BILLED` |
+
+**Bugs fixed (4 of 9 projected columns absent).**
+
+- `SCHEDULE_NUM` → `PO_LINE_LOCATIONS_ALL.SHIPMENT_NUM` (col 140, `NUMBER`, N). In Fusion's physical model, a "schedule" **is** a "shipment" — `PO_LINE_LOCATIONS_ALL` is the shipments table, and `SHIPMENT_NUM` is the internal sequence. `CUSTOMER_PO_SCHEDULE_NUMBER` (col 246) and `SALES_ORDER_SCHEDULE_NUMBER` (col 251) are external reference numbers, not the sequence. **Type change recorded:** role returns `NUMBER`, not a string.
+- `REQUESTED_DELIVERY_DATE` → `PO_LINE_LOCATIONS_ALL.NEED_BY_DATE` (col 47, `DATE`, Y). Semantic ambiguity — see observations.
+- `RECEIVED_QUANTITY` → `PO_LINE_LOCATIONS_ALL.QUANTITY_RECEIVED` (col 39, `NUMBER`, Y). Pure column-name reversal; semantics unchanged.
+- `BILLED_QUANTITY` → `PO_LINE_LOCATIONS_ALL.QUANTITY_BILLED` (col 42, `NUMBER`, Y). Same reversal. The sweep's named failure — fixed by this substitution.
+
+**Join keys.** Base entity has no joins; nothing to verify on the entity's own `base_joins`. No Q4 self-check needed.
+
+**Filter.** `("get_purchase_order_schedules","po_header_id")` → `{alias}.PO_HEADER_ID = {value}` on alias `S` → `PO_LINE_LOCATIONS_ALL.PO_HEADER_ID` (col 33, N). Verified present directly on the table — **no subquery, no join change.** The `"po_schedule_columns_from_reference"` assumption held on the filter side; first filter in the corpus whose column was not pre-verified from another entity, and the only clean case.
+
+**Observations.** `requested_delivery_date` is semantically ambiguous: the pod carries `REQUESTED_SHIP_DATE` (10), `PROMISED_SHIP_DATE` (11), `NEED_BY_DATE` (47), `PROMISED_DATE` (48). `NEED_BY_DATE` chosen — arrival-side, matches "delivery." If the overlay intended the buyer-requested ship side, `REQUESTED_SHIP_DATE` is correct; revisit if downstream consumer clarifies. `schedule_number` returns `NUMBER` where a caller may format as text. Additional quantities exist if later roles need them: `QUANTITY_SHIPPED` (155), `QUANTITY_ACCEPTED` (40), `QUANTITY_REJECTED` (41), `QUANTITY_CANCELLED` (43), `SHIPPING_UOM_QUANTITY` (274). `ESTIMATED_TAX_AMOUNT` (58) — same column used by PurchaseOrderLine's `total_tax` — is available at schedule level if a schedule-tax role is ever wanted. `PO_LINE_ID` (34, N) present, enabling downstream traversal to lines without a `base_joins` change.
+
+### PODistribution (`PO_DISTRIBUTIONS_ALL`)
+
+`kg_entity`: `(PODistribution, PO_DISTRIBUTIONS_ALL, PO_DISTRIBUTION_ID)`
+
+`base_joins`: `[]` — none. The `status` role is a correlated scalar subquery, self-contained.
+
+`kg_sql_column`, `is_default_projection='Y'`:
+
+| role | table | column |
+|---|---|---|
+| `po_distribution_id` | `PO_DISTRIBUTIONS_ALL` | `PO_DISTRIBUTION_ID` |
+| `distribution_num` | `PO_DISTRIBUTIONS_ALL` | `DISTRIBUTION_NUM` |
+| `charge_account_id` | `PO_DISTRIBUTIONS_ALL` | `DEST_CHARGE_ACCOUNT_ID` |
+| `amount_ordered` | `PO_DISTRIBUTIONS_ALL` | `AMOUNT_ORDERED` |
+
+`kg_derived_projection`, `is_default_projection='Y'`:
+
+| role | expression |
+|---|---|
+| `status` | `(SELECT L.LINE_STATUS FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = D.PO_LINE_ID)` |
+
+**Bugs fixed (3 of 6 projected columns absent).**
+
+- `PO_CHARGE_ACCOUNT_ID` -> `PO_DISTRIBUTIONS_ALL.DEST_CHARGE_ACCOUNT_ID` (col 166, `NUMBER(18,0)`, Y). Substitution. The five `*_ACCOUNT_ID` siblings (`BUDGET_ACCOUNT_ID` 132, `ACCRUAL_ACCOUNT_ID` 133, `VARIANCE_ACCOUNT_ID` 134, `DEST_CHARGE_ACCOUNT_ID` 166, `DEST_VARIANCE_ACCOUNT_ID` 167) are all nullable; `DEST_CHARGE_ACCOUNT_ID` is the distribution's expense landing point. **Semantic choice, not a name-reversal** — flagged for revisit if a consumer distinguishes budget/accrual/variance accounts.
+- `STATUS` -> derived from `PO_LINES_ALL.LINE_STATUS` (col 72, `VARCHAR2(100)`, Y) via `PO_LINE_ID`. The sweep's named failure. `PO_DISTRIBUTIONS_ALL.FUNDS_STATUS` (col 5, `VARCHAR2(100)`, Y) is a sub-status, not the status — same reasoning as PurchaseOrderLine's `FUNDS_STATUS`/`FIRM_STATUS_LOOKUP_CODE`. No `STATUS` column exists anywhere in the `PO_DISTRIB%` family (9 objects: `_ALL`, `_ALL_SEC`, `_ARCHIVE_ALL`, `_ARCHIVE_ALL_SEC`, `_DRAFT_ALL`, `_DRAFT_ALL_SEC`, `_AP_V`, `_GT`, `_INTERFACE`), so no on-family substitute exists. Derived from parent line.
+- `PERCENTAGE` -> **no carrier, not in default projection.** No percent-shaped column exists on `PO_DISTRIBUTIONS_ALL` or anywhere in the `PO_DISTRIB%` family (comprehensive `LIKE 'PO_DISTRIB%'` scan for `COLUMN_NAME IN ('STATUS','PERCENTAGE')` returned zero rows). Deriving it as `AMOUNT_ORDERED / line_amount` would manufacture a semantic the pod does not state; rejected. The role is absent from `kg_sql_column` and `kg_derived_projection` until a consumer requires it, at which point the semantic (percent-of-line vs percent-of-header) is a named decision.
+
+**Join keys, verified both sides.** Base entity has no `base_joins`. Inside the Q6 subquery: `PO_DISTRIBUTIONS_ALL.PO_LINE_ID` (col 12, N) = `PO_LINES_ALL.PO_LINE_ID` (col 1, N). Both NOT NULL — no Q4 self-check needed.
+
+**Nullable projection — flagged, not a join key.** `DEST_CHARGE_ACCOUNT_ID` is Y; `charge_account_id` returns NULL where the destination charge account is unset. `LINE_STATUS` is Y; `status` returns NULL for a distribution whose parent line has a null status. No `base_joins` nullable keys, so no §3.4 build self-check entry from this entity.
+
+**Observations.** PODistribution's six projected columns collapse to four direct + one derived + one dropped — a 3-of-6 absence, the widest understatement of the sweep yet (sweep named one, real count three, plus one no-carrier role). This is R-8's fifth confirmation and its first case where a projected role has **no carrier at all** — the R-7 stub-view pattern extended from a missing derived value to a missing direct role. The `PO_DISTRIB%` family is a sibling cluster like `PO_HEADERS%` (R-7): nine objects, none carrying `STATUS` or `PERCENTAGE`. `PO_DISTRIBUTIONS` (the bare name, no suffix) is a SYNONYM to `PO_DISTRIBUTIONS_ALL`, not a distinct object. Expect the same sibling-cluster stub shape on `AP_INVOICES_ALL` and `RA_CUSTOMER_TRX_ALL`.
+
+### Invoice (`AP_INVOICES_ALL`)
+
+`kg_entity`: `(Invoice, AP_INVOICES_ALL, INVOICE_ID)`
+
+`base_joins`:
+`JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID`
+
+`kg_sql_column`, `is_default_projection='Y'`:
+
+| role | table | column |
+|---|---|---|
+| `invoice_id` | `AP_INVOICES_ALL` | `INVOICE_ID` |
+| `invoice_num` | `AP_INVOICES_ALL` | `INVOICE_NUM` |
+| `invoice_amount` | `AP_INVOICES_ALL` | `INVOICE_AMOUNT` |
+| `invoice_date` | `AP_INVOICES_ALL` | `INVOICE_DATE` |
+| `invoice_currency_code` | `AP_INVOICES_ALL` | `INVOICE_CURRENCY_CODE` |
+| `supplier_number` | `POZ_SUPPLIERS` | `SEGMENT1` |
+| `payment_status_flag` | `AP_INVOICES_ALL` | `PAYMENT_STATUS_FLAG` |
+
+`kg_derived_projection`: none.
+
+**Bugs fixed: none (0 of 7 projected columns absent).** Every projected column verified present on the pod. `POZ_SUPPLIERS.SEGMENT1` (col 4, `VARCHAR2(120)`, N) is the supplier number, reused from Supplier's `supplier_number` role — same physical column, same semantics.
+
+**Sweep flag stale — R-3 recurrence.** The Phase 1 sweep named `P.ENTERED_AMOUNT` as Invoice's first failing column. `ENTERED_AMOUNT` is **not in the current `select_columns`** — the projection has changed since the sweep ran, or the sweep ran against a different spec. The current seven columns are all valid. Same branch-divergence shape R-3 recorded for Buyer; recorded here so a future window does not re-chase a column the overlay no longer projects.
+
+**Join keys, verified both sides.** `POZ_SUPPLIERS.VENDOR_ID` (col 1, N) = `AP_INVOICES_ALL.VENDOR_ID` (col 4, Y). Right side NOT NULL; **left side nullable**.
+
+**Nullable — Q4 self-check required.** `AP_INVOICES_ALL.VENDOR_ID` (col 4, Y). Count NULLs on `AP_INVOICES_ALL.VENDOR_ID`; require zero; non-zero fails the §3.4 build. An inner join on a NULL `VENDOR_ID` silently drops those invoices. Third known nullable join key in the corpus, after `POZ_SUPPLIER_SITES_ALL_M.PARTY_SITE_ID` (Contact) and `PO_HEADERS_ALL.VENDOR_ID` (PurchaseOrder).
+
+**Observations.** Invoice is the first entity in the corpus with a clean projection (0 absent) and the first whose sweep flag is stale rather than understated. `INVOICE_AMOUNT` (col 10, Y), `INVOICE_DATE` (col 14, Y), `PAYMENT_STATUS_FLAG` (col 25, Y) are nullable — the corresponding roles return NULL where unset. `PAYMENT_STATUS_FLAG` is `VARCHAR2(4)` — a short flag, not a descriptive status; if a consumer needs a status label, a lookup table join is a separate role, not a substitute for this one. No derived projection: `AP_INVOICES_ALL` carries `INVOICE_AMOUNT` directly, unlike `PO_HEADERS_ALL` (R-7) — the stub-view pattern does **not** recur here for the amount role. The R-7 prediction ("expect the same stub shape on AP_INVOICES_ALL") holds only for any header-total role not carried directly; the amount role is carried, so no derivation needed.

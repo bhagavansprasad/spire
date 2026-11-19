@@ -124,7 +124,7 @@ Contact (Phase 2 §3.2) had one sweep-named failure and one actual bug — not u
 | Task 1 — module table lists | complete | All 4 modules scanned (1641 objects); all 18 overlay names verified present; all are VIEWs (R-1). |
 | Task 2 — per-table column lists | complete | `t_task2_all.txt` on disk, 4101 lines, 19 tables. Regeneration in §6. |
 | Task 3 — HR-side gap | closed | `per_all_people_f` found under FUSION as a 105-col view (R-2). |
-| Task 4 — role maps | 6/22 | Supplier, Contact, Site, Address, Classification (5 entities); Buyer (first Procurement). 16 remaining. |
+| Task 4 — role maps | 11/22 | Supplier, Contact, Site, Address, Classification (5); Buyer, PurchaseOrder, PurchaseOrderLine, POSchedule, PODistribution (5 Procurement); Invoice (1 Payables). 11 remaining: all Receivables. |
 
 ---
 
