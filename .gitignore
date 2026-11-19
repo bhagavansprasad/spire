@@ -46,6 +46,14 @@ t_after*.txt
 trash/
 t_*.txt
 
+# Scratch evidence artifacts (root only, so scripts/t_s1_*.py stays tracked).
+# Captured run output, query files and their results — cited by filename in
+# docs/fixes/FIX_PLAN.md, never committed.
+/t_*.json
+/t_*.csv
+/t_*.sql
+/t_*.out
+
 # Overnight prompt runs and their derivatives
 overnight/
 clean_*
