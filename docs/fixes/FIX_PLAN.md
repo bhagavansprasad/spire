@@ -274,3 +274,61 @@ returns open POs for Lee Supplies (matches REST).
 **S8 (miss record).** The FilterSpec was drafted against the overlay's
 hand-authored assumptions, not the tool signature; the end-to-end
 promptkit ↔ runsql discipline surfaced it in one run.
+
+### F-066 — `CustomerTransaction.TransactionId` maps to `CUSTOMER_TRX_ID`, not `PAYMENT_SCHEDULE_ID`
+
+**Status:** Confirmed (evidence below). Not yet fixed — belongs to the
+CustomerTransaction Receivables role map (task 5), which must verify all
+of this entity's columns, not just the id.
+
+**S0.** The hand-authored `CustomerTransaction` EntitySpec projects
+`PAYMENT_SCHEDULE_ID` as the row id, but REST's `TransactionId` field is
+the physical `CUSTOMER_TRX_ID` — a different value on the same row.
+
+**S1 (harm).** SQL ≠ REST at the id column. The emitted SQL's first
+column (`PAYMENT_SCHEDULE_ID`=1398398) is a different number than the REST
+`TransactionId` (1624374) on the same transaction, so the SQL path would
+report the wrong id for every row. Amount/date/number columns agree; only
+the id is mismapped.
+
+**S2 (evidence).** Prompt "Show me AR invoices for customer ABC Corporation
+Americas" (dipstick depth 5). REST row: `TransactionId=1624374,
+TransactionNumber=1471201, TotalOriginalAmount=693.83`. Against the pod:
+
+    -- hand-authored map: PAYMENT_SCHEDULE_ID as the id
+    SELECT T.PAYMENT_SCHEDULE_ID, T.CUSTOMER_TRX_ID, T.TRX_NUMBER
+    FROM AR_PAYMENT_SCHEDULES_ALL T WHERE T.TRX_NUMBER = '1471201';
+    -- PAYMENT_SCHEDULE_ID=1398398, CUSTOMER_TRX_ID=1624374, TRX_NUMBER=1471201
+
+    REST TransactionId (1624374) == CUSTOMER_TRX_ID, NOT PAYMENT_SCHEDULE_ID.
+
+The tool contract (`customer_transactions.py`) projects
+`TransactionId` first; the EntitySpec comment even labels
+`PAYMENT_SCHEDULE_ID` as "InstallmentId", which no REST field is named.
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py`
+`"CustomerTransaction"` EntitySpec:
+`pk_column="PAYMENT_SCHEDULE_ID"` and
+`select_columns[0]=("T","PAYMENT_SCHEDULE_ID")`.
+
+**S4 (root cause).** Hand-authored guess, exactly like the Procurement
+stubs; this entity has no KG rows (it is one of the 11 un-drafted
+Receivables), so nothing overrode the guess.
+
+**S5 (alternative disproven).** `CUST_TRX_TYPE_SEQ_ID`=34 and
+`PAYMENT_SCHEDULE_ID`=1398398 are both real but neither equals 1624374;
+only `CUSTOMER_TRX_ID` does.
+
+**Fix (deferred to role map).** `pk_column` and the first select column →
+`CUSTOMER_TRX_ID`. Verified amount/date/status columns
+(`TRX_NUMBER`→TransactionNumber, `AMOUNT_DUE_ORIGINAL`→TotalOriginalAmount,
+`AMOUNT_DUE_REMAINING`→TotalBalanceAmount, `STATUS`→InstallmentStatus,
+`CLASS`→TransactionClass, `TRX_DATE`→TransactionDate,
+`DUE_DATE`→PaymentScheduleDueDate) all agree — only the id is wrong.
+
+**S8 (miss record).** No Receivables SQL-emitter test exists yet, and the
+dipstick prompts had not been run against the KG-backed emitter; this is
+the first Receivables column verified end-to-end.
+
+**S9 (cross-link).** Same shape as F-065 (wrong column mapped to a role),
+but in an un-drafted entity rather than a filter.
