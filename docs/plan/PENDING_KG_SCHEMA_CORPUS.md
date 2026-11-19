@@ -15,7 +15,7 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 1 — module table lists | complete |
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
-| Task 4 — role maps | **11 of 22** drafted |
+| Task 4 — role maps | **13 of 22** drafted (added CustomerTransaction + ReceivablesInvoice, 2026-11-19; F-066 + F-067 fixed) |
 | §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — 11/57/4 rows (see §0.2); gap register fully reversed (61/61 bound) |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
 | §3.3 — emitter reads from KG | **3.3a complete** (select_columns + derived from KG; commit `6b247e9`). **3.3b filter/aggregation part complete** (stale `AUTHORIZATION_STATUS`/`SUM(AMOUNT)` → `DOCUMENT_STATUS`/derived line-amount, 2026-11-19). **3.3b Receivables part blocked** on the 11 role maps (task 5) |

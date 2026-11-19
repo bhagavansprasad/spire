@@ -277,9 +277,8 @@ promptkit ↔ runsql discipline surfaced it in one run.
 
 ### F-066 — `CustomerTransaction.TransactionId` maps to `CUSTOMER_TRX_ID`, not `PAYMENT_SCHEDULE_ID`
 
-**Status:** Confirmed (evidence below). Not yet fixed — belongs to the
-CustomerTransaction Receivables role map (task 5), which must verify all
-of this entity's columns, not just the id.
+**Status:** Fixed 2026-11-19 (`Phase3-F060-Amount-Carrier`, role map
+seeded).
 
 **S0.** The hand-authored `CustomerTransaction` EntitySpec projects
 `PAYMENT_SCHEDULE_ID` as the row id, but REST's `TransactionId` field is
@@ -332,3 +331,48 @@ the first Receivables column verified end-to-end.
 
 **S9 (cross-link).** Same shape as F-065 (wrong column mapped to a role),
 but in an un-drafted entity rather than a filter.
+
+**Resolution (2026-11-19).** CustomerTransaction role map drafted and
+seeded into `kg_schema.sql` — `pk_column` and the first column →
+`CUSTOMER_TRX_ID`. All 8 columns verified against the pod and REST.
+The `_kg_backed_overlay` now reads CustomerTransaction from the KG, so
+the emitted SQL projects `T.CUSTOMER_TRX_ID` (matching REST
+`TransactionId`). Verified live: `CUSTOMER_ID=300000047368527` returns the
+account's transactions.
+
+### F-067 — `ReceivablesInvoice` binds to header stubs: `ENTERED_AMOUNT` absent, `STATUS_TRX` a stub, amount/balance off-header
+
+**Status:** Fixed 2026-11-19 (`Phase3-F060-Amount-Carrier`, role map
+seeded).
+
+**S0.** `RA_CUSTOMER_TRX_ALL` has no amount column and no due date, and its
+`STATUS_TRX` only ever holds `'OP'` — so the hand-authored
+`ReceivablesInvoice` map projected `ENTERED_AMOUNT` (absent) and
+`STATUS_TRX` (stub), returning NULL/`'OP'` where REST returns the invoice
+amount and status.
+
+**S2 (evidence).** REST "Get the AR invoice with CustomerTransactionId
+300000248096352" → `EnteredAmount=39969`, `InvoiceBalanceAmount=0`,
+`InvoiceStatus='Complete'`, `BillToCustomerName='ABC Corporation Americas'`,
+`BillToCustomerNumber='26370'`, `InvoiceCurrencyCode='GBP'`. Against the
+pod:
+
+    -- RA_CUSTOMER_TRX_ALL has NO amount column; ENTERED_AMOUNT -> ORA-00904
+    -- STATUS_TRX: only ever 'OP' (206,653 rows) or NULL — never 'Complete'
+    -- SUM(AR_PAYMENT_SCHEDULES_ALL.AMOUNT_DUE_ORIGINAL) = 39969 = EnteredAmount
+    -- SUM(AR_PAYMENT_SCHEDULES_ALL.AMOUNT_DUE_REMAINING) = 0 = InvoiceBalanceAmount
+    -- COMPLETE_FLAG = 'Y' = InvoiceStatus 'Complete'
+
+**Fix.** ReceivablesInvoice role map seeded: `EnteredAmount`/`InvoiceBalanceAmount`
+as derived projections over `AR_PAYMENT_SCHEDULES_ALL`; `InvoiceStatus` →
+`COMPLETE_FLAG`; `BillToCustomerNumber` → `HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER`.
+The `Y`→"Complete" display mapping is F-061-class (cosmetic).
+
+**Verification.** Emitted SQL runs on the pod and returns
+`39969` / `0` / `Y` / `26370` / `GBP` / `ABC Corporation Americas` — all
+agreeing with REST.
+
+**S8 (miss record).** `ENTERED_AMOUNT` was the Phase-1 sweep's named first
+failure for ReceivablesInvoice but was never pursued; the role-map pass
+finally resolved it and the two adjacent stubs (`STATUS_TRX`, off-header
+amounts).
