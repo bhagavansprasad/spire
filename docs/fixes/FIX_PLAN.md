@@ -75,3 +75,69 @@ were removed — the tests pass deterministically.
   fastmcp 4.x).
 - `tests/test_kg_metadata.py` row counts — `kg_entity_field` 210→217;
   added the 3 SQL satellites to the count contract.
+
+---
+
+## 4. Confirmed findings — open (KG schema corpus)
+
+### F-060 — `PurchaseOrderLine.amount` binds to a stub column; SQL ≠ REST
+
+**Status:** Confirmed (S0–S6 walked). Not fixed — needs a deliberate
+carrier decision.
+
+**S0.** `PO_LINES_ALL.AMOUNT` is the wrong carrier for the
+`PurchaseOrderLine.amount` role — it is NULL on ~100% of pod rows, so the
+SQL path returns null where the REST path returns the real line amount.
+
+**S1 (harm).** Inconsistency between two paths: the emitted SQL returns
+NULL line amounts while Spire's own REST answer returns `33000` / `8250`.
+The corpus's whole purpose is that SQL and REST agree; they do not.
+
+**S2 (evidence).** Prompt `Show PO 2144 and its lines` (REST answer
+`Ordered = 33000.0` / `8250.0`). SQL against the pod:
+
+    SELECT LINE_NUM, NVL(AMOUNT,-999), UNIT_PRICE FROM PO_LINES_ALL
+    WHERE PO_HEADER_ID = 2144 ORDER BY LINE_NUM;
+    -- 1  -999  33000
+    -- 2  -999  8250
+
+Aggregate: `AMOUNT` is NULL on **315,857 of 315,970** rows (99.96%);
+`TAX_EXCLUSIVE_PRICE` is populated where `AMOUNT` is not (46,206 rows
+non-null). Evidence scratch: `t_compare_agg.txt`, `t_compare_amt.txt`,
+`t_compare_candidates.txt`.
+
+**S3 (mechanism).** `kg_sql_column` binds `PurchaseOrderLine.amount →
+PO_LINES_ALL.AMOUNT` (seeded in `scripts/sql/kg_schema.sql` STEP 12, from
+`KG_ROLE_MAPS.md` §PurchaseOrderLine).
+
+**S4 (root cause).** The R-7 stub-view shape, recurring at the column
+level. The discovery method (§6 of `SCHEMA_DISCOVERY_METHOD.md`) verifies
+a column **exists** in `t_task2_all.txt`, not that it is **populated**.
+`AMOUNT` exists; it is just never set. The method has a gap: existence ≠
+populated.
+
+**S5 (alternative disproven).** Not a one-off — `AMOUNT` is broadly null
+(315,857 rows), so it is a persistent pod property, not PO-2144-specific
+data.
+
+**S6 (falsifier).** A `COUNT(AMOUNT)` showing it is populated on most
+rows would refute it; it shows the opposite.
+
+**Decision needed (next window).** Pick the real carrier: `TAX_EXCLUSIVE_PRICE`
+(populated, 33000/8250 confirmed) or a derived `UNIT_PRICE × QUANTITY`.
+`TAX_EXCLUSIVE_PRICE` is the closer semantic match to REST `Ordered`
+(excluding tax), but the naming and the many sibling amount columns
+(`COMMITTED_AMOUNT`, `BASE_UNIT_PRICE`, etc.) need a deliberate choice, not
+a quick swap. This is the first column-level R-7 recurrence — the fix
+likely also tightens `SCHEMA_DISCOVERY_METHOD.md` §6 to check population,
+not just existence.
+
+### F-061 — buyer name format: SQL `DISPLAY_NAME` ≠ REST `Buyer`
+
+**Status:** Observation (S1 border). Cosmetic.
+
+SQL returns `PER_PERSON_NAMES_F.DISPLAY_NAME = "May Gee"` (first last);
+REST returns `Buyer = "Gee, May"` (last, first). Same person, different
+format. Recorded here so a future session does not treat it as a column
+bug. Resolution (if any) is a display/formatting decision, not a schema
+one.

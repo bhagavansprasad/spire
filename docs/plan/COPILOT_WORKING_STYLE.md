@@ -81,6 +81,23 @@ evidence, rather than asking the user to run a second cell.
   Never pipe the run itself through a filter at capture time.
 - **Name a slow command's cost before running it.** If wall-clock may
   exceed ~30s, say so with a rough figure and why.
+- **Emitted SQL must be validated by execution, not just inspection.**
+  After the SQL emitter produces SQL, run it against the pod with
+  `./runsql.sh "<SQL>"` and confirm it (a) executes (exit 0) and (b)
+  returns the **same values as Spire's own REST answer** for that prompt.
+  SQL and REST must agree; "the SQL executes" is not enough — "the SQL
+  agrees with the REST answer" is the standard. This is how the
+  F-060 stub-column defect (a column that exists but is NULL) was caught.
+- **Column existence ≠ column populated.** A column present in
+  `t_task2_all.txt` may still be NULL on every row (the R-7 stub-view
+  shape at the column level). When a role is bound to a physical column,
+  sanity-check population with a `COUNT(<col>)` / NULL-count, not just a
+  presence grep.
+- **Deferred test failures get an `xfail` + a `FIX_PLAN` note, not a
+  silent ignore.** A failing test you are not fixing this window is marked
+  `@pytest.mark.xfail(reason="... (FIX_PLAN §n)", strict=False)` and
+  recorded in `docs/fixes/FIX_PLAN.md`. Do not delete or comment out the
+  test.
 - **Findings walk R then S0–S11 in order before any F-NNN entry.**
   - **R — reproduce** the prompt: run it, run it again, run the sibling
     that passed. Intermittent results need N≥20 runs before classifying.
@@ -115,6 +132,14 @@ evidence, rather than asking the user to run a second cell.
   5000/5001/5002 (testers via ngrok), per `SPIRE-PORTS.env`.
 - Restart the API/MCP server after any change under `src/spire/` —
   imports are cached at startup.
+- **Python interpreter is `/home/bhagavan/virtenv/spire/bin/python`**, not
+  bare `python`/`python3`. The bare interpreter lacks `oracledb`. Use the
+  full path for `python`, `pip`, and `pytest`; `./runsql.sh` (Oracle via
+  curl) does not need it.
+- **`./runsql.sh "<SQL>"` is the pod-SQL validator.** It posts to the
+  Fusion BI Publisher report and returns tabular rows. Use it to execute
+  emitted SQL and check real data (credentials come from
+  `IKS_FUSION_USERNAME`/`IKS_FUSION_PASSWORD`).
 
 ### Reply discipline
 
