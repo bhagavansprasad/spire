@@ -1672,8 +1672,8 @@ PROMPT Seeded kg_entity_filter (37 rows).
 -- one vocabulary, no snake_case role names.
 --
 --   11 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
---   40 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---    4 kg_derived_projection — correlated scalar subqueries.
+--   56 kg_sql_column rows   — direct columns, is_default_projection='Y'.
+--    5 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1727,7 +1727,6 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Category', 'PO_LINES_ALL', 'CATEGORY_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Quantity', 'PO_LINES_ALL', 'QUANTITY', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Price', 'PO_LINES_ALL', 'UNIT_PRICE', 'NUMBER', 22, 'Y');
-INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'PO_LINES_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrderLine', 'StatusCode', 'PO_LINES_ALL', 'LINE_STATUS', 'VARCHAR2', 100, 'Y');
 -- POSchedule
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('POSchedule', 'LineLocationId', 'PO_LINE_LOCATIONS_ALL', 'LINE_LOCATION_ID', 'NUMBER', 22, 'Y');
@@ -1765,14 +1764,15 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'City', 'HZ_LOCATIONS', 'CITY', 'VARCHAR2', 240, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'State', 'HZ_LOCATIONS', 'STATE', 'VARCHAR2', 240, 'Y');
 
--- ---- kg_derived_projection (4 rows) ----
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.AMOUNT) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
+-- ---- kg_derived_projection (5 rows) ----
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Ordered', 'L.UNIT_PRICE * L.QUANTITY', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'TotalTax', '(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
-INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', 'L.AMOUNT + (SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrderLine', 'Total', '(L.UNIT_PRICE * L.QUANTITY) + (SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) FROM PO_LINE_LOCATIONS_ALL LL WHERE LL.PO_LINE_ID = L.PO_LINE_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PODistribution', 'StatusCode', '(SELECT L.LINE_STATUS FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = D.PO_LINE_ID)', 'Y');
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (57 rows), kg_derived_projection (4 rows).
+PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (56 rows), kg_derived_projection (5 rows).
 
 -- ============================================================

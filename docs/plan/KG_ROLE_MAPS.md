@@ -103,6 +103,24 @@ JOIN PER_PERSON_NAMES_F PN ON PN.PERSON_ID = BP.PERSON_ID AND PN.NAME_TYPE = 'GL
 
 **Observations.** `ESTIMATED_TAX_AMOUNT` is an estimate; post-invoice actual tax lives as `RECOVERABLE_TAX` (col 152) + `NONRECOVERABLE_TAX` (col 153) on `PO_DISTRIBUTIONS_ALL`. If `actual_tax` is ever a distinct role, the path is `PO_LINES_ALL` → `PO_LINE_LOCATIONS_ALL.LINE_LOCATION_ID` → `PO_DISTRIBUTIONS_ALL.LINE_LOCATION_ID` — a second derived projection, not a substitution of the first. Not drafted today. `total` and `total_tax` return NULL, not 0, for a line with no schedules. `PO_LINES_ALL` carries `AMOUNT` and `UNIT_PRICE` but no `TOTAL`/`TOTAL_TAX` — this is the Fusion shape, not a stub; totals and tax are computed at schedule/distribution level.
 
+**F-060 correction (2026-11-19).** The `amount → PO_LINES_ALL.AMOUNT` row
+above was **wrong**: `AMOUNT` is a stub (NULL on 315,857 / 315,970 rows,
+99.96%), so `Ordered` emitted NULL where REST returned the line amount.
+`TAX_EXCLUSIVE_PRICE` was ruled out as the substitute — it is a *unit*
+price (equals `UNIT_PRICE`), populated on only 14.9% of rows, not the
+extended amount. The corrected carrier is a derived projection:
+
+| role | expression |
+|---|---|
+| `amount` (`Ordered`) | `L.UNIT_PRICE * L.QUANTITY` |
+
+Two dependent expressions that read the stub `L.AMOUNT` were fixed in the
+same pass: `PurchaseOrder.Ordered` → `SUM(L.UNIT_PRICE * L.QUANTITY)`, and
+`PurchaseOrderLine.total` → `(L.UNIT_PRICE * L.QUANTITY) + (tax subquery)`.
+The table above is left as the historical (wrong) draft; the seed in
+`scripts/sql/kg_schema.sql` carries the fix. Full record:
+`docs/fixes/FIX_PLAN.md` F-060.
+
 ### POSchedule (`PO_LINE_LOCATIONS_ALL`)
 
 `kg_entity`: `(POSchedule, PO_LINE_LOCATIONS_ALL, LINE_LOCATION_ID)`

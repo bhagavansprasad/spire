@@ -82,8 +82,8 @@ were removed — the tests pass deterministically.
 
 ### F-060 — `PurchaseOrderLine.amount` binds to a stub column; SQL ≠ REST
 
-**Status:** Confirmed (S0–S6 walked). Not fixed — needs a deliberate
-carrier decision.
+**Status:** Fixed (2026-11-19). Carrier chosen: derived
+`UNIT_PRICE × QUANTITY`. See **Resolution** below.
 
 **S0.** `PO_LINES_ALL.AMOUNT` is the wrong carrier for the
 `PurchaseOrderLine.amount` role — it is NULL on ~100% of pod rows, so the
@@ -131,6 +131,62 @@ rows would refute it; it shows the opposite.
 a quick swap. This is the first column-level R-7 recurrence — the fix
 likely also tightens `SCHEMA_DISCOVERY_METHOD.md` §6 to check population,
 not just existence.
+
+**Resolution (2026-11-19).** Carrier = derived `UNIT_PRICE × QUANTITY`,
+not `TAX_EXCLUSIVE_PRICE`. Decisive pod evidence:
+
+- `TAX_EXCLUSIVE_PRICE` is populated on only **47,206 / 315,970** rows
+  (14.9%), and — the deciding fact — it is a **unit** price, not the
+  extended amount. On PO 3 line 1: `UNIT_PRICE`=444, `QUANTITY`=2,
+  `TAX_EXCLUSIVE_PRICE`=425, but the extended amount is 888. It equals
+  `UNIT_PRICE` on rows where both are populated, so it cannot carry
+  `Ordered` ("line extended amount excluding tax") whenever `QUANTITY`≠1.
+- `UNIT_PRICE` (99.96%) and `QUANTITY` (98.3%) are near-universal.
+- PO 2144: `UNIT_PRICE × QUANTITY` = 33000 / 8250 = REST `Ordered`. ✓
+
+**Fix applied** (`Phase3-F060-Amount-Carrier`):
+
+1. `scripts/sql/kg_schema.sql` — removed the `kg_sql_column` row
+   `PurchaseOrderLine.Ordered → AMOUNT`; added `kg_derived_projection`
+   `PurchaseOrderLine.Ordered → L.UNIT_PRICE * L.QUANTITY`.
+2. Fixed the two derived projections that also read the stub `L.AMOUNT`:
+   - `PurchaseOrder.Ordered` → `(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) …)`
+   - `PurchaseOrderLine.Total` → `(L.UNIT_PRICE * L.QUANTITY) + (tax subquery)`
+3. Row counts: `kg_sql_column` 57→56, `kg_derived_projection` 4→5
+   (updated in `test_kg_metadata.py` and `scripts/print_kg.py`).
+4. `SCHEMA_DISCOVERY_METHOD.md` §6 — added the population check
+   ("existence ≠ populated").
+
+**Verification** (emitted SQL ran via `runsql.sh`): line `Ordered` =
+33000 / 8250 (REST ✓); header `Ordered` = 41250 (SUM of the two lines).
+
+### F-062 — `POSchedule.amount` binds to `PO_LINE_LOCATIONS_ALL.AMOUNT`, also a stub
+
+**Status:** Confirmed. Not fixed — schedule-level carrier needs a separate
+discovery decision.
+
+`PO_LINE_LOCATIONS_ALL.AMOUNT` is NULL on 310,807 of 310,947 rows (99.95%)
+— the same R-7 stub shape as F-060. `POSchedule.Amount` (`kg_sql_column`
+→ `AMOUNT`, `is_default_projection='Y'`) therefore emits NULL where REST
+returns a schedule amount. `PO_LINE_LOCATIONS_ALL` has **no** `UNIT_PRICE`
+(ORA-00904), so the schedule extended amount cannot be derived on-table;
+it needs a join back to `PO_LINES_ALL` via `PO_LINE_ID`
+(`L.UNIT_PRICE × S.QUANTITY`, schedule quantity). That derivation (and the
+schedule-amount semantics vs line amount) must be verified against REST
+before binding — deferred to the POSchedule role-map pass.
+
+### F-063 — `Total`/`TotalTax` return NULL, not 0, when the schedule tax is NULL
+
+**Status:** Observation (pre-existing, not introduced by F-060).
+
+`TotalTax` = `(SELECT SUM(LL.ESTIMATED_TAX_AMOUNT) …)` returns NULL (not 0)
+when the line's schedules carry a NULL `ESTIMATED_TAX_AMOUNT` (PO 2144 has
+schedule rows with NULL tax), so `Total` = `Ordered + NULL` = NULL. This
+was already flagged in `KG_ROLE_MAPS.md` §PurchaseOrderLine ("NULL, not 0,
+for a line with no schedules"); F-060's carrier fix did not change the
+NULL-propagation behavior of the tax subquery. If REST returns `TotalTax=0`
+and `Total=Ordered` in this case, an `NVL(SUM(…), 0)` is warranted — a
+separate decision, not part of F-060.
 
 ### F-061 — buyer name format: SQL `DISPLAY_NAME` ≠ REST `Buyer`
 

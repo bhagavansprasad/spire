@@ -192,6 +192,20 @@ done
 
 **Every entity's every projected column is checked.** Not just the sweep's named one. Not just the "likely" ones. All of them.
 
+**Population check — existence ≠ populated.** A column present in `t_task2_<module>.txt` can still be NULL on ~100% of rows — the R-7 stub-view shape, at the column level. Existence in `ALL_TAB_COLUMNS` is not evidence the column is a real carrier. Before binding a role to a physical column (especially an amount/measure column), count its population:
+
+```
+./runsql.sh "SELECT COUNT(*) TOTAL, COUNT(<COL>) NON_NULL FROM <TABLE>"
+```
+
+- `NON_NULL` ≈ `TOTAL` — the column is a real carrier. ✓
+- `NON_NULL` is a small fraction of `TOTAL` — the column is a stub; do not bind the role to it. Find the populated carrier instead (an adjacent column, or a derived expression over populated columns).
+- `NON_NULL` = 0 — the column is never set; existence is an illusion.
+
+**F-060 is the canonical case.** `PO_LINES_ALL.AMOUNT` exists (it is in `t_task2_all.txt`) but is NULL on 315,857 of 315,970 rows (99.96%). `PurchaseOrderLine.amount` bound to it emitted SQL that returned NULL where REST returned the real line amount (33000/8250 on PO 2144). `TAX_EXCLUSIVE_PRICE` was populated on only 47,206 rows and — decisively — is a *unit* price (it equals `UNIT_PRICE`), not the extended amount. The correct carrier is derived `UNIT_PRICE * QUANTITY` (both populated on ~98%+ of rows).
+
+The population check applies to the projected column itself **and** to every physical column inside a `kg_derived_projection` expression — a derived `SUM(X)` over a stub `X` returns NULL, so the derived role is stubbed too. F-060 fixed `PurchaseOrder.Ordered` (`SUM(L.AMOUNT)` → `SUM(L.UNIT_PRICE * L.QUANTITY)`) and `PurchaseOrderLine.Total` (`L.AMOUNT + tax` → `(L.UNIT_PRICE * L.QUANTITY) + tax`) for exactly this reason.
+
 ---
 
 ## 7. Step 5 — Verify every join key
