@@ -8,7 +8,7 @@ This document is the **pending-work register**. The handovers carry what was don
 
 ---
 
-## 0. Status snapshot (2026-11-18)
+## 0. Status snapshot (2026-11-19)
 
 | Item | Status |
 |---|---|
@@ -16,10 +16,30 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
 | Task 4 — role maps | **11 of 22** drafted |
-| §3.1 — KG schema additions (`kg_entity.fusion_table`/`pk_column`, `kg_sql_column`, `kg_derived_projection`) | **not started** |
-| §3.2 — `rebuild_kg.py` build step | **not started** |
+| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — commit `8d9252e`; 11/40/4 rows, verified via rebuild + `print_kg --counts-only` |
+| §3.2 — `rebuild_kg.py` build step | **superseded** (see R-9 below) — build is hermetic static seed in `kg_schema.sql`, already executed by `rebuild_kg.py` |
 | §3.3 — emitter reads from KG | **not started** |
 | §3.4 — build self-check | **not started** |
+
+### 0.1 Revisions recorded 2026-11-19
+
+These supersede earlier text; the old lines are **not edited** (verified maps
+are append-only). They are the "facts not in the docs" carried forward from
+the resume brief.
+
+- **R-9 — the build is hermetic / static seed.** Phase 1 §3.2 (and this
+  document's §3, and `HANDOVER_KG_SCHEMA.md` §3.2) describe the build as
+  querying `ALL_TAB_COLUMNS` on the pod at build time. That is superseded.
+  Rows are static `INSERT`s in `scripts/sql/kg_schema.sql`, created on every
+  `python scripts/rebuild_kg.py`. Pod re-verification is a separate on-demand
+  script (proposed, not yet written), run at release/CI.
+- **Q1 resolved — `pk_column` goes on the new satellite `kg_entity_sql`, not
+  on `kg_entity`.** Reason: `kg_entity`'s 22 seed rows are positional
+  (`INSERT INTO kg_entity VALUES (...)` with no column list); adding columns
+  breaks them. `kg_entity_sql(entity_name, fusion_table, pk_column)` matches
+  the existing satellite pattern (`kg_entity_tool`, `kg_entity_filter`,
+  `kg_entity_field`). `KG_FIELD_TRANSLATION.md` §4 still says "on kg_entity"
+  — that line is stale; the satellite is the decision.
 
 **Drafted (11):** Supplier, Contact, Site, Address, Classification (Supplier module); Buyer, PurchaseOrder, PurchaseOrderLine, POSchedule, PODistribution (Procurement); Invoice (Payables).
 
