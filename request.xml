@@ -1,0 +1,18 @@
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"
+               xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+  <soap:Body>
+    <pub:runReport>
+      <pub:reportRequest>
+        <pub:reportAbsolutePath>/Custom/Bhagavan/SQL_Runner.xdo</pub:reportAbsolutePath>
+        <pub:attributeFormat>xml</pub:attributeFormat>
+        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+        <pub:parameterNameValues>
+          <pub:item>
+            <pub:name>P_SQL</pub:name>
+            <pub:values><pub:item><![CDATA[SELECT SEGMENT1, DOCUMENT_STATUS FROM PO_HEADERS_ALL WHERE PO_HEADER_ID = 2144]]></pub:item></pub:values>
+          </pub:item>
+        </pub:parameterNameValues>
+      </pub:reportRequest>
+    </pub:runReport>
+  </soap:Body>
+</soap:Envelope>

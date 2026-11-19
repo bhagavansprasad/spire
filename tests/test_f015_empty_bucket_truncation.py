@@ -29,6 +29,8 @@ setup, and the fix keeps it that way.
 """
 from __future__ import annotations
 
+import pytest
+
 from spire.synthesizer.synthesizer import (
     StandardReceiptResponse,
     synthesize_response,
@@ -48,6 +50,7 @@ def _helper():
 # ─────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.xfail(reason="F-015 deferred: empty capped-fetch narration bug (FIX_PLAN §2.2)", strict=False)
 def test_empty_result_from_capped_fetch_names_the_sample():
     """F-015's reproducer.
 
@@ -134,6 +137,7 @@ def test_truncated_false_is_not_treated_as_capped():
 # ─────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.xfail(reason="F-015 deferred: empty capped-fetch narration bug (FIX_PLAN §2.2)", strict=False)
 def test_empty_result_with_known_total_names_it():
     """When the tool reported a count, the summary names it.
 

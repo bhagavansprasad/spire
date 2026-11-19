@@ -2,10 +2,10 @@
 """
 print_kg.py — Inspect the Spire Knowledge Graph.
 
-Reads the 9 KG tables (kg_entity, kg_entity_field, kg_edge, kg_pattern,
-kg_vocabulary, kg_pattern_binding, kg_entity_tool, kg_entity_filter,
-kg_edge_tool) and prints them as formatted ASCII tables, with row counts
-and an FK summary.
+Reads the 12 KG tables (kg_entity, kg_entity_field, kg_entity_sql,
+kg_sql_column, kg_derived_projection, kg_edge, kg_pattern, kg_vocabulary,
+kg_pattern_binding, kg_entity_tool, kg_entity_filter, kg_edge_tool) and
+prints them as formatted ASCII tables, with row counts and an FK summary.
 
 Requires:
 - Oracle container running (oracle26ai_db_spire_iks)
@@ -63,7 +63,49 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 210,
+        "expected_rows": 227,
+    },
+    {
+        "name": "kg_entity_sql",
+        "purpose": "SQL carrier facts for an entity: its physical "
+                   "table/view and primary-key column. A satellite of "
+                   "kg_entity (not columns on it) because kg_entity's 22 "
+                   "seed rows are positional.",
+        "columns": ["entity_name", "fusion_table", "pk_column"],
+        "sql": "SELECT entity_name, fusion_table, pk_column "
+               "FROM kg_entity_sql ORDER BY entity_name",
+        "clob_cols": set(),
+        "expected_rows": 11,
+    },
+    {
+        "name": "kg_sql_column",
+        "purpose": "Direct SQL columns per entity field. Keyed on "
+                   "(entity_name, field_name) from kg_entity_field "
+                   "(option A: one vocabulary). A field with no SQL "
+                   "carrier has no row here.",
+        "columns": ["entity_name", "field_name", "physical_table",
+                    "column_name", "data_type", "data_length",
+                    "is_default_projection"],
+        "sql": "SELECT entity_name, field_name, physical_table, "
+               "column_name, data_type, data_length, "
+               "is_default_projection FROM kg_sql_column "
+               "ORDER BY entity_name, field_name",
+        "clob_cols": set(),
+        "expected_rows": 57,
+    },
+    {
+        "name": "kg_derived_projection",
+        "purpose": "Correlated scalar subqueries where no direct column "
+                   "carries the role (e.g. PO header total = SUM of line "
+                   "amounts). Keyed (entity_name, field_name) -> "
+                   "kg_entity_field.",
+        "columns": ["entity_name", "field_name", "expression",
+                    "is_default_projection"],
+        "sql": "SELECT entity_name, field_name, expression, "
+               "is_default_projection FROM kg_derived_projection "
+               "ORDER BY entity_name, field_name",
+        "clob_cols": set(),
+        "expected_rows": 4,
     },
     {
         "name": "kg_edge",
@@ -162,6 +204,11 @@ TABLES: list[dict] = [
 # Foreign-key relationships, for the relations summary.
 FK_RELATIONS: list[tuple[str, str, str]] = [
     ("kg_entity_field",    "entity_name",  "kg_entity.entity_name"),
+    ("kg_entity_sql",      "entity_name",  "kg_entity.entity_name"),
+    ("kg_sql_column",      "entity_name, field_name",
+     "kg_entity_field.entity_name, field_name"),
+    ("kg_derived_projection", "entity_name, field_name",
+     "kg_entity_field.entity_name, field_name"),
     ("kg_edge",            "from_entity",  "kg_entity.entity_name"),
     ("kg_edge",            "to_entity",    "kg_entity.entity_name"),
     ("kg_pattern_binding", "entity_name",  "kg_entity.entity_name"),
@@ -349,7 +396,7 @@ def main() -> int:
     parser.add_argument(
         "--table",
         choices=[t["name"] for t in TABLES],
-        help="Print just one table instead of all nine.",
+        help="Print just one table instead of all twelve.",
     )
     parser.add_argument(
         "--schema-only",

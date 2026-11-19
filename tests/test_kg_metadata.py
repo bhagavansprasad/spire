@@ -354,7 +354,7 @@ async def test_kg_table_row_counts_match_v1_1():
     persona = load_persona("default_dev")
     expected = {
         "kg_entity": 22,
-        "kg_entity_field": 210,
+        "kg_entity_field": 227,
         "kg_edge": 17,
         "kg_pattern": 3,
         "kg_vocabulary": 131,
@@ -362,6 +362,15 @@ async def test_kg_table_row_counts_match_v1_1():
         "kg_entity_tool": 13,
         "kg_entity_filter": 37,
         "kg_edge_tool": 16,
+        # SQL satellites (KG schema corpus STEP 12). kg_entity_sql is the
+        # per-entity fusion_table/pk carrier; kg_sql_column the direct
+        # column bindings; kg_derived_projection the correlated subqueries.
+        # The gap register ("accept unbound") is fully reversed: Site +
+        # Classification (7) first, then the 10 SQL-essential gap roles,
+        # so kg_entity_field 210->227 and kg_sql_column 40->57.
+        "kg_entity_sql": 11,
+        "kg_sql_column": 57,
+        "kg_derived_projection": 4,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted
     # per table and stopped at the first failure, so a phase that moved
@@ -455,6 +464,7 @@ async def test_supplier_has_projection_fields():
     assert field_names == [
         "CreatedBy",
         "CreationDate",
+        "Enabled",
         "LastUpdateDate",
         "LastUpdatedBy",
         "Status",

@@ -70,21 +70,48 @@ def _oracle_credentials() -> tuple[str, str, str]:
     return user, password, dsn
 
 
+# Process-lifetime connection pool, created lazily on first use and
+# reused for every subsequent KG lookup. This replaces the old
+# fresh-connection-per-call pattern, which churned ~1300 connections per
+# full planner run and hit the pod's `processes` limit (ORA-12516 /
+# DPY-6000). A pool bounds live connections to `max` regardless of how
+# many lookups run. See docs/fixes/FIX_PLAN.md §2.1.
+_pool: oracledb.ConnectionPool | None = None
+
+
+def _get_pool() -> oracledb.ConnectionPool:
+    """Return the process-lifetime KG connection pool, creating it once."""
+    global _pool
+    if _pool is None:
+        user, password, dsn = _oracle_credentials()
+        _pool = oracledb.create_pool(
+            user=user,
+            password=password,
+            dsn=dsn,
+            min=1,
+            max=4,
+            increment=1,
+        )
+    return _pool
+
+
 @contextmanager
 def _kg_cursor() -> Iterator[oracledb.Cursor]:
     """
-    Yield a cursor against the KG database. Closes connection on exit.
+    Yield a cursor against the KG database.
 
-    Every KG-lookup function opens a fresh connection; pooling can be
-    added later if profiling shows it matters.
+    Connections are acquired from the process-lifetime pool and released
+    back to it on exit (not closed). CLOB columns must be read to plain
+    strings *inside* this context, before the connection is released —
+    every current call site already does so.
     """
-    user, password, dsn = _oracle_credentials()
-    connection = oracledb.connect(user=user, password=password, dsn=dsn)
+    pool = _get_pool()
+    connection = pool.acquire()
     try:
         with connection.cursor() as cursor:
             yield cursor
     finally:
-        connection.close()
+        pool.release(connection)
 
 
 def _read_clob(value: Any) -> str:

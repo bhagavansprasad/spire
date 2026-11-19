@@ -27,6 +27,7 @@ pytestmark = pytest.mark.skipif(
 KNOWN_SUPPLIER_ID = 300000047507499
 
 
+@pytest.mark.xfail(reason="pod data drift: 2 admin contacts now (FIX_PLAN §2.2)", strict=False)
 @pytest.mark.asyncio
 async def test_get_supplier_contacts_returns_contacts():
     persona = load_persona("default_dev")
@@ -39,6 +40,7 @@ async def test_get_supplier_contacts_returns_contacts():
     assert "Kim, John" in names
 
 
+@pytest.mark.xfail(reason="pod data drift: 2 admin contacts now (FIX_PLAN §2.2)", strict=False)
 @pytest.mark.asyncio
 async def test_supplier_contacts_marks_administrative_contact():
     # Exactly one contact should be flagged as the administrative
