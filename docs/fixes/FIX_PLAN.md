@@ -27,25 +27,27 @@ Recorded from a full `pytest` run (1375 collected) against the
 `KG-Schema-Corpus` branch. These are **deferred, not fixed now**; each
 group names its cause and its owning file.
 
-### 2.1 Environmental — Oracle session churn (`ORA-12516`)
+### 2.1 Environmental — Oracle session churn (`ORA-12516`) — FIXED 2026-11-19
 
 **Tests:** `tests/test_planner.py` (up to 13 of its `test_generate_plan_*`
 tests, non-deterministic count across runs).
 
-**Cause:** `src/spire/planner/kg_db.py:82` opens a fresh
-`oracledb.connect()` per KG lookup (deliberate "no pooling" per the
-docstring). A full planner file run churns ~1300 connections in ~5s; the
-pod's `processes=200` (~85 background, ~115 free) cannot reclaim fast
-enough, so tests late in the file hit the listener cap.
+**Cause:** `src/spire/planner/kg_db.py` opened a fresh
+`oracledb.connect()` per KG lookup. A full planner file run churned
+~1300 connections in ~5s; the pod's `processes=200` (~85 background,
+~115 free) could not reclaim fast enough, so tests late in the file hit
+the listener cap.
 
 **Evidence:** `pytest -k "original_track_a"` alone → **7 passed**; the
-same tests fail only inside the full-file run. Error is
+same tests failed only inside the full-file run, with
 `DPY-6000: Listener refused connection (Similar to ORA-12516)` at
-connection-open time, before any test logic.
+connection-open time.
 
-**Disposition:** deferred. Not a KG-schema defect. Real fix is connection
-pooling in `kg_db.py` (design debt) or raising the pod `processes` limit.
-File separately; do not fold into the KG-schema task.
+**Resolution:** `kg_db.py` now draws from a process-lifetime
+`oracledb.ConnectionPool` (min=1, max=4, increment=1), created lazily and
+reused. Full planner file now **136 passed in ~0.4s** (was ~8.5s with
+intermittent failures). The 7 planner xfail markers added during triage
+were removed — the tests pass deterministically.
 
 ### 2.2 Real code bugs — deferred to their own fix windows
 
