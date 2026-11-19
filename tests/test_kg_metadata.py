@@ -368,9 +368,9 @@ async def test_kg_table_row_counts_match_v1_1():
         # The gap register ("accept unbound") is fully reversed: Site +
         # Classification (7) first, then the 10 SQL-essential gap roles,
         # so kg_entity_field 210->227 and kg_sql_column 40->57.
-        "kg_entity_sql": 13,
-        "kg_sql_column": 71,
-        "kg_derived_projection": 7,
+        "kg_entity_sql": 22,
+        "kg_sql_column": 128,
+        "kg_derived_projection": 9,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted
     # per table and stopped at the first failure, so a phase that moved

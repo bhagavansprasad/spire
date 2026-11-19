@@ -320,8 +320,8 @@ _ENTITIES = {
         ],
         base_joins=[],
     ),
-    "ReceivablesTransactionDFF": EntitySpec(
-        name="ReceivablesTransactionDFF",
+    "ReceivablesInvoiceTransactionDFF": EntitySpec(
+        name="ReceivablesInvoiceTransactionDFF",
         fusion_table="RA_CUSTOMER_TRX_ALL",
         alias="D",
         pk_column="CUSTOMER_TRX_ID",
@@ -345,7 +345,10 @@ _ENTITIES = {
             ("C", "INVOICE_CURRENCY_CODE"),
             ("C", "STATUS_TRX"),
         ],
-        base_joins=[],
+        base_joins=[
+            "JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = C.BILL_TO_CUSTOMER_ID",
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+        ],
     ),
     "CustomerAccount": EntitySpec(
         name="CustomerAccount",
@@ -584,9 +587,9 @@ _FILTERS = {
         tool_name="get_receivables_invoice_tax_lines",
         arg_name="customer_transaction_id",
         predicate_template=(
-            "{alias}.CUSTOMER_TRX_ID = {value} "
-            "AND {alias}.CUST_TRX_LINE_ID = :line_id "
-            "AND {alias}.ACCOUNT_CLASS = 'TAX'"
+            "{alias}.TRX_ID = {value} "
+            "AND {alias}.TRX_LINE_ID = :line_id "
+            "AND {alias}.ENTITY_CODE = 'TRANSACTIONS'"
         ),
         assumption="ar_tax_line_filter",
     ),
@@ -631,9 +634,17 @@ _FILTERS = {
     ("get_account_receipt_applications", "account_id"): FilterSpec(
         tool_name="get_account_receipt_applications",
         arg_name="account_id",
+        # Applications are children of RECEIPTS, which are children of the
+        # account (AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER). The prior
+        # template reached the account through "the parent transaction" via
+        # CUSTOMER_TRX_ID / TRX_ID — both wrong: AR_RECEIVABLE_APPLICATIONS_ALL
+        # has no account id, and RA_CUSTOMER_TRX_ALL has CUSTOMER_TRX_ID (not
+        # TRX_ID), and the receipt's own CUSTOMER_TRX_ID is the on-account
+        # transaction, not the applied one. Fixed to the receipt path.
         predicate_template=(
-            "{alias}.CUSTOMER_TRX_ID IN "
-            "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE BILL_TO_CUSTOMER_ID = {value})"
+            "{alias}.CASH_RECEIPT_ID IN "
+            "(SELECT CASH_RECEIPT_ID FROM AR_CASH_RECEIPTS_ALL "
+            "WHERE PAY_FROM_CUSTOMER = {value})"
         ),
         assumption="account_receipt_application_by_customer",
     ),
@@ -825,14 +836,15 @@ _ASSUMPTIONS = {
         "'CALVIN.ROTH_euth-dev93@oraclepdemos.com'."
     ),
     "ar_tax_line_filter": (
-        "AR tax lines come from RA_CUST_TRX_LINE_GL_DIST_ALL filtered "
-        "to ACCOUNT_CLASS = 'TAX'. Confirmed via curl against AR "
-        "invoice 1002, line 74: two tax rows (COUNTY 2.25%, STATE 6.5%) "
-        "with their own CUST_TRX_LINE_GL_DIST_IDs (112, 113) - distinct "
-        "from the parent invoice line (74). The filter takes two ids: "
-        "customer_transaction_id and the parent line_id (named bind). "
-        "The physical column name for the parent line id is not "
-        "confirmed; if execution fails, curl the AR endpoint and update."
+        "AR tax lines come from ZX_LINES (the tax engine), joined on "
+        "TRX_ID = CUSTOMER_TRX_ID and TRX_LINE_ID = CUSTOMER_TRX_LINE_ID, "
+        "with ENTITY_CODE = 'TRANSACTIONS'. Verified via curl + pod against "
+        "AR invoice 1002, line 74: two tax rows (COUNTY 2.25%, STATE 6.5%) "
+        "on TAX_LINE_ID 9040/9039. RA_CUST_TRX_LINE_GL_DIST_ALL carries "
+        "the GL-side tax AMOUNT but none of the rate/regime/jurisdiction "
+        "columns, and on this pod has no ACCOUNT_CLASS='TAX' row for line 74 "
+        "(only a REV row). The filter takes two ids: customer_transaction_id "
+        "and the parent line_id (named bind)."
     ),
     "ar_dff_columns_uncertain": (
         "AR transaction DFF is projected as ATTRIBUTE_CATEGORY (the "
@@ -842,7 +854,7 @@ _ASSUMPTIONS = {
         "segment values are populated, so the mapping cannot be "
         "confirmed end-to-end until a pod with populated DFF is "
         "available. If a future prompt reveals different column names, "
-        "update the select_columns on ReceivablesTransactionDFF."
+        "update the select_columns on ReceivablesInvoiceTransactionDFF."
     ),
     "customer_account_by_party_name": (
         "get_customer_account_by_name resolves HZ_CUST_ACCOUNTS joined "
@@ -875,13 +887,14 @@ _ASSUMPTIONS = {
         "get_account_receipt_applications reads "
         "AR_RECEIVABLE_APPLICATIONS_ALL. The table does not carry a "
         "direct account id column, so the filter reaches the account "
-        "through its parent transaction: CUSTOMER_TRX_ID IN "
-        "(SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL WHERE "
-        "BILL_TO_CUSTOMER_ID = ?). Confirmed via curl: two rows "
-        "returned, one Applied (ReferenceTransactionId populated) and "
-        "one Unapplied (ReferenceTransaction* null). The tool's own "
-        "client_filters discard Unapplied rows; the emitted SQL does "
-        "not add that filter because the tool does it downstream."
+        "through the parent RECEIPT: CASH_RECEIPT_ID IN "
+        "(SELECT CASH_RECEIPT_ID FROM AR_CASH_RECEIPTS_ALL WHERE "
+        "PAY_FROM_CUSTOMER = ?). The prior parent-transaction path "
+        "(CUSTOMER_TRX_ID / TRX_ID) was wrong: AR_RECEIVABLE_APPLICATIONS_ALL."
+        "CUSTOMER_TRX_ID is the on-account transaction, not the applied one, "
+        "and RA_CUSTOMER_TRX_ALL has CUSTOMER_TRX_ID, not TRX_ID. The tool "
+        "filters to ApplicationStatus='Applied' server-side; the emitted SQL "
+        "does not add that filter (STATUS='APP' is the physical code)."
     ),
     "standard_receipt_by_customer_name": (
         "search_standard_receipts resolves customer_name to an account "
@@ -942,7 +955,7 @@ OVERLAY = Overlay(
         "get_receivables_invoice_lines": "ReceivablesInvoiceLine",
         "get_buyer": "Buyer",
         "get_receivables_invoice_tax_lines": "ReceivablesTaxLine",
-        "get_receivables_invoice_transaction_dff": "ReceivablesTransactionDFF",
+        "get_receivables_invoice_transaction_dff": "ReceivablesInvoiceTransactionDFF",
         "list_receivables_credit_memos": "CreditMemo",
         "get_customer_account_by_name": "CustomerAccount",
         "get_customer_transactions": "CustomerTransaction",

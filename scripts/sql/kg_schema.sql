@@ -1671,9 +1671,9 @@ PROMPT Seeded kg_entity_filter (37 rows).
 -- SQL satellites key on (entity_name, field_name) from kg_entity_field —
 -- one vocabulary, no snake_case role names.
 --
---   13 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
---   71 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---    7 kg_derived_projection — correlated scalar subqueries.
+--   22 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
+--  128 kg_sql_column rows   — direct columns, is_default_projection='Y'.
+--    9 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1695,6 +1695,15 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('PODist
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Invoice',           'AP_INVOICES_ALL',          'INVOICE_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CustomerTransaction','AR_PAYMENT_SCHEDULES_ALL','CUSTOMER_TRX_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoice', 'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoiceLine', 'RA_CUSTOMER_TRX_LINES_ALL', 'CUSTOMER_TRX_LINE_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CreditMemo',            'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('StandardReceipt',       'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('AccountReceipt',        'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CustomerAccount',       'HZ_CUST_ACCOUNTS',         'CUST_ACCOUNT_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('AccountCreditMemo',     'AR_PAYMENT_SCHEDULES_ALL', 'CUSTOMER_TRX_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('AccountReceiptApplication', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'RECEIVABLE_APPLICATION_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesTaxLine',    'ZX_LINES',                 'TAX_LINE_ID');
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoiceTransactionDFF', 'RA_CUSTOMER_TRX_ALL',  'CUSTOMER_TRX_ID');
 
 -- ---- kg_sql_column (47 rows) ----
 -- Supplier
@@ -1782,6 +1791,72 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceCurrencyCode', 'RA_CUSTOMER_TRX_ALL', 'INVOICE_CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'TransactionDate', 'RA_CUSTOMER_TRX_ALL', 'TRX_DATE', 'DATE', 7, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceStatus', 'RA_CUSTOMER_TRX_ALL', 'COMPLETE_FLAG', 'VARCHAR2', 4, 'Y');
+-- ReceivablesInvoiceLine (RA_CUSTOMER_TRX_LINES_ALL) — 0 absent; all six hand-authored columns verified.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'CustomerTransactionLineId', 'RA_CUSTOMER_TRX_LINES_ALL', 'CUSTOMER_TRX_LINE_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'LineNumber', 'RA_CUSTOMER_TRX_LINES_ALL', 'LINE_NUMBER', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'Description', 'RA_CUSTOMER_TRX_LINES_ALL', 'DESCRIPTION', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'Quantity', 'RA_CUSTOMER_TRX_LINES_ALL', 'QUANTITY_INVOICED', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'UnitSellingPrice', 'RA_CUSTOMER_TRX_LINES_ALL', 'UNIT_SELLING_PRICE', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'LineAmount', 'RA_CUSTOMER_TRX_LINES_ALL', 'EXTENDED_AMOUNT', 'NUMBER', 22, 'Y');
+-- CreditMemo (RA_CUSTOMER_TRX_ALL) — mirror of ReceivablesInvoice; EnteredAmount derived from lines (see below).
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'CustomerTransactionId', 'RA_CUSTOMER_TRX_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'TransactionNumber', 'RA_CUSTOMER_TRX_ALL', 'TRX_NUMBER', 'VARCHAR2', 80, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'TransactionDate', 'RA_CUSTOMER_TRX_ALL', 'TRX_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'CreditMemoCurrency', 'RA_CUSTOMER_TRX_ALL', 'INVOICE_CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'CreditMemoStatus', 'RA_CUSTOMER_TRX_ALL', 'COMPLETE_FLAG', 'VARCHAR2', 4, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'BillToCustomerName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'BillToCustomerNumber', 'HZ_CUST_ACCOUNTS', 'ACCOUNT_NUMBER', 'VARCHAR2', 120, 'Y');
+-- StandardReceipt (AR_CASH_RECEIPTS_ALL) — top-level /standardReceipts projection.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'StandardReceiptId', 'AR_CASH_RECEIPTS_ALL', 'CASH_RECEIPT_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'ReceiptNumber', 'AR_CASH_RECEIPTS_ALL', 'RECEIPT_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'ReceiptDate', 'AR_CASH_RECEIPTS_ALL', 'RECEIPT_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'Amount', 'AR_CASH_RECEIPTS_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'Currency', 'AR_CASH_RECEIPTS_ALL', 'CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'Status', 'AR_CASH_RECEIPTS_ALL', 'STATUS', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'CustomerName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('StandardReceipt', 'CustomerAccountNumber', 'HZ_CUST_ACCOUNTS', 'ACCOUNT_NUMBER', 'VARCHAR2', 120, 'Y');
+-- AccountReceipt (AR_CASH_RECEIPTS_ALL) — per-account child; UnappliedAmount derived (see below).
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceipt', 'StandardReceiptId', 'AR_CASH_RECEIPTS_ALL', 'CASH_RECEIPT_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceipt', 'ReceiptNumber', 'AR_CASH_RECEIPTS_ALL', 'RECEIPT_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceipt', 'ReceiptDate', 'AR_CASH_RECEIPTS_ALL', 'RECEIPT_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceipt', 'Amount', 'AR_CASH_RECEIPTS_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceipt', 'Currency', 'AR_CASH_RECEIPTS_ALL', 'CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
+-- CustomerAccount (HZ_CUST_ACCOUNTS) — identity only; the two balances have no clean carrier (see role map).
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerAccount', 'AccountId', 'HZ_CUST_ACCOUNTS', 'CUST_ACCOUNT_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerAccount', 'AccountNumber', 'HZ_CUST_ACCOUNTS', 'ACCOUNT_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerAccount', 'CustomerName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CustomerAccount', 'CustomerId', 'HZ_CUST_ACCOUNTS', 'PARTY_ID', 'NUMBER', 22, 'Y');
+-- AccountCreditMemo (AR_PAYMENT_SCHEDULES_ALL) — per-account installment view; CreditMemoId = CUSTOMER_TRX_ID (NOT PAYMENT_SCHEDULE_ID).
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'CreditMemoId', 'AR_PAYMENT_SCHEDULES_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'CreditMemoNumber', 'AR_PAYMENT_SCHEDULES_ALL', 'TRX_NUMBER', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'CreditMemoDate', 'AR_PAYMENT_SCHEDULES_ALL', 'TRX_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'TransactionClass', 'AR_PAYMENT_SCHEDULES_ALL', 'CLASS', 'VARCHAR2', 80, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'TotalOriginalAmount', 'AR_PAYMENT_SCHEDULES_ALL', 'AMOUNT_DUE_ORIGINAL', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'TotalBalanceAmount', 'AR_PAYMENT_SCHEDULES_ALL', 'AMOUNT_DUE_REMAINING', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'CreditMemoStatus', 'AR_PAYMENT_SCHEDULES_ALL', 'STATUS', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountCreditMemo', 'CreditMemoCurrency', 'AR_PAYMENT_SCHEDULES_ALL', 'INVOICE_CURRENCY_CODE', 'VARCHAR2', 60, 'Y');
+-- AccountReceiptApplication (AR_RECEIVABLE_APPLICATIONS_ALL) — ReferenceTransactionId = APPLIED_CUSTOMER_TRX_ID.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'ApplicationId', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'RECEIVABLE_APPLICATION_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'ApplicationDate', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'APPLY_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'ApplicationAmount', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'AMOUNT_APPLIED', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'ApplicationStatus', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'STATUS', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'StandardReceiptId', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'CASH_RECEIPT_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('AccountReceiptApplication', 'ReferenceTransactionId', 'AR_RECEIVABLE_APPLICATIONS_ALL', 'APPLIED_CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+-- ReceivablesTaxLine (ZX_LINES) — the tax engine; join TRX_ID/TRX_LINE_ID to the AR line.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'CustomerTransactionLineId', 'ZX_LINES', 'TAX_LINE_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxLineNumber', 'ZX_LINES', 'TAX_LINE_NUMBER', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxJurisdictionCode', 'ZX_LINES', 'TAX_JURISDICTION_CODE', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxRate', 'ZX_LINES', 'TAX_RATE', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxRateCode', 'ZX_LINES', 'TAX_RATE_CODE', 'VARCHAR2', 600, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxRegimeCode', 'ZX_LINES', 'TAX_REGIME_CODE', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxStatusCode', 'ZX_LINES', 'TAX_STATUS_CODE', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'Tax', 'ZX_LINES', 'TAX', 'VARCHAR2', 120, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxAmount', 'ZX_LINES', 'TAX_AMT', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxableAmount', 'ZX_LINES', 'TAXABLE_AMT', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesTaxLine', 'TaxPointDate', 'ZX_LINES', 'TAX_POINT_DATE', 'DATE', 7, 'Y');
+-- ReceivablesInvoiceTransactionDFF (RA_CUSTOMER_TRX_ALL) — the DFF context only; no populated segments on this pod.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceTransactionDFF', 'CustomerTrxId', 'RA_CUSTOMER_TRX_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context', 'RA_CUSTOMER_TRX_ALL', 'ATTRIBUTE_CATEGORY', 'VARCHAR2', 120, 'Y');
 
 -- ---- kg_derived_projection (5 rows) ----
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.UNIT_PRICE * L.QUANTITY) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
@@ -1791,9 +1866,11 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PODistribution', 'StatusCode', '(SELECT L.LINE_STATUS FROM PO_LINES_ALL L WHERE L.PO_LINE_ID = D.PO_LINE_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'EnteredAmount', '(SELECT SUM(S.AMOUNT_DUE_ORIGINAL) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('ReceivablesInvoice', 'InvoiceBalanceAmount', '(SELECT SUM(S.AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_TRX_ID = P.CUSTOMER_TRX_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CreditMemo', 'EnteredAmount', '(SELECT SUM(L.EXTENDED_AMOUNT) FROM RA_CUSTOMER_TRX_LINES_ALL L WHERE L.CUSTOMER_TRX_ID = C.CUSTOMER_TRX_ID)', 'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('AccountReceipt', 'UnappliedAmount', 'R.AMOUNT - (SELECT SUM(A.AMOUNT_APPLIED) FROM AR_RECEIVABLE_APPLICATIONS_ALL A WHERE A.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID)', 'Y');
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (13 rows), kg_sql_column (71 rows), kg_derived_projection (7 rows).
+PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (128 rows), kg_derived_projection (9 rows).
 
 -- ============================================================
