@@ -81,9 +81,16 @@ evidence, rather than asking the user to run a second cell.
   the "paste into new window" resume brief.
 
 **The resume brief is a fixed shape.** Every window close emits ONE
-paste-in block with exactly these sections, in order:
+paste-in block with exactly these sections, in order. The brief's first
+section must tell the new window that the **working style is pasted
+alongside it**: the user copies the resume brief *and*
+`docs/plan/COPILOT_WORKING_STYLE.md` (or its rules) into the message, so
+the new window reads the working style before doing anything else — it is
+not auto-loaded and must not be assumed present.
 
-1. `RESUME — <task> (SPIRE), next window` header.
+1. `RESUME — <task> (SPIRE), next window` header, followed by a line such
+   as: *"Working style: pasted below / in COPILOT_WORKING_STYLE.md — read
+   it first."*
 2. **Branch instructions** — the exact `git checkout master && git pull
    --ff-only origin master && git checkout -b <branch>` to run. The new
    branch name follows `Phase{N}-{Descriptive}`; state it explicitly.
@@ -92,10 +99,13 @@ paste-in block with exactly these sections, in order:
    `./runsql.sh "<SQL>"`.
 4. **FILES TO READ (in this order)** — an explicit bulleted list of
    absolute-or-repo-relative paths, most-important first: the pending
-   register, role maps, FIX_PLAN, discovery method, working style, then
-   the code files the task edits, then the scratch/evidence artifacts
-   (`t_*`). Never assume the next window will discover files by grep;
-   name them so the next session reads directly.
+   register, role maps, FIX_PLAN, discovery method, then the code files
+   the task edits, then the scratch/evidence artifacts (`t_*`). The
+   working style (`docs/plan/COPILOT_WORKING_STYLE.md`) is **not** just a
+   path in this list — its rules are pasted into the message itself (see
+   §1), because the new window must internalize them up front. Never
+   assume the next window will discover files by grep; name them so the
+   next session reads directly.
 5. **DONE (last window)** — what landed, with branch/commit/PR and any
    row-count changes (satellites `kg_entity_sql`/`kg_sql_column`/
    `kg_derived_projection`).
