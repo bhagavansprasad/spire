@@ -261,3 +261,26 @@ def test_po_supplier_id_filter_uses_vendor_id_not_segment1():
     assert "SEGMENT1 = '300000047414503'" not in body
     assert "IN (SELECT VENDOR_ID FROM POZ_SUPPLIERS" not in body
     assert "ASSUMPTION [supplier_maps_to_vendor_id]" in sql
+
+
+def test_standard_receipt_uses_left_join_for_nullable_pay_from_customer():
+    """F-074: AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER is NULL on 39 of
+    79,777 receipts (UNID/REV/NSF/APP). REST's top-level /standardReceipts
+    returns those receipts with NULL CustomerName/CustomerAccountNumber, so
+    the emitted SQL must LEFT JOIN (keep them with NULL customer), not
+    INNER JOIN (silently drop them)."""
+    plan = [Step(1, "search_standard_receipts", {"customer_name": "ABC Corporation Americas"})]
+    sql = emit_sql(plan)[0]
+    body = _strip_comments(sql)
+    assert "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER" in body
+    assert "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID" in body
+    # The old INNER JOIN (bare "JOIN") must be gone: the only join lines
+    # are the two LEFT JOINs above.
+    join_lines = [
+        l.strip() for l in body.splitlines()
+        if l.strip().startswith("JOIN ") or l.strip().startswith("LEFT JOIN ")
+    ]
+    assert join_lines == [
+        "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
+        "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+    ]

@@ -19,7 +19,7 @@ This document is the **pending-work register**. The handovers carry what was don
 | §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **22/128/9** rows (was 13/71/7 at PR #213); all 22 entities drafted |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
 | §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads all 22 entities with KG rows |
-| §3.4 — build self-check | **complete** — `scripts/validate_kg_schema.py` (9 derived projections validated; 6 nullable keys checked; 1 open: F-074) |
+| §3.4 — build self-check | **complete** — `scripts/validate_kg_schema.py` (9 derived projections validated; 5 nullable keys checked; F-074 resolved) |
 
 ### 0.2 Branch / merge record (2026-11-19)
 
@@ -168,7 +168,7 @@ the 6 nullable-key NULL-count checks below (Q4). Run it with
 `/home/bhagavan/virtenv/spire/bin/python scripts/validate_kg_schema.py`
 (`--kg-only` skips the pod checks).
 
-**Known nullable join keys (6), encoded as checks:**
+**Known nullable join keys (5), encoded as checks:**
 
 | Entity | Join key column | Check |
 |---|---|---|
@@ -177,7 +177,11 @@ the 6 nullable-key NULL-count checks below (Q4). Run it with
 | Invoice | `AP_INVOICES_ALL.VENDOR_ID` | count NULLs = 0 |
 | ReceivablesInvoice | `RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID` | count NULLs = 0 |
 | CreditMemo | `RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID` | count NULLs = 0 (shares the physical column with ReceivablesInvoice) |
-| StandardReceipt | `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` | count NULLs = 0 **— but the pod has 39** (see §4.2, F-074) |
+
+StandardReceipt's `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` is **not in
+the list** (removed 2026-11-19, F-074): its join is now a LEFT JOIN, so
+its 39 NULLs propagate as NULL customer fields rather than being dropped
+— see §4.2.
 
 The mechanism is **per-key, not per-entity**. The self-check also walks
 `kg_derived_projection` expressions, validating every physical column
@@ -208,18 +212,22 @@ The "count NULLs = 0" check for `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER`
 79,777 have NULL `PAY_FROM_CUSTOMER`, by `STATUS`: `UNID` 25 (321,177.32),
 `REV` 10 (10,625,331.37), `NSF` 2 (21,000,000), `APP` 2 (1,602.95).
 
-**Not yet decided** (open, F-074). Unlike §4.1's PO case — where all 5
-NULL rows are `DOCUMENT_STATUS='INCOMPLETE'` and dropping them is clearly
-correct — these 39 are unidentified / reversed / bounced / applied
-receipts, which are not obviously "non-real". The inner
-`JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER`
-drops them; whether that is correct (option 1, with a documented
-`exclude` carve-out) or should become LEFT JOIN + NULL propagation or an
-explicit filter is a separate decision. Until it lands,
-`scripts/validate_kg_schema.py` fails on this key by design.
+**Decided (2026-11-19, F-074 fixed) — option 2: LEFT JOIN + NULL
+propagation.** Unlike §4.1's PO case — where all 5 NULL rows are
+`DOCUMENT_STATUS='INCOMPLETE'` and dropping them is clearly correct — these
+39 are unidentified / reversed / bounced / applied receipts, which REST's
+top-level `/standardReceipts` **returns** (with `CustomerName` /
+`CustomerAccountNumber` null, verified on receipt `300000066476398`,
+`STATUS='REV'`). So the inner `JOIN HZ_CUST_ACCOUNTS` drop was a row-count
+mismatch. `StandardReceipt.base_joins` now use `LEFT JOIN HZ_CUST_ACCOUNTS`
++ `LEFT JOIN HZ_PARTIES`, and the StandardReceipt entry was removed from
+`NULLABLE_KEYS` (no INNER join left to guard). The Q4 "LEFT JOIN + NULL
+propagation rejected" rule applies to join keys meant to be non-null, not
+to a column whose NULLs REST itself projects as null.
 
-Evidence: `scripts/validate_kg_schema.py` (Q4 check → FAIL, NULLs = 39);
-pod `COUNT(*) TOTAL = 79777`, `COUNT(PAY_FROM_CUSTOMER) NON_NULL = 79738`.
+Evidence: `scripts/validate_kg_schema.py` → `Result: PASS`; emitted SQL
+`LEFT JOIN` row count = 79,777 vs INNER JOIN 79,738 (the 39 kept, not
+dropped).
 
 ---
 

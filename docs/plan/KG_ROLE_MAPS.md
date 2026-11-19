@@ -364,8 +364,8 @@ JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 `base_joins`:
 
 ```
-JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER
-JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
+LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER
+LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 ```
 
 `kg_sql_column`, `is_default_projection='Y'`:
@@ -386,6 +386,14 @@ JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID
 **Bugs fixed (0 of 8 absent).** All eight direct columns present: `CASH_RECEIPT_ID` (1, NUMBER, N), `RECEIPT_NUMBER` (20, VARCHAR2 120, Y), `RECEIPT_DATE` (21, DATE, N), `AMOUNT` (12, NUMBER, N), `CURRENCY_CODE` (15, VARCHAR2 60, N), `STATUS` (18, VARCHAR2 120, Y), `HZ_PARTIES.PARTY_NAME`, `HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER`. `CustomerAccountNumber` added (join-carried; REST projects it).
 
 **Join keys, verified both sides.** `HZ_CUST_ACCOUNTS.CUST_ACCOUNT_ID` (1, N) = `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` (17, Y). **Left side nullable** — 6th nullable join key in the corpus.
+
+**F-074 resolution (2026-11-19).** The join was INNER and silently dropped
+the 39 rows with NULL `PAY_FROM_CUSTOMER` (UNID 25 / REV 10 / NSF 2 / APP 2).
+REST's top-level `/standardReceipts` **returns** those receipts with
+`CustomerName`/`CustomerAccountNumber` null, so the join is now LEFT JOIN
+(NULL propagation, matching REST). The StandardReceipt entry was removed
+from `validate_kg_schema.py`'s `NULLABLE_KEYS` (no INNER join left to
+guard). Full record: `docs/fixes/FIX_PLAN.md` F-074.
 
 **Observations.** `ReceiptMethod` is deliberately absent: `RECEIPT_METHOD_ID` (56, NUMBER, N) is a numeric FK; REST returns the display string (e.g. 'Check (Directly/No Remit)') which lives on `AR_RECEIPT_METHODS` (join not mapped). `Status` (`STATUS`='APP') is the top-level status code; REST `Status`='Cleared' is a bank-clearance state with no clean single column — F-061-class display divergence, flagged not fixed. `CustomerSite`, `RemittanceBank*` are not projected (sparse / no mapped join). `customer_site` filter references `{alias}.CUSTOMER_SITE`, which does not exist on `AR_CASH_RECEIPTS_ALL` (only `CUSTOMER_SITE_USE_ID`, 51, NUMBER) — see FIX_PLAN backlog.
 

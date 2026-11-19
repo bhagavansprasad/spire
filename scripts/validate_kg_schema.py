@@ -63,10 +63,16 @@ _COLUMN_REF_RE = re.compile(
 )
 
 # The known nullable join keys (§4 of PENDING_KG_SCHEMA_CORPUS.md, extended
-# from 3 to 6 by the Receivables role maps). ``exclude`` is an extra AND
+# from 3 to 5 by the Receivables role maps). ``exclude`` is an extra AND
 # predicate that carves out rows allowed to be NULL (only PurchaseOrder's
 # VENDOR_ID has one). Two entries — ReceivablesInvoice and CreditMemo —
 # share one physical column (RA_CUSTOMER_TRX_ALL.BILL_TO_CUSTOMER_ID).
+#
+# StandardReceipt's PAY_FROM_CUSTOMER is deliberately ABSENT (F-074,
+# resolved 2026-11-19): that join is now a LEFT JOIN, so its 39 NULL rows
+# (UNID 25 / REV 10 / NSF 2 / APP 2) are propagated as NULL customer
+# fields — matching REST — rather than silently dropped. There is no
+# INNER join to guard, so there is no NULL-count check for it.
 NULLABLE_KEYS: list[dict] = [
     {
         "entity": "Contact",
@@ -102,16 +108,6 @@ NULLABLE_KEYS: list[dict] = [
         "column": "BILL_TO_CUSTOMER_ID",
         "exclude": "",
         "note": "count NULLs = 0 (shares physical column with ReceivablesInvoice)",
-    },
-    {
-        "entity": "StandardReceipt",
-        "table": "AR_CASH_RECEIPTS_ALL",
-        "column": "PAY_FROM_CUSTOMER",
-        "exclude": "",
-        # OPEN (F-074): the pod has 39 NULL rows (UNID 25 / REV 10 / NSF 2 /
-        # APP 2), so this check fails until the drop-vs-LEFT-JOIN decision
-        # lands. Deliberately NOT weakened — see docs/fixes/FIX_PLAN.md F-074.
-        "note": "count NULLs = 0 (open: F-074, pod has 39 NULLs)",
     },
 ]
 

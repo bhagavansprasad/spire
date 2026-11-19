@@ -478,10 +478,9 @@ Receivables-filter pass. Also open: `AccountReceipt.State` ('Applied'/'Unapplied
 and `ProcessStatus` ('Open'/'Closed') have no clean single column on
 `AR_CASH_RECEIPTS_ALL` — both dropped, documented in KG_ROLE_MAPS.md §AccountReceipt.
 
-### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (OPEN)
+### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (FIXED)
 
-**Status:** Confirmed. Open — not fixed this window. Found by the §3.4
-build self-check (`scripts/validate_kg_schema.py`), which this window wrote.
+**Status:** Fixed (2026-11-19). LEFT JOIN with NULL propagation (option 2).
 
 **S0.** `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` — the StandardReceipt role
 map's 6th nullable join key — is NULL on **39 of 79,777** rows, so the
@@ -519,11 +518,31 @@ correct.
 reproduced directly on the pod (39 NULL of 79,777), and the other five
 nullable keys all report 0 under the same checker.
 
-**Decision needed (next window).** Same shape as §4.1: (option 1) accept
-the drop with a documented `exclude` carve-out, (option 2) switch
-StandardReceipt to LEFT JOIN with NULL propagation (rejected by Q4 for
-shipping NULLs), or (option 3) filter these receipts out explicitly. Until
-one lands, `validate_kg_schema.py` fails on this key by design.
+**Decision (2026-11-19).** Option 2 — switch StandardReceipt to LEFT JOIN
+with NULL propagation. Unlike §4.1's PO case (5 NULLs, all
+`DOCUMENT_STATUS='INCOMPLETE'`, correctly dropped), these 39 receipts are
+**not** non-real: REST's top-level `/standardReceipts` returns them with
+`CustomerName`/`CustomerAccountNumber` null (verified on receipt
+`300000066476398`, `STATUS='REV'`). So the correct behavior is to **keep**
+them with NULL customer fields — an INNER JOIN drop is a row-count
+mismatch, and Q4's "LEFT JOIN + NULL propagation rejected" rule applies to
+join keys meant to be non-null, not to a column whose NULLs REST itself
+projects as null.
+
+**Fix applied.** `src/spire/kg/sql_overlay.py` StandardReceipt `base_joins`
+→ `LEFT JOIN HZ_CUST_ACCOUNTS` + `LEFT JOIN HZ_PARTIES`. The
+`NULLABLE_KEYS` entry for StandardReceipt was removed from
+`scripts/validate_kg_schema.py` (no INNER join to guard); its absence is
+documented in the list header.
+
+**Verification.** Emitted SQL shape (`LEFT JOIN …`) returns **79,777** rows
+(the full `AR_CASH_RECEIPTS_ALL` count) vs **79,738** under the old INNER
+JOIN — the 39 null-customer receipts are kept, not dropped. Receipt
+`300000066476398` is returned with NULL `ACCOUNT_NUMBER`/`PARTY_NAME`,
+matching REST's `CustomerName`/`CustomerAccountNumber` = null.
+`scripts/validate_kg_schema.py` → `Result: PASS`. Regression test
+`test_standard_receipt_uses_left_join_for_nullable_pay_from_customer` in
+`tests/test_sql_emitter.py`.
 
 **S8 (miss record).** The Receivables role-map pass flagged the key as
 nullable but did not run the Q4 NULL-count; the §3.4 self-check (this

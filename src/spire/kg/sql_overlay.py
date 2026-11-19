@@ -447,8 +447,14 @@ _ENTITIES = {
             ("HP", "PARTY_NAME"),
         ],
         base_joins=[
-            "JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
-            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
+            # LEFT JOIN (not INNER): 39 of 79,777 receipts have NULL
+            # PAY_FROM_CUSTOMER (UNID 25 / REV 10 / NSF 2 / APP 2). REST's
+            # top-level /standardReceipts returns those receipts with NULL
+            # CustomerName/CustomerAccountNumber, so an INNER JOIN would
+            # silently drop them (F-074). NULL propagation is the correct
+            # behavior here, not a drop.
+            "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
+            "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
         ],
     ),
 }
