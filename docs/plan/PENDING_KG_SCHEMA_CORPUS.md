@@ -162,11 +162,11 @@ Per Phase 2 Q4: every nullable join key gets a build check counting NULLs on the
 
 **Status 2026-11-19 — complete.** The self-check is now
 `scripts/validate_kg_schema.py` (on-demand release/CI). It (a) walks the
-9 `kg_derived_projection` expressions and validates every referenced
+10 `kg_derived_projection` expressions and validates every referenced
 physical column — a `kg_sql_column` carrier is a validated measure; a
 column not in `kg_sql_column` is checked for existence on the pod (a join
 key); a column in neither is a MISSING-column failure (Q6) — and (b) runs
-the 6 nullable-key NULL-count checks below (Q4). Run it with
+the 5 nullable-key NULL-count checks below (Q4). Run it with
 `/home/bhagavan/virtenv/spire/bin/python scripts/validate_kg_schema.py`
 (`--kg-only` skips the pod checks).
 
@@ -237,7 +237,11 @@ dropped).
 
 `sql_overlay.py`'s `_ENTITIES[*].select_columns` becomes a KG lookup at import time (`SELECT column_name FROM kg_sql_column WHERE entity_name=? AND is_default_projection='Y'`); `predicate_template` columns resolve via the same lookup plus alias translation (Phase 2 Q2 — three steps: tool→entity, base_joins→alias→table map, `kg_sql_column` lookup). The emitter reads columns from the KG, not from literals.
 
-**Q5 deferred here:** which of the 22 entities the SQL emitter actually produces. First action: `grep -l sql_overlay src/spire/mcp_server/tools/*.py` to identify overlay-consuming tools. Not blocking role maps; blocking §3.3's testability.
+**Q5 resolved (2026-11-19).** Every MCP tool now has an overlay entry:
+the two filter-less sample-and-disclose fetchers are mapped —
+`search_receivables_invoices → ReceivablesInvoice` and
+`search_customer_accounts → CustomerAccount`. `tests/test_sql_overlay_coverage.py`
+(`test_every_mcp_tool_has_an_overlay_entry`) is green (xfail removed).
 
 **Q6 emitter branch:** role → `kg_sql_column` lookup, else role → `kg_derived_projection` expression, else error.
 
@@ -273,7 +277,7 @@ Clean them up in §3.3b, which revisits the hand-authored overlay anyway.
 | Q2 | `predicate_template` surface | resolved (Phase 2) — `FilterSpec` at `sql_overlay.py:23`, `_FILTERS` keyed by `(tool, filter)` | Phase 2 §5 |
 | Q3 | `kg_sql_column` keying | resolved (Phase 2) — PK `(entity_name, physical_table, column_name)` | Phase 2 §5 |
 | Q4 | nullable join keys | resolved (Phase 2) — per-key build self-check, list extends | §4 above |
-| Q5 | which entities the emitter produces | **deferred to §3.3** | §5 above |
+| Q5 | which entities the emitter produces | **resolved (2026-11-19)** — every MCP tool mapped (incl. the two filter-less fetchers) | §5 above |
 | Q6 | roles with no direct carrier | resolved (Phase 2) — `kg_derived_projection` | §2 item 3 above |
 
 ---

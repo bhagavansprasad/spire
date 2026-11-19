@@ -114,7 +114,6 @@ def test_shape_3_suppliers_with_addresses():
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(reason="stale :supplier_id assertion, resolves with §3.3 (FIX_PLAN §2.3)", strict=False)
 def test_shape_4_suppliers_with_site_in_bu():
     plan = [
         Step(1, "search_suppliers", {}),
@@ -134,9 +133,10 @@ def test_shape_4_suppliers_with_site_in_bu():
     assert "WHERE" not in _strip_comments(step1)
     assert "FROM POZ_SUPPLIER_SITES_ALL_M S" in step2
     assert "S.PRC_BU_ID = 300000046987012" in step2
-    assert ":supplier_id" in step2
+    assert "S.VENDOR_ID = :iteration_value" in step2
     assert "keep parents where this returns rows" in step2
     assert "ASSUMPTION [bu_literal_from_overlay]" in step2
+    assert "ASSUMPTION [site_supplier_id_maps_to_vendor_id]" in step2
 
 
 # ─────────────────────────────────────────────────────────────────────
