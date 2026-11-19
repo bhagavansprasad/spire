@@ -16,10 +16,29 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
 | Task 4 — role maps | **11 of 22** drafted |
-| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — commit `8d9252e`; 11/40/4 rows, verified via rebuild + `print_kg --counts-only` |
-| §3.2 — `rebuild_kg.py` build step | **superseded** (see R-9 below) — build is hermetic static seed in `kg_schema.sql`, already executed by `rebuild_kg.py` |
-| §3.3 — emitter reads from KG | **not started** |
+| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — 11/57/4 rows (see §0.2); gap register fully reversed (61/61 bound) |
+| §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
+| §3.3 — emitter reads from KG | **3.3a complete** (select_columns + derived from KG; commit `6b247e9`). **3.3b open** (filters/predicate_template + 11 Receivables) |
 | §3.4 — build self-check | **not started** |
+
+### 0.2 Branch / merge record (2026-11-19)
+
+- Work landed on branch `KG-Schema-Corpus`, merged to `master` via
+  **PR #212** (merge commit `6755d3d`, 2026-11-19).
+- The branch is left in place; **next window starts a new branch off
+  `master`** (per `COPILOT_WORKING_STYLE.md` — window discipline).
+- `kg_entity_sql`=11, `kg_sql_column`=57, `kg_derived_projection`=4.
+  Full suite at merge: 1343 passed, 11 xfailed, 0 failed.
+
+### 0.3 Open finding carried forward — F-060 (next window's first task)
+
+`PO_LINES_ALL.AMOUNT` is a stub column (NULL on 99.96% of 315,970 rows),
+so `PurchaseOrderLine.amount` binds wrong: emitted SQL returns NULL where
+REST returns the real line amount (33000/8250 on PO 2144). Full S0–S6 walk
+in `docs/fixes/FIX_PLAN.md` §4 (F-060); also F-061 (buyer name format,
+cosmetic). Fix the carrier (`TAX_EXCLUSIVE_PRICE` or `UNIT_PRICE ×
+QUANTITY`) and tighten `SCHEMA_DISCOVERY_METHOD.md` §6 to check population,
+not just existence.
 
 ### 0.1 Revisions recorded 2026-11-19
 

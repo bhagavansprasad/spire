@@ -62,6 +62,23 @@ evidence, rather than asking the user to run a second cell.
   merge into `master`.
 - **Branch naming:** `Phase{N}-{Descriptive}` (e.g.
   `Phase1-Audit-and-Baseline`).
+- **After a PR merges, the next window starts on a NEW branch off
+  `master`** — never a continuation of the merged branch. The merged
+  branch is left in place (not deleted) unless the user asks otherwise.
+  Merge via `gh pr create --base master --head <branch>` then
+  `gh pr merge <num> --merge`, then `git fetch && git checkout master &&
+  git pull --ff-only origin master`.
+
+### Window discipline
+
+- **Keep windows medium-sized.** Switch to a fresh window at a natural
+  checkpoint — a coherent unit of work committed and verified — not
+  mid-task, and not after the context has grown huge. Flag the switch
+  point at wrap-up; do not stop mid-edit.
+- **At every window close:** (a) commit any pending work, (b) push, (c)
+  update `docs/plan/PENDING_KG_SCHEMA_CORPUS.md` status + branch details,
+  (d) record open findings in `docs/fixes/FIX_PLAN.md`, (e) give the user
+  the "paste into new window" resume brief.
 
 ### Documentation
 
