@@ -748,7 +748,23 @@ INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankName', 'pr
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankBranch', 'projection', 'string', 'Bank branch.');
 INSERT INTO kg_entity_field VALUES ('StandardReceipt', 'RemittanceBankAccountNumber', 'projection', 'string', 'Bank account number.');
 
-PROMPT Seeded kg_entity_field (217 rows).
+-- SQL-essential gap reversal (2026-11-19). These 10 roles were in the
+-- "accept unbound" gap register, but the SQL emitter projects them today
+-- (verified in KG_ROLE_MAPS.md). Adding them back so the KG-backed
+-- emitter does not regress the projection. This reverses the gap-register
+-- decision for all remaining gaps; see KG_FIELD_TRANSLATION.md revision.
+INSERT INTO kg_entity_field VALUES ('Supplier', 'Enabled', 'projection', 'string', 'Supplier enabled flag (ENABLED_FLAG Y/N). SQL-only; the REST Status field is semantically different.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'SupplierName', 'projection', 'string', 'Joined supplier name (HZ_PARTIES.PARTY_NAME). SQL-only; REST carries SupplierId, not a name.');
+INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'BuyerName', 'projection', 'string', 'Joined buyer name (PER_PERSON_NAMES_F.DISPLAY_NAME). SQL-only; REST carries BuyerId, not a name.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'SupplierId', 'reference', 'numeric', 'Joined supplier id (POZ_SUPPLIER_SITES_ALL_M.VENDOR_ID). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Contact', 'PartySiteId', 'reference', 'numeric', 'Supplier site id (POZ_SUPPLIER_CONTACTS.PARTY_SITE_ID). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Address', 'PartySiteId', 'reference', 'numeric', 'Party site id (HZ_PARTY_SITES.PARTY_SITE_ID). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Address', 'PartyId', 'reference', 'numeric', 'Party id (HZ_PARTY_SITES.PARTY_ID). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Address', 'Address1', 'projection', 'string', 'Address line 1 (HZ_LOCATIONS.ADDRESS1). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Address', 'City', 'projection', 'string', 'City (HZ_LOCATIONS.CITY). SQL-only.');
+INSERT INTO kg_entity_field VALUES ('Address', 'State', 'projection', 'string', 'State (HZ_LOCATIONS.STATE). SQL-only.');
+
+PROMPT Seeded kg_entity_field (227 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1737,6 +1753,17 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'SupplierId', 'POZ_BUS_CLASSIFICATIONS', 'VENDOR_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Classification', 'POZ_BUS_CLASSIFICATIONS', 'LOOKUP_CODE', 'VARCHAR2', 120, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Status', 'POZ_BUS_CLASSIFICATIONS', 'STATUS', 'VARCHAR2', 4, 'Y');
+-- SQL-essential gap reversal (2026-11-19) — the 10 gap-role columns.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'Enabled', 'POZ_SUPPLIERS', 'ENABLED_FLAG', 'VARCHAR2', 4, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrder', 'SupplierName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrder', 'BuyerName', 'PER_PERSON_NAMES_F', 'DISPLAY_NAME', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Contact', 'SupplierId', 'POZ_SUPPLIER_SITES_ALL_M', 'VENDOR_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Contact', 'PartySiteId', 'POZ_SUPPLIER_CONTACTS', 'PARTY_SITE_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'PartySiteId', 'HZ_PARTY_SITES', 'PARTY_SITE_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'PartyId', 'HZ_PARTY_SITES', 'PARTY_ID', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'Address1', 'HZ_LOCATIONS', 'ADDRESS1', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'City', 'HZ_LOCATIONS', 'CITY', 'VARCHAR2', 240, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Address', 'State', 'HZ_LOCATIONS', 'STATE', 'VARCHAR2', 240, 'Y');
 
 -- ---- kg_derived_projection (4 rows) ----
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('PurchaseOrder', 'Ordered', '(SELECT SUM(L.AMOUNT) FROM PO_LINES_ALL L WHERE L.PO_HEADER_ID = P.PO_HEADER_ID)', 'Y');
@@ -1746,6 +1773,6 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (47 rows), kg_derived_projection (4 rows).
+PROMPT Seeded kg_entity_sql (11 rows), kg_sql_column (57 rows), kg_derived_projection (4 rows).
 
 -- ============================================================

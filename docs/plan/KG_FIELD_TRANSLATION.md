@@ -198,4 +198,35 @@ The 17 gap roles are accepted as **unbound**. They do not enter `kg_sql_column` 
 
 ---
 
+## Revision — accept-unbound fully reversed (2026-11-19)
+
+The "accept unbound" decision above is **fully reversed**. All 17 gap
+roles now have `kg_entity_field` rows and `kg_sql_column` rows, so all 61
+drafted SQL roles are bound. Two passes:
+
+1. **Site + Classification (7 roles)** — reversed 2026-11-19 (commit
+   `23308c7`), so those two entities gained a SQL projection path.
+2. **The 10 SQL-essential gap roles** — reversed 2026-11-19 (this pass),
+   because the KG-backed SQL emitter (PENDING §3.3) would otherwise drop
+   columns the overlay currently projects (verified in `KG_ROLE_MAPS.md`):
+   Supplier `enabled`; PurchaseOrder `supplier_name`/`buyer_name`;
+   Contact `supplier_id`/`party_site_id`; Address `party_site_id`,
+   `party_id`, `address1`, `city`, `state`.
+
+The rationale is the same the original note anticipated — *"they can be
+re-added to the KG the day a field is added, without re-deriving the role
+map."* The SQL emitter needs them, so the fields were added with role
+`projection`/`reference` and the note `SQL-only; no REST field`.
+
+**Field names chosen** (no `kg_entity_field` collision per entity):
+`Enabled`, `SupplierName`, `BuyerName`, `SupplierId` (Contact),
+`PartySiteId` (Contact), `PartySiteId` (Address), `PartyId` (Address),
+`Address1`, `City`, `State`.
+
+Counts: `kg_entity_field` 210→227, `kg_sql_column` 40→57. The gap
+register table above is left as written (historical); this revision is
+the current state.
+
+---
+
 *End of translation map.*
