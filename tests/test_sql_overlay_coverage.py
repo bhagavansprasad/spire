@@ -33,7 +33,7 @@ import pytest
 from spire.kg.sql_overlay import OVERLAY
 
 
-@pytest.mark.xfail(reason="Q5 backlog: Receivables entities not drafted (FIX_PLAN §2.3)", strict=False)
+@pytest.mark.xfail(reason="Q5 backlog: search_customer_accounts + search_receivables_invoices (filter-less sample-and-disclose) unmapped (FIX_PLAN §2.3)", strict=False)
 @pytest.mark.asyncio
 async def test_every_mcp_tool_has_an_overlay_entry():
     from spire.mcp_server.server import mcp

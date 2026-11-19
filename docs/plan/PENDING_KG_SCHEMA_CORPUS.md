@@ -15,10 +15,10 @@ This document is the **pending-work register**. The handovers carry what was don
 | Task 1 — module table lists | complete |
 | Task 2 — per-table column lists | complete (`t_task2_all.txt`, 19 tables) |
 | Task 3 — HR-side gap | closed (`PER_ALL_PEOPLE_F` found under FUSION) |
-| Task 4 — role maps | **13 of 22** drafted (added CustomerTransaction + ReceivablesInvoice, 2026-11-19; F-066 + F-067 fixed) |
-| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **13/71/7** rows (was 11/57/4 at PR #212); gap register fully reversed |
+| Task 4 — role maps | **22 of 22** drafted (all 11 Receivables done 2026-11-19: ReceivablesInvoiceLine, CreditMemo, StandardReceipt, AccountReceipt, CustomerAccount, AccountCreditMemo, AccountReceiptApplication, ReceivablesTaxLine, ReceivablesInvoiceTransactionDFF) |
+| §3.1 — KG schema additions (`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`) | **complete** — now **22/128/9** rows (was 13/71/7 at PR #213); all 22 entities drafted |
 | §3.2 — `rebuild_kg.py` build step | **superseded** (R-9) — hermetic static seed in `kg_schema.sql`, executed by `rebuild_kg.py` |
-| §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads any entity with KG rows (13 drafted) — the 9 remaining Receivables still hand-authored |
+| §3.3 — emitter reads from KG | **3.3a complete**; **3.3b drafted-entities done** (F-064, F-065); **3.3b Receivables** now auto-reads all 22 entities with KG rows |
 | §3.4 — build self-check | **not started** |
 
 ### 0.2 Branch / merge record (2026-11-19)
@@ -84,6 +84,14 @@ the resume brief.
 ---
 
 ## 1. Pending — the 11 Receivables role maps
+
+**DONE 2026-11-19 (`Phase3-KG-Receivables-RoleMaps`).** All 11 are now
+drafted and seeded; full sections in `KG_ROLE_MAPS.md` (Receivables
+subsection). Counts moved to kg_entity_sql=22 / kg_sql_column=128 /
+kg_derived_projection=9. Open items recorded in FIX_PLAN §5: F-072
+(CustomerAccount balances — no clean carrier), F-073 (StandardReceipt
+`customer_site` filter + AccountReceipt State/ProcessStatus no-carrier),
+and the ReceivablesTaxLine canonical-id discrepancy (F-070 OPEN).
 
 Each follows the four-step pattern (Phase 2 §4): dump spec → verify every projected column against `t_task2_all.txt` → verify every join key both sides → draft. Header rules in `KG_ROLE_MAPS.md` apply (never trust the sweep; verify every column; cite evidence; flag NULL-returning roles).
 

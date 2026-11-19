@@ -62,7 +62,7 @@ were removed — the tests pass deterministically.
 
 | Group | Tests | Cause |
 |---|---|---|
-| Q5 emitter surface | `tests/test_sql_overlay_coverage.py` ×1 | `search_customer_accounts` + `search_receivables_invoices` have no SQL overlay entry — the 11 un-drafted Receivables entities |
+| Q5 emitter surface | `tests/test_sql_overlay_coverage.py` ×1 | `search_customer_accounts` + `search_receivables_invoices` (the two filter-less sample-and-disclose fetchers) have no SQL overlay entry — the 11 un-drafted Receivables entities are now drafted (2026-11-19); only these two list-all tools remain unmapped |
 | Stale `:supplier_id` assertion | `tests/test_sql_emitter.py::test_shape_4_suppliers_with_site_in_bu` | Site filter emitted no `:supplier_id` bind; assertion predates the KG column work; resolved by §3.3 |
 
 ---
@@ -376,3 +376,104 @@ agreeing with REST.
 failure for ReceivablesInvoice but was never pursued; the role-map pass
 finally resolved it and the two adjacent stubs (`STATUS_TRX`, off-header
 amounts).
+
+---
+
+## 5. Receivables role-map findings (2026-11-19, `Phase3-KG-Receivables-RoleMaps`)
+
+The 9 remaining Receivables role maps landed (kg_entity_sql 13→22,
+kg_sql_column 71→128, kg_derived_projection 7→9). Several hand-authored
+specs were wrong and were fixed in the seed; several roles have no clean
+carrier and are dropped. Findings below, fixed-then-open.
+
+### F-068 — `AccountCreditMemo.CreditMemoId` maps to `CUSTOMER_TRX_ID`, not `PAYMENT_SCHEDULE_ID` (FIXED)
+
+**S0.** The hand-authored `AccountCreditMemo` EntitySpec projected
+`PAYMENT_SCHEDULE_ID` as `CreditMemoId`. REST `CreditMemoId`=1581292 ==
+`AR_PAYMENT_SCHEDULES_ALL.CUSTOMER_TRX_ID` (21), while
+`PAYMENT_SCHEDULE_ID`=1343229 on the same row.
+
+**S1 (harm).** SQL ≠ REST at the id column — the same F-066 shape in the
+account-credit-memo child.
+
+**S2 (evidence).** REST `get_account_credit_memos(300000047368527)` row:
+`CreditMemoId=1581292, CreditMemoNumber=1447816`. Pod:
+`CUSTOMER_TRX_ID=1581292, PAYMENT_SCHEDULE_ID=1343229, TRX_NUMBER=1447816`.
+
+**Fix.** Seed `CreditMemoId → CUSTOMER_TRX_ID`; `pk_column` → `CUSTOMER_TRX_ID`.
+Verified live: `CUSTOMER_TRX_ID=1581292` returns the memo's rows agreeing
+with REST. Also noted: `CreditMemoStatus` (`STATUS`='OP'/'CL') and
+`TransactionClass` (`CLASS`='CM') are code-vs-display (F-061 class).
+
+### F-069 — `AccountReceiptApplication` filter reached the account through the wrong path (FIXED)
+
+**S0.** The filter `get_account_receipt_applications.account_id` was
+`{alias}.CUSTOMER_TRX_ID IN (SELECT TRX_ID FROM RA_CUSTOMER_TRX_ALL …)` —
+wrong twice: `TRX_ID` is not a column (it is `CUSTOMER_TRX_ID`), and the
+receipt's own `CUSTOMER_TRX_ID` is the on-account transaction, not the
+applied one.
+
+**Fix.** Applications are children of receipts, so the account link is the
+receipt path: `{alias}.CASH_RECEIPT_ID IN (SELECT CASH_RECEIPT_ID FROM
+AR_CASH_RECEIPTS_ALL WHERE PAY_FROM_CUSTOMER = {value})`. Also
+`ReferenceTransactionId` → `APPLIED_CUSTOMER_TRX_ID` (not `PAYMENT_SCHEDULE_ID`).
+Verified live: application 994531 → amount 487.2, status 'APP', receipt 621464,
+applied tx 1624341 — all equal REST.
+
+### F-070 — `ReceivablesTaxLine` points at the wrong table (FIXED, one open item)
+
+**S0.** The hand-authored spec pointed at `RA_CUST_TRX_LINE_GL_DIST_ALL` and
+projected `TAX_LINE_NUMBER`/`TAX_JURISDICTION_CODE`/`TAX_RATE`/
+`TAX_RATE_CODE`/`TAX_REGIME_CODE`/`TAX`/`TAXABLE_AMOUNT` — none exist on that
+table (9 of 11 projected columns absent). The real source is `ZX_LINES` (the
+tax engine), joined `TRX_ID`=`CUSTOMER_TRX_ID`, `TRX_LINE_ID`=
+`CUSTOMER_TRX_LINE_ID`, `ENTITY_CODE`='TRANSACTIONS'.
+
+**Fix.** `fusion_table` → `ZX_LINES`; all 10 detail fields map cleanly
+(`TAX_LINE_NUMBER`, `TAX_JURISDICTION_CODE`, `TAX_RATE`, `TAX_RATE_CODE`,
+`TAX_REGIME_CODE`, `TAX_STATUS_CODE`, `TAX`, `TAX_AMT`, `TAXABLE_AMT`,
+`TAX_POINT_DATE`). Filter rewritten to `TRX_ID`/`TRX_LINE_ID`/`ENTITY_CODE`.
+Verified live: invoice 1002 line 74 → COUNTY 2.25% / STATE 6.5% exactly equal REST.
+
+**OPEN — canonical-id discrepancy.** REST `CustomerTransactionLineId` on the
+tax line is 112/113 (the GL-dist `RA_CUST_TRX_LINE_GL_DIST_ALL.CUSTOMER_TRX_LINE_ID`),
+a different id space from `ZX_LINES.TAX_LINE_ID` (9039/9040). The role map
+binds the canonical id to `TAX_LINE_ID`; the REST-vs-physical id mismatch is
+unresolved. `TaxInclusiveIndicator` ('No') → `TAX_AMT_INCLUDED_FLAG` (code) is
+dropped (F-061 class).
+
+### F-071 — `ReceivablesTransactionDFF` overlay name mismatch (FIXED)
+
+**S0.** `sql_overlay.py` named the entity `ReceivablesTransactionDFF`, but the
+KG (kg_entity / kg_entity_field / kg_edge / kg_vocabulary / nl_parser /
+synthesizer / tests) names it `ReceivablesInvoiceTransactionDFF`. The mismatch
+was latent (no KG rows) and surfaced as an ORA-02291 on the first `kg_entity_sql`
+insert.
+
+**Fix.** Renamed the overlay EntitySpec + `tool_to_entity` entry to
+`ReceivablesInvoiceTransactionDFF`. The DFF role map: `CustomerTrxId` →
+`CUSTOMER_TRX_ID`, `__FLEX_Context` → `ATTRIBUTE_CATEGORY`; `ATTRIBUTE1`
+(dropped — no populated segment on this pod) and `__FLEX_Context_DisplayValue`
+(null) are dropped.
+
+### F-072 — `CustomerAccount` balances have no clean carrier (OPEN)
+
+`TotalOpenReceivablesForAccount` (14418895.83) and
+`TotalTransactionsDueForAccount` (15872395) live on the
+`/receivablesCustomerAccountActivities` service, not `HZ_CUST_ACCOUNTS`.
+`TotalTransactionsDueForAccount` = `SUM(AMOUNT_DUE_REMAINING) WHERE CLASS='INV'`
+(verified exact), but `TotalOpenReceivablesForAccount` does **not** reduce to a
+single clean SUM (all-class remaining 14418344, INV+DM+CM 14419844 — both off by
+~550–950). Both balance roles are **dropped** (no carrier) until the exact
+aggregation is pinned. The four identity fields (`AccountId`, `AccountNumber`,
+`CustomerName`, `CustomerId`) are bound and verified.
+
+### F-073 — `StandardReceipt` `customer_site` filter names an absent column (OPEN)
+
+`search_standard_receipts.customer_site` → `{alias}.CUSTOMER_SITE = {value}`,
+but `AR_CASH_RECEIPTS_ALL` has no `CUSTOMER_SITE` column (only
+`CUSTOMER_SITE_USE_ID`, 51, NUMBER). The tool matches `customer_site`
+client-side. Deferred — not a role-map (column) item; belongs to the §3.3b
+Receivables-filter pass. Also open: `AccountReceipt.State` ('Applied'/'Unapplied')
+and `ProcessStatus` ('Open'/'Closed') have no clean single column on
+`AR_CASH_RECEIPTS_ALL` — both dropped, documented in KG_ROLE_MAPS.md §AccountReceipt.
