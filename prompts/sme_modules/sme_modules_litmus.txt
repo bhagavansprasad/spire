@@ -1,0 +1,218 @@
+# Spire prompt set - sme_modules/litmus. Read by scripts/promptkit.py.
+# One prompt per line. Blank lines and lines starting with # are ignored.
+#
+# TIER: litmus. Not a capability tier - see prompts/README.md.
+# SOURCE: "Module A" SME prompt list, 4 modules x 10 prompts, captured
+#         2026-11-21. Prompt WORDING IS THE TEST - only the {PLACEHOLDER}
+#         values were substituted, with values verified on the pod
+#         (t_f078_verify.csv, t_f078_verify2.csv, t_f079_verify.csv).
+#
+# WHY THE FILL VALUES MATTER: a prompt naming a record with no children
+# returns an empty list from Fusion, which is indistinguishable from Spire
+# being broken. Every substituted value below was queried first and its
+# child counts recorded in sme_modules_expected.md.
+#
+# CONTRACT (read before scoring):
+#   20 prompts are expected to ANSWER (marked PASS-EXPECTED).
+#   13 are expected to answer PARTIALLY (PARTIAL-EXPECTED) - a clean
+#     answer that omits an unmodelled field is a PASS; inventing the field
+#     is a FAIL.
+#    7 are known GAPS (GAP-EXPECTED). A clean refusal naming the missing
+#     capability is the PASS for these. Do NOT score a GAP as a regression,
+#     and do NOT "fix" the file by deleting the prompt - the gap is the
+#     record.
+#
+# ORDERING: module order, easy-before-hard within each module. The full
+# set is ~40 prompts; the 8 in section 6 of sme_modules_expected.md are
+# the ones to run first if time is short.
+#
+# WALL-CLOCK: not yet baselined. Record it on first full run.
+
+# ==========================================================================
+# MODULE 1 - PROCUREMENT: purchase orders, lines, schedules, distributions
+# ==========================================================================
+
+# PASS-EXPECTED. 171 POs in the 30-day window. Total amount is DERIVED
+# (UNIT_PRICE x QUANTITY + PO_DISTRIBUTIONS tax), not a stored column -
+# this is the F-060/F-063 projection engine on every row.
+Show me all purchase orders created in the last 30 days. Include PO number, supplier name, buyer, creation date, total amount, and status.
+
+# PARTIAL-EXPECTED. PO 55040 = POHeaderId 67, CLOSED, 52 lines/scheds/dists.
+# Two known limits: the tool takes POHeaderId (not the number), and
+# "approval status" is DOCUMENT_STATUS because AUTHORIZATION_STATUS does
+# not exist on the pod (F-064, re-confirmed by ORA-00904).
+Get the complete details of purchase order 55040, including supplier, business unit, buyer, currency, total amount, and approval status.
+
+# PASS-EXPECTED. 52 lines on PO 55040. Line amount is derived.
+Show all lines for purchase order 55040. Include item description, quantity, unit price, UOM, and line amount.
+
+# PASS-EXPECTED. 52 schedules on PO 55040.
+Show the shipment schedules for purchase order 55040. Include shipment number, ordered quantity, received quantity, promised date, and shipment status.
+
+# PASS-EXPECTED. 52 distributions on PO 55040 - the deepest chain
+# (PO -> line -> schedule -> distribution). A wrong join here returns
+# plausible numbers, so compare the row count, not just the shape.
+Show the distribution details for purchase order 55040. Include distribution number, charge account, quantity, amount, and deliver-to location.
+
+# PASS-EXPECTED. Dell Inc. = VendorId 300000047414679, 32 supplier sites.
+Find all purchase orders for supplier Dell Inc. Show PO number, order date, total amount, and status.
+
+# GAP-EXPECTED. search_purchase_orders has no buyer filter. Eleanor White
+# (PERSON_ID 300000076218768) holds 3,773 POs. A clean refusal naming the
+# missing filter is the pass. NOTE: naive joins here double the count -
+# PER_PERSON_NAMES_F carries 2 rows per person (effective dating).
+Show all purchase orders assigned to buyer Eleanor White. Include PO number, supplier, amount, and approval status.
+
+# PASS-EXPECTED. 64 PENDING APPROVAL POs on the pod; PO 55250 is one
+# (POHeaderId 1829, 52 lines).
+Find purchase orders that are pending approval. Show PO number, supplier, buyer, amount, and submission date.
+
+# GAP-EXPECTED. No schedule-level "overdue" predicate - search_purchase_orders
+# cannot reach PO_LINE_LOCATIONS_ALL.PROMISED_DATE. PO UK555867 (header
+# 625877) has exactly 52 overdue schedules, so the data is there.
+Show purchase orders with pending or overdue shipments. Include PO number, supplier, shipment number, promised delivery date, and outstanding quantity.
+
+# PARTIAL-EXPECTED. No PO-by-supplier aggregate exists
+# (aggregate_purchase_orders_by_status does, by status not supplier).
+Get the total purchase order amount by supplier for the current month. Display supplier name, number of purchase orders, and total amount.
+
+# ==========================================================================
+# MODULE 2 - PAYABLES: supplier invoices
+# ==========================================================================
+
+# PASS-EXPECTED. 781 AP invoices in the 30-day window.
+Show all supplier invoices created in the last 30 days. Include invoice number, supplier name, invoice date, amount, and status.
+
+# PARTIAL-EXPECTED. ERS-53004-755598 = InvoiceId 1601397, 184 lines,
+# 138,864.62, Staffing Services. DUE_DATE DOES NOT EXIST on
+# AP_INVOICES_ALL (ORA-00904) - an answer that invents a due date fails.
+Get the complete details of invoice ERS-53004-755598. Include supplier, invoice date, due date, invoice amount, currency, business unit, and payment status.
+
+# GAP-EXPECTED. No InvoiceLine entity or tool. The 184 lines exist in
+# AP_INVOICE_LINES_ALL; Spire has nothing to call.
+Show all invoice lines for invoice ERS-53004-755598. Include line number, description, quantity, unit price, amount, and line type.
+
+# PARTIAL-EXPECTED. The unpaid filter exists (PAYMENT_STATUS_FLAG = 'N',
+# 12,347 rows pod-wide). Two limits: DUE_DATE is absent, and the filter
+# admits zero-amount invoices - 12,347 includes them, so a "top by lines"
+# list looks broken without an INVOICE_AMOUNT > 0 guard.
+Find all unpaid invoices for supplier Staffing Services. Show invoice number, invoice date, due date, amount, and remaining balance.
+
+# GAP-EXPECTED. Invoice holds are not modelled.
+Show all invoices currently on hold. Include invoice number, supplier, invoice amount, hold reason, and hold status.
+
+# PARTIAL-EXPECTED. The overdue filter exists on AP Invoice (unlike AR),
+# but DUE_DATE is absent, so "number of overdue days" is unanswerable.
+# An answer that states the day count is fabricating it.
+Find all overdue supplier invoices. Show invoice number, supplier, due date, outstanding amount, and number of overdue days.
+
+# GAP-EXPECTED. No Payment entity - payment number/date/method are unreachable.
+Show the payment details for invoice ERS-53004-755598. Include payment number, payment date, payment method, payment amount, and payment status.
+
+# PARTIAL-EXPECTED. Only PAYMENT_STATUS_FLAG is modelled; validation and
+# accounting status and their error queues are not.
+Check whether invoice ERS-53004-755598 has completed validation and accounting. Show validation status, accounting status, and any errors.
+
+# PARTIAL-EXPECTED. No duplicate-detection tool. Passing means listing the
+# supplier's invoices and letting the reader compare - not asserting a
+# duplicate count the SQL cannot support.
+Find duplicate invoices for supplier Staffing Services. Compare invoice numbers, invoice dates, and invoice amounts.
+
+# PASS-EXPECTED. aggregate_invoices_by_supplier with date_from/date_to.
+# REST reports count PER PAGE, so a page size stated as a total is a fail.
+Show the total outstanding invoice amount grouped by supplier for the current month. Include supplier name, invoice count, and outstanding amount.
+
+# ==========================================================================
+# MODULE 3 - RECEIVABLES: AR invoices, customers, receipts, credit memos
+# ==========================================================================
+
+# GAP-EXPECTED. ReceivablesInvoice has exactly ONE filter, by_id. There is
+# no date filter, so "last 30 days" is unanswerable however good the
+# parser is. 107 INV-class transactions exist in the window.
+Show all AR invoices created in the last 30 days. Include invoice number, customer name, invoice date, due date, amount, and status.
+
+# PASS-EXPECTED. AR invoice 112390 = CustomerTransactionId 1533822, 240
+# lines, 180 tax lines, Sykes Gym. Outstanding balance is the F-067
+# derived projection.
+Get the complete details of AR invoice 112390. Include customer, transaction date, transaction type, currency, total amount, and outstanding balance.
+
+# PASS-EXPECTED. Plain list, sample-and-disclose.
+Show all customers with active customer accounts. Include customer name, account number, account status, and customer type.
+
+# PARTIAL-EXPECTED. Account 26360 = ABC Application Software, 1 site.
+# Resolves by name; the site list and account profile are not projected.
+Get the complete details of customer account 26360. Include account name, account number, account status, customer sites, and account profile.
+
+# PASS-EXPECTED. Account 26360 holds 2,329 receipts (pod-wide, all orgs).
+# Customer_name resolves to the account number server-side. F-076 caveat:
+# REST shows the session BU only, so a row count below matches REST.
+Show all receipts received from customer ABC Application Software. Include receipt number, receipt date, receipt amount, receipt method, and status.
+
+# PASS-EXPECTED. Receipt Brad-234 = CashReceiptId 300000347746566, 579
+# applications. Unapplied must come from the PMT schedule (F-075), NOT
+# from AMOUNT - SUM(AMOUNT_APPLIED), which is wrong on partial receipts.
+Get the application details of receipt Brad-234. Show the invoices against which the receipt was applied, applied amount, and unapplied amount.
+
+# PASS-EXPECTED. Receipt 2001 is 100,000 with 10,000 unapplied; 558877 is
+# 50,000 / 25,500. Filtering on the applications sum instead returns only
+# NSF/REV receipts with applied = 0 - that is the wrong query, not a
+# missing-data answer.
+Find all unapplied and partially applied receipts. Include receipt number, customer, receipt amount, applied amount, and unapplied balance.
+
+# PASS-EXPECTED. Credit memo 29822 belongs to Bradshaw Hotels. Use the
+# account-scoped tool, not the top-level newest-first list.
+Show all credit memos created for customer Bradshaw Hotels. Include credit memo number, transaction date, amount, reason, and status.
+
+# PARTIAL-EXPECTED. CM 29822 = CustomerTransactionId 300000183145265, 24
+# lines. "Original invoice reference" and "reason" are not modelled.
+Get the complete details of credit memo 29822. Include customer, original invoice reference, credit amount, reason, and accounting status.
+
+# GAP-EXPECTED. No overdue filter on ReceivablesInvoice - only AP Invoice
+# has one. The asymmetry, not the data, is the blocker.
+Find overdue AR invoices for customer ABC Corporation Americas. Include invoice number, due date, original amount, outstanding balance, and overdue days.
+
+# ==========================================================================
+# MODULE 4 - SUPPLIER: master data, sites, contacts, addresses, classes
+# ==========================================================================
+
+# PASS-EXPECTED. name_fragment filter.
+Search for suppliers matching Dell. Show supplier name, supplier number, supplier type, business relationship, and status.
+
+# PARTIAL-EXPECTED. 1262 is SEGMENT1 (supplier number), not VendorId; the
+# tool takes SupplierId or a name fragment. Expect a resolution attempt
+# or a clean "give me the id". Tax registration is only partly modelled.
+Get the complete details of supplier 1262. Include supplier name, supplier number, tax registration details, supplier type, and status.
+
+# PASS-EXPECTED. 1262 = EIP Inc, VendorId 300000047507499, 22 sites.
+Show all active supplier sites for supplier 1262. Include site name, procurement business unit, address, and site status.
+
+# PARTIAL-EXPECTED. Same fetch; inactive filtering is client-side at best.
+Show all inactive supplier sites for supplier 1262. Include site name, business unit, and inactive date if available.
+
+# PASS-EXPECTED. 45 contacts, via get_supplier_contacts. NOTE the physical
+# path: POZ_SUPPLIER_CONTACTS has no VENDOR_ID - it joins through
+# PARTY_SITE_ID to POZ_SUPPLIER_SITES_ALL_M. The obvious join returns 0
+# contacts for every supplier.
+Get the contact details of supplier 1262. Include contact name, email address, phone number, and contact status.
+
+# PASS-EXPECTED. 22 distinct addresses on supplier 1262.
+Show all addresses associated with supplier 1262. Include address name, address lines, city, state, country, and postal code.
+
+# PASS-EXPECTED. SMALL_BUSINESS = 13 suppliers (HUB_ZONE = 18). 11 lookup
+# codes exist; the column is POZ_BUS_CLASSIFICATIONS.LOOKUP_CODE.
+Find suppliers based on supplier classification SMALL_BUSINESS. Include supplier name, supplier number, classification, and status.
+
+# PARTIAL-EXPECTED. has_site_in_bu exists; payment method and payment
+# terms may not be projected.
+Show the procurement and payment-related site assignments for supplier 1262. Include site name, procurement business unit, payment method, and payment terms where available.
+
+# PARTIAL-EXPECTED. 8 suppliers have END_DATE_ACTIVE <= SYSDATE.
+# INACTIVE_FLAG does not exist on POZ_SUPPLIERS (ORA-00904) - an answer
+# built on that column name fails.
+Find suppliers with inactive or expired supplier records. Include supplier number, supplier name, status, and inactive date.
+
+# PASS-EXPECTED. The best single traversal test: 22 sites, 45 contacts,
+# 22 addresses, 3 classifications off one parent, four different KG edges.
+# Compare all four counts - a tool that returns one child type and
+# silently drops the rest passes a shape check but fails this prompt.
+Compare the supplier details for 1262 and show all associated sites, contacts, addresses, and classifications.

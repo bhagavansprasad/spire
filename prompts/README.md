@@ -38,12 +38,28 @@ prompts/
   dipstick/               dipstick_smoke.txt  dipstick_verify.txt  dipstick_exhaust.txt
   scorer/                 parser_stress.txt  tool_selection.txt
   sme/                    testcases.txt
+  sme_modules/            sme_modules_litmus.txt  + 3 companion files
   retest/                 prompts.txt
 ~~~
 
 **Other files, no tier:**
 
 - `sme/sme_testcases.txt` — external QA corpus, verbatim, no runner contract.
+  Note: despite the name this is **not** the SME "Module A" list; it is an
+  older QEI/negative suite (34 prompts) carrying dangling pronouns and one
+  malformed prompt. Three different dates are in play and they are not
+  interchangeable: its header says the content was **captured 2026-07-28,
+  extended 2026-07-30**; it was **first committed 2026-10-10**; its last
+  modification was **2026-10-26**. Do not confuse it with Module A.
+- `sme_modules/` — the SME **Module A** set, self-contained and safe to hand
+  to a reviewer as a folder:
+  - `sme_testcases-original.txt` — the SME's 40 prompts, unedited,
+    `{PLACEHOLDER}`s intact. Baseline of record.
+  - `sme_modules_litmus.txt` — the runnable set: same 40 prompts with only
+    the placeholders replaced by pod-verified values (40/40 match, 0 drift).
+  - `sme_modules_expected.md` — fill values, readiness ledger (20 PASS /
+    13 PARTIAL / 7 GAP), scoring rules, known traps.
+  - `PROMPT_SHEET_2026-11-21.md` — one-page per-prompt readiness view.
 - `refusals/refusals_refusal_examples.txt` — the refusal Examples from `capability.py`, enforced by `tests/test_nl_parser_capability.py`.
 - `scorer/` — parser-scorer corpora in a different format (`EXPECT ||| prompt`). Not for promptkit.
 - `retest/retest_prompts.txt` — pending fold-in to its targets.
