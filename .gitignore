@@ -54,6 +54,14 @@ t_*.txt
 /t_*.sql
 /t_*.out
 
+# Scratch evidence DIRECTORIES (e.g. t_f081_sql/ from the litmus run).
+# The root-only rules above match files, not files inside a t_* folder, so
+# a directory of per-prompt .sql/.out artifacts leaked into git status.
+# The artifacts are reproducible via scripts/t_s1_f081_emit.py +
+# scripts/t_s1_f081_run_sql.sh, so they do not need to be in git.
+/t_*_sql/
+/t_*_out/
+
 # Overnight prompt runs and their derivatives
 overnight/
 clean_*
