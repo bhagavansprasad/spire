@@ -1,0 +1,59 @@
+1. Procurement – Purchase Orders
+10 prompts
+These prompts cover purchase orders, PO lines, schedules, distributions, and buyers.
+#	Prompt
+1	Show me all purchase orders created in the last 30 days. Include PO number, supplier name, buyer, creation date, total amount, and status.
+2	Get the complete details of purchase order {PO_NUMBER}, including supplier, business unit, buyer, currency, total amount, and approval status.
+3	Show all lines for purchase order {PO_NUMBER}. Include item description, quantity, unit price, UOM, and line amount.
+4	Show the shipment schedules for purchase order {PO_NUMBER}. Include shipment number, ordered quantity, received quantity, promised date, and shipment status.
+5	Show the distribution details for purchase order {PO_NUMBER}. Include distribution number, charge account, quantity, amount, and deliver-to location.
+6	Find all purchase orders for supplier {SUPPLIER_NAME}. Show PO number, order date, total amount, and status.
+7	Show all purchase orders assigned to buyer {BUYER_NAME}. Include PO number, supplier, amount, and approval status.
+8	Find purchase orders that are pending approval. Show PO number, supplier, buyer, amount, and submission date.
+9	Show purchase orders with pending or overdue shipments. Include PO number, supplier, shipment number, promised delivery date, and outstanding quantity.
+10	Get the total purchase order amount by supplier for the current month. Display supplier name, number of purchase orders, and total amount.
+
+2. Payables – Supplier Invoices
+10 prompts
+These prompts focus on invoice details, invoice lines, validation, holds, payment status, and accounting.
+#	Prompt
+1	Show all supplier invoices created in the last 30 days. Include invoice number, supplier name, invoice date, amount, and status.
+2	Get the complete details of invoice {INVOICE_NUMBER}. Include supplier, invoice date, due date, invoice amount, currency, business unit, and payment status.
+3	Show all invoice lines for invoice {INVOICE_NUMBER}. Include line number, description, quantity, unit price, amount, and line type.
+4	Find all unpaid invoices for supplier {SUPPLIER_NAME}. Show invoice number, invoice date, due date, amount, and remaining balance.
+5	Show all invoices currently on hold. Include invoice number, supplier, invoice amount, hold reason, and hold status.
+6	Find all overdue supplier invoices. Show invoice number, supplier, due date, outstanding amount, and number of overdue days.
+7	Show the payment details for invoice {INVOICE_NUMBER}. Include payment number, payment date, payment method, payment amount, and payment status.
+8	Check whether invoice {INVOICE_NUMBER} has completed validation and accounting. Show validation status, accounting status, and any errors.
+9	Find duplicate invoices for supplier {SUPPLIER_NAME}. Compare invoice numbers, invoice dates, and invoice amounts.
+10	Show the total outstanding invoice amount grouped by supplier for the current month. Include supplier name, invoice count, and outstanding amount.
+
+3. Receivables – AR Invoices, Customers, Receipts and Credit Memos
+10 prompts
+These prompts cover customer accounts, transactions, receipts, and credit memos.
+#	Prompt
+1	Show all AR invoices created in the last 30 days. Include invoice number, customer name, invoice date, due date, amount, and status.
+2	Get the complete details of AR invoice {AR_INVOICE_NUMBER}. Include customer, transaction date, transaction type, currency, total amount, and outstanding balance.
+3	Show all customers with active customer accounts. Include customer name, account number, account status, and customer type.
+4	Get the complete details of customer account {CUSTOMER_ACCOUNT_NUMBER}. Include account name, account number, account status, customer sites, and account profile.
+5	Show all receipts received from customer {CUSTOMER_NAME}. Include receipt number, receipt date, receipt amount, receipt method, and status.
+6	Get the application details of receipt {RECEIPT_NUMBER}. Show the invoices against which the receipt was applied, applied amount, and unapplied amount.
+7	Find all unapplied and partially applied receipts. Include receipt number, customer, receipt amount, applied amount, and unapplied balance.
+8	Show all credit memos created for customer {CUSTOMER_NAME}. Include credit memo number, transaction date, amount, reason, and status.
+9	Get the complete details of credit memo {CREDIT_MEMO_NUMBER}. Include customer, original invoice reference, credit amount, reason, and accounting status.
+10	Find overdue AR invoices for customer {CUSTOMER_NAME}. Include invoice number, due date, original amount, outstanding balance, and overdue days.
+
+4. Supplier – Supplier Master Data
+10 prompts
+These prompts cover suppliers, supplier sites, contacts, addresses, and classifications.
+#	Prompt
+1	Search for suppliers matching {SUPPLIER_NAME}. Show supplier name, supplier number, supplier type, business relationship, and status.
+2	Get the complete details of supplier {SUPPLIER_NUMBER}. Include supplier name, supplier number, tax registration details, supplier type, and status.
+3	Show all active supplier sites for supplier {SUPPLIER_NUMBER}. Include site name, procurement business unit, address, and site status.
+4	Show all inactive supplier sites for supplier {SUPPLIER_NUMBER}. Include site name, business unit, and inactive date if available.
+5	Get the contact details of supplier {SUPPLIER_NUMBER}. Include contact name, email address, phone number, and contact status.
+6	Show all addresses associated with supplier {SUPPLIER_NUMBER}. Include address name, address lines, city, state, country, and postal code.
+7	Find suppliers based on supplier classification {CLASSIFICATION}. Include supplier name, supplier number, classification, and status.
+8	Show the procurement and payment-related site assignments for supplier {SUPPLIER_NUMBER}. Include site name, procurement business unit, payment method, and payment terms where available.
+9	Find suppliers with inactive or expired supplier records. Include supplier number, supplier name, status, and inactive date.
+10	Compare the supplier details for {SUPPLIER_NUMBER} and show all associated sites, contacts, addresses, and classifications.
