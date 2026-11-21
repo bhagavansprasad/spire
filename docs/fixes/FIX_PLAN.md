@@ -1,7 +1,8 @@
 # SPIRE — Fix Plan
 
-**Branch:** `Phase3-F073-Receipt-Site-Filter` (merged to `master` via PR
-#217, merge commit `8030439`)
+**Branch:** current work on `Phase3-F081-Litmus-Findings` (off `master`).
+Prior: `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge
+`8030439`); SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
@@ -11,6 +12,17 @@ F-076 (BU scoping) new Candidate; no regressions
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
+
+**2026-11-21 addendum.** The first full run of the SME Module A litmus set
+(`prompts/sme_modules/sme_modules_litmus.txt`, log `t_f081_litmus_run.txt`)
+scored **24 pass / 16 fail of 40**, and execution of every emitted SQL
+statement (`t_f081_sql/`) found **1 statement of 22 agreeing with REST**.
+Five new findings are recorded in §6 — **F-078** (unmapped args → invalid
+SQL, 9 of 22 statements), **F-079** (number bound to internal id, 6
+statements → 0 rows), **F-080** (two wrong predicates → false zeros),
+**F-081** (requested columns silently dropped), **F-082** (AR by-number
+false negative). F-076 and F-077 remain open. Recommended fix order is at
+the end of §6.
 
 ---
 
@@ -423,7 +435,7 @@ carrier and are dropped. Findings below, fixed-then-open.
 **S1 (harm).** SQL ≠ REST at the id column — the same F-066 shape in the
 account-credit-memo child.
 
-**S2 (evidence).** REST `get_account_credit_memos(300000047368527)` row:
+**S2.** REST `get_account_credit_memos(300000047368527)` row:
 `CreditMemoId=1581292, CreditMemoNumber=1447816`. Pod:
 `CUSTOMER_TRX_ID=1581292, PAYMENT_SCHEDULE_ID=1343229, TRX_NUMBER=1447816`.
 
@@ -686,3 +698,318 @@ matching REST's `CustomerName`/`CustomerAccountNumber` = null.
 **S8 (miss record).** The Receivables role-map pass flagged the key as
 nullable but did not run the Q4 NULL-count; the §3.4 self-check (this
 window) is the first command to run it.
+
+---
+
+## 6. Litmus-run findings (2026-11-21, `Phase3-F081-Litmus-Findings`)
+
+Source of all five: the first full run of
+`prompts/sme_modules/sme_modules_litmus.txt` (40 prompts, log
+`t_f081_litmus_run.txt`), then execution of every emitted SQL statement
+via `./runsql.sh` (`t_f081_sql/pNN.sql` → `pNN.out`).
+
+**Run result:** 24 pass / 16 fail of 40. **SQL result: 1 of 22 statements
+agreed with REST.**
+
+The emitted SQL had to be **re-emitted** for execution: promptkit's
+`spire.sql` diagnostic is hard-wrapped at 80 columns and truncates long
+lines, so the SQL inside the log cannot be run verbatim. The Plan block is
+short and intact, and `emit_sql` is a pure function of the plan, so
+`scripts/t_s1_f081_emit.py` rebuilds the statements from the recovered
+plans with no further LLM calls. That script and
+`scripts/t_s1_f081_run_sql.sh` are the reproducers for this section.
+
+### F-078 — tool args with no `FilterSpec` emit an empty WHERE (OPEN, S1)
+
+**S0 (claim).** When a plan step carries a `tool_arg` that has no
+`FilterSpec` in `sql_overlay._FILTERS`, the emitter appends only a comment
+and produces a structurally invalid statement:
+
+```
+WHERE -- unmapped tool_arg: invoice_number='ERS-53004-755598';
+```
+
+Oracle sees `WHERE ;` → **ORA-00936: missing expression**.
+
+**S1 (harm).** The emitted SQL cannot execute at all, so the SQL half of
+every such answer is unverifiable. Nine of 22 statements (41%) are
+affected, covering the highest-value prompts in the set (invoice details,
+invoice lines, unpaid invoices, overdue invoices, payments, validation
+status, supplier addresses, account details, POs in a date window).
+
+**S2 (evidence).** `t_f081_sql/p01, p06, p12, p14, p16, p17, p18, p24,
+p36` — all `ORA-00936`. Counts of the markers in the run log:
+
+```
+3 unmapped tool_arg: invoice_number      1 unmapped tool_arg: overdue
+2 unmapped tool_arg: supplier_name       1 unmapped tool_arg: open_only
+1 unmapped tool_arg: unpaid              1 unmapped tool_arg: created_since
+1 unmapped tool_arg: supplier_number     1 unmapped tool_arg: account_number
+```
+
+The comparison that proves it is a gap and not a design: `_FILTERS`
+registers **31** (tool, arg) pairs. `search_invoices` has only **two**
+(`invoice_date_after`, `supplier_number`), while the tool accepts
+`invoice_number`, `supplier_name`, `unpaid` and `overdue` as well.
+`search_purchase_orders` has only **two** (`status`, `supplier_id`) while
+the tool accepts `created_since`, `supplier_name`, `buyer`, `pending`.
+`get_customer_account_by_name` has only `customer_name`, though the tool
+also resolves by `account_number`.
+
+**S3 (mechanism).** `src/spire/rendering/sql_emitter.py` renders an
+unmapped arg as a trailing comment and keeps going, which is deliberate
+(it preserves visibility into what the tool was asked for) but produces a
+statement that can never run. The plan, the tool and the REST answer are
+all correct; only the SQL projection is incomplete.
+
+**S4 (root cause).** The filter overlay was written per-tool as prompts
+needed it, not derived from the tool signatures. A tool argument reaches
+the SQL layer only if someone remembered to author a `FilterSpec` for it.
+Nothing checks the two lists against each other.
+
+**S5 (disproved alternative).** Not "the parser dropped the argument" —
+the Plan block shows the arg present and correctly valued
+(`tool_args: {'invoice_number': 'ERS-53004-755598'}`), and the REST side
+returns data. Not "the pod rejects the SQL" either: the same statement
+runs once a predicate is supplied.
+
+**S6 (fix shape, not yet applied).** (a) Author the missing specs for the
+in-scope args; (b) make the emitter **fail loudly** — if any tool_arg is
+unmapped, emit a marker that makes the statement unusable-by-accident
+(e.g. a `1=1 AND -- unmapped` is worse; better: raise, or emit `WHERE 1=0`
+with an explicit `-- SQL DISABLED: unmapped arg X` banner) so an
+unrunnable statement is never presented as a projection; (c) add a guard
+test that every declared tool arg has a spec or is in an explicit
+"not-in-SQL" allowlist.
+
+**S7 (classification).** **Open, S1 harm.** Highest priority of the four:
+it is the widest blast radius (9/22) and the cheapest to detect.
+
+### F-079 — an entity *number* is bound to an internal *id* (OPEN, S1)
+
+**S0.** The planner puts the human-facing number into the
+identifier argument, and the SQL overlay binds it to the physical id
+column, so the SQL asks for a row that cannot exist:
+
+| Prompt | Plan arg | Emitted predicate | Actual mapping |
+|---|---|---|---|
+| PO details/lines/schedules/dists (55040) | `po_header_id='55040'` | `P.PO_HEADER_ID = '55040'` | 55040 is `SEGMENT1`; header id is **67** |
+| AR invoice 112390 | `customer_transaction_id='112390'` | `P.CUSTOMER_TRX_ID = '112390'` | 112390 is `TRX_NUMBER`; id is **1533822** |
+
+**S1 (harm).** Six statements (**p02, p03, p04, p05, p22**) execute
+cleanly and return **0 rows** where REST returns data — 1 PO / 52 lines /
+52 schedules / 52 distributions. A zero-row result is the most dangerous
+wrong answer type: it is indistinguishable from "no such record" and the
+narrative will say so.
+
+**S2 (evidence).**
+`./runsql.sh "SELECT COUNT(*) FROM PO_HEADERS_ALL WHERE PO_HEADER_ID = '55040'"` → **0**.
+`... WHERE SEGMENT1 = '55040'` → **1** (header 67).
+Extract of the run for prompt 2 shows the plan and the projection:
+
+```
+Plan:  Step 1: get_purchase_order_by_id   tool_args: {'po_header_id': '55040'}
+```
+
+and `t_f081_sql/p02.out` → `(no rows returned)`.
+
+**S3 (mechanism).** `get_purchase_order_by_id` **accepts either** an
+`OrderNumber` or a `POHeaderId` and tries both at runtime
+(`_try_order_number`, then `_try_header_id`). The plan carries one value
+with no indication of which space it is in, so the SQL projection — which
+has a single `po_header_id` spec — cannot reproduce the fallback. The tool
+succeeds, the SQL fails, and nothing flags the divergence.
+
+**S4 (root cause).** Runtime tolerance in the tool is not modelled in the
+plan. The plan is the contract for the SQL layer, and it is ambiguous.
+
+**S5 (disproved alternative).** Not a REST defect: REST returns PO 55040
+with `Supplier: 'EDF'`, `Total: 14869.2`. Not a missing `FilterSpec`: the
+`po_header_id` spec exists and renders correctly — it is fed the wrong
+value. Disproved by re-running the same SQL with `SEGMENT1` and getting 1
+row.
+
+**S6 (fix shape, not yet applied).** Make the identifier space explicit in
+the plan — separate args (`po_number` vs `po_header_id`) or a
+`{space: 'number'|'id'}` tag — and give each its own `FilterSpec`
+(`SEGMENT1 = {value}` vs `PO_HEADER_ID = {value}`). Same treatment for
+`TRX_NUMBER` vs `CUSTOMER_TRX_ID`. This also removes the F-082 condition
+below.
+
+**S7 (classification).** **Open, S1 harm.** Silent wrong answer, six
+statements, and it is the mechanism behind one of the 16 prompt failures.
+
+### F-080 — two filter specs point at the wrong predicate (OPEN, S1)
+
+**S0 (claim).** Two specs exist but express the wrong thing, so they
+return zero rows against correct data.
+
+**(a) `supplier_name_contains` → `HP.PARTY_NAME LIKE {value}`.** The arg is
+"contains", the template is an exact match; no wildcards are wrapped, so
+`LIKE 'Dell'` matches only a supplier literally named "Dell".
+
+```
+HP.PARTY_NAME LIKE 'Dell'    -> 0 rows
+HP.PARTY_NAME LIKE 'Dell%'   -> 4 rows
+```
+REST returns 1 supplier for the same prompt; prompt 31 answered
+"0 suppliers". `t_f081_sql/p31.out` → no rows.
+
+**(b) `search_suppliers.status` → `{alias}.ENABLED_FLAG = {value}`** with
+`value_map {'INACTIVE': "'N'"}`. The column exists but carries no
+information:
+
+```
+SELECT ENABLED_FLAG, COUNT(*) FROM POZ_SUPPLIERS GROUP BY ENABLED_FLAG
+  -> Y, 752          (every row)
+SELECT COUNT(*) FROM POZ_SUPPLIERS WHERE END_DATE_ACTIVE <= SYSDATE
+  -> 8
+```
+The real inactive carrier is `END_DATE_ACTIVE` (as recorded in F-074's
+neighbourhood and used by the SME sheet). Prompt 39 answered "0
+inactive suppliers"; the true count is 8.
+
+**S1 (harm).** Wrong-but-confident zero-row answers on supplier prompts
+31 and 39 — two of the 16 failures. Both look like clean "none found"
+answers.
+
+**S2 (evidence).** `t_f081_sql/p31.out`, `p39.out` (both no rows); the two
+`COUNT(*)` commands above; REST returning 1 and 7 respectively in the run
+log.
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py` lines 469–475
+(`status`) and 483–488 (`supplier_name_contains`).
+
+**S4 (root cause).** The same one as F-078: specs authored by hand, never
+checked against the semantics of the tool argument or against a
+`COUNT(col)` / distribution test. `ENABLED_FLAG` passed a "column exists"
+check and failed the "column is populated" one — the R-7 class again, this
+time at predicate level rather than projection level.
+
+**S5 (disproved alternative).** Not "the data is absent" — the corrected
+predicates return 4 and 8 rows on the same pod in the same session.
+
+**S6 (fix shape, not yet applied).** (a) wrap the value in `%…%` for
+`*_contains` args (or make the spec declare `match='contains'` and let the
+emitter do it); (b) re-point `status` at `END_DATE_ACTIVE` (`INACTIVE` →
+`END_DATE_ACTIVE <= SYSDATE`, `ACTIVE` → `END_DATE_ACTIVE IS NULL OR >
+SYSDATE`); (c) extend `validate_kg_schema.py` to run a
+distribution/`COUNT(DISTINCT)` check on every column used in a predicate,
+so an all-one-value column cannot become a filter carrier again.
+
+**S7 (classification).** **Open, S1 harm.** Two prompts, both silent zeros.
+
+### F-081 — `intent.fields` uses display names, so projection drops real columns (OPEN, S1)
+
+**S0 (claim).** The parser emits `fields` in REST/KG vocabulary
+(`SupplierName`, `BuyerName`) while the tool payload uses the API's own
+keys (`Supplier`, `Buyer`). `_project_outputs` keeps only keys present in
+both, so the requested columns are **silently dropped** and the formatter
+then renders em dashes for them.
+
+**S1 (harm).** The answer is confidently wrong on two of the five requested
+columns, for every PO-scoped prompt. Prompt 2 rendered:
+
+```
+SupplierName | BuyerName | CurrencyCode | Total   | Status
+—            | —         | GBP          | 14869.2 | Closed
+```
+
+The data exists at **every** other layer — pod (`VENDOR_ID`,
+`AGENT_ID` both set), REST (`Supplier: 'EDF'`, `Buyer: 'Fox, Dan'`), tool
+payload (`"Supplier": "EDF"`, `"Buyer": "Fox, Dan"`), emitted SQL
+(`PARTY_NAME = EDF`, `DISPLAY_NAME = Dan Fox`). It is lost at projection,
+with no warning.
+
+**S2 (evidence).** The run log for prompt 2:
+
+```
+Intent:  fields: ['SupplierName', 'BuyerName', 'CurrencyCode', 'Total', 'Status']
+Outputs: po: 1 record(s)
+         [1] {'CurrencyCode': 'GBP', 'Total': 14869.2, 'Status': 'Closed'}
+```
+
+Five fields requested, three survived — exactly the intersection. Direct
+tool call returns all of `Supplier`, `Buyer`, `SupplierSite`.
+
+**S3 (mechanism).** `src/spire/graph/pipeline.py::_project_outputs`
+(line ~153) does `trimmed = {k: rec[k] for k in wanted if k in rec}` and,
+when nothing matches, falls back to the *whole* record — so a **partial**
+match silently yields a partial row, and the caller has no way to know.
+`formatters._render_records` then builds the table from the intent's
+column list, printing `—` for the missing keys.
+
+**S4 (root cause).** Two vocabularies for the same quantity — KG/REST
+display names in `intent.fields`, payload names in tool output — with no
+mapping between them and no assertion that every requested field was
+found.
+
+**S5 (disproved alternative).** Not a rendering bug: the em dash is
+correctly reporting an absent key. Not the same bug as F-079: prompt 2's
+tool call succeeded and returned full data; only the projection narrowed
+it. Proven by calling the tool directly and getting `Supplier: 'EDF'`.
+
+**S6 (fix shape, not yet applied).** (a) map `intent.fields` through a
+per-entity field→payload-key alias table (the KG already knows both
+names — `kg_entity_field` vs `kg_sql_column`); (b) make `_project_outputs`
+**report** requested-but-absent fields instead of silently trimming, and
+have the formatter print that list (the "isn't available on X" mechanism
+already exists and works well — prompts 12/16/17/18 used it); (c) add a
+regression test asserting a fully-populated PO row survives projection
+with all requested columns present.
+
+**S7 (classification).** **Open, S1 harm.** Affects every PO response, and
+the failure mode is invisible to the reader.
+
+### Fix order (recommended)
+
+| Order | Finding | Why here | Effort |
+|---|---|---|---|
+| 1 | **F-078** | Widest blast radius (9/22), cheapest: author missing specs + make unmapped args loud | M |
+| 2 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
+| 3 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
+| 4 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| 5 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+
+**Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
+is that three lists are maintained by hand and never compared: tool
+signatures, `_FILTERS` specs, and `intent.fields` vocabulary. One
+`scripts/validate_sql_coverage.py` that diffs them — and a CI step that
+fails on any unmapped arg — would have caught all three before a prompt
+ever ran. That is the durable fix; the four entries above are the symptoms.
+
+### F-082 — AR by-number lookup reports "none found" for an existing invoice (OPEN, S1, twin of F-079)
+
+**S0.** Prompt 22 (`Get the complete details of AR invoice 112390`)
+answered **"No AR invoices found matching the criteria."** Invoice 112390
+exists: `CUSTOMER_TRX_ID = 1533822`, 240 lines, 180 tax lines, Sykes Gym.
+
+**S1 (harm).** A confident false negative on a primary RECEIVABLES prompt —
+the same harm class as F-077, in a second module.
+
+**S2 (evidence).** Run log block 22 (`Records returned: 0`, answer "No AR
+invoices found"); the pod holds the record
+(`t_f078_q5.csv`: `112390,1533822,INV,Sykes Gym,240,180`); the emitted SQL
+`WHERE P.CUSTOMER_TRX_ID = '112390'` also returns 0 rows
+(`t_f081_sql/p22.out`).
+
+**S3 (mechanism).** `customer_transaction_id` is bound to
+`CUSTOMER_TRX_ID`, but the prompt supplies `TRX_NUMBER`. The REST lookup
+fails the same way the SQL does, so this is **not** only an SQL-layer
+problem like F-079 — the tool itself has no number-or-id fallback for AR
+(the PO tool does).
+
+**S4 (root cause).** Asymmetric tolerance: `get_purchase_order_by_id`
+tries both spaces; `get_receivables_invoice_by_id` does not.
+
+**S5 (disproved alternative).** Not F-076 (BU scoping) — the id space, not
+the business unit, is the reason 0 rows come back; the same predicate
+returns 0 with `ORG_ID` added.
+
+**S6 (fix shape).** Add the number-or-id fallback to the AR by-id tool (as
+the PO tool has), plus the identifier-space tagging from F-079 so the SQL
+can follow.
+
+**S7 (classification).** **Open, S1 harm.** Fix together with F-079 — one
+decision, two tools.
