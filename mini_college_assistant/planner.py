@@ -1,25 +1,21 @@
+
 import sqlite3
 
-
-DB_PATH = "college.db"
+DB_PATH = "people_organization.db"
 
 
 def get_tool_for_entity(conn, entity_name):
-    """
-    Find the tool associated with an entity in the KG.
-    """
+    """Find the retrieval tool for an entity from the KG."""
+
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT kg_tool_mapping.tool_name
-        FROM kg_tool_mapping
-        JOIN kg_entity
-            ON kg_tool_mapping.entity_id = kg_entity.entity_id
-        WHERE kg_entity.entity_name = ?
-        """,
-        (entity_name,),
-    )
+    cur.execute("""
+        SELECT ktm.tool_name
+        FROM kg_tool_mapping ktm
+        JOIN kg_entity ke
+            ON ktm.entity_id = ke.entity_id
+        WHERE ke.entity_name = ?
+    """, (entity_name,))
 
     row = cur.fetchone()
 
@@ -31,27 +27,23 @@ def get_tool_for_entity(conn, entity_name):
 
 
 def get_relationship(conn, source_entity, target_entity):
-    """
-    Find the relationship and its connection fields from the KG.
-    """
+    """Find relationship details and its execution tool from the KG."""
+
     cur = conn.cursor()
 
-    cur.execute(
-        """
+    cur.execute("""
         SELECT
-            kg_relationship.relationship_name,
-            kg_relationship.source_field,
-            kg_relationship.target_field
-        FROM kg_relationship
-        JOIN kg_entity AS source
-            ON kg_relationship.source_entity_id = source.entity_id
-        JOIN kg_entity AS target
-            ON kg_relationship.target_entity_id = target.entity_id
+            kr.relationship_name,
+            kr.source_field,
+            kr.target_field
+        FROM kg_relationship kr
+        JOIN kg_entity source
+            ON kr.source_entity_id = source.entity_id
+        JOIN kg_entity target
+            ON kr.target_entity_id = target.entity_id
         WHERE source.entity_name = ?
           AND target.entity_name = ?
-        """,
-        (source_entity, target_entity),
-    )
+    """, (source_entity, target_entity))
 
     row = cur.fetchone()
 
@@ -61,123 +53,68 @@ def get_relationship(conn, source_entity, target_entity):
             f"{source_entity} and {target_entity}"
         )
 
-    if row[1] is None or row[2] is None:
+    relationship_tools = {
+        "WORKS_FOR": "query_works_for",
+        "KNOWS": "query_knows",
+    }
+
+    tool_name = relationship_tools.get(row[0])
+
+    if not tool_name:
         raise ValueError(
-            f"Relationship between {source_entity} and "
-            f"{target_entity} has no connection fields defined in the KG"
+            f"No execution tool mapped to relationship: {row[0]}"
         )
 
     return {
         "name": row[0],
         "source_field": row[1],
         "target_field": row[2],
+        "tool_name": tool_name,
     }
 
-
-
-def get_filter_definition(conn, filter_name):
-    """
-    Retrieve the filter rule from the KG.
-    """
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            kg_filter.entity_id,
-            kg_filter.left_field,
-            kg_filter.operator,
-            kg_filter.right_field
-        FROM kg_filter
-        WHERE kg_filter.filter_name = ?
-        """,
-        (filter_name,),
-    )
-
-    row = cur.fetchone()
-
-    if row is None:
-        raise ValueError(f"Filter not found: {filter_name}")
-
-    return {
-        "entity_id": row[0],
-        "left_field": row[1],
-        "operator": row[2],
-        "right_field": row[3],
-    }
 
 
 def generate_plan(intent):
-    """
-    Convert an Intent into a list of execution steps.
-    """
+    """Convert an Intent into execution steps."""
+
     conn = sqlite3.connect(DB_PATH)
 
     try:
         entity = intent["entity"]
         related_entity = intent.get("related_entity")
-        filter_name = intent.get("filter")
-        requested_fields = intent.get("requested_fields", [])
 
-        # Step 1: Find the tool for the main entity.
-        main_tool = get_tool_for_entity(conn, entity)
-
-        plan = [
-            {
-                "step_id": 1,
-                "tool_name": main_tool,
-                "purpose": f"Retrieve {entity} records",
-                "arguments": {},
-            }
-        ]
-
-        # Step 2: If another entity is involved,
-        # find its tool and the relationship between entities.
+        # Case 1: Relationship-based question.
         if related_entity:
-            related_tool = get_tool_for_entity(conn, related_entity)
-
             relationship = get_relationship(
                 conn,
                 entity,
-                related_entity,
+                related_entity
             )
 
-            plan.append(
+            tool_name = relationship["tool_name"]
+
+            return [
                 {
-                    "step_id": 2,
-                    "tool_name": related_tool,
-                    "purpose": f"Retrieve related {related_entity} records",
+                    "step_id": 1,
+                    "tool_name": tool_name,
+                    "purpose": (
+                        f"Retrieve records for "
+                        f"{relationship['name']}"
+                    ),
                     "relationship": relationship,
-                    "arguments": {},
                 }
-            )
+            ]
 
-        # Step 3: Retrieve the KG definition of the filter.
-        if filter_name:
-            filter_definition = get_filter_definition(
-                conn,
-                filter_name,
-            )
+        # Case 2: Single-entity question.
+        tool_name = get_tool_for_entity(conn, entity)
 
-            plan.append(
-                {
-                    "step_id": len(plan) + 1,
-                    "action": "apply_filter",
-                    "filter_name": filter_name,
-                    "filter_definition": filter_definition,
-                }
-            )
-
-        # Step 4: Record the fields requested by the user.
-        plan.append(
+        return [
             {
-                "step_id": len(plan) + 1,
-                "action": "select_fields",
-                "fields": requested_fields,
+                "step_id": 1,
+                "tool_name": tool_name,
+                "purpose": f"Retrieve {entity} records",
             }
-        )
-
-        return plan
+        ]
 
     finally:
         conn.close()

@@ -1,96 +1,94 @@
+
 import sqlite3
 
-# Connect to the existing database
-conn = sqlite3.connect("college.db")
+# Connect to the new database
+conn = sqlite3.connect("people_organization.db")
+
+# Enable foreign key checking
+conn.execute("PRAGMA foreign_keys = ON")
 
 cursor = conn.cursor()
 
-# Insert student records
-students = [
-    ("S1", "Moksha", "moksha@example.com"),
-    ("S2", "Navya", "navya@example.com"),
-    ("S3", "nishi", "nishi@example.com"),
-    ("S4", "ammu", "ammu@example.com"),
-    ("S5", "yagni", "yagni@example.com"),
-]
+try:
+    # 1. Insert PERSON records
+    people = [
+        (1, "Arjun", "Bangalore", 32),
+        (2, "Priya", "Mumbai", 28),
+        (3, "Ravi", "Chennai", 35),
+        (4, "Sneha", "Hyderabad", 40),
+        (5, "Vikram", "Pune", 27),
+        (6, "Meena", "Delhi", 31),
+        (7, "Kiran", "Kolkata", 29),
+        (8, "Suresh", "Ahmedabad", 38),
+    ]
 
-cursor.executemany("""
-INSERT OR IGNORE INTO students
-(student_id, name, email)
-VALUES (?, ?, ?)
-""", students)
-
-
-# Insert course records
-courses = [
-    ("C1", "ECE", 4, 50000),
-    ("C2", "CSE", 4, 60000),
-]
-
-cursor.executemany("""
-INSERT OR IGNORE INTO courses
-(course_id, course_name, duration_years, total_fee)
-VALUES (?, ?, ?, ?)
-""", courses)
+    cursor.executemany("""
+        INSERT OR IGNORE INTO PERSON
+        (PERSON_ID, NAME, CITY, AGE)
+        VALUES (?, ?, ?, ?)
+    """, people)
 
 
-# Insert payment records
-payments = [
-    ("P1", "S1", 50000, 50000),
-    ("P2", "S2", 60000, 40000),
-    ("P3", "S3", 50000, 30000),
-    ("P4", "S4", 60000, 60000),
-    ("P5", "S5", 50000, 20000),
-]
+    # 2. Insert ORGANIZATION records
+    organizations = [
+        (1, "Infosys", "Technology"),
+        (2, "TCS", "Consulting"),
+        (3, "Wipro", "Cloud"),
+    ]
 
-cursor.executemany("""
-INSERT OR IGNORE INTO payments
-(payment_id, student_id, amount_due, amount_paid)
-VALUES (?, ?, ?, ?)
-""", payments)
+    cursor.executemany("""
+        INSERT OR IGNORE INTO ORGANIZATION
+        (ORG_ID, ORG_NAME, INDUSTRY)
+        VALUES (?, ?, ?)
+    """, organizations)
 
 
+    # 3. Insert ROLE_ASSIGNMENT records
+    role_assignments = [
+        (1, 1, "Engineer", 2019),
+        (2, 1, "Manager", 2020),
+        (3, 2, "Analyst", 2021),
+        (4, 3, "Architect", 2018),
+        (5, 1, "Developer", 2022),
+        (6, 2, "Engineer", 2020),
+        (7, 3, "Designer", 2021),
+        (8, 2, "Consultant", 2019),
+    ]
 
-# Insert examination data
-cursor.executemany("""
-INSERT OR IGNORE INTO exams
-(exam_id, course_id, exam_name, pass_marks, max_marks)
-VALUES (?, ?, ?, ?, ?)
-""", [
-    ("E1", "C1", "Embedded Systems", 40, 100),
-    ("E2", "C1", "Digital Electronics", 40, 100),
-    ("E3", "C2", "Python Programming", 35, 100),
-    ("E4", "C2", "Database Management", 35, 100)
-])
-
-
-# Insert examination results
-cursor.executemany("""
-INSERT OR IGNORE INTO exam_results
-(result_id, exam_id, student_id, marks_obtained)
-VALUES (?, ?, ?, ?)
-""", [
-    ("R1", "E1", "S1", 85),
-    ("R2", "E2", "S1", 32),
-
-    ("R3", "E1", "S2", 30),
-    ("R4", "E2", "S2", 75),
-
-    ("R5", "E1", "S3", 65),
-    ("R6", "E2", "S3", 55),
-
-    ("R7", "E3", "S4", 90),
-    ("R8", "E4", "S4", 25),
-
-    ("R9", "E3", "S5", 20),
-    ("R10", "E4", "S5", 80)
-])
+    cursor.executemany("""
+        INSERT OR IGNORE INTO ROLE_ASSIGNMENT
+        (PERSON_ID, ORG_ID, ROLE, SINCE)
+        VALUES (?, ?, ?, ?)
+    """, role_assignments)
 
 
+    # 4. Insert KNOWS relationships
+    knows = [
+        (1, 2, 2018),
+        (2, 3, 2019),
+        (3, 4, 2020),
+        (1, 5, 2017),
+        (5, 6, 2018),
+        (6, 7, 2019),
+        (7, 8, 2020),
+        (4, 8, 2021),
+    ]
 
-# Save all changes
-conn.commit()
+    cursor.executemany("""
+        INSERT OR IGNORE INTO KNOWS
+        (PERSON_ID, KNOWS_PERSON_ID, SINCE)
+        VALUES (?, ?, ?)
+    """, knows)
 
-conn.close()
 
-print("Sample data inserted successfully!")
+    # Save all changes
+    conn.commit()
+
+    print("People & Organizations data inserted successfully!")
+
+except sqlite3.Error:
+    conn.rollback()
+    raise
+
+finally:
+    conn.close()

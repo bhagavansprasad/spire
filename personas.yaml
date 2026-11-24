@@ -5,8 +5,8 @@ default_dev:
     # password: "S#2c*5MB"
 
     base_url: 'https://fa-euth-dev20-saasfademo1.ds-fa.oraclepdemos.com'
-    username: 'Chase.Schultz'
-    password: '!7*?Q5Vn'
+    username: 'Madison.Winslow'
+    password: '@q!qg47K'
 
     auth_type: "basic"
 

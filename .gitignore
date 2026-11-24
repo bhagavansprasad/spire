@@ -49,3 +49,9 @@ t_*.txt
 # Overnight prompt runs and their derivatives
 overnight/
 clean_*
+
+# Local database
+/college.db
+
+# Unwanted file
+/=

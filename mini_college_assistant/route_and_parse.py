@@ -12,15 +12,21 @@ from executor import execute_plan
 # 1. CONFIGURATION
 # --------------------------------------------------
 
-DB_PATH = "college.db"
+DB_PATH = "people_organization.db"
 
 MODEL = os.getenv("SPIRE_LLM_MODEL", "gemini-3.5-flash")
 
 MODULES = {
-    "Students": "Questions about student information.",
-    "Courses": "Questions about courses and course details.",
-    "Payments": "Questions about fees, payments, and pending fees.",
-    "Examinations": "Questions about exams, examination marks, results, and pass or fail status.",
+    "People": """
+        Questions about people, their names, ages, cities,
+        and relationships with other people, including
+        who knows whom.
+    """,
+
+    "Organizations": """
+        Questions about organizations, their names, industries,
+        and people working for them.
+    """
 }
 
 
@@ -33,43 +39,52 @@ class ClassificationError(Exception):
 # 2. LOAD THE KNOWLEDGE GRAPH MENU
 # --------------------------------------------------
 
+
 def load_kg_menu():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     try:
-        # Load entities, including their actual database IDs.
+        # 1. Load entities.
         cursor.execute("""
             SELECT entity_id, entity_name, description
             FROM kg_entity
         """)
         entities = cursor.fetchall()
 
-        # Create a mapping from entity names to IDs.
-        # Example: {"Student": 1, "Course": 2, "Payment": 3}
         entity_ids = {
             entity_name: entity_id
             for entity_id, entity_name, description in entities
         }
 
-        # Load relationships between entities.
+        
+        # 2. Load relationships.
         cursor.execute("""
-            SELECT relationship_name,
-                   source_entity_id,
-                   target_entity_id,
-                   description
+            SELECT relationship_id,
+                relationship_name,
+                source_entity_id,
+                target_entity_id,
+                description
             FROM kg_relationship
         """)
         relationships = cursor.fetchall()
 
-        # Load fields belonging to each entity.
+        # 3. Load entity fields.
         cursor.execute("""
             SELECT entity_id, field_name, description
             FROM kg_field
         """)
         fields = cursor.fetchall()
 
-        # Load available filters.
+        # 4. Load relationship properties.
+        cursor.execute("""
+            SELECT relationship_id, field_name, description
+            FROM kg_relationship_field
+        """)
+        relationship_fields = cursor.fetchall()
+
+
+        # 5. Load available filters.
         cursor.execute("""
             SELECT filter_name,
                    entity_id,
@@ -81,7 +96,7 @@ def load_kg_menu():
         """)
         filters = cursor.fetchall()
 
-        # Load tool mappings.
+        # 6. Load tool mappings.
         cursor.execute("""
             SELECT entity_id, tool_name, description
             FROM kg_tool_mapping
@@ -93,12 +108,14 @@ def load_kg_menu():
             "entity_ids": entity_ids,
             "relationships": relationships,
             "fields": fields,
+            "relationship_fields": relationship_fields,
             "filters": filters,
             "tools": tools,
         }
 
     finally:
         conn.close()
+
 
 
 # --------------------------------------------------
@@ -143,41 +160,67 @@ def classify_modules(prompt: str, llm=None) -> list[str]:
     """
 
     client = get_llm(llm)
-
+    
+    
     classifier_prompt = f"""
-You are the module classifier for a college assistant.
+    You are the module classifier for a People and Organizations assistant.
 
-Identify which modules are needed to answer the user's question.
+    Your task is to identify ALL modules required to answer the user's question.
 
-Available modules:
-{json.dumps(MODULES, indent=2)}
+    Available modules:
+    {json.dumps(MODULES, indent=2)}
 
-Rules:
-1. Select every module needed to answer the question.
-2. Select multiple modules when necessary.
-3. Select Students for questions asking for student details,
-   such as student names, IDs, email addresses, or profiles.
-4. Select Payments for fee and payment questions.
-5. Select Courses for course questions.
-6. Questions about exam marks, examination results, or PASS/FAIL
-   status require Examinations.
-7. Do not select Students just because the word "students" appears
-   in an examination-results question. The Examinations module
-   already provides student names along with exam results.
-8. Select Students along with Examinations only when the question
-   also asks for separate student information not included in
-   examination results, such as email addresses.
-9. Do not invent module names.
-10. If no module is relevant, return an empty list.
-11. Return only JSON in the specified format.
+    Available modules and their responsibilities:
 
-{{
-    "modules": ["Students", "Payments"]
-}}
+    1. People:
+    - Person names, IDs, ages and cities.
+    - Relationships between people, such as who knows whom.
+    - Finding people based on their details.
 
-User question:
-{prompt}
-"""
+    2. Organizations:
+    - Organization names and industries.
+    - Finding organizations based on their details.
+
+    IMPORTANT MODULE SELECTION RULES:
+
+    1. If the question asks about people only, select People.
+
+    2. If the question asks about organizations only, select Organizations.
+
+    3. If the question asks who works for an organization,
+    ALWAYS select BOTH People and Organizations.
+
+    4. If the question asks which organization a person works for,
+    ALWAYS select BOTH People and Organizations.
+
+    5. If the question asks about people working in a particular
+    industry, select BOTH People and Organizations.
+
+    6. If the question asks who knows whom,
+    select People only.
+
+    7. If the question requires information about both people
+    and organizations, select BOTH modules.
+
+    8. Do not select a module just because its name appears
+    in the question. Select modules based on the information
+    needed to answer the question.
+
+    9. Do not invent module names.
+
+    10. If no module is relevant, return an empty list.
+
+    Return only JSON in this format:
+
+    {{
+        "modules": ["People", "Organizations"]
+    }}
+
+    User question:
+    {prompt}
+    """
+
+
 
     result = call_llm_json(client, classifier_prompt)
 
@@ -206,6 +249,7 @@ User question:
 # 5. ASSEMBLE THE RELEVANT KG CONTEXT
 # --------------------------------------------------
 
+
 def assemble_subset(modules: list[str], menu: dict) -> str:
     """
     Select KG information relevant to the classified modules.
@@ -213,72 +257,79 @@ def assemble_subset(modules: list[str], menu: dict) -> str:
     """
 
     module_to_entity = {
-        "Students": "Student",
-        "Courses": "Course",
-        "Payments": "Payment",
-        "Examinations": "ExamResult",
+        "People": "PERSON",
+        "Organizations": "ORGANIZATION",
     }
 
-    # Convert selected modules into KG entity names.
     selected_entities = {
         module_to_entity[module]
         for module in modules
+        if module in module_to_entity
     }
 
-    # Use the actual IDs loaded from kg_entity.
     entity_ids = menu["entity_ids"]
 
-    # Build the reverse mapping: ID -> entity name.
     id_to_name = {
         entity_id: entity_name
         for entity_name, entity_id in entity_ids.items()
     }
 
-    # Get the IDs of the selected entities.
     selected_ids = {
         entity_ids[name]
         for name in selected_entities
         if name in entity_ids
     }
 
-    # Select the relevant entities.
+    # 1. Select entities.
     entities = [
         {
             "name": entity_name,
             "description": description,
         }
-        for entity_id, entity_name, description
-        in menu["entities"]
+        for entity_id, entity_name, description in menu["entities"]
         if entity_name in selected_entities
     ]
 
-    # Select relationships connecting selected entities.
-    relationships = [
+    # 2. Select relationships connecting selected entities.
+    selected_relationships = [
         {
+            "id": relationship_id,
             "name": name,
             "source": id_to_name.get(source_id, source_id),
             "target": id_to_name.get(target_id, target_id),
             "description": description,
         }
-        for name, source_id, target_id, description
+        for relationship_id, name, source_id, target_id, description
         in menu["relationships"]
         if source_id in selected_ids
         and target_id in selected_ids
     ]
 
-    # Select fields belonging to selected entities.
+    # 3. Select entity fields.
     fields = [
         {
             "entity": id_to_name.get(entity_id, entity_id),
             "field": field_name,
             "description": description,
         }
-        for entity_id, field_name, description
-        in menu["fields"]
+        for entity_id, field_name, description in menu["fields"]
         if entity_id in selected_ids
     ]
 
-    # Select filters belonging to selected entities.
+    # 4. Select relationship properties.
+    relationship_fields = [
+        {
+            "relationship": relationship["name"],
+            "field": field_name,
+            "description": description,
+        }
+        for relationship_id, field_name, description
+        in menu["relationship_fields"]
+        for relationship in selected_relationships
+        if relationship["id"] == relationship_id
+    ]
+
+    # 5. Select filters.
     filters = [
         {
             "name": name,
@@ -299,28 +350,37 @@ def assemble_subset(modules: list[str], menu: dict) -> str:
         if entity_id in selected_ids
     ]
 
-    # Select tool mappings belonging to selected entities.
+    # 6. Select tool mappings.
     tools = [
         {
             "entity": id_to_name.get(entity_id, entity_id),
             "tool": tool_name,
             "description": description,
         }
-        for entity_id, tool_name, description
-        in menu["tools"]
+        for entity_id, tool_name, description in menu["tools"]
         if entity_id in selected_ids
     ]
 
-    # Combine the selected KG information.
+    # 7. Combine KG information.
     context = {
         "entities": entities,
-        "relationships": relationships,
+        "relationships": [
+            {
+                "name": relationship["name"],
+                "source": relationship["source"],
+                "target": relationship["target"],
+                "description": relationship["description"],
+            }
+            for relationship in selected_relationships
+        ],
         "fields": fields,
+        "relationship_fields": relationship_fields,
         "filters": filters,
         "tools": tools,
     }
 
     return json.dumps(context, indent=2)
+
 
 
 # --------------------------------------------------
@@ -345,88 +405,111 @@ def parse(
     # If no selected context is supplied, use the full KG.
     if system_prompt is None:
         system_prompt = assemble_subset(
-            ["Students", "Courses", "Payments", "Examinations"],
+            ["People", "Organizations"],
             menu,
         )
 
     
+    
     parser_prompt = f"""
-    You are the parser for a college assistant.
+    You are the parser for a People and Organizations assistant.
 
-    Convert the user's question into a structured Intent using the provided KG context.
+    Convert the user's question into a structured Intent
+    using the provided Knowledge Graph context.
 
     KG RULES:
-    1. Use only entities, fields, relationships, filters, and tool mappings provided in the KG context.
+
+    1. Use only entities, fields, relationships, filters,
+    and tool mappings provided in the KG context.
+
     2. Do not invent entities, fields, relationships, or filters.
-    3. The entity must be the MAIN entity whose records the user wants to retrieve.
-    4. If the question asks for students, set entity to "Student".
-    5. If answering the question requires information from another entity, set related_entity to that entity.
-    6. If the question can be answered using only the main entity, set related_entity to null.
-    7. Use a filter only when a known KG filter matches the user's condition.
-    8. If no known filter matches the question, set filter to null.
-    9. requested_fields must contain valid fields from the KG context that help answer the question.
-    10. If the question asks for students and requires checking their payments, use:
-        entity = "Student"
-        related_entity = "Payment"
-        when the KG context contains the relationship connecting Student and Payment.
-    11. If the question asks for examination results, use:
-    entity = "ExamResult"
-    related_entity = null
-    when the KG context contains the ExamResult entity.
-    12. The ExamResult tool retrieves student names, exam names,
-        marks, and calculated PASS/FAIL status using database JOINs.
-    13. Do not set related_entity to Student or Exam for an
-    examination-results question. The ExamResult tool already
-    retrieves the required joined information.
-    
+
+    3. The entity must be the MAIN entity whose records
+    the user wants to retrieve.
+
+    4. Use "PERSON" for questions asking about people.
+
+    5. Use "ORGANIZATION" for questions asking about organizations.
+
+    6. Use related_entity when answering requires information
+    from another entity.
+
+    7. Use related_entity = null when the question can be
+    answered using only the main entity.
+
+    8. For questions about who knows whom, use:
+    entity = "PERSON"
+    related_entity = "PERSON"
+    when the KNOWS relationship is available.
+
+    9. For questions about people working for organizations, use:
+    entity = "PERSON"
+    related_entity = "ORGANIZATION"
+    when the WORKS_FOR relationship is available.
+
+    10. If the question has a condition on a field (such as age, city,
+    or organization name), set filter to a dictionary with exactly
+    these keys: "field", "operator" and "value".
+
+    11. "field" must be one of the field names in the KG context.
+
+    12. "operator" must be one of: ">", "<", ">=", "<=", "==", "!=".
+        Use "==" for "equals" and "is".
+
+    13. "value" must come from the user's question.
+        Use a number (not text) for numeric fields such as AGE.
+
+    14. If the question has no condition, set filter to null.
+
     EXAMPLES:
 
-    Question: "Show me the details of all students."
+    Question: "Show me all people."
+
     Intent:
     {{
-        "entity": "Student",
+        "entity": "PERSON",
         "related_entity": null,
         "filter": null,
-        "requested_fields": ["student_id", "name", "email"]
+        "requested_fields": ["PERSON_ID", "NAME", "CITY", "AGE"]
     }}
 
-    Question: "Show me all students who have pending fees."
-    Intent:
-    {{
-        "entity": "Student",
-        "related_entity": "Payment",
-        "filter": "pending_fees",
-        "requested_fields": ["student_id", "name"]
-    }}
+    Question: "Who does Moksha know?"
 
-    Question: "Which students paid their college fees?"
     Intent:
     {{
-        "entity": "Student",
-        "related_entity": "Payment",
+        "entity": "PERSON",
+        "related_entity": "PERSON",
         "filter": null,
-        "requested_fields": ["student_id", "name"]
+        "requested_fields": ["NAME"]
     }}
 
-    Question: "Show me the examination results of all students."
+    Question: "Which people work for Google?"
+
     Intent:
     {{
-        "entity": "ExamResult",
+        "entity": "PERSON",
+        "related_entity": "ORGANIZATION",
+        "filter": null,
+        "requested_fields": ["NAME", "ORG_NAME", "ROLE", "SINCE"]
+    }}
+
+    Question: "Show me all organizations."
+
+    Intent:
+    {{
+        "entity": "ORGANIZATION",
         "related_entity": null,
         "filter": null,
-        "requested_fields": [
-            "student_name",
-            "exam_name",
-            "marks_obtained",
-            "result"
-        ]
+        "requested_fields": ["ORG_ID", "ORG_NAME", "INDUSTRY"]
     }}
-    
+
     IMPORTANT:
+
     - The examples show the expected output structure.
-    - Select a filter only when its meaning matches the question.
-    - Do not use "pending_fees" to represent students who have fully paid.
-    - Return valid JSON only, with these keys:
+    - Use only the relationships present in the KG context.
+    - Do not invent filters.
+    - Return valid JSON only.
+    - Return these four keys:
     "entity", "related_entity", "filter", "requested_fields".
 
     KG context:
@@ -435,6 +518,7 @@ def parse(
     User question:
     {prompt}
     """
+
 
 
     intent = call_llm_json(client, parser_prompt)
@@ -481,21 +565,33 @@ def parse(
             f"Unknown related entity: {related_entity}"
         )
 
-    # Validate the selected filter.
-    filter_names = {
-        record[0]
-        for record in menu["filters"]
-    }
-
+    # Validate the dynamic filter.
     selected_filter = intent["filter"]
 
-    if (
-        selected_filter is not None
-        and selected_filter not in filter_names
-    ):
-        raise ValueError(
-            f"Unknown filter: {selected_filter}"
-        )
+    if selected_filter is not None:
+
+        if not isinstance(selected_filter, dict):
+            raise ValueError(
+                "Filter must be a dictionary or None."
+            )
+
+        required_filter_keys = {
+            "field",
+            "operator",
+            "value",
+        }
+
+        if not required_filter_keys.issubset(selected_filter):
+            raise ValueError(
+                "Filter must contain field, operator and value."
+            )
+
+        allowed_operators = {
+            ">", "<", ">=", "<=", "==", "!="
+        }
+
+        if selected_filter["operator"] not in allowed_operators:
+            raise ValueError("Unsupported filter operator.")
 
     return intent
 
@@ -569,32 +665,55 @@ def route_and_parse(
 
 if __name__ == "__main__":
 
-    user_prompt = "Show me the examination results of all students."
+    questions = [
+    "Which people are above thirty?",
+    "People aged 35 or more",
+    "Everyone except those aged 32",
+    "People who live in pune",
+    "Names of people older than 30",
+    "People younger than 28",
+    "People who are exactly 31",
+    "People older than 100",
+    "Who works for Google?",
+    "peple oldr than 30",
+    "People older than 30 in Bangalore",
+    "Who is the oldest person?",
+    "How many people are older than 30?",
+    "Who knows Priya?",
+    "What is the weather in Pune?",
+    "Delete all people",
+    "Show me everyone's salary",
+]
 
-    print("User prompt:")
-    print(user_prompt)
-
-    # Load and inspect the KG menu.
+    # Load the KG once and show what was loaded
     kg_menu = load_kg_menu()
 
-    print("\nLoaded KG entities:")
+    print("Loaded KG entities:")
     for entity_id, entity_name, description in kg_menu["entities"]:
         print(f"ID: {entity_id}, Name: {entity_name}")
 
-    # Run routing and parsing.
-    intent = route_and_parse(
-        user_prompt,
-        menu=kg_menu,
-    )
-    print("\nFinal Intent:")
-    print(json.dumps(intent, indent=2))
-    
-    plan = generate_plan(intent)
-    
-    print("\nGenerate plan:")
-    print(json.dumps(plan, indent=2))
-    
-    results = execute_plan(plan,intent)
+    for q in questions:
+        print("\n" + "=" * 60)
+        print("User prompt:")
+        print(q)
 
-    print("\nRetrieved Results:")
-    print(json.dumps(results, indent=2))
+        try:
+            intent = route_and_parse(q, menu=kg_menu)
+
+            print("\nFinal Intent:")
+            print(json.dumps(intent, indent=2))
+
+            plan = generate_plan(intent)
+
+            print("\nGenerate plan:")
+            print(json.dumps(plan, indent=2))
+
+            # "Executing step ..." is printed by executor.py itself
+            results = execute_plan(plan, intent)
+
+            print("\nRetrieved Results:")
+            print(f"Rows returned: {len(results)}")
+            print(json.dumps(results, indent=2))
+
+        except Exception as e:
+            print("\nERROR:", e)
