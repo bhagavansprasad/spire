@@ -390,3 +390,87 @@ def test_purchase_order_line_tax_is_from_distributions_not_schedule_stub():
     assert "NVL(" in body
     # The stub ESTIMATED_TAX_AMOUNT carrier must be gone.
     assert "ESTIMATED_TAX_AMOUNT" not in body
+
+
+def test_f078_filter_specs_cover_observed_tool_arguments():
+    cases = [
+        (
+            "search_purchase_orders",
+            {"created_since": "2026-10-21"},
+            "P.CREATION_DATE >= '2026-10-21'",
+        ),
+        (
+            "search_purchase_orders",
+            {"supplier_name": "Dell Inc"},
+            "HP.PARTY_NAME LIKE '%Dell Inc%'",
+        ),
+        (
+            "search_invoices",
+            {"invoice_number": "ERS-53004-755598"},
+            "P.INVOICE_NUM = 'ERS-53004-755598'",
+        ),
+        (
+            "search_invoices",
+            {"supplier_name": "Staffing Services"},
+            "HI.PARTY_NAME LIKE '%Staffing Services%'",
+        ),
+        (
+            "search_invoices",
+            {"unpaid": True},
+            "P.PAYMENT_STATUS_FLAG IN ('N', 'P')",
+        ),
+        (
+            "get_customer_account_by_name",
+            {"account_number": "26360"},
+            "CA.ACCOUNT_NUMBER = '26360'",
+        ),
+        (
+            "search_addresses",
+            {"supplier_number": "1262"},
+            "SP.SEGMENT1 = '1262'",
+        ),
+        (
+            "get_customer_transactions",
+            {"account_id": "$iteration_value", "open_only": True},
+            "T.AMOUNT_DUE_REMAINING > 0",
+        ),
+    ]
+
+    for tool_name, args, expected in cases:
+        body = _strip_comments(
+            emit_sql([Step(1, tool_name, args)])[0]
+        )
+        assert expected in body, (tool_name, args, body)
+
+
+def test_unmapped_filter_arg_fails_instead_of_emitting_invalid_where():
+    with pytest.raises(
+        ValueError,
+        match=r"Unmapped SQL argument search_invoices\.unknown_filter",
+    ):
+        emit_sql([Step(1, "search_invoices", {"unknown_filter": "x"})])
+
+
+@pytest.mark.parametrize("arg_name", ["pending", "overdue"])
+def test_known_sql_disabled_filter_fails_with_reason(arg_name):
+    with pytest.raises(
+        ValueError,
+        match=rf"SQL projection disabled for search_invoices\.{arg_name}",
+    ):
+        emit_sql([Step(1, "search_invoices", {arg_name: True})])
+
+
+def test_unmapped_aggregation_arg_fails_instead_of_emitting_comment():
+    with pytest.raises(
+        ValueError,
+        match=r"Unmapped SQL argument aggregate_invoices_by_supplier\.unknown",
+    ):
+        emit_sql(
+            [
+                Step(
+                    1,
+                    "aggregate_invoices_by_supplier",
+                    {"unknown": "x"},
+                )
+            ]
+        )

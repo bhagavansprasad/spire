@@ -52,7 +52,9 @@ for i in range(1, len(blocks) - 1, 2):
     try:
         statements = emit_sql(step_objs)
     except Exception as exc:  # noqa: BLE001
-        rows.append((n, steps, None, f"emit error: {exc}"))
+        path = OUT / f"p{n:02d}.sql"
+        path.write_text(f"-- SQL DISABLED: {exc}\n")
+        rows.append((n, steps, path, f"SQL disabled: {exc}"))
         continue
 
     sql = "\n".join(statements)
@@ -67,4 +69,6 @@ for n, steps, path, err in rows:
     print(f"{n:>3} {desc[:40]:<40} {str(path.name) if path else '-':<16} {err or ''}")
 
 print()
-print(f"SQL files written: {len([r for r in rows if r[2]])} -> {OUT}")
+written = len([r for r in rows if r[2] and not r[3]])
+disabled = len([r for r in rows if r[3]])
+print(f"SQL projections written: {written}; disabled markers: {disabled} -> {OUT}")

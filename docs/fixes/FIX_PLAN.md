@@ -773,14 +773,23 @@ the Plan block shows the arg present and correctly valued
 returns data. Not "the pod rejects the SQL" either: the same statement
 runs once a predicate is supplied.
 
-**S6 (fix shape, not yet applied).** (a) Author the missing specs for the
-in-scope args; (b) make the emitter **fail loudly** — if any tool_arg is
-unmapped, emit a marker that makes the statement unusable-by-accident
-(e.g. a `1=1 AND -- unmapped` is worse; better: raise, or emit `WHERE 1=0`
-with an explicit `-- SQL DISABLED: unmapped arg X` banner) so an
-unrunnable statement is never presented as a projection; (c) add a guard
-test that every declared tool arg has a spec or is in an explicit
-"not-in-SQL" allowlist.
+**S6 (implementation started 2026-11-23; pod verification pending).**
+The branch adds specs for the observed invoice-number, supplier-name,
+unpaid, created-since, account-number, supplier-number, and open-only args.
+The emitter now raises instead of returning a partial query for an
+unmapped arg or unresolved literal; intentional SQL-disabled args have
+explicit reasons and also raise if used. `scripts/validate_sql_coverage.py`
+checks registered tool signatures, overlay/intent-field mappings, and
+known substring/payload-alias gaps. It currently reports the open
+F-080b/F-081 mismatches. `overdue` is deliberately SQL-disabled until a
+populated due-date carrier is verified on this pod; the KG records that
+the AP invoice header has no due-date field.
+
+The regenerated statements have not been compared against the pod or REST:
+`./runsql.sh` returned HTTP 401 for a read-only `SELECT 1 FROM DUAL`, so
+no execution or REST-agreement claim is made. Keep F-078 open until the
+pod check succeeds, the remaining blocked filter is resolved or explicitly
+accepted as SQL-disabled, and each result is compared with REST.
 
 **S7 (classification).** **Open, S1 harm.** Highest priority of the four:
 it is the widest blast radius (9/22) and the cheapest to detect.
@@ -889,13 +898,12 @@ time at predicate level rather than projection level.
 **S5 (disproved alternative).** Not "the data is absent" — the corrected
 predicates return 4 and 8 rows on the same pod in the same session.
 
-**S6 (fix shape, not yet applied).** (a) wrap the value in `%…%` for
-`*_contains` args (or make the spec declare `match='contains'` and let the
-emitter do it); (b) re-point `status` at `END_DATE_ACTIVE` (`INACTIVE` →
-`END_DATE_ACTIVE <= SYSDATE`, `ACTIVE` → `END_DATE_ACTIVE IS NULL OR >
-SYSDATE`); (c) extend `validate_kg_schema.py` to run a
-distribution/`COUNT(DISTINCT)` check on every column used in a predicate,
-so an all-one-value column cannot become a filter carrier again.
+**S6 (partial implementation 2026-11-23; not verified).** The emitter now
+supports a `contains` match mode and wraps substring values in `%...%`;
+this corrects F-080a's supplier-name predicate shape. F-080b remains open:
+the `search_suppliers.status` predicate still uses the unpopulated
+`ENABLED_FLAG` carrier. The new SQL coverage validator reports this known
+gap. No pod verification was possible in this window.
 
 **S7 (classification).** **Open, S1 harm.** Two prompts, both silent zeros.
 
@@ -973,11 +981,12 @@ the failure mode is invisible to the reader.
 | 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
-is that three lists are maintained by hand and never compared: tool
-signatures, `_FILTERS` specs, and `intent.fields` vocabulary. One
-`scripts/validate_sql_coverage.py` that diffs them — and a CI step that
-fails on any unmapped arg — would have caught all three before a prompt
-ever ran. That is the durable fix; the four entries above are the symptoms.
+is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
+were maintained by hand and never compared. `scripts/validate_sql_coverage.py`
+now checks argument coverage, SQL/intent field consistency, substring
+semantics, and the known PO payload-key mismatch; it currently reports the
+open F-080b/F-081 gaps. It is not yet a CI step and does not replace live
+column-population or REST-agreement checks.
 
 ### F-082 — AR by-number lookup reports "none found" for an existing invoice (OPEN, S1, twin of F-079)
 

@@ -33,6 +33,7 @@ class FilterSpec:
     vocab_kind: str | None = None
     requires_join: tuple[str, str] | None = None
     assumption: str | None = None
+    match_mode: str | None = None
 
 
 @dataclass
@@ -80,6 +81,8 @@ class Overlay:
     # "not expressible as one SELECT" comment rather than a fake
     # SELECT that would return wrong rows.
     not_expressible: set[str] = field(default_factory=set)
+    sql_control_args: set[str] = field(default_factory=set)
+    sql_disabled_args: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -485,6 +488,7 @@ _FILTERS = {
         arg_name="supplier_name_contains",
         predicate_template="HP.PARTY_NAME LIKE {value}",
         assumption="name_like_on_party_name",
+        match_mode="contains",
     ),
     ("search_suppliers_by_site_bu", "supplier_id"): FilterSpec(
         tool_name="search_suppliers_by_site_bu",
@@ -506,6 +510,18 @@ _FILTERS = {
         vocab_kind="supplier_classification",
         assumption="classification_literal_from_overlay",
     ),
+    ("search_suppliers_by_classification", "supplier_id"): FilterSpec(
+        tool_name="search_suppliers_by_classification",
+        arg_name="supplier_id",
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        assumption="classification_supplier_id",
+    ),
+    ("get_supplier_contacts", "supplier_id"): FilterSpec(
+        tool_name="get_supplier_contacts",
+        arg_name="supplier_id",
+        predicate_template="PS.VENDOR_ID = {value}",
+        assumption="contact_supplier_id",
+    ),
     
     # PurchaseOrder filters
     ("search_purchase_orders", "status"): FilterSpec(
@@ -524,8 +540,27 @@ _FILTERS = {
         predicate_template="{alias}.VENDOR_ID = {value}",
         assumption="supplier_maps_to_vendor_id",
     ),
+    ("search_purchase_orders", "supplier_name"): FilterSpec(
+        tool_name="search_purchase_orders",
+        arg_name="supplier_name",
+        predicate_template="HP.PARTY_NAME LIKE {value}",
+        assumption="name_like_on_party_name",
+        match_mode="contains",
+    ),
+    ("search_purchase_orders", "created_since"): FilterSpec(
+        tool_name="search_purchase_orders",
+        arg_name="created_since",
+        predicate_template="{alias}.CREATION_DATE >= {value}",
+        assumption="po_created_since",
+    ),
 
     # Invoice filters
+    ("search_invoices", "invoice_number"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="invoice_number",
+        predicate_template="{alias}.INVOICE_NUM = {value}",
+        assumption="invoice_number_maps_to_invoice_num",
+    ),
     ("search_invoices", "supplier_number"): FilterSpec(
         tool_name="search_invoices",
         arg_name="supplier_number",
@@ -533,11 +568,29 @@ _FILTERS = {
         requires_join=("Invoice", "Supplier"),
         assumption="invoice_supplier_maps_to_segment1",
     ),
+    ("search_invoices", "supplier_name"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="supplier_name",
+        predicate_template=(
+            "S.VENDOR_ID IN (SELECT SI.VENDOR_ID FROM POZ_SUPPLIERS SI "
+            "JOIN HZ_PARTIES HI ON HI.PARTY_ID = SI.PARTY_ID "
+            "WHERE HI.PARTY_NAME LIKE {value})"
+        ),
+        requires_join=("Invoice", "Supplier"),
+        assumption="invoice_supplier_name",
+        match_mode="contains",
+    ),
     ("search_invoices", "invoice_date_after"): FilterSpec(
         tool_name="search_invoices",
         arg_name="invoice_date_after",
         predicate_template="{alias}.INVOICE_DATE >= {value}",
         assumption="invoice_date_filter",
+    ),
+    ("search_invoices", "unpaid"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="unpaid",
+        predicate_template="{alias}.PAYMENT_STATUS_FLAG IN ('N', 'P')",
+        assumption="invoice_unpaid_status_flags",
     ),
     
     # AR Invoice filters
@@ -564,11 +617,19 @@ _FILTERS = {
     ("get_purchase_order_distributions", "po_header_id"): FilterSpec(
         tool_name="get_purchase_order_distributions",
         arg_name="po_header_id",
-        predicate_template=(
-            "{alias}.PO_HEADER_ID = {value} "
-            "AND {alias}.PO_LINE_ID = :po_line_id "
-            "AND {alias}.LINE_LOCATION_ID = :line_location_id"
-        ),
+        predicate_template="{alias}.PO_HEADER_ID = {value}",
+        assumption="po_distribution_three_way_filter",
+    ),
+    ("get_purchase_order_distributions", "po_line_id"): FilterSpec(
+        tool_name="get_purchase_order_distributions",
+        arg_name="po_line_id",
+        predicate_template="{alias}.PO_LINE_ID = {value}",
+        assumption="po_distribution_three_way_filter",
+    ),
+    ("get_purchase_order_distributions", "line_location_id"): FilterSpec(
+        tool_name="get_purchase_order_distributions",
+        arg_name="line_location_id",
+        predicate_template="{alias}.LINE_LOCATION_ID = {value}",
         assumption="po_distribution_three_way_filter",
     ),
 
@@ -600,9 +661,14 @@ _FILTERS = {
         arg_name="customer_transaction_id",
         predicate_template=(
             "{alias}.TRX_ID = {value} "
-            "AND {alias}.TRX_LINE_ID = :line_id "
             "AND {alias}.ENTITY_CODE = 'TRANSACTIONS'"
         ),
+        assumption="ar_tax_line_filter",
+    ),
+    ("get_receivables_invoice_tax_lines", "line_id"): FilterSpec(
+        tool_name="get_receivables_invoice_tax_lines",
+        arg_name="line_id",
+        predicate_template="{alias}.TRX_LINE_ID = {value}",
         assumption="ar_tax_line_filter",
     ),
     ("get_receivables_invoice_transaction_dff", "customer_transaction_id"): FilterSpec(
@@ -621,11 +687,26 @@ _FILTERS = {
         predicate_template="HP.PARTY_NAME = {value}",
         assumption="customer_account_by_party_name",
     ),
+    ("get_customer_account_by_name", "account_number"): FilterSpec(
+        tool_name="get_customer_account_by_name",
+        arg_name="account_number",
+        predicate_template="{alias}.ACCOUNT_NUMBER = {value}",
+        assumption="customer_account_by_number",
+    ),
     ("get_customer_transactions", "account_id"): FilterSpec(
         tool_name="get_customer_transactions",
         arg_name="account_id",
         predicate_template="{alias}.CUSTOMER_ID = {value}",
         assumption="customer_transaction_by_customer_id",
+    ),
+    ("get_customer_transactions", "open_only"): FilterSpec(
+        tool_name="get_customer_transactions",
+        arg_name="open_only",
+        predicate_template=(
+            "{alias}.CLASS = 'INV' "
+            "AND {alias}.AMOUNT_DUE_REMAINING > 0"
+        ),
+        assumption="customer_transaction_open_invoice",
     ),
     ("get_account_credit_memos", "account_id"): FilterSpec(
         tool_name="get_account_credit_memos",
@@ -688,6 +769,27 @@ _FILTERS = {
             "WHERE LOC.CITY = {value})"
         ),
         assumption="standard_receipt_site_client_side",
+    ),
+    ("search_addresses", "supplier_number"): FilterSpec(
+        tool_name="search_addresses",
+        arg_name="supplier_number",
+        predicate_template=(
+            "EXISTS (SELECT 1 FROM POZ_SUPPLIERS SP "
+            "WHERE SP.PARTY_ID = PS.PARTY_ID AND SP.SEGMENT1 = {value})"
+        ),
+        assumption="address_supplier_number",
+    ),
+    ("search_addresses", "supplier_name"): FilterSpec(
+        tool_name="search_addresses",
+        arg_name="supplier_name",
+        predicate_template=(
+            "EXISTS (SELECT 1 FROM POZ_SUPPLIERS SP "
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = SP.PARTY_ID "
+            "WHERE SP.PARTY_ID = PS.PARTY_ID "
+            "AND HP.PARTY_NAME LIKE {value})"
+        ),
+        assumption="address_supplier_name",
+        match_mode="contains",
     ),
 
     # Phase 5: aggregation argument filters
@@ -801,6 +903,42 @@ _ASSUMPTIONS = {
     ),
     "invoice_date_filter": (
         "InvoiceDate filters against AP_INVOICES_ALL.INVOICE_DATE."
+    ),
+    "po_created_since": (
+        "CreationDate filters against PO_HEADERS_ALL.CREATION_DATE."
+    ),
+    "invoice_number_maps_to_invoice_num": (
+        "InvoiceNumber filters against AP_INVOICES_ALL.INVOICE_NUM."
+    ),
+    "invoice_supplier_name": (
+        "Supplier substring matches resolve through POZ_SUPPLIERS and "
+        "HZ_PARTIES.PARTY_NAME."
+    ),
+    "invoice_unpaid_status_flags": (
+        "Unpaid includes AP_INVOICES_ALL.PAYMENT_STATUS_FLAG values N "
+        "and P (unpaid and partially paid)."
+    ),
+    "customer_account_by_number": (
+        "CustomerAccountNumber maps to HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER."
+    ),
+    "customer_transaction_open_invoice": (
+        "Open customer transactions are invoice-class rows with a positive "
+        "AR_PAYMENT_SCHEDULES_ALL.AMOUNT_DUE_REMAINING."
+    ),
+    "address_supplier_number": (
+        "Address supplier number resolves through POZ_SUPPLIERS.SEGMENT1 "
+        "and the shared PARTY_ID."
+    ),
+    "address_supplier_name": (
+        "Address supplier name resolves through POZ_SUPPLIERS.PARTY_ID "
+        "to HZ_PARTIES.PARTY_NAME."
+    ),
+    "classification_supplier_id": (
+        "SupplierId scopes POZ_BUS_CLASSIFICATIONS.VENDOR_ID."
+    ),
+    "contact_supplier_id": (
+        "SupplierId scopes contacts through POZ_SUPPLIER_SITES_ALL_M."
+        "VENDOR_ID."
     ),
     "ar_id_maps_to_customer_trx_id": (
         "AR CustomerTransactionId maps to "
@@ -1062,6 +1200,48 @@ OVERLAY = Overlay(
         "aggregate_purchase_orders_by_supplier",
         "rank_customer_accounts_by_exposure",
         "summarize_open_purchase_orders",
+    },
+    sql_control_args={"limit", "fetch_limit", "ctx"},
+    sql_disabled_args={
+        ("search_suppliers", "business_relationship"): (
+            "business relationship has no verified SQL predicate"
+        ),
+        ("search_suppliers", "created_from"): (
+            "date-range handling is not yet represented in SQL"
+        ),
+        ("search_suppliers", "created_to"): (
+            "date-range handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "purchase_order"): (
+            "PO-number invoice filtering is not yet represented in SQL"
+        ),
+        ("search_invoices", "invoice_date_before"): (
+            "invoice date upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "amount_min"): (
+            "invoice amount lower-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "amount_max"): (
+            "invoice amount upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "pending"): (
+            "pending approval has no verified SQL predicate"
+        ),
+        ("search_invoices", "overdue"): (
+            "the invoice due-date carrier has not been verified on this pod"
+        ),
+        ("search_addresses", "country"): (
+            "address country filtering is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "created_before"): (
+            "PO creation-date upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "last_updated_before"): (
+            "PO last-update filtering is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "last_updated_after"): (
+            "PO last-update filtering is not yet represented in SQL"
+        ),
     },
 )
 
