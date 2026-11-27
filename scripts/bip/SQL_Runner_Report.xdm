@@ -1,0 +1,35 @@
+<?xml version = '1.0' encoding = 'utf-8'?>
+<dataModel xmlns="http://xmlns.oracle.com/oxp/xmlp" version="2.1" xmlns:xdm="http://xmlns.oracle.com/oxp/xmlp" xmlns:xsd="http://wwww.w3.org/2001/XMLSchema" defaultDataSourceRef="ApplicationDB_FSCM">
+   <dataProperties>
+      <property name="include_parameters" value="true"/>
+      <property name="include_null_Element" value="false"/>
+      <property name="include_rowsettag" value="false"/>
+      <property name="exclude_tags_for_lob" value="false"/>
+      <property name="EXCLUDE_LINE_FEED_AND_CARRIAGE_RETURN_FOR_LOB" value="true"/>
+      <property name="enable_sqlid_logging" value="true"/>
+      <property name="xml_tag_case" value="upper"/>
+      <property name="enforce_validation_status" value="true"/>
+      <property name="optimize_query_executions" value="false"/>
+      <property name="enable_xml_chunks" value=""/>
+      <property name="sql_monitor_report_generated" value="false"/>
+   </dataProperties>
+   <parameters>
+      <parameter name="P_SQL" dataType="xsd:string" rowPlacement="1">
+         <input defaultValue="SELECT 1 AS ONE FROM DUAL" type="text"/>
+      </parameter>
+   </parameters>
+   <dataSets>
+      <dataSet name="SQL_Runner_Report" type="complex">
+         <sql dataSourceRef="ApplicationDB_FSCM"><![CDATA[SELECT DBMS_XMLGEN.GETXML(:P_SQL) AS XMLDATA FROM DUAL]]></sql>
+      </dataSet>
+   </dataSets>
+   <output rootName="DATA_DS" uniqueRowName="false">
+      <nodeList name="data-structure">
+         <dataStructure tagName="DATA_DS">
+            <group name="G_1" label="G_1" source="SQL_Runner_Report">
+               <element name="XMLDATA" value="XMLDATA" label="XMLDATA" dataType="xsd:string" breakOrder="" fieldOrder="1"/>
+            </group>
+         </dataStructure>
+      </nodeList>
+   </output>
+</dataModel>

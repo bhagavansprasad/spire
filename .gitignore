@@ -53,6 +53,11 @@ t_*.txt
 /t_*.csv
 /t_*.sql
 /t_*.out
+/t_*.xml
+/t_*.html
+/t_*.xdm
+/t_*.xdo
+/t_*.xpt
 
 # Scratch evidence DIRECTORIES (e.g. t_f081_sql/ from the litmus run).
 # The root-only rules above match files, not files inside a t_* folder, so

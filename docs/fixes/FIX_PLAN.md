@@ -1,14 +1,17 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F081-Litmus-Findings` (off `master`).
-Prior: `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge
-`8030439`); SME litmus docs merged via PR #218 (merge `ce269a5`).
+**Branch:** current work on `Phase3-F078-SQL-Filter-Specs` (off `master`).
+Prior: `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
+`Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
+SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — F-073 (customer_site filter), F-072 (account balances),
-F-075 (UnappliedAmount) fixed this window; F-061 decided (leave);
-F-076 (BU scoping) new Candidate; no regressions
+**Status:** Open — F-078 **fixed and live-verified on dev49 (2026-11-27)**:
+all 22 litmus statements execute, and every statement REST can compare
+agrees. New **F-083** (AP invoice inner join drops sentinel-vendor rows,
+found by that comparison). Still open: F-081, F-079, F-080b, F-076,
+F-077, F-082, F-083.
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
@@ -773,7 +776,7 @@ the Plan block shows the arg present and correctly valued
 returns data. Not "the pod rejects the SQL" either: the same statement
 runs once a predicate is supplied.
 
-**S6 (implementation committed 2026-11-26; live verification pending).**
+**S6 (implemented 2026-11-26; live-verified 2026-11-27).**
 The branch adds specs for the observed invoice-number, supplier-name,
 unpaid, created-since, account-number, supplier-number, and open-only args.
 The emitter now raises instead of returning a partial query for an
@@ -804,8 +807,44 @@ Keep F-078 open until the pod check succeeds, the remaining blocked filter
 is resolved or explicitly accepted as SQL-disabled, and each result is
 compared with REST.
 
-**S7 (classification).** **Open, S1 harm.** Highest priority of the four:
-it is the widest blast radius (9/22) and the cheapest to detect.
+**S7 (classification).** **Fixed (2026-11-27).** Every statement the
+emitter produces for this prompt set now executes, and every statement
+REST can check agrees with it. Residual zero-row answers belong to
+F-079 / F-080b / F-082.
+
+**Verification (2026-11-27, dev49, FUSIONU4).** BIP unblocked and all 22
+statements run. `runsql.sh` repaired: SOAP 1.1 on `PublicReportService`,
+credentials in the body (HTTP Basic alone yields
+`initSession Failure: due to empty userID`), HTTP-status and `faultstring`
+checks, `ORA-*` lines surfaced, and `xml` added to the report's
+`outputFormat` list. The report data model now runs
+`SELECT DBMS_XMLGEN.GETXML(:P_SQL) AS XMLDATA FROM DUAL` with a `P_SQL`
+string parameter, so the report accepts an arbitrary single statement.
+Full table: `t_f078_rest_compare.txt`.
+
+Result: **0 of 22 statements fail to execute** (was 9/22 ORA-00936).
+
+| Agree | SQL = REST |
+|---|---|
+| p12 / p17 / p18 (invoice number) | 1 = 1 |
+| p14 (unpaid, Staffing Services) | 827 = 827 |
+| p31 (`Supplier LIKE '%Dell%'`) | 1 = 1 |
+| p36 (addresses, supplier 1262) | 22 = 22 REST sites |
+| p37 (small-business supplier base) | 332 = 332 REST suppliers |
+
+Remaining divergence is owned by other findings: p02–p05 zero rows
+(F-079), p22 zero rows (F-082), p39 zero rows where REST reports 2
+expired suppliers (F-080b re-confirmed here: `InactiveDate <= today` = 2,
+`END_DATE_ACTIVE <= SYSDATE` = 2, `ENABLED_FLAG='N'` = 0). p11 returns
+104 of REST's 106 — a new inner-join defect, recorded as **F-083**.
+
+**Not REST-verifiable on dev49** (pod environment, not a code defect):
+`purchaseOrders` / `purchaseOrderSchedules` return 0 rows and `count=0`
+for this user (`purchaseOrders/2144` → 404) while the pod holds 13,473
+CLOSED orders, so p01/p06 have no REST baseline;
+`receivablesCustomerAccountActivities` returns 403, so p24/p25/p28/p30
+have none. p20 is an aggregation with no REST equivalent. p16 stays
+SQL-disabled by design (`overdue`).
 
 ### F-079 — an entity *number* is bound to an internal *id* (OPEN, S1)
 
@@ -986,10 +1025,11 @@ the failure mode is invisible to the reader.
 
 | Order | Finding | Why here | Effort |
 |---|---|---|---|
-| 1 | **F-078** | Widest blast radius (9/22), cheapest: author missing specs + make unmapped args loud | M |
-| 2 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
-| 3 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
-| 4 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| ~~1~~ | ~~**F-078**~~ | **Fixed 2026-11-27** — all 22 statements execute and agree where REST is comparable | ~~M~~ |
+| 1 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
+| 2 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
+| 3 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| 4 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
 | 5 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
 | 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
@@ -1035,3 +1075,58 @@ can follow.
 
 **S7 (classification).** **Open, S1 harm.** Fix together with F-079 — one
 decision, two tools.
+
+### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (OPEN, S1)
+
+**S0.** The emitted AP-invoice statement joins
+`JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID` (an inner join), so
+any `AP_INVOICES_ALL` row whose `VENDOR_ID` has no supplier row is
+silently dropped — REST returns those invoices.
+
+**S1 (harm).** SQL row count is lower than REST, and the missing invoices
+are invisible: no warning, no NULL supplier column, just fewer rows.
+
+**S2 (evidence).** Found by the F-078 REST comparison on dev49.
+Prompt 11 (`invoices created in the last 30 days`) → SQL **104** rows,
+REST **106**. Set diff (`/tmp/s.txt` vs `/tmp/r.txt`, both `sort -u`):
+`only-in-REST = 2` (`1072121`, `1075121`), `only-in-SQL = 0`. Against the
+pod:
+
+    SELECT INVOICE_NUM, INVOICE_DATE, VENDOR_ID FROM AP_INVOICES_ALL
+    WHERE INVOICE_NUM IN ('1072121','1075121');
+    -- 1072121  2026-11-26  -222
+    -- 1075121  2026-11-27  -222
+
+    SELECT COUNT(*) FROM POZ_SUPPLIERS WHERE VENDOR_ID = -222;  -- 0
+
+REST still returns both, with a supplier name and no number:
+`1072121 -> TEXAS CORP / SupplierNumber None / 50`,
+`1075121 -> Info-Systems Pvt Ltd / None / 300`.
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py` `Invoice` EntitySpec
+`base_joins` (`JOIN POZ_SUPPLIERS` + `JOIN HZ_PARTIES`, the latter only to
+project the supplier name).
+
+**S4 (root cause).** The same class as F-074: a join key was assumed
+non-null and populated. Here it is populated but *sentinel* (`-222`),
+so a NULL-count alone would not have caught it — the check that would
+have is "count rows with no matching parent", not "count NULL keys".
+
+**S5 (disproved alternative).** Not a date-boundary artefact — both
+invoices are dated inside the filter window and REST returns them under
+the same `InvoiceDate >= '2026-10-21'` predicate.
+
+**S6 (fix shape, not applied).** Switch the supplier joins to `LEFT JOIN`
+so the invoice survives with NULL supplier columns, matching REST's
+null `SupplierNumber`; add a validator rule for orphan FK rows on the
+join keys (rows whose parent is absent), and a regression test from the
+two invoice numbers above. Do **not** fix by filtering out `-222`.
+
+**S7 (classification).** **Open, S1 harm.** Row-count divergence on AP
+invoice prompts; sibling of F-074 (inner-join loss) and the invoice-side
+analogue of F-076 (row-count divergence).
+
+**S10 (not checked).** Whether the same sentinel pattern affects the
+`PurchaseOrder` supplier join or the AR entities' customer joins; whether
+more than these 2 invoices carry `VENDOR_ID = -222`.
+
