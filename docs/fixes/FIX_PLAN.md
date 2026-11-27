@@ -773,7 +773,7 @@ the Plan block shows the arg present and correctly valued
 returns data. Not "the pod rejects the SQL" either: the same statement
 runs once a predicate is supplied.
 
-**S6 (implementation started 2026-11-23; pod verification pending).**
+**S6 (implementation committed 2026-11-26; live verification pending).**
 The branch adds specs for the observed invoice-number, supplier-name,
 unpaid, created-since, account-number, supplier-number, and open-only args.
 The emitter now raises instead of returning a partial query for an
@@ -785,11 +785,24 @@ F-080b/F-081 mismatches. `overdue` is deliberately SQL-disabled until a
 populated due-date carrier is verified on this pod; the KG records that
 the AP invoice header has no due-date field.
 
-The regenerated statements have not been compared against the pod or REST:
-`./runsql.sh` returned HTTP 401 for a read-only `SELECT 1 FROM DUAL`, so
-no execution or REST-agreement claim is made. Keep F-078 open until the
-pod check succeeds, the remaining blocked filter is resolved or explicitly
-accepted as SQL-disabled, and each result is compared with REST.
+Commit `8fbd4eb` (`F-078: Add SQL filter coverage and fail-loud emission`)
+is on branch `Phase3-F078-SQL-Filter-Specs`; targeted tests passed (26).
+The coverage validator still reports the known F-080b/F-081 gaps and no
+uncovered tool arguments.
+
+The regenerated statements have not been compared against the pod or REST.
+The dev42 BIP WSDLs respond, but authenticated `CatalogService` calls failed
+with an invalid-username-or-password SOAP fault; `runsql.sh` did not return
+SQL results. A BIP report was visible in the browser, but its existence
+does not establish that it accepts and executes `P_SQL`. No report or
+catalog object was created through SOAP. A separate fixed-query diagnostic
+report (`SELECT 1 FROM DUAL`) was approved, but creation is blocked until
+SOAP authentication works. Do not record credentials in this file or
+commit `personas.yaml`.
+
+Keep F-078 open until the pod check succeeds, the remaining blocked filter
+is resolved or explicitly accepted as SQL-disabled, and each result is
+compared with REST.
 
 **S7 (classification).** **Open, S1 harm.** Highest priority of the four:
 it is the widest blast radius (9/22) and the cheapest to detect.
