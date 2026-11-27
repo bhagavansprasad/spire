@@ -75,7 +75,13 @@ def _bundle_paths(bundles: dict) -> set[str]:
     return out
 
 
-@pytest.mark.xfail(reason="bundle manifest drift deferred (FIX_PLAN §2.2)", strict=False)
+# BOTH drift checks below run for real since 2026-11-27. They used to carry
+# @pytest.mark.xfail(reason="bundle manifest drift deferred (FIX_PLAN §2.2)"),
+# which made the manifest unguardable: the checks existed, described the
+# drift accurately, and were invisible because xfail reports a failure as an
+# expected outcome. The drift they were suppressing was 19 entries pointing
+# at files deleted in 678066f "cleanup" and 24 tracked files in no bundle.
+# Both are reconciled, so there is nothing left to defer.
 def test_every_tracked_file_is_in_a_bundle():
     """Every tracked file not excluded (or allowlisted) is in some bundle."""
     bundles, excludes = _load_config()
@@ -108,7 +114,6 @@ def test_every_tracked_file_is_in_a_bundle():
     )
 
 
-@pytest.mark.xfail(reason="bundle manifest drift deferred (FIX_PLAN §2.2)", strict=False)
 def test_no_bundle_entry_is_missing_from_the_tree():
     """Every path named by a bundle exists in the working tree."""
     bundles, _ = _load_config()
