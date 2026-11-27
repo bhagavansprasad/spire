@@ -95,7 +95,13 @@ def _kg_backed_overlay() -> Overlay:
             select_columns=columns,
             base_joins=entity.base_joins,
             derived_columns=list(car["derived"]),
+            # F-076: the scope is a data-access fact, not a column fact, so
+            # it must survive the KG rebuild that replaces select_columns.
+            scope_predicates=list(entity.scope_predicates),
+            scope_assumption=entity.scope_assumption,
         )
+
+    _apply_data_scope(entities)
 
     _kg_overlay_cache = Overlay(
         tool_to_entity=OVERLAY.tool_to_entity,
@@ -110,6 +116,75 @@ def _kg_backed_overlay() -> Overlay:
         sql_disabled_args=OVERLAY.sql_disabled_args,
     )
     return _kg_overlay_cache
+
+
+# ── Data scope (F-076) ────────────────────────────────────────────────
+#
+# REST is not a view of the whole database: the integration user's security
+# profile decides which business units are visible. That fact lives in no
+# column, so it cannot come from the KG — it comes from the persona
+# (spire.config.DataScope.visible_business_units) and is injected here.
+#
+# Only entities with a MEASURED difference are listed. Receipts are; AR
+# invoices are NOT (REST returns UK invoices even though it hides UK
+# receipts, so a global business-unit filter would be wrong there). Adding
+# an entity to this map is a claim that must be evidenced, not assumed.
+_BU_SCOPED_COLUMNS: dict[str, str] = {
+    "StandardReceipt": "ORG_ID",
+}
+
+
+def _visible_business_units() -> list[str]:
+    """The persona's visible business-unit names, or [] when unconfigured.
+
+    Never raises: a missing personas.yaml, an unknown persona, or no scope
+    block all mean "no scoping", which is the pre-F-076 behaviour.
+    """
+    import os
+
+    try:
+        from spire.config import load_persona
+
+        persona = load_persona(os.environ.get("SPIRE_PERSONA", "default_dev"))
+    except Exception:
+        return []
+    if persona.scope is None or not persona.scope.visible_business_units:
+        return []
+    return list(persona.scope.visible_business_units)
+
+
+def _bu_scope_predicate(alias: str, column: str, names: list[str]) -> str:
+    """Restrict to the named business units, resolving name -> ORG_ID.
+
+    Resolved by subquery rather than by hardcoded ids: the ids are pod
+    specific and would rot, while HR_OPERATING_UNITS.NAME is what both the
+    persona and REST's `BusinessUnit` field use.
+    """
+    quoted = ", ".join(
+        "'" + n.replace("'", "''") + "'" for n in names
+    )
+    return (
+        f"{{alias}}.{column} IN (SELECT U.ORGANIZATION_ID "
+        f"FROM HR_OPERATING_UNITS U WHERE U.NAME IN ({quoted}))"
+    )
+
+
+def _apply_data_scope(entities: dict[str, EntitySpec]) -> None:
+    """Append the persona's business-unit filter to the scoped entities.
+
+    Mutates `entities` in place. A no-op when no visible set is configured,
+    so an unconfigured environment keeps the previous (superset) behaviour.
+    """
+    names = _visible_business_units()
+    if not names:
+        return
+    for entity_name, column in _BU_SCOPED_COLUMNS.items():
+        entity = entities.get(entity_name)
+        if entity is None:
+            continue
+        entity.scope_predicates.append(
+            _bu_scope_predicate(entity.alias, column, names)
+        )
 
 
 def emit_sql(plan: Iterable[Any], overlay: Overlay | None = None) -> list[str]:
@@ -162,6 +237,15 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
     joins: list[str] = list(entity.base_joins)
     where: list[str] = []
     assumptions: list[str] = []
+
+    # F-076: the data-scope predicates come FIRST, before any user filter.
+    # They restrict the statement to what REST can actually return, so a
+    # count over this entity agrees with the REST count rather than
+    # counting rows the user cannot see.
+    for scope_predicate in entity.scope_predicates:
+        where.append(scope_predicate.format(alias=entity.alias))
+    if entity.scope_predicates and entity.scope_assumption:
+        assumptions.append(entity.scope_assumption)
 
     # Iterating steps: the primary arg is $iteration_value. Handled in
     # the per-arg loop below via FilterSpec, same as any other arg.

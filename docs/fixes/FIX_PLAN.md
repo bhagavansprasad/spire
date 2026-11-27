@@ -11,12 +11,13 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-080, F-081, F-082, F-083, F-084 and
-F-077 fixed and live-verified on dev49**: all 22 litmus statements execute,
-and every statement REST can compare agrees with it. New **F-085** (the
-documented `rebuild_kg.sh` reduced the KG to 8 tables / 5 entities and
-reported success; it now delegates to `rebuild_kg.py`). Still open:
-**F-076** — the only finding left in this queue.
+**Status:** **Closed** — every finding recorded in this file is fixed and
+live-verified on dev49: **F-076, F-077, F-078, F-079, F-080, F-081, F-082,
+F-083, F-084 and F-085**. All 22 litmus statements execute, and every
+statement REST can compare agrees with it.
+
+**This queue is empty.** F-076 and F-077 were the last two, both fixed
+2026-11-27.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
@@ -31,7 +32,8 @@ SQL, 9 of 22 statements), **F-079** (number bound to internal id, 6
 statements → 0 rows), **F-080** (two wrong predicates → false zeros),
 **F-081** (requested columns silently dropped), **F-082** (AR by-number
 false negative), **F-077** (AP invoice lines refused as "not in the API
-schema"). F-076 remains open. Recommended fix order is at the end of §6.
+schema"). F-076 and F-077 are both closed; **every finding in this queue
+is now fixed**. Recommended fix order is at the end of §6.
 
 ---
 
@@ -615,27 +617,129 @@ S.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID), 0)` returns 0 / 0 / 0 / 0 for the
 four above (= REST), 1,135.2 (300000066476397), 550 (300000066476549),
 474.85 (619474), 438.98 (619507) — all equal REST (`t_f072_unapplied_verify.csv`).
 
-### F-076 — emitted SQL is not business-unit scoped (Candidate, OPEN)
+### F-076 — emitted SQL is not business-unit scoped (FIXED, S1)
 
-**S0.** REST AR collections return only the session's business unit; the
-emitted SQL has no `ORG_ID` filter, so it also counts rows from other BUs.
+**Status: fixed 2026-11-27 for `StandardReceipt` only.** The recorded
+mechanism was wrong and is corrected below. The other AR entities are
+**not** fixed, and deliberately so — see S5.
+
+**S0 (original claim).** REST AR collections return only the session's
+business unit; the emitted SQL has no `ORG_ID` filter, so it also counts
+rows from other BUs.
 
 **S1 (harm).** Row-count and total divergence on multi-org accounts:
 `AR_CASH_RECEIPTS_ALL` holds account 26370 in three orgs — 1,692
-(`300000046987012`, the REST BU) + 605 + 544. The emitted SQL returns 745
-Santa Clara receipts for the account where REST returns 742; the 3 extra
-are `ORG_ID=300000047498175` (`t_f073_outliers.txt`). Same shape for
-account *totals* (2,841 pod vs 1,692 REST) on every AR SQL answer, not
-just site filters.
+(`300000046987012`, the REST BU) + 605 + 544. The emitted SQL returned 745
+Santa Clara receipts for the account where REST returned 742; the 3 extra
+were `ORG_ID=300000047498175` (`t_f073_outliers.txt`). Same shape for
+account *totals* (2,841 pod vs 1,692 REST) on every AR SQL answer, not just
+site filters.
 
-**S3 (mechanism).** No `ORG_ID`/BU predicate appears in any AR
-`EntitySpec` or `kg_sql_column`; the KG has `BusinessUnit` documented as
-"numeric FK, REST is a name" and dropped.
+**S2 (re-measured 2026-11-27 — the premise was WRONG).** REST is **not**
+scoped to one business unit. It sees **14 of the 16** AR orgs. The full
+decomposition of the pod, every row accounted for:
 
-**S7 (classification).** Candidate. Corpus-wide, needs a deliberate
-decision (bind the session BU via `ORG_ID`, or accept BU-superset answers
-as richer-than-REST and document it) — out of scope for F-073 because it
-is not site-specific. Do **not** fix by guessing a BU id.
+    REST /standardReceipts total ........ 63,065
+    France Business Unit (hidden) .......  9,316
+    UK Business Unit (hidden) ...........  7,352
+    TYPE='MISC', 1 row (hidden) .........      1
+    ------------------------------------------------
+    pod AR_CASH_RECEIPTS_ALL total ...... 79,734   <- exact
+
+Per-BU agreement, probed by name via `q=BusinessUnit='...'` — 9 of 9
+exact:
+
+    US1 50004 = 50004     Supremo 12261 = 12261   University 628 = 628
+    Healthcare 117 = 117  Progress 33 = 33        India 4 = 4
+    Germany 2 = 2         France 0 (pod 9,316)    UK 0 (pod 7,352)
+
+**S3 (mechanism, corrected).** Two independent rules, neither of which is
+"the session BU":
+
+1. **Endpoint semantics.** `/standardReceipts` does not expose
+   miscellaneous receipts — the single `TYPE='MISC'` row is absent from
+   REST while all 79,733 `TYPE='CASH'` rows are reachable.
+2. **Data access.** The integration user's security profile hides France
+   and UK. Nothing in the business data encodes this; `SET_OF_BOOKS_ID`
+   does not group them (France `300000047488121` and UK `300000047488112`
+   are distinct ledgers, and the visible set spans several ledgers too).
+
+**S4 (root cause).** The SQL overlay models the physical tables, and the
+physical tables are not what REST returns. The gap between "rows in the
+table" and "rows this user can see" was never represented anywhere.
+
+**S5 (disproved fixes — this is why the original S6 would have hurt).**
+
+- **"Bind the session BU via `ORG_ID`" is wrong.** A single BU is not the
+  REST scope. `US1` alone is 50,004 receipts, i.e. **13,061 below** REST.
+  It would have converted an over-count into an under-count.
+- **"Accept BU-superset answers and document it" is also wrong.** The
+  extra rows are France/UK ledgers the user genuinely cannot see — not
+  extra detail.
+- **The scope is per-resource, so it cannot be applied globally.**
+  `/receivablesInvoices` returns UK invoices (its own first row is
+  `BusinessUnit='UK Business Unit'`) even though it hides UK receipts, and
+  `BusinessUnit` is not even queryable there (HTTP 400). Applying the
+  receipts rule to AR invoices would delete 47,838 real rows.
+- **AP is unaffected.** `/invoices` = 53,163 = pod 53,163 exactly. This is
+  an AR-only finding.
+
+**S6 (fix applied).** A persona-declared data scope, consumed by the
+emitter.
+
+| Layer | Change |
+|---|---|
+| `config.py` | new optional `DataScope.visible_business_units`; `Persona.scope` |
+| `sql_overlay.py` | `EntitySpec.scope_predicates` + `scope_assumption`; `TYPE='CASH'` declared on `StandardReceipt`; new assumption text |
+| `sql_emitter.py` | scope predicates seeded into `WHERE` *before* user filters; `_apply_data_scope` injects the BU filter from the persona; `_BU_SCOPED_COLUMNS = {"StandardReceipt": "ORG_ID"}` |
+| `personas.yaml` / `personas.example.yaml` | the visible set, documented, with the unset default spelled out |
+| `tests/test_f076_data_scope.py` | 18 tests |
+
+Design choices worth stating:
+
+- **Names, not ids.** The predicate is
+  `R.ORG_ID IN (SELECT ORGANIZATION_ID FROM HR_OPERATING_UNITS WHERE NAME IN (...))`.
+  Hardcoded `ORG_ID` values would rot on the next pod provisioning; the
+  names are what both the persona and REST's `BusinessUnit` field use.
+- **The BU half is optional; the endpoint half is not.** `TYPE='CASH'` is
+  a property of the resource and is always applied. The BU list is
+  unset by default, which reproduces the pre-F-076 behaviour exactly — so
+  an environment that has not measured its own scope is not silently
+  narrowed.
+- **Scope predicates are seeded before user filters** and survive the
+  KG rebuild (they are a data-access fact, not a column fact, so they are
+  carried across the `EntitySpec` reconstruction).
+
+**Verification (dev49, `runsql.sh` + REST, same session).**
+
+    emitted receipts statement      63,065
+    REST /standardReceipts total    63,065   -> AGREE exactly
+
+    account 26370 (the S1 case)      1,692
+    REST account 26370               1,692   -> AGREE exactly (was 2,841)
+
+Scope confinement checked by emitting the other statements and asserting
+the predicate is absent: `search_receivables_invoices`, `search_invoices`,
+`search_suppliers`, `search_purchase_orders` and
+`get_receivables_invoice_by_id` emit no `ORG_ID` / `HR_OPERATING_UNITS`
+predicate.
+
+**S7 (classification).** Fixed for the entity where it was measured.
+Silent row-count divergence between SQL and REST, AR-only.
+
+**S10 (not checked — deliberately).** The per-resource scope of the other
+18 entities. The mechanism is now available (`_BU_SCOPED_COLUMNS`), but
+adding an entity is a claim that needs its own measurement — the AR-invoice
+case proves extrapolating from receipts is wrong. Also unmeasured:
+`/receivablesInvoices` reports 201,385 against a pod count of 207,243; the
+5,858 gap is **not** the France/UK rule and has a different, unknown cause.
+
+**S11 (fragility, recorded not fixed).** A visible list fails *closed*: a
+business unit provisioned later and left out of the persona would silently
+drop rows from counts. An exclusion list would fail *open* instead. Neither
+is derivable, because the boundary is a security-profile property. The
+persona is where it belongs; the mitigation is that the assumption text is
+printed in every emitted statement so the restriction is visible.
 
 
 ### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (FIXED)
@@ -1239,8 +1343,8 @@ renderer) surfaces `projection_gaps` the same way.
 | ~~1~~ | ~~**F-080b**~~ | **Fixed 2026-11-27** — `END_DATE_ACTIVE` carrier; p39 0 → 2 rows, identity-matched to REST | ~~S~~ |
 | ~~1~~ | ~~**F-084**~~ | **Fixed 2026-11-27** — Status derived from END_DATE_ACTIVE; 335/335 suppliers agree with REST | ~~S~~ |
 | ~~1~~ | ~~**F-085**~~ | **Fixed 2026-11-27** — `rebuild_kg.sh` delegates to `rebuild_kg.py`; it had been shrinking the KG | ~~S~~ |
+| ~~1~~ | ~~**F-076**~~ | **Fixed 2026-11-27** — persona-declared data scope; receipts now equal REST (63,065) | ~~L~~ |
 | ~~2~~ | ~~**F-077**~~ | **Fixed 2026-11-27** — AP `InvoiceLine` entity built end to end; building it also fixed the routing | ~~L~~ |
-| 1 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
