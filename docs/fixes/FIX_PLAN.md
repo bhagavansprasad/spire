@@ -1,7 +1,8 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F083-Invoice-Supplier-Join` (off `master`).
-Prior: `Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
+**Branch:** current work on `Phase3-F080b-Supplier-Status-Carrier` (off `master`).
+Prior: `Phase3-F083-Invoice-Supplier-Join` merged via PR #222 (merge `908e396`);
+`Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
 `Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
 `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
 `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
@@ -9,10 +10,12 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-081, F-082 and F-083 fixed and
-live-verified on dev49 (2026-11-27)**: all 22 litmus statements execute,
-and every statement REST can compare agrees with it. Still open:
-F-080b, F-076, F-077.
+**Status:** Open — **F-078, F-079, F-080, F-081, F-082 and F-083 fixed and
+live-verified on dev49**: all 22 litmus statements execute, and every
+statement REST can compare agrees with it. `validate_sql_coverage.py`
+exits 0 for the first time. New **F-084** (the projected supplier
+`Enabled` column reads the same `ENABLED_FLAG` stub; needs a KG seed
+change + rebuild). Still open: F-076, F-077, F-084.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
@@ -958,7 +961,7 @@ statements, and it was the mechanism behind one of the 16 prompt failures.
 Fixed together with F-082 (same decision, two tools).
 
 
-### F-080 — two filter specs point at the wrong predicate (OPEN, S1)
+### F-080 — two filter specs point at the wrong predicate (FIXED, S1)
 
 **S0 (claim).** Two specs exist but express the wrong thing, so they
 return zero rows against correct data.
@@ -1016,6 +1019,67 @@ the `search_suppliers.status` predicate still uses the unpopulated
 gap. No pod verification was possible in this window.
 
 **S7 (classification).** **Open, S1 harm.** Two prompts, both silent zeros.
+
+**F-080b Resolution (2026-11-27).** **Fixed.** The carrier is
+`POZ_SUPPLIERS.END_DATE_ACTIVE`, measured rather than chosen:
+
+| Measurement (dev49, one session) | value |
+|---|---|
+| `POZ_SUPPLIERS` rows | 334 |
+| `ENABLED_FLAG` distribution | **`'Y'` on 334/334** — no information |
+| `END_DATE_ACTIVE` populated | 2 rows (both `2022-11-19`) |
+| REST `Status` distribution | ACTIVE 332 / **INACTIVE 2** |
+| REST `InactiveDate` populated | 2 (both `2022-11-19`) |
+| `InactiveDate` == `END_DATE_ACTIVE` per SupplierNumber | **334 matched, 0 mismatches** |
+| `POZ_SUPPLIERS` date/status columns | has `END_DATE_ACTIVE`, `START_DATE_ACTIVE`; **no `INACTIVE_DATE`** |
+
+So REST's `InactiveDate` *is* `END_DATE_ACTIVE` — there is no separate
+column it could be. The old S6 note's `END_DATE_ACTIVE <= SYSDATE` was the
+right column; what was missing was the proof and the ACTIVE half.
+
+ACTIVE and INACTIVE need opposite predicates, so the template branches on
+the resolved literal:
+
+```sql
+CASE WHEN UPPER('INACTIVE') = 'INACTIVE'
+     THEN CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 1 ELSE 0 END
+     ELSE CASE WHEN P.END_DATE_ACTIVE IS NULL
+                 OR P.END_DATE_ACTIVE > TRUNC(SYSDATE) THEN 1 ELSE 0 END
+END = 1
+```
+
+`value_map` still lists only ACTIVE/INACTIVE, so any other status resolves
+to no literal and the emitter **raises** — the F-078 fail-loud rule. A test
+asserts `status='ON_HOLD'` raises instead of quietly returning every
+supplier.
+
+**Validator rule generalised.** The old check was one hardcoded string:
+`if "ENABLED_FLAG" in search_suppliers.status.predicate_template`. That
+only ever guarded the one spec someone had already fixed. It is now a
+`STUB_COLUMNS` table (column → the measurement that makes it a stub,
+sourced from F-060/F-062/F-063/F-080b) checked against **every**
+`FilterSpec.predicate_template`, so the next spec cannot reuse any known
+stub silently. `scripts/validate_sql_coverage.py` now exits 0 — the first
+clean run in this record.
+
+**Verification (dev49, same session).**
+
+| | before | after | REST |
+|---|---|---|---|
+| p39 "inactive suppliers" | **0 rows** | **2 rows** | 2 |
+| same, ACTIVE | — | 332 | 332 |
+
+The two rows are the same suppliers REST reports, by identity not just
+count: `1421 Best Rig Corp` (InactiveDate 2022-11-19),
+`1422 Manali Petro Ltd` (2022-11-19).
+
+**S10 (not checked).** The `<=` vs `<` boundary for a supplier whose
+`END_DATE_ACTIVE` is today is unverified — both populated dates are in the
+past, so the forms are indistinguishable on this pod. A future-dated
+`END_DATE_ACTIVE` is treated as still active by this predicate and no row
+tests that.
+
+**Cross-link.** The projection half of the same stub is **F-084** (new).
 
 ### F-081 — `intent.fields` uses display names, so projection drops real columns (OPEN, S1)
 
@@ -1167,7 +1231,8 @@ renderer) surfaces `projection_gaps` the same way.
 | ~~1~~ | ~~**F-079**~~ | **Fixed 2026-11-27** — by-id specs resolve number-then-id; p02–p05 now return rows | ~~M~~ |
 | ~~2~~ | ~~**F-082**~~ | **Fixed 2026-11-27** — AR tool resolves both spaces; p22 agrees with REST on 9/9 fields | ~~M~~ |
 | ~~3~~ | ~~**F-083**~~ | **Fixed 2026-11-27** — LEFT JOIN; p11 now equals REST exactly (132 = 132) | ~~S~~ |
-| 1 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| ~~1~~ | ~~**F-080b**~~ | **Fixed 2026-11-27** — `END_DATE_ACTIVE` carrier; p39 0 → 2 rows, identity-matched to REST | ~~S~~ |
+| 1 | **F-084** | Projected supplier `Enabled` column reads the stub too; needs KG seed + rebuild | S |
 | 2 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
 | 3 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
@@ -1367,3 +1432,71 @@ analogue of F-076 (row-count divergence).
 measured, so an all-zero orphan count for them is an assumption, not a
 finding.
 
+
+### F-084 — the projected supplier `Enabled` column reads the `ENABLED_FLAG` stub (OPEN, S1)
+
+**S0 (claim).** The KG binds `Supplier.Enabled` to
+`POZ_SUPPLIERS.ENABLED_FLAG`, which is `'Y'` on all 334 suppliers, so the
+SQL projection reports every supplier as enabled while REST reports
+`Status` ACTIVE 332 / INACTIVE 2.
+
+**S1 (harm).** SQL ≠ REST on a column the prompts ask for. Prompt 39
+(`Find suppliers with inactive or expired supplier records. Include
+supplier number, supplier name, classification, and status`) now returns
+the right two rows after F-080b, but its status column reads `Y` for both
+where REST reads `INACTIVE`.
+
+**S2 (evidence).** Emitted p39 after the F-080b fix:
+
+    SELECT P.ENABLED_FLAG, HP.PARTY_NAME, P.VENDOR_ID, P.SEGMENT1
+    FROM POZ_SUPPLIERS P JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID
+    WHERE CASE WHEN UPPER('INACTIVE') = 'INACTIVE' THEN ... END = 1;
+
+    -- returns: Y | Best Rig Corp | 300000256953842 | 1421
+    --          Y | Manali Petro Ltd | 300000256953861 | 1422
+
+REST for the same two: `Status = 'INACTIVE'`. Pod:
+`ENABLED_FLAG` is `'Y'` on 334/334 (`SELECT ENABLED_FLAG, COUNT(*) ...
+GROUP BY ENABLED_FLAG` → `Y, 334`).
+
+**S3 (mechanism).** `scripts/sql/kg_schema.sql` line 1769 seeds
+`kg_sql_column ('Supplier', 'Enabled', 'POZ_SUPPLIERS', 'ENABLED_FLAG')`,
+and `EntitySpec.derived_columns`/select list for a KG-backed entity come
+from `kg_sql_column`, so the emitted column is the stub. Line 756's
+`kg_entity_field` for the same field already states the problem:
+"Supplier enabled flag (ENABLED_FLAG Y/N). SQL-only; the REST Status
+field is semantically different." The KG therefore knows `Enabled` is not
+`Status` — and has no `Status` SQL carrier at all, which is why the
+projection has nothing better to offer.
+
+**S4 (root cause).** The R-7 stub shape at the projection level, exactly
+as F-060/F-062/F-063 — but here the field (`Enabled`) has **no populated
+carrier at all** on this pod. `KG_FIELD_TRANSLATION.md` already recorded
+the gap: "Nearest field is `Status` (ACTIVE/INACTIVE), semantically
+different from ENABLED_FLAG Y/N."
+
+**S5 (disproved alternative).** Not a display-mapping problem that the
+formatter could fix: the value coming out of SQL is `'Y'`, and there is no
+row-level information in it — 334 of 334 rows are identical, so no
+mapping can recover which 2 are inactive.
+
+**S6 (fix shape, not applied).** Two seed changes, then a KG rebuild:
+(a) add `kg_derived_projection ('Supplier', 'Status',
+"CASE WHEN S.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 'INACTIVE' ELSE
+'ACTIVE' END")` — verified to reproduce REST's 332/2 split exactly in the
+F-080b predicate; (b) drop the `Enabled` `kg_sql_column` row rather than
+repoint it, because `ENABLED_FLAG` carries no information and `Enabled` is
+not `Status`. Row counts change (`kg_sql_column` −1,
+`kg_derived_projection` +1), so `test_kg_metadata.py` and
+`scripts/print_kg.py` need updating, and `scripts/validate_kg_schema.py`
+must stay PASS.
+
+**S7 (classification).** **Open, S1 harm.** Deliberately NOT folded into
+the F-080b branch: it needs a KG seed change plus a rebuild, which is a
+different unit of work from a filter-spec change, and mixing them would
+make a failing rebuild block a verified filter fix.
+
+**S8 (miss record).** F-080b's own tests caught it — asserting
+`"ENABLED_FLAG" not in sql` failed on the SELECT list after the WHERE
+clause was already correct. The literal assertion was too broad, which is
+what surfaced the second instance.

@@ -63,8 +63,12 @@ def test_shape_1_active_suppliers():
     assert "HP.PARTY_NAME" in body
     assert "FROM POZ_SUPPLIERS P" in body
     assert "JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID" in body
-    assert "WHERE P.ENABLED_FLAG = 'Y'" in body
-    assert "ASSUMPTION [status_maps_to_enabled_flag]" in sql
+    # F-080b: status maps to END_DATE_ACTIVE, not the ENABLED_FLAG stub
+    # ('Y' on all 334 suppliers). ACTIVE is the complement of INACTIVE.
+    assert "UPPER('ACTIVE') = 'INACTIVE'" in body
+    assert "P.END_DATE_ACTIVE IS NULL" in body
+    assert "P.ENABLED_FLAG = 'Y'" not in body
+    assert "ASSUMPTION [status_maps_to_end_date_active]" in sql
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -77,10 +81,10 @@ def test_shape_2_active_suppliers_in_us():
                  {"status": "ACTIVE", "country": "US"})]
     sql = emit_sql(plan)[0]
     body = _strip_comments(sql)
-    assert "P.ENABLED_FLAG = 'Y'" in body
+    assert "P.END_DATE_ACTIVE" in body  # F-080b carrier
     assert "L.COUNTRY = 'US'" in body
     assert "AND" in body
-    assert "ASSUMPTION [status_maps_to_enabled_flag]" in sql
+    assert "ASSUMPTION [status_maps_to_end_date_active]" in sql
     assert "ASSUMPTION [address_join_for_country]" in sql
 
 

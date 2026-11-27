@@ -486,9 +486,32 @@ _FILTERS = {
     ("search_suppliers", "status"): FilterSpec(
         tool_name="search_suppliers",
         arg_name="status",
-        predicate_template="{alias}.ENABLED_FLAG = {value}",
-        value_map={"ACTIVE": "'Y'", "INACTIVE": "'N'"},
-        assumption="status_maps_to_enabled_flag",
+        # F-080b: the arg is REST's `Status` (ACTIVE / INACTIVE, matched
+        # client-side against the payload). The old carrier was
+        # POZ_SUPPLIERS.ENABLED_FLAG, which is 'Y' on all 334 suppliers on
+        # this pod and therefore returned 0 rows for "inactive suppliers"
+        # while REST reports 2.
+        #
+        # The real carrier is END_DATE_ACTIVE: REST's InactiveDate equals
+        # it on 334/334 suppliers (0 mismatches) and REST's Status is
+        # ACTIVE 332 / INACTIVE 2 on exactly the two rows where it is set
+        # and past. There is no INACTIVE_DATE column on POZ_SUPPLIERS.
+        #
+        # ACTIVE and INACTIVE need opposite predicates, so the template
+        # branches on the resolved literal. `value_map` still lists only
+        # those two values, so any other status raises rather than
+        # silently returning suppliers (the F-078 fail-loud rule).
+        predicate_template=(
+            "CASE WHEN UPPER({value}) = 'INACTIVE' "
+            "THEN CASE WHEN {alias}.END_DATE_ACTIVE <= TRUNC(SYSDATE) "
+            "THEN 1 ELSE 0 END "
+            "ELSE CASE WHEN {alias}.END_DATE_ACTIVE IS NULL "
+            "OR {alias}.END_DATE_ACTIVE > TRUNC(SYSDATE) "
+            "THEN 1 ELSE 0 END "
+            "END = 1"
+        ),
+        value_map={"ACTIVE": "'ACTIVE'", "INACTIVE": "'INACTIVE'"},
+        assumption="status_maps_to_end_date_active",
     ),
     ("search_suppliers", "country"): FilterSpec(
         tool_name="search_suppliers",
@@ -908,9 +931,13 @@ _LITERALS = {
 # ─────────────────────────────────────────────────────────────────────
 
 _ASSUMPTIONS = {
-    "status_maps_to_enabled_flag": (
-        "Supplier ACTIVE/INACTIVE maps to POZ_SUPPLIERS.ENABLED_FLAG "
-        "('Y'/'N')."
+    "status_maps_to_end_date_active": (
+        "search_suppliers.status is REST's Status (ACTIVE/INACTIVE) and "
+        "maps to POZ_SUPPLIERS.END_DATE_ACTIVE, not ENABLED_FLAG. "
+        "ENABLED_FLAG is 'Y' on all 334 suppliers on this pod; "
+        "END_DATE_ACTIVE is set on the same 2 rows REST reports INACTIVE, "
+        "and REST's InactiveDate equals it on 334/334 suppliers. A "
+        "supplier is inactive once END_DATE_ACTIVE has passed."
     ),
     "address_join_for_country": (
         "Supplier country lives on the child address. "

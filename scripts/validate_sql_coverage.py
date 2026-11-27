@@ -14,6 +14,17 @@ sys.path.insert(0, str(ROOT))
 from spire.kg.sql_overlay import OVERLAY  # noqa: E402
 from spire.graph.pipeline import _FIELD_ALIASES  # noqa: E402
 
+# Columns that EXIST and are never NULL-but-empty, so a "column exists"
+# check passes while the predicate built on them can never match. Every
+# entry is here because it was measured, not suspected (see the F-060 /
+# F-062 / F-063 / F-080b records in docs/fixes/FIX_PLAN.md).
+STUB_COLUMNS: dict[str, str] = {
+    "ENABLED_FLAG": "'Y' on all 334 POZ_SUPPLIERS rows (F-080b)",
+    "PO_LINES_ALL.AMOUNT": "NULL on 315,857 of 315,970 rows (F-060)",
+    "PO_LINE_LOCATIONS_ALL.AMOUNT": "NULL on 310,807 of 310,947 rows (F-062)",
+    "ESTIMATED_TAX_AMOUNT": "NULL on all 310,952 schedule rows (F-063)",
+}
+
 
 def _tool_signatures() -> dict[str, set[str]]:
     source = (ROOT / "src/spire/mcp_server/server.py").read_text()
@@ -151,12 +162,20 @@ def validate() -> list[str]:
                     f"Substring argument {tool_name}.{arg_name} lacks "
                     "contains semantics"
                 )
-    supplier_status = OVERLAY.filters.get(("search_suppliers", "status"))
-    if supplier_status and "ENABLED_FLAG" in supplier_status.predicate_template:
-        errors.append(
-            "search_suppliers.status uses the known unpopulated ENABLED_FLAG "
-            "carrier (F-080b)"
-        )
+    # F-080b generalised: a predicate on a KNOWN-STUB column returns a
+    # confident wrong answer (a zero for "inactive suppliers") while
+    # looking perfectly valid, so it cannot be caught by shape checks.
+    # The old rule named ENABLED_FLAG on search_suppliers.status only,
+    # which meant the next spec could reuse any other stub silently.
+    # Each entry carries the measurement that makes it a stub, so nobody
+    # has to re-derive why it is on the list.
+    for (tool_name, arg_name), spec in sorted(OVERLAY.filters.items()):
+        for column, evidence in STUB_COLUMNS.items():
+            if column in spec.predicate_template:
+                errors.append(
+                    f"{tool_name}.{arg_name} filters on the stub column "
+                    f"{column} ({evidence})"
+                )
 
     for tool_name in sorted(sql_tools):
         if tool_name not in signatures:
