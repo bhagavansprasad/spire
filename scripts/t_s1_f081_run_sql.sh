@@ -8,9 +8,14 @@ cd /home/bhagavan/aura/spire
 printf '%-8s %-6s %-7s %s\n' "FILE" "EXIT" "ROWS" "NOTE"
 printf '%s\n' "-------------------------------------------------------------"
 
-for f in t_f081_sql/p*.sql; do
+for f in t_f081_sql/p[0-9][0-9].sql; do
   base=$(basename "$f" .sql)
   clean="t_f081_sql/${base}.run.sql"
+
+  if grep -q '^-- SQL DISABLED:' "$f"; then
+    printf '%-8s %-6s %-7s %s\n' "$base" "SKIP" "-" "SQL disabled"
+    continue
+  fi
 
   # Keep everything up to the first trailing ASSUMPTION block.
   awk '/^-- ASSUMPTION/{exit} {print}' "$f" > "$clean"

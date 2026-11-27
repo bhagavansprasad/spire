@@ -106,6 +106,8 @@ def _kg_backed_overlay() -> Overlay:
         assumptions=OVERLAY.assumptions,
         aggregations=OVERLAY.aggregations,
         not_expressible=OVERLAY.not_expressible,
+        sql_control_args=OVERLAY.sql_control_args,
+        sql_disabled_args=OVERLAY.sql_disabled_args,
     )
     return _kg_overlay_cache
 
@@ -181,10 +183,7 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
             # execution time.
             fspec = overlay.filters.get((step.tool_name, arg_name))
             if fspec is None:
-                where.append(
-                    f"-- unmapped iteration arg: {arg_name}"
-                )
-                continue
+                raise _unmapped_arg_error(step.tool_name, arg_name, overlay)
             if fspec.requires_join is not None:
                 _maybe_add_join(
                     fspec.requires_join, joins, assumptions, overlay
@@ -200,8 +199,9 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
 
         fspec = overlay.filters.get((step.tool_name, arg_name))
         if fspec is None:
-            where.append(f"-- unmapped tool_arg: {arg_name}={arg_value!r}")
-            continue
+            if arg_name in overlay.sql_control_args:
+                continue
+            raise _unmapped_arg_error(step.tool_name, arg_name, overlay)
 
         # Pull in any join the filter's predicate depends on.
         if fspec.requires_join is not None:
@@ -211,13 +211,11 @@ def _emit_step(step: Any, overlay: Overlay) -> str:
 
         sql_value = _resolve_value(fspec, arg_value, overlay)
         if sql_value is None:
-            where.append(
-                f"-- unresolved literal for {arg_name}={arg_value!r} "
+            raise ValueError(
+                f"SQL projection disabled: unresolved literal for "
+                f"{step.tool_name}.{arg_name}={arg_value!r} "
                 f"(vocab_kind={fspec.vocab_kind})"
             )
-            if fspec.assumption:
-                assumptions.append(fspec.assumption)
-            continue
 
         where.append(
             fspec.predicate_template.format(
@@ -293,6 +291,19 @@ def _maybe_add_join(
         assumptions.append(join_spec.assumption)
 
 
+def _unmapped_arg_error(
+    tool_name: str, arg_name: str, overlay: Overlay
+) -> ValueError:
+    reason = overlay.sql_disabled_args.get((tool_name, arg_name))
+    if reason is not None:
+        return ValueError(
+            f"SQL projection disabled for {tool_name}.{arg_name}: {reason}"
+        )
+    return ValueError(
+        f"Unmapped SQL argument {tool_name}.{arg_name}: no FilterSpec"
+    )
+
+
 def _resolve_value(
     fspec: FilterSpec, raw: Any, overlay: Overlay
 ) -> str | None:
@@ -302,6 +313,8 @@ def _resolve_value(
     if fspec.vocab_kind is not None:
         return overlay.literals.get((fspec.vocab_kind, key))
     safe = key.replace("'", "''")
+    if fspec.match_mode == "contains":
+        return f"'%{safe}%'"
     return f"'{safe}'"
 
 
@@ -353,9 +366,8 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     non-aggregating path applies them, but only simple-equality filters
     make sense for aggregations (a > filter would be a HAVING clause,
     not a WHERE, and no current aggregation tool takes a range filter).
-    If any arg fails to resolve through the FilterSpec lookup, a
-    comment line is emitted rather than a WHERE, so the SQL is not
-    silently wrong.
+    Any argument that is not mapped to SQL fails emission rather than
+    producing a partial or structurally invalid projection.
     """
     base = overlay.entities.get(spec.base_entity)
     if base is None:
@@ -380,25 +392,31 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
     #   2. spec.top_n_arg — the top-N limit; becomes FETCH FIRST N ROWS
     #      ONLY after the ORDER BY, not a WHERE.
     #   3. filter args — mapped via FilterSpec into the WHERE clause.
-    #   4. unknown args — emitted as a comment so nothing is silently
-    #      dropped.
+    #   4. unknown args — fail emission rather than drop the argument.
     top_n_value: int | None = None
     for arg_name, arg_value in step.tool_args.items():
+        if arg_name in overlay.sql_control_args:
+            continue
         if arg_name in spec.skip_args:
             continue
         if arg_name == spec.top_n_arg:
             try:
                 top_n_value = int(arg_value)
             except (TypeError, ValueError):
-                where.append(
-                    f"-- non-numeric top_n: {arg_name}={arg_value!r}"
+                raise ValueError(
+                    f"SQL projection disabled: {step.tool_name}.{arg_name} "
+                    f"must be an integer, got {arg_value!r}"
+                )
+            if top_n_value < 1:
+                raise ValueError(
+                    f"SQL projection disabled: {step.tool_name}.{arg_name} "
+                    f"must be positive, got {arg_value!r}"
                 )
             continue
         if arg_value == ITERATION_SENTINEL:
             fspec = overlay.filters.get((step.tool_name, arg_name))
             if fspec is None:
-                where.append(f"-- unmapped iteration arg: {arg_name}")
-                continue
+                raise _unmapped_arg_error(step.tool_name, arg_name, overlay)
             where.append(
                 fspec.predicate_template.format(
                     alias=base.alias, value=":iteration_value"
@@ -407,14 +425,13 @@ def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
             continue
         fspec = overlay.filters.get((step.tool_name, arg_name))
         if fspec is None:
-            where.append(f"-- unmapped tool_arg: {arg_name}={arg_value!r}")
-            continue
+            raise _unmapped_arg_error(step.tool_name, arg_name, overlay)
         sql_value = _resolve_value(fspec, arg_value, overlay)
         if sql_value is None:
-            where.append(
-                f"-- unresolved literal for {arg_name}={arg_value!r}"
+            raise ValueError(
+                f"SQL projection disabled: unresolved literal for "
+                f"{step.tool_name}.{arg_name}={arg_value!r}"
             )
-            continue
         where.append(
             fspec.predicate_template.format(
                 alias=base.alias, value=sql_value

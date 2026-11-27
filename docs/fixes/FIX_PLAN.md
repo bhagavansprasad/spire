@@ -1,14 +1,17 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F081-Litmus-Findings` (off `master`).
-Prior: `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge
-`8030439`); SME litmus docs merged via PR #218 (merge `ce269a5`).
+**Branch:** current work on `Phase3-F078-SQL-Filter-Specs` (off `master`).
+Prior: `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
+`Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
+SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — F-073 (customer_site filter), F-072 (account balances),
-F-075 (UnappliedAmount) fixed this window; F-061 decided (leave);
-F-076 (BU scoping) new Candidate; no regressions
+**Status:** Open — F-078 **fixed and live-verified on dev49 (2026-11-27)**:
+all 22 litmus statements execute, and every statement REST can compare
+agrees. New **F-083** (AP invoice inner join drops sentinel-vendor rows,
+found by that comparison). Still open: F-081, F-079, F-080b, F-076,
+F-077, F-082, F-083.
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
@@ -773,17 +776,75 @@ the Plan block shows the arg present and correctly valued
 returns data. Not "the pod rejects the SQL" either: the same statement
 runs once a predicate is supplied.
 
-**S6 (fix shape, not yet applied).** (a) Author the missing specs for the
-in-scope args; (b) make the emitter **fail loudly** — if any tool_arg is
-unmapped, emit a marker that makes the statement unusable-by-accident
-(e.g. a `1=1 AND -- unmapped` is worse; better: raise, or emit `WHERE 1=0`
-with an explicit `-- SQL DISABLED: unmapped arg X` banner) so an
-unrunnable statement is never presented as a projection; (c) add a guard
-test that every declared tool arg has a spec or is in an explicit
-"not-in-SQL" allowlist.
+**S6 (implemented 2026-11-26; live-verified 2026-11-27).**
+The branch adds specs for the observed invoice-number, supplier-name,
+unpaid, created-since, account-number, supplier-number, and open-only args.
+The emitter now raises instead of returning a partial query for an
+unmapped arg or unresolved literal; intentional SQL-disabled args have
+explicit reasons and also raise if used. `scripts/validate_sql_coverage.py`
+checks registered tool signatures, overlay/intent-field mappings, and
+known substring/payload-alias gaps. It currently reports the open
+F-080b/F-081 mismatches. `overdue` is deliberately SQL-disabled until a
+populated due-date carrier is verified on this pod; the KG records that
+the AP invoice header has no due-date field.
 
-**S7 (classification).** **Open, S1 harm.** Highest priority of the four:
-it is the widest blast radius (9/22) and the cheapest to detect.
+Commit `8fbd4eb` (`F-078: Add SQL filter coverage and fail-loud emission`)
+is on branch `Phase3-F078-SQL-Filter-Specs`; targeted tests passed (26).
+The coverage validator still reports the known F-080b/F-081 gaps and no
+uncovered tool arguments.
+
+The regenerated statements have not been compared against the pod or REST.
+The dev42 BIP WSDLs respond, but authenticated `CatalogService` calls failed
+with an invalid-username-or-password SOAP fault; `runsql.sh` did not return
+SQL results. A BIP report was visible in the browser, but its existence
+does not establish that it accepts and executes `P_SQL`. No report or
+catalog object was created through SOAP. A separate fixed-query diagnostic
+report (`SELECT 1 FROM DUAL`) was approved, but creation is blocked until
+SOAP authentication works. Do not record credentials in this file or
+commit `personas.yaml`.
+
+Keep F-078 open until the pod check succeeds, the remaining blocked filter
+is resolved or explicitly accepted as SQL-disabled, and each result is
+compared with REST.
+
+**S7 (classification).** **Fixed (2026-11-27).** Every statement the
+emitter produces for this prompt set now executes, and every statement
+REST can check agrees with it. Residual zero-row answers belong to
+F-079 / F-080b / F-082.
+
+**Verification (2026-11-27, dev49, FUSIONU4).** BIP unblocked and all 22
+statements run. `runsql.sh` repaired: SOAP 1.1 on `PublicReportService`,
+credentials in the body (HTTP Basic alone yields
+`initSession Failure: due to empty userID`), HTTP-status and `faultstring`
+checks, `ORA-*` lines surfaced, and `xml` added to the report's
+`outputFormat` list. The report data model now runs
+`SELECT DBMS_XMLGEN.GETXML(:P_SQL) AS XMLDATA FROM DUAL` with a `P_SQL`
+string parameter, so the report accepts an arbitrary single statement.
+Full table: `t_f078_rest_compare.txt`.
+
+Result: **0 of 22 statements fail to execute** (was 9/22 ORA-00936).
+
+| Agree | SQL = REST |
+|---|---|
+| p12 / p17 / p18 (invoice number) | 1 = 1 |
+| p14 (unpaid, Staffing Services) | 827 = 827 |
+| p31 (`Supplier LIKE '%Dell%'`) | 1 = 1 |
+| p36 (addresses, supplier 1262) | 22 = 22 REST sites |
+| p37 (small-business supplier base) | 332 = 332 REST suppliers |
+
+Remaining divergence is owned by other findings: p02–p05 zero rows
+(F-079), p22 zero rows (F-082), p39 zero rows where REST reports 2
+expired suppliers (F-080b re-confirmed here: `InactiveDate <= today` = 2,
+`END_DATE_ACTIVE <= SYSDATE` = 2, `ENABLED_FLAG='N'` = 0). p11 returns
+104 of REST's 106 — a new inner-join defect, recorded as **F-083**.
+
+**Not REST-verifiable on dev49** (pod environment, not a code defect):
+`purchaseOrders` / `purchaseOrderSchedules` return 0 rows and `count=0`
+for this user (`purchaseOrders/2144` → 404) while the pod holds 13,473
+CLOSED orders, so p01/p06 have no REST baseline;
+`receivablesCustomerAccountActivities` returns 403, so p24/p25/p28/p30
+have none. p20 is an aggregation with no REST equivalent. p16 stays
+SQL-disabled by design (`overdue`).
 
 ### F-079 — an entity *number* is bound to an internal *id* (OPEN, S1)
 
@@ -889,13 +950,12 @@ time at predicate level rather than projection level.
 **S5 (disproved alternative).** Not "the data is absent" — the corrected
 predicates return 4 and 8 rows on the same pod in the same session.
 
-**S6 (fix shape, not yet applied).** (a) wrap the value in `%…%` for
-`*_contains` args (or make the spec declare `match='contains'` and let the
-emitter do it); (b) re-point `status` at `END_DATE_ACTIVE` (`INACTIVE` →
-`END_DATE_ACTIVE <= SYSDATE`, `ACTIVE` → `END_DATE_ACTIVE IS NULL OR >
-SYSDATE`); (c) extend `validate_kg_schema.py` to run a
-distribution/`COUNT(DISTINCT)` check on every column used in a predicate,
-so an all-one-value column cannot become a filter carrier again.
+**S6 (partial implementation 2026-11-23; not verified).** The emitter now
+supports a `contains` match mode and wraps substring values in `%...%`;
+this corrects F-080a's supplier-name predicate shape. F-080b remains open:
+the `search_suppliers.status` predicate still uses the unpopulated
+`ENABLED_FLAG` carrier. The new SQL coverage validator reports this known
+gap. No pod verification was possible in this window.
 
 **S7 (classification).** **Open, S1 harm.** Two prompts, both silent zeros.
 
@@ -958,26 +1018,108 @@ already exists and works well — prompts 12/16/17/18 used it); (c) add a
 regression test asserting a fully-populated PO row survives projection
 with all requested columns present.
 
-**S7 (classification).** **Open, S1 harm.** Affects every PO response, and
-the failure mode is invisible to the reader.
+**S7 (classification).** **Fixed (2026-11-27).** Both halves of S6 are
+implemented and the reader-visible output is corrected.
+
+**Resolution.** `src/spire/graph/pipeline.py`:
+
+- `_FIELD_ALIASES` — `SupplierName → Supplier`, `BuyerName → Buyer`.
+  Consulted **only when the exact key is missing from the record**, so an
+  entity that genuinely carries `SupplierName` is never shadowed. The
+  requested name stays the column header, which is what the formatter
+  builds its table from.
+- `_project_outputs_and_gaps(outputs, fields, aliases=None)` returns
+  `(projected, gaps)`. `_project_outputs` is now a thin wrapper keeping
+  the old two-argument contract, so no existing caller or test changed.
+- `execute` returns a new `projection_gaps` key alongside
+  `projected_outputs`.
+
+`src/spire/rendering/formatters.py`:
+
+- `_unresolved_columns(state)` merges `intent.unresolved_fields` (names
+  the catalog does not know, COL-03) with `projection_gaps` (names the
+  catalog knows but the payload cannot satisfy). Both render paths use
+  it, so a payload-level gap now reaches the existing
+  "columns aren't available on X" note instead of an unexplained em dash.
+
+**Verification.** Reproduced first against the real function:
+
+    _project_outputs({"po":[rec]}, ["SupplierName","BuyerName",
+                                    "CurrencyCode","Total","Status"])
+    -> {'CurrencyCode': 'GBP', 'Total': 14869.2, 'Status': 'Closed'}
+    SILENTLY DROPPED: ['SupplierName', 'BuyerName']   (no warning)
+
+After the fix, rendered through `_format_projected_table`:
+
+    BEFORE                              AFTER
+    SupplierName | BuyerName | ...      SupplierName | BuyerName | ...
+    —            | —         | ...      EDF          | Fox, Dan  | ...
+
+which is byte-for-byte the reported defect (`FIX_PLAN` §6 prompt 2)
+against the corrected answer.
+
+Pod check (`./runsql.sh`, dev49) — the two columns the projection now
+fills are populated in the emitted SQL itself, so the alias maps onto
+real values rather than onto another empty column:
+
+    BUYER_NAME  ORDER_NUMBER  SUPPLIER_NAME  TOTAL
+    ----------  ------------  -------------  -----
+    Dan Fox     55040         EDF            12391   1 row(s)
+
+(the statement is bound by `SEGMENT1` here because `PO_HEADER_ID='55040'`
+is F-079 — the emitted p02 still returns 0 rows until that lands. `TOTAL`
+is 12391 on dev49; the 14869.2 figure in the S2 evidence above came from
+the earlier pod, and is not part of this finding.)
+
+Tests: `tests/test_f081_field_projection.py` — 10 passed, covering alias
+fill, header preservation, unresolved reporting, exact-key precedence
+over the alias, the F-014 shape-wrapper skip, the empty-fields identity,
+the two-argument wrapper contract, and a guard that every alias target is
+a real PO payload key. Targeted run of the render/projection/parser
+subset: **209 passed, 2 skipped, 3 xfailed**.
+
+`scripts/validate_sql_coverage.py` now reads the same `_FIELD_ALIASES`
+map instead of assuming a `XxxName → Xxx` rule with no registry, so it
+reports only genuinely unfillable columns. Its error list dropped from
+five entries to one:
+
+    before: F-080b + 4 × "PurchaseOrder.{Buyer,Supplier}Name has no
+            payload alias"
+    after : F-080b only
+
+`tests/test_sql_coverage.py` asserts that outcome and, via monkeypatch,
+that removing the alias map makes the four errors reappear — the check
+stays live rather than being neutered by the fix. The earlier assertion
+that the validator *should* report `SupplierName`/`BuyerName` was
+inverted, because it encoded the bug as expected behaviour.
+
+
+**S10 (not checked).** Whether other entities have the same
+display-name/payload split; the alias table holds only the two pairs the
+coverage validator reports. Whether the API/UI path (as opposed to the CLI
+renderer) surfaces `projection_gaps` the same way.
+
 
 ### Fix order (recommended)
 
 | Order | Finding | Why here | Effort |
 |---|---|---|---|
-| 1 | **F-078** | Widest blast radius (9/22), cheapest: author missing specs + make unmapped args loud | M |
-| 2 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
-| 3 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
-| 4 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
-| 5 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| ~~1~~ | ~~**F-078**~~ | **Fixed 2026-11-27** — all 22 statements execute and agree where REST is comparable | ~~M~~ |
+| ~~1~~ | ~~**F-081**~~ | **Fixed 2026-11-27** — alias map fills the dropped columns; gaps now reported | ~~M~~ |
+| 1 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
+| 2 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| 3 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
+| 4 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 5 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| 6 | **F-082** | AR by-number; lands with F-079 (same identifier-space decision) | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
-is that three lists are maintained by hand and never compared: tool
-signatures, `_FILTERS` specs, and `intent.fields` vocabulary. One
-`scripts/validate_sql_coverage.py` that diffs them — and a CI step that
-fails on any unmapped arg — would have caught all three before a prompt
-ever ran. That is the durable fix; the four entries above are the symptoms.
+is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
+were maintained by hand and never compared. `scripts/validate_sql_coverage.py`
+now checks argument coverage, SQL/intent field consistency, substring
+semantics, and the known PO payload-key mismatch; it currently reports the
+open F-080b/F-081 gaps. It is not yet a CI step and does not replace live
+column-population or REST-agreement checks.
 
 ### F-082 — AR by-number lookup reports "none found" for an existing invoice (OPEN, S1, twin of F-079)
 
@@ -1013,3 +1155,58 @@ can follow.
 
 **S7 (classification).** **Open, S1 harm.** Fix together with F-079 — one
 decision, two tools.
+
+### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (OPEN, S1)
+
+**S0.** The emitted AP-invoice statement joins
+`JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID` (an inner join), so
+any `AP_INVOICES_ALL` row whose `VENDOR_ID` has no supplier row is
+silently dropped — REST returns those invoices.
+
+**S1 (harm).** SQL row count is lower than REST, and the missing invoices
+are invisible: no warning, no NULL supplier column, just fewer rows.
+
+**S2 (evidence).** Found by the F-078 REST comparison on dev49.
+Prompt 11 (`invoices created in the last 30 days`) → SQL **104** rows,
+REST **106**. Set diff (`/tmp/s.txt` vs `/tmp/r.txt`, both `sort -u`):
+`only-in-REST = 2` (`1072121`, `1075121`), `only-in-SQL = 0`. Against the
+pod:
+
+    SELECT INVOICE_NUM, INVOICE_DATE, VENDOR_ID FROM AP_INVOICES_ALL
+    WHERE INVOICE_NUM IN ('1072121','1075121');
+    -- 1072121  2026-11-26  -222
+    -- 1075121  2026-11-27  -222
+
+    SELECT COUNT(*) FROM POZ_SUPPLIERS WHERE VENDOR_ID = -222;  -- 0
+
+REST still returns both, with a supplier name and no number:
+`1072121 -> TEXAS CORP / SupplierNumber None / 50`,
+`1075121 -> Info-Systems Pvt Ltd / None / 300`.
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py` `Invoice` EntitySpec
+`base_joins` (`JOIN POZ_SUPPLIERS` + `JOIN HZ_PARTIES`, the latter only to
+project the supplier name).
+
+**S4 (root cause).** The same class as F-074: a join key was assumed
+non-null and populated. Here it is populated but *sentinel* (`-222`),
+so a NULL-count alone would not have caught it — the check that would
+have is "count rows with no matching parent", not "count NULL keys".
+
+**S5 (disproved alternative).** Not a date-boundary artefact — both
+invoices are dated inside the filter window and REST returns them under
+the same `InvoiceDate >= '2026-10-21'` predicate.
+
+**S6 (fix shape, not applied).** Switch the supplier joins to `LEFT JOIN`
+so the invoice survives with NULL supplier columns, matching REST's
+null `SupplierNumber`; add a validator rule for orphan FK rows on the
+join keys (rows whose parent is absent), and a regression test from the
+two invoice numbers above. Do **not** fix by filtering out `-222`.
+
+**S7 (classification).** **Open, S1 harm.** Row-count divergence on AP
+invoice prompts; sibling of F-074 (inner-join loss) and the invoice-side
+analogue of F-076 (row-count divergence).
+
+**S10 (not checked).** Whether the same sentinel pattern affects the
+`PurchaseOrder` supplier join or the AR entities' customer joins; whether
+more than these 2 invoices carry `VENDOR_ID = -222`.
+
