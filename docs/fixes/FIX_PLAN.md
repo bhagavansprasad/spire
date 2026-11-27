@@ -1,17 +1,19 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F078-SQL-Filter-Specs` (off `master`).
-Prior: `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
+**Branch:** current work on `Phase3-F079-Identifier-Space` (off `master`).
+Prior: `Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
+`Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
 `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
 SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — F-078 **fixed and live-verified on dev49 (2026-11-27)**:
-all 22 litmus statements execute, and every statement REST can compare
-agrees. New **F-083** (AP invoice inner join drops sentinel-vendor rows,
-found by that comparison). Still open: F-081, F-079, F-080b, F-076,
-F-077, F-082, F-083.
+**Status:** Open — **F-078, F-079, F-081 and F-082 fixed and live-verified
+on dev49 (2026-11-27)**: all 22 litmus statements execute, and every
+statement REST can compare agrees with it. New **F-083** (AP invoice inner
+join drops sentinel-vendor rows, found by that comparison). Still open:
+F-080b, F-076, F-077, F-083.
+
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
@@ -897,8 +899,64 @@ the plan — separate args (`po_number` vs `po_header_id`) or a
 `TRX_NUMBER` vs `CUSTOMER_TRX_ID`. This also removes the F-082 condition
 below.
 
-**S7 (classification).** **Open, S1 harm.** Silent wrong answer, six
-statements, and it is the mechanism behind one of the 16 prompt failures.
+**S6 correction (2026-11-27) — that fix shape does not work.** Splitting
+the arg or tagging the space both require someone to know which space the
+value is in *before* the plan is built, and that is precisely what a bare
+number does not say. The ambiguity is why `get_purchase_order_by_id`
+resolves instead of fetches (its own module docstring records the P6
+history: every test had used 2144, which happens to be a `PO_HEADER_ID`).
+Splitting the arg would only move the guess into the parser, where a wrong
+guess produces the same silent 0 rows. **The resolution is a runtime fact,
+so the SQL has to mirror it.**
+
+**S7 / Resolution (2026-11-27).** **Fixed.** The two by-id `FilterSpec`s now
+resolve the same way the tools do — printed number first, internal id only
+when no row claims that number:
+
+```sql
+-- get_purchase_order_by_id.po_header_id
+{alias}.PO_HEADER_ID = COALESCE(
+  (SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H WHERE H.SEGMENT1 = {value}),
+  (SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H WHERE H.PO_HEADER_ID = {value}))
+
+-- get_receivables_invoice_by_id.customer_transaction_id
+{alias}.CUSTOMER_TRX_ID = COALESCE(
+  (SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T WHERE T.TRX_NUMBER = {value}),
+  (SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T WHERE T.CUSTOMER_TRX_ID = {value}))
+```
+
+`COALESCE` was chosen over `SEGMENT1 = :v OR PO_HEADER_ID = :v` deliberately:
+the `OR` form returns **two** POs when a number and an id collide, which
+REST never does (it performs one lookup per space). `MIN()` makes the result
+deterministic where the tool's `limit=1` takes whatever the pod returns
+first. Assumptions renamed and documented:
+`po_by_id` → `po_by_id_resolves_number_then_id`,
+`ar_id_maps_to_customer_trx_id` → `ar_id_resolves_number_then_trx_id`.
+
+**Child filters were deliberately left alone.** `get_purchase_order_lines`
+/ `schedules` / `distributions` receive `:iteration_value` from step 1's
+`POHeaderId` (the already-resolved id), so they keep the plain
+`PO_HEADER_ID = {value}` predicate. Re-resolving there would be wrong and
+would cost a subquery per row. A test asserts they are unchanged.
+
+**Verification (dev49).** Re-emitted and executed every statement:
+
+| | before | after |
+|---|---|---|
+| p02 PO 55040 header | 0 rows | **1 row** |
+| p03 lines | 0 | **1** |
+| p04 schedules | 0 | **1** |
+| p05 distributions | 0 | **1** |
+| p22 AR 112390 | 0 | **1** |
+
+p02 now returns `SEGMENT1=55040, PO_HEADER_ID=67, CLOSED, EDF, 12391` —
+the same record the pod holds, where the old predicate
+(`PO_HEADER_ID = '55040'`) matched nothing.
+
+**S7 (classification).** **Fixed (2026-11-27).** Silent wrong answer, six
+statements, and it was the mechanism behind one of the 16 prompt failures.
+Fixed together with F-082 (same decision, two tools).
+
 
 ### F-080 — two filter specs point at the wrong predicate (OPEN, S1)
 
@@ -1106,12 +1164,12 @@ renderer) surfaces `projection_gaps` the same way.
 |---|---|---|---|
 | ~~1~~ | ~~**F-078**~~ | **Fixed 2026-11-27** — all 22 statements execute and agree where REST is comparable | ~~M~~ |
 | ~~1~~ | ~~**F-081**~~ | **Fixed 2026-11-27** — alias map fills the dropped columns; gaps now reported | ~~M~~ |
-| 1 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
+| ~~1~~ | ~~**F-079**~~ | **Fixed 2026-11-27** — by-id specs resolve number-then-id; p02–p05 now return rows | ~~M~~ |
+| ~~2~~ | ~~**F-082**~~ | **Fixed 2026-11-27** — AR tool resolves both spaces; p22 agrees with REST on 9/9 fields | ~~M~~ |
+| 1 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
 | 2 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
-| 3 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
-| 4 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 5 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
-| 6 | **F-082** | AR by-number; lands with F-079 (same identifier-space decision) | M |
+| 3 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 4 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
@@ -1121,7 +1179,7 @@ semantics, and the known PO payload-key mismatch; it currently reports the
 open F-080b/F-081 gaps. It is not yet a CI step and does not replace live
 column-population or REST-agreement checks.
 
-### F-082 — AR by-number lookup reports "none found" for an existing invoice (OPEN, S1, twin of F-079)
+### F-082 — AR by-number lookup reports "none found" for an existing invoice (FIXED, S1, twin of F-079)
 
 **S0.** Prompt 22 (`Get the complete details of AR invoice 112390`)
 answered **"No AR invoices found matching the criteria."** Invoice 112390
@@ -1153,8 +1211,46 @@ returns 0 with `ORG_ID` added.
 the PO tool has), plus the identifier-space tagging from F-079 so the SQL
 can follow.
 
-**S7 (classification).** **Open, S1 harm.** Fix together with F-079 — one
-decision, two tools.
+**S7 / Resolution (2026-11-27).** **Fixed.** Both halves applied:
+
+1. **Tool.** `receivables_invoice_by_id.py` now mirrors the PO tool:
+   `_try_transaction_number` (`q=TransactionNumber='X'`) first, then
+   `_try_customer_transaction_id` (`q=CustomerTransactionId='X'`), sharing
+   one `_lookup` helper. Both clauses are quoted — `TransactionNumber` is a
+   string, and the pod accepts the numeric id quoted too (verified:
+   `TransactionNumber='112390'` → 1 row, `CustomerTransactionId=1533822` →
+   1 row, both the same invoice). The module docstring's old
+   "WHY SINGLE-PATH" justification is replaced with the counter-evidence.
+2. **SQL.** The `FilterSpec` resolves both spaces with `COALESCE`
+   (see F-079 S6 correction for why a split arg cannot work).
+
+**Verification (dev49).** Tool, before → after:
+
+| Call | before | after |
+|---|---|---|
+| `get_receivables_invoice_by_id("112390")` | `None` | `1533822 / '112390' / Complete / 3949.1` |
+| `get_receivables_invoice_by_id("1533822")` | worked | still works (no regression) |
+| `get_receivables_invoice_by_id("999999999")` | `None` | `None` |
+
+p22 SQL went from 0 rows to 1, and **all nine projected fields agree with
+REST** on invoice 112390:
+
+| Field | REST | SQL |
+|---|---|---|
+| CustomerTransactionId | 1533822 | 1533822 |
+| TransactionNumber | 112390 | 112390 |
+| BillToCustomerName | Sykes Gym | Sykes Gym |
+| BillToCustomerNumber | 22108 | 22108 |
+| InvoiceCurrencyCode | USD | USD |
+| EnteredAmount | 3949.1 | 3949.1 |
+| InvoiceBalanceAmount | 0 | 0 |
+| InvoiceStatus | Complete | `COMPLETE_FLAG = Y` |
+| TransactionDate | 2025-08-25 | 2025-08-25 |
+
+Tests: `tests/test_f079_identifier_space.py` covers the tool's number path,
+id path, number-wins precedence (with a fake client, so it runs offline) and
+the unknown-value path.
+
 
 ### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (OPEN, S1)
 

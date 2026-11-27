@@ -597,8 +597,20 @@ _FILTERS = {
     ("get_receivables_invoice_by_id", "customer_transaction_id"): FilterSpec(
         tool_name="get_receivables_invoice_by_id",
         arg_name="customer_transaction_id",
-        predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
-        assumption="ar_id_maps_to_customer_trx_id",
+        # F-079/F-082: the plan carries one bare number and cannot know
+        # which identifier space it is in — "invoice 112390" is a
+        # TRX_NUMBER (the id is 1533822). This mirrors the tool's
+        # resolution order exactly: TransactionNumber first, then
+        # CustomerTransactionId. MIN() makes it deterministic where the
+        # tool's limit=1 takes whatever the pod returns first.
+        predicate_template=(
+            "{alias}.CUSTOMER_TRX_ID = COALESCE("
+            "(SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T "
+            "WHERE T.TRX_NUMBER = {value}), "
+            "(SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T "
+            "WHERE T.CUSTOMER_TRX_ID = {value}))"
+        ),
+        assumption="ar_id_resolves_number_then_trx_id",
     ),
 
     # PO child fetchers (Phase 1)
@@ -645,8 +657,19 @@ _FILTERS = {
     ("get_purchase_order_by_id", "po_header_id"): FilterSpec(
         tool_name="get_purchase_order_by_id",
         arg_name="po_header_id",
-        predicate_template="{alias}.PO_HEADER_ID = {value}",
-        assumption="po_by_id",
+        # F-079: "PO 55040" is a SEGMENT1 (the id is 67), but "PO 2144" is
+        # a PO_HEADER_ID. The plan cannot tell them apart, so this mirrors
+        # the tool's resolution order: OrderNumber first, header id only
+        # when no PO claims that number. Binding a single space silently
+        # returned 0 rows for the number form.
+        predicate_template=(
+            "{alias}.PO_HEADER_ID = COALESCE("
+            "(SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H "
+            "WHERE H.SEGMENT1 = {value}), "
+            "(SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H "
+            "WHERE H.PO_HEADER_ID = {value}))"
+        ),
+        assumption="po_by_id_resolves_number_then_id",
     ),
 
     # Phase 2 filters
@@ -940,9 +963,12 @@ _ASSUMPTIONS = {
         "SupplierId scopes contacts through POZ_SUPPLIER_SITES_ALL_M."
         "VENDOR_ID."
     ),
-    "ar_id_maps_to_customer_trx_id": (
-        "AR CustomerTransactionId maps to "
-        "RA_CUSTOMER_TRX_ALL.CUSTOMER_TRX_ID."
+    "ar_id_resolves_number_then_trx_id": (
+        "get_receivables_invoice_by_id accepts a TransactionNumber or a "
+        "CustomerTransactionId and tries TransactionNumber first. The "
+        "predicate resolves the same way (COALESCE over TRX_NUMBER, then "
+        "CUSTOMER_TRX_ID). Confirmed on the pod: AR invoice 112390 is "
+        "TRX_NUMBER with CUSTOMER_TRX_ID 1533822."
     ),
     "bu_literal_from_overlay": (
         "Business-unit name resolves to a numeric BU_ID from "
@@ -998,10 +1024,12 @@ _ASSUMPTIONS = {
         "DESCRIPTION, QUANTITY_INVOICED, UNIT_SELLING_PRICE, "
         "EXTENDED_AMOUNT."
     ),
-    "po_by_id": (
-        "get_purchase_order_by_id fetches one PO by PO_HEADER_ID (the "
-        "numeric internal id, not OrderNumber). Confirmed against the "
-        "pod: /purchaseOrders/2055 returns PO 55269."
+    "po_by_id_resolves_number_then_id": (
+        "get_purchase_order_by_id accepts either an OrderNumber or a "
+        "POHeaderId and tries OrderNumber first. The predicate resolves "
+        "the same way (COALESCE over SEGMENT1, then PO_HEADER_ID) because "
+        "a bare number in a prompt does not say which space it is in. "
+        "Confirmed on the pod: PO 55040 is SEGMENT1 with PO_HEADER_ID 67."
     ),
     "buyer_person_id": (
         "get_buyer looks up PER_ALL_PEOPLE_F by PERSON_ID. Confirmed "
