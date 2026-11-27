@@ -5,7 +5,21 @@ def test_sql_coverage_reports_unclassified_args_and_known_gaps():
     errors = validate()
 
     assert not any(error.startswith("Uncovered tool argument") for error in errors)
-    assert any("F-080b" in error for error in errors)
+    assert not any("stub column" in error for error in errors)
+
+
+def test_f080b_stub_carrier_is_no_longer_reported():
+    """F-080b: the validator must not keep flagging a carrier that was fixed.
+
+    It asserted `any("F-080b" in error)` while the ENABLED_FLAG predicate
+    was still in place; the finding is closed, so a validator that kept
+    reporting it would be noise. The rule itself is asserted to stay live
+    in `test_f080b_supplier_status_carrier.py`.
+    """
+    errors = validate()
+
+    assert not any("F-080b" in error for error in errors), errors
+    assert not any("ENABLED_FLAG" in error for error in errors), errors
 
 
 def test_supplier_and_buyer_name_are_no_longer_reported_as_alias_gaps():
