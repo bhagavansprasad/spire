@@ -11,14 +11,13 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-080, F-081, F-082, F-083, F-084 and
-F-077 fixed and live-verified on dev49**: all 22 litmus statements execute,
-and every statement REST can compare agrees with it. New **F-085** (the
-documented `rebuild_kg.sh` reduced the KG to 8 tables / 5 entities and
-reported success; it now delegates to `rebuild_kg.py`).
+**Status:** **Closed** — every finding recorded in this file is fixed and
+live-verified on dev49: **F-076, F-077, F-078, F-079, F-080, F-081, F-082,
+F-083, F-084 and F-085**. All 22 litmus statements execute, and every
+statement REST can compare agrees with it.
 
-**This queue is empty.** Every finding recorded here is closed:
-F-076 and F-077 were the last two, both fixed 2026-11-27.
+**This queue is empty.** F-076 and F-077 were the last two, both fixed
+2026-11-27.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
