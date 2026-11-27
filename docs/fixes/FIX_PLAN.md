@@ -1058,6 +1058,19 @@ After the fix, rendered through `_format_projected_table`:
 which is byte-for-byte the reported defect (`FIX_PLAN` §6 prompt 2)
 against the corrected answer.
 
+Pod check (`./runsql.sh`, dev49) — the two columns the projection now
+fills are populated in the emitted SQL itself, so the alias maps onto
+real values rather than onto another empty column:
+
+    BUYER_NAME  ORDER_NUMBER  SUPPLIER_NAME  TOTAL
+    ----------  ------------  -------------  -----
+    Dan Fox     55040         EDF            12391   1 row(s)
+
+(the statement is bound by `SEGMENT1` here because `PO_HEADER_ID='55040'`
+is F-079 — the emitted p02 still returns 0 rows until that lands. `TOTAL`
+is 12391 on dev49; the 14869.2 figure in the S2 evidence above came from
+the earlier pod, and is not part of this finding.)
+
 Tests: `tests/test_f081_field_projection.py` — 10 passed, covering alias
 fill, header preservation, unresolved reporting, exact-key precedence
 over the alias, the F-014 shape-wrapper skip, the empty-fields identity,
