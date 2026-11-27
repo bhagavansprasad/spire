@@ -2,15 +2,15 @@
 
 """Integration tests for the KG metadata tables in Oracle.
 
-These verify that the v1 KG, populated by scripts/rebuild_kg.sh,
-is readable from Spire code via OracleClient. They are not unit tests —
-they hit the real Oracle 26ai container and assume the seed scripts
-have run.
+These verify that the v1 KG, populated by scripts/rebuild_kg.py from
+scripts/sql/kg_schema.sql, is readable from Spire code via OracleClient.
+They are not unit tests — they hit the real Oracle 26ai container and
+assume the seed scripts have run.
 
 If a test here fails, the most likely cause is that the SPIRE schema
 is empty or stale. To repopulate:
 
-    ./scripts/rebuild_kg.sh
+    ./scripts/rebuild_kg.py
 
 Skipped if personas.yaml is missing — same gate as the other
 integration tests.
@@ -369,8 +369,8 @@ async def test_kg_table_row_counts_match_v1_1():
         # Classification (7) first, then the 10 SQL-essential gap roles,
         # so kg_entity_field 210->227 and kg_sql_column 40->57.
         "kg_entity_sql": 22,
-        "kg_sql_column": 127,
-        "kg_derived_projection": 12,
+        "kg_sql_column": 126,
+        "kg_derived_projection": 13,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted
     # per table and stopped at the first failure, so a phase that moved

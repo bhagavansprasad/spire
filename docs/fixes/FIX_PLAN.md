@@ -1,7 +1,8 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F080b-Supplier-Status-Carrier` (off `master`).
-Prior: `Phase3-F083-Invoice-Supplier-Join` merged via PR #222 (merge `908e396`);
+**Branch:** current work on `Phase3-F084-Supplier-Status-Projection` (off `master`).
+Prior: `Phase3-F080b-Supplier-Status-Carrier` merged via PR #223 (merge `93185ee`);
+`Phase3-F083-Invoice-Supplier-Join` merged via PR #222 (merge `908e396`);
 `Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
 `Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
 `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
@@ -10,12 +11,12 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-080, F-081, F-082 and F-083 fixed and
-live-verified on dev49**: all 22 litmus statements execute, and every
-statement REST can compare agrees with it. `validate_sql_coverage.py`
-exits 0 for the first time. New **F-084** (the projected supplier
-`Enabled` column reads the same `ENABLED_FLAG` stub; needs a KG seed
-change + rebuild). Still open: F-076, F-077, F-084.
+**Status:** Open — **F-078, F-079, F-080, F-081, F-082, F-083 and F-084
+fixed and live-verified on dev49**: all 22 litmus statements execute, and
+every statement REST can compare agrees with it. New **F-085** (the
+documented `rebuild_kg.sh` reduced the KG to 8 tables / 5 entities and
+reported success; it now delegates to `rebuild_kg.py`). Still open:
+F-076, F-077.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
@@ -1031,6 +1032,10 @@ gap. No pod verification was possible in this window.
 | REST `Status` distribution | ACTIVE 332 / **INACTIVE 2** |
 | REST `InactiveDate` populated | 2 (both `2022-11-19`) |
 | `InactiveDate` == `END_DATE_ACTIVE` per SupplierNumber | **334 matched, 0 mismatches** |
+
+(These figures are from the F-080b session. The demo pod gained a
+supplier between windows, so F-084's later verification reads 335 — every
+count here moved by one on both sides.)
 | `POZ_SUPPLIERS` date/status columns | has `END_DATE_ACTIVE`, `START_DATE_ACTIVE`; **no `INACTIVE_DATE`** |
 
 So REST's `InactiveDate` *is* `END_DATE_ACTIVE` — there is no separate
@@ -1232,9 +1237,10 @@ renderer) surfaces `projection_gaps` the same way.
 | ~~2~~ | ~~**F-082**~~ | **Fixed 2026-11-27** — AR tool resolves both spaces; p22 agrees with REST on 9/9 fields | ~~M~~ |
 | ~~3~~ | ~~**F-083**~~ | **Fixed 2026-11-27** — LEFT JOIN; p11 now equals REST exactly (132 = 132) | ~~S~~ |
 | ~~1~~ | ~~**F-080b**~~ | **Fixed 2026-11-27** — `END_DATE_ACTIVE` carrier; p39 0 → 2 rows, identity-matched to REST | ~~S~~ |
-| 1 | **F-084** | Projected supplier `Enabled` column reads the stub too; needs KG seed + rebuild | S |
-| 2 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 3 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| ~~1~~ | ~~**F-084**~~ | **Fixed 2026-11-27** — Status derived from END_DATE_ACTIVE; 335/335 suppliers agree with REST | ~~S~~ |
+| ~~1~~ | ~~**F-085**~~ | **Fixed 2026-11-27** — `rebuild_kg.sh` delegates to `rebuild_kg.py`; it had been shrinking the KG | ~~S~~ |
+| 1 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 2 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
@@ -1433,7 +1439,7 @@ measured, so an all-zero orphan count for them is an assumption, not a
 finding.
 
 
-### F-084 — the projected supplier `Enabled` column reads the `ENABLED_FLAG` stub (OPEN, S1)
+### F-084 — the projected supplier `Enabled` column reads the `ENABLED_FLAG` stub (FIXED, S1)
 
 **S0 (claim).** The KG binds `Supplier.Enabled` to
 `POZ_SUPPLIERS.ENABLED_FLAG`, which is `'Y'` on all 334 suppliers, so the
@@ -1500,3 +1506,141 @@ make a failing rebuild block a verified filter fix.
 `"ENABLED_FLAG" not in sql` failed on the SELECT list after the WHERE
 clause was already correct. The literal assertion was too broad, which is
 what surfaced the second instance.
+
+**S7 / Resolution (2026-11-27).** **Fixed.** The KG seed change plus the
+rebuild it needed — and the rebuild turned out to be broken, recorded
+below as F-085.
+
+Seed (`scripts/sql/kg_schema.sql`):
+
+1. Added `kg_derived_projection ('Supplier', 'Status',
+   "CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 'INACTIVE' ELSE
+   'ACTIVE' END", 'Y')`.
+2. Removed the `kg_sql_column ('Supplier', 'Enabled', 'POZ_SUPPLIERS',
+   'ENABLED_FLAG')` row. The `kg_entity_field` row for `Enabled` stays as
+   field-only: the role exists, it just has no populated carrier.
+3. Row counts: `kg_sql_column` 127 → **126**,
+   `kg_derived_projection` 12 → **13**. Updated in
+   `tests/test_kg_metadata.py`, `scripts/print_kg.py`, the seed header
+   comment and the seed's own `PROMPT Seeded ...` banner.
+
+The expression was verified against REST **before** it was seeded, per
+SupplierNumber across the whole supplier set:
+
+    CASE distribution  ACTIVE 333 / INACTIVE 2
+    REST distribution  ACTIVE 333 / INACTIVE 2
+    matched            335/335, 0 mismatches
+
+A NULL `END_DATE_ACTIVE` falls through to `'ACTIVE'` because `NULL <= x`
+is NULL, not false — so suppliers with an open-ended record stay active
+without an `NVL`.
+
+**Verification (dev49, same session, after the rebuild).** Emitted p37
+(the unfiltered supplier statement) and compared every row's status
+column with REST:
+
+    SQL rows 335   status distribution ACTIVE 333 / INACTIVE 2
+    REST rows 335  distribution        ACTIVE 333 / INACTIVE 2
+    matched 335    STATUS mismatches 0    -> AGREE
+
+p39 (`inactive suppliers`) now prints the column the prompt asked for:
+
+    BEFORE:  Y | Best Rig Corp    | 1421
+             Y | Manali Petro Ltd | 1422
+    AFTER:   INACTIVE | Best Rig Corp    | 1421
+             INACTIVE | Manali Petro Ltd | 1422
+
+The 22-statement pass is unchanged apart from pod growth (p11 147 → 148,
+p37 334 → 335).
+
+Tests: `tests/test_f084_supplier_status_projection.py` — 12 tests covering
+the seed rows, the emitted projection, that the expression renders
+`ACTIVE`/`INACTIVE` rather than `1`/`0`, and that the field row survives
+carrier removal. `scripts/validate_kg_schema.py` → PASS,
+`scripts/validate_sql_coverage.py` → PASS.
+
+**S10 (not checked).** Whether any other `kg_entity_field` in the KG is
+bound to a constant-valued column the same way. `validate_kg_schema.py`
+checks derived-projection columns exist and orphan FKs, but nothing
+asserts a projected column carries more than one distinct value.
+
+---
+
+### F-085 — `rebuild_kg.sh` did not rebuild the KG; it reduced it (FIXED, S1)
+
+**S0 (claim).** `scripts/rebuild_kg.sh` — the command the test docstrings
+and `ARCHITECTURE.md` told you to run — carried its own copy of the DDL
+and seed that was **8 tables and 5 entities** behind the canonical
+`scripts/sql/kg_schema.sql` (**12 tables, 22 entities**). Running it did
+not reload the KG, it shrank it, and it reported success either way.
+
+**S1 (harm).** Two failures at once, both silent:
+
+1. A seed edit to `kg_sql_column` / `kg_derived_projection` /
+   `kg_entity_sql` / `kg_entity_filter` could not take effect — the script
+   never created those tables, so **F-084 was unapplicable** by the
+   documented route.
+2. Because those four tables were also missing from its DROP list, the
+   drops of `kg_entity` and `kg_entity_field` failed with ORA-02449, the
+   old rows survived, and every seed INSERT then collided with ORA-00001.
+   The script still printed "All KG tables dropped" and "Rebuild
+   complete" and exited **0**.
+
+**S2 (evidence).** Running the old script on dev49:
+
+    $ bash scripts/rebuild_kg.sh oracle26ai_db_spire_iks ; echo $?
+    ... 2 x ORA-02449, 54 x ORA-00001 ...
+    "All KG tables dropped (or did not exist)."
+    "Rebuild complete."
+    0
+
+Live KG afterwards: `kg_entity 5`, `kg_entity_field 27`,
+`kg_entity_sql` **does not exist** (ORA-00942), and the new
+`Supplier.Status` row absent. Before the run it was 22 / 227 / 22 / 126 /
+12.
+
+**S3 (mechanism).** `scripts/rebuild_kg.sh` had its own inline DDL:
+`CREATE TABLE` for 8 tables only (`grep -c "CREATE TABLE"` → 8, no
+`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`,
+`kg_entity_filter`) and `grep -c "INSERT INTO kg_entity "` → 5.
+
+**S4 (root cause).** Two builders, one of them a copy. `rebuild_kg.py`
+was written later ("Unlike the old rebuild_kg.sh ...") and reads the whole
+seed over the network, but the old script was left in place and kept being
+named in the docs. The copy drifted when STEP 12 added the SQL
+satellites, and nothing compared the two.
+
+**S5 (disproved alternative).** Not a permissions or container problem:
+the canonical `rebuild_kg.py` against the same database printed
+`Loaded 660 statement(s) from kg_schema.sql` and produced 22 / 227 / 22 /
+126 / 13 in one run, with no ORA errors.
+
+**S6 (fix applied).** `scripts/rebuild_kg.sh` is now a 49-line wrapper
+that `exec`s `rebuild_kg.py`, keeps the old positional container argument
+working (accepted and ignored with a note), and honours
+`SPIRE_PYTHON`. The stale inline DDL/seed is deleted rather than
+maintained — one builder, no copy to drift. Doc and test references
+(`tests/test_planner.py`, `tests/test_kg_loader.py`,
+`tests/test_kg_metadata.py`, `docs/design/ARCHITECTURE.md`) now name
+`rebuild_kg.py` and describe the wrapper.
+
+**Verification.** Both invocations run clean and leave the full KG:
+
+    ./scripts/rebuild_kg.sh --quiet                      -> 0, 22/227/22/126/13
+    ./scripts/rebuild_kg.sh oracle26ai_db_spire_iks      -> 0, same counts
+                                                            (arg noted, ignored)
+    scripts/print_kg.py                                  -> every table "ok"
+
+**S7 (classification).** **Fixed.** S1: it silently destroyed seeded
+state, and it blocked a verified fix (F-084) from being applied.
+
+**S8 (miss record).** No test asserted that the rebuild path loads the
+canonical seed, or that the script creates every KG table. Added:
+`test_rebuild_shell_script_delegates_to_the_canonical_builder`,
+`test_canonical_builder_applies_the_file_that_holds_the_fix`, and a
+parametrised `test_seed_creates_every_sql_satellite`.
+
+**S10 (not checked).** Whether the running API/MCP server caches the old
+carrier set; it loads carriers once per process, so it needs a restart to
+pick up the new `Status` column (the documented rule for any `src/spire/`
+or KG change).

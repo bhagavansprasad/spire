@@ -2,7 +2,7 @@
 
 These verify the v1 KG can be loaded from Oracle as a markdown bundle.
 They hit the real Oracle 26ai container and assume the seed scripts
-have run (scripts/rebuild_kg.sh).
+have run (scripts/rebuild_kg.py, or the rebuild_kg.sh wrapper).
 
 Skipped if personas.yaml is missing.
 """
