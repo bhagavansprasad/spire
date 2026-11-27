@@ -1,8 +1,18 @@
 # Module-support activity status
 
 **Status:** Parked while other work proceeds.
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 **Planning branch:** `ModuleSupport-Roadmap`
+
+## Documents in this folder
+
+- [`MODULE_SUPPORT_ROADMAP.md`](./MODULE_SUPPORT_ROADMAP.md) — portfolio,
+  priority, the eight gates, open decisions.
+- [`MODULE_SUPPORT_PLAYBOOK.md`](./MODULE_SUPPORT_PLAYBOOK.md) — the
+  code-grounded procedure for one module: REST discovery, tool shapes, wiring
+  points, verification. SQL deferred.
+- [`MODULE_SUPPORT_MEETING_MINUTES.md`](./MODULE_SUPPORT_MEETING_MINUTES.md) —
+  one shared record of discussions, newest first.
 
 ## Decisions captured
 
@@ -14,7 +24,8 @@
   provided later; they are not a blocker to parking this planning activity.
 - The requested module inventory and priority order are in the
   [roadmap](./MODULE_SUPPORT_ROADMAP.md); meeting decisions are in the
-  [minutes](./MODULE_SUPPORT_MEETING_MINUTES.md).
+  [minutes](./MODULE_SUPPORT_MEETING_MINUTES.md). The per-module procedure is
+  the [playbook](./MODULE_SUPPORT_PLAYBOOK.md).
 
 ## AP baseline checked
 

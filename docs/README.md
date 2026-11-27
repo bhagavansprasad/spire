@@ -4,7 +4,7 @@ Six buckets. One README. Max depth 3.
 
 | Folder | What lives here |
 |---|---|
-| [`plan/`](plan/) | The frozen plan, session logs per phase, working style, handoffs, and module-support planning. |
+| [`plan/`](plan/) | The frozen plan, session logs per phase, working style, handoffs, and module-support planning (`plan/module-support/`). |
 | [`audit/`](audit/) | Phase 1 audit, findings log, the byte-equality goldens. |
 | [`fixes/`](fixes/) | The Phase 2 fix plan, all fix records in one file, per-finding evidence. |
 | [`design/`](design/) | Architecture (cache, context bundles), future feature designs, UML/design diagrams. |
@@ -14,7 +14,8 @@ Six buckets. One README. Max depth 3.
 ## Where to start
 
 - **Resuming module-support planning?** [`plan/module-support/STATUS.md`](plan/module-support/STATUS.md) — parked status and next steps.
-- **Planning new Fusion module support?** [`plan/module-support/MODULE_SUPPORT_ROADMAP.md`](plan/module-support/MODULE_SUPPORT_ROADMAP.md) — module order and repeatable REST-first playbook.
+- **Planning new Fusion module support?** [`plan/module-support/MODULE_SUPPORT_ROADMAP.md`](plan/module-support/MODULE_SUPPORT_ROADMAP.md) — module order, priority, and the eight gates.
+- **Adding a Fusion module?** [`plan/module-support/MODULE_SUPPORT_PLAYBOOK.md`](plan/module-support/MODULE_SUPPORT_PLAYBOOK.md) — the code-grounded procedure: REST discovery, tool shapes, wiring points, verification. SQL deferred.
 - **New session?** [`plan/HANDOFF.md`](plan/HANDOFF.md) first.
 - **Working a bug?** [`fixes/FIX_PLAN.md`](fixes/FIX_PLAN.md) is the live queue.
 - **Reading a fix?** [`fixes/FIXES.md`](fixes/FIXES.md) — all F-NNN records, F-number order.
