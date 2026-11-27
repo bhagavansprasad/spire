@@ -304,9 +304,31 @@ class OracleCredentials(BaseModel):
     password: str
 
 
+class DataScope(BaseModel):
+    """The slice of data the Fusion user can actually see (F-076).
+
+    REST is NOT a view of the whole database. The integration user's
+    security profile limits which business units are visible, so pod row
+    counts and REST row counts legitimately differ. Measured on dev49:
+    `/standardReceipts` sees 14 of the 16 AR orgs — everything except
+    France and UK — and excludes non-CASH receipt types.
+
+    Declaring the visible set here lets the SQL overlay reproduce REST's
+    scope instead of silently returning rows the user cannot see.
+
+    Unset (the default) means "no scoping applied", which is the previous
+    behaviour: SQL returns every business unit, a superset of REST.
+    """
+
+    # Business-unit names as they appear in HR_OPERATING_UNITS.NAME and in
+    # REST's `BusinessUnit` field (e.g. 'US1 Business Unit').
+    visible_business_units: list[str] | None = None
+
+
 class Persona(BaseModel):
     fusion: FusionCredentials
     oracle: OracleCredentials | None = None
+    scope: DataScope | None = None
 
 
 def load_persona(name: str) -> Persona:

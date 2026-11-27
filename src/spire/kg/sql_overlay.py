@@ -22,6 +22,19 @@ class EntitySpec:
     # KG-backed overlay builder (spire.rendering.sql_emitter); the
     # hand-authored entities leave this empty.
     derived_columns: list[str] = field(default_factory=list)
+    # Predicates that constrain the entity to the dataset REST can see
+    # (F-076), as opposed to filtering on what the user asked for. Seeded
+    # into the WHERE clause of every statement over this entity, before
+    # the per-arg filters. `{alias}` is formatted in by the emitter.
+    #
+    # These are data-access facts, not business rules: REST is scoped by
+    # the integration user's security profile, which no column encodes.
+    # An empty list (the default) leaves the entity unscoped.
+    scope_predicates: list[str] = field(default_factory=list)
+    # Assumption text key explaining WHY the scope is applied, surfaced in
+    # the emitted SQL comment block so a reader can see the rows were
+    # restricted deliberately rather than by a mistaken filter.
+    scope_assumption: str | None = None
 
 
 @dataclass
@@ -497,6 +510,19 @@ _ENTITIES = {
             "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
             "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
         ],
+        # F-076: /standardReceipts does not expose every AR_CASH_RECEIPTS_ALL
+        # row. It reports the standard cash receipts only — the single
+        # TYPE='MISC' row on dev49 is absent from REST while all 79,733
+        # TYPE='CASH' rows are reachable. Measured, not assumed: pod
+        # CASH-only receipts excluding the two non-visible business units
+        # reconcile to REST's total of 63,065 exactly.
+        #
+        # The business-unit half of the scope is NOT declared here: it is a
+        # property of the integration user's security profile, supplied by
+        # the persona (see spire.config.DataScope) and injected by the
+        # emitter.
+        scope_predicates=["{alias}.TYPE = 'CASH'"],
+        scope_assumption="receipts_scoped_to_rest_visible_dataset",
     ),
 }
 
@@ -1088,6 +1114,19 @@ _ASSUMPTIONS = {
         "row: POHeaderId, POLineId, LineLocationId. The filter template "
         "uses {value} for PO_HEADER_ID and named binds for the other "
         "two. The plan's tool_args must supply all three."
+    ),
+    "receipts_scoped_to_rest_visible_dataset": (
+        "StandardReceipt SQL is restricted to the rows REST can actually "
+        "return (F-076). Two independent rules, both measured on dev49: "
+        "(1) TYPE = 'CASH' — /standardReceipts does not expose "
+        "miscellaneous receipts (1 MISC row on the pod, absent from REST); "
+        "(2) the business-unit filter injected from the persona's "
+        "scope.visible_business_units, because REST visibility is set by "
+        "the integration user's security profile and is not derivable "
+        "from any column. Without rule (2) the SQL returns receipts from "
+        "business units the user cannot see (France 9,316 and UK 7,352 on "
+        "dev49). Do NOT read this as one business unit: REST sees 14 of "
+        "the 16 AR orgs, not a single BU."
     ),
     "ar_line_by_customer_trx_id": (
         "AR line child filters on CUSTOMER_TRX_ID (the AR invoice's "

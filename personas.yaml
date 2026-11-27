@@ -20,3 +20,24 @@ default_dev:
     dsn: "localhost:1521/FREEPDB1"
     username: "spire"
     password: "jnjnuh"
+
+  # Data scope (F-076) — the business units this Fusion user can see.
+  # Measured on dev49: /standardReceipts sees 14 of the 16 AR orgs and
+  # hides France (9,316 receipts) and UK (7,352). Pod CASH-only receipts
+  # in these 14 units reconcile to REST's 63,065 exactly.
+  scope:
+    visible_business_units:
+      - "110-Aarna CC Bu"
+      - "BBC BU03"
+      - "China Business Unit"
+      - "Germany Business Unit"
+      - "Healthcare US Business Unit"
+      - "India Business Unit"
+      - "Italy Public Sector BU"
+      - "Progress CA Business Unit"
+      - "Progress US Business Unit"
+      - "Spencer BU"
+      - "Supremo US Business Unit"
+      - "Turkey Business Unit"
+      - "US1 Business Unit"
+      - "University US Business Unit"
