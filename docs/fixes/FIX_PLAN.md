@@ -1018,20 +1018,87 @@ already exists and works well — prompts 12/16/17/18 used it); (c) add a
 regression test asserting a fully-populated PO row survives projection
 with all requested columns present.
 
-**S7 (classification).** **Open, S1 harm.** Affects every PO response, and
-the failure mode is invisible to the reader.
+**S7 (classification).** **Fixed (2026-11-27).** Both halves of S6 are
+implemented and the reader-visible output is corrected.
+
+**Resolution.** `src/spire/graph/pipeline.py`:
+
+- `_FIELD_ALIASES` — `SupplierName → Supplier`, `BuyerName → Buyer`.
+  Consulted **only when the exact key is missing from the record**, so an
+  entity that genuinely carries `SupplierName` is never shadowed. The
+  requested name stays the column header, which is what the formatter
+  builds its table from.
+- `_project_outputs_and_gaps(outputs, fields, aliases=None)` returns
+  `(projected, gaps)`. `_project_outputs` is now a thin wrapper keeping
+  the old two-argument contract, so no existing caller or test changed.
+- `execute` returns a new `projection_gaps` key alongside
+  `projected_outputs`.
+
+`src/spire/rendering/formatters.py`:
+
+- `_unresolved_columns(state)` merges `intent.unresolved_fields` (names
+  the catalog does not know, COL-03) with `projection_gaps` (names the
+  catalog knows but the payload cannot satisfy). Both render paths use
+  it, so a payload-level gap now reaches the existing
+  "columns aren't available on X" note instead of an unexplained em dash.
+
+**Verification.** Reproduced first against the real function:
+
+    _project_outputs({"po":[rec]}, ["SupplierName","BuyerName",
+                                    "CurrencyCode","Total","Status"])
+    -> {'CurrencyCode': 'GBP', 'Total': 14869.2, 'Status': 'Closed'}
+    SILENTLY DROPPED: ['SupplierName', 'BuyerName']   (no warning)
+
+After the fix, rendered through `_format_projected_table`:
+
+    BEFORE                              AFTER
+    SupplierName | BuyerName | ...      SupplierName | BuyerName | ...
+    —            | —         | ...      EDF          | Fox, Dan  | ...
+
+which is byte-for-byte the reported defect (`FIX_PLAN` §6 prompt 2)
+against the corrected answer.
+
+Tests: `tests/test_f081_field_projection.py` — 10 passed, covering alias
+fill, header preservation, unresolved reporting, exact-key precedence
+over the alias, the F-014 shape-wrapper skip, the empty-fields identity,
+the two-argument wrapper contract, and a guard that every alias target is
+a real PO payload key. Targeted run of the render/projection/parser
+subset: **209 passed, 2 skipped, 3 xfailed**.
+
+`scripts/validate_sql_coverage.py` now reads the same `_FIELD_ALIASES`
+map instead of assuming a `XxxName → Xxx` rule with no registry, so it
+reports only genuinely unfillable columns. Its error list dropped from
+five entries to one:
+
+    before: F-080b + 4 × "PurchaseOrder.{Buyer,Supplier}Name has no
+            payload alias"
+    after : F-080b only
+
+`tests/test_sql_coverage.py` asserts that outcome and, via monkeypatch,
+that removing the alias map makes the four errors reappear — the check
+stays live rather than being neutered by the fix. The earlier assertion
+that the validator *should* report `SupplierName`/`BuyerName` was
+inverted, because it encoded the bug as expected behaviour.
+
+
+**S10 (not checked).** Whether other entities have the same
+display-name/payload split; the alias table holds only the two pairs the
+coverage validator reports. Whether the API/UI path (as opposed to the CLI
+renderer) surfaces `projection_gaps` the same way.
+
 
 ### Fix order (recommended)
 
 | Order | Finding | Why here | Effort |
 |---|---|---|---|
 | ~~1~~ | ~~**F-078**~~ | **Fixed 2026-11-27** — all 22 statements execute and agree where REST is comparable | ~~M~~ |
-| 1 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
-| 2 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
-| 3 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
-| 4 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
-| 5 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| ~~1~~ | ~~**F-081**~~ | **Fixed 2026-11-27** — alias map fills the dropped columns; gaps now reported | ~~M~~ |
+| 1 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
+| 2 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| 3 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
+| 4 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 5 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| 6 | **F-082** | AR by-number; lands with F-079 (same identifier-space decision) | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary

@@ -1311,6 +1311,32 @@ def _format_summary(plan, outputs, response) -> str:
     return "\n".join(lines)
 
 
+def _unresolved_columns(state: dict) -> list[str]:
+    """Columns the reader asked for that this answer cannot show.
+
+    Two different sources, one list, because from the reader's side they
+    are the same defect — a named column that renders as an em dash:
+
+    * `intent.unresolved_fields` — names the entity catalog does not
+      know at all (COL-03, already reported).
+    * `projection_gaps` — names the catalog knows and the KG maps, but
+      no key in the tool payload (and no `_FIELD_ALIASES` entry) can
+      satisfy. F-081: these were dropped in silence, so
+      `SupplierName`/`BuyerName` rendered as em dashes on every PO
+      answer while the payload below carried `Supplier: 'EDF'` and
+      `Buyer: 'Fox, Dan'`.
+
+    Order is preserved, first-seen wins, so the note reads in the order
+    the reader named the columns.
+    """
+    intent = state.get("intent")
+    combined = list(getattr(intent, "unresolved_fields", None) or [])
+    for gap in state.get("projection_gaps") or []:
+        if gap not in combined:
+            combined.append(gap)
+    return combined
+
+
 def _unresolved_columns_note(
     entity: str | None,
     unresolved_fields: list[str],
@@ -1556,7 +1582,7 @@ def render_answer(state: dict, menu, emit) -> None:
     """
     outputs = state.get("outputs") or {}
     fields = state["intent"].fields
-    unresolved = state["intent"].unresolved_fields
+    unresolved = _unresolved_columns(state)
     synth_failed = state.get("synth_failed")
 
     if not (fields or unresolved):
@@ -1602,7 +1628,7 @@ def render_cli_stdout(state: dict, menu) -> str:
 
     outputs = state.get("outputs") or {}
     fields = state["intent"].fields
-    unresolved = state["intent"].unresolved_fields
+    unresolved = _unresolved_columns(state)
     synth_failed = state.get("synth_failed")
 
     parts: list[str] = []

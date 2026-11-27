@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from spire.kg.sql_overlay import OVERLAY  # noqa: E402
+from spire.graph.pipeline import _FIELD_ALIASES  # noqa: E402
 
 
 def _tool_signatures() -> dict[str, set[str]]:
@@ -205,12 +206,18 @@ def validate() -> list[str]:
         entity_name = OVERLAY.tool_to_entity.get(tool_name)
         if entity_name is None:
             continue
+        # F-081: a display-name field is satisfied when the projection can
+        # actually fill it — either the payload carries the field itself,
+        # or `_FIELD_ALIASES` names a payload key that does. Before the
+        # alias map existed this check flagged SupplierName/BuyerName on
+        # every PO tool; now it flags only genuinely unfillable columns.
         for field_name in sorted(
             field
             for entity, field in intent_fields
             if entity == entity_name
             and field.endswith("Name")
             and field not in payload
+            and _FIELD_ALIASES.get(field) not in payload
             and field[:-4] in payload
         ):
             errors.append(
