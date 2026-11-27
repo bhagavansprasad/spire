@@ -11,9 +11,9 @@
  
 default_dev:
   fusion:
-    base_url: 'https://fa-euth-dev63-saasfademo1.ds-fa.oraclepdemos.com'
-    username: 'Sian.Stewart'
-    password: 'owKQ68@H'
+    base_url: 'https://fa-euth-dev49-saasfademo1.ds-fa.oraclepdemos.com'
+    username: 'FUSIONU4'
+    password: 'Fusion@4321'
     auth_type: "basic"
  
   oracle:
