@@ -1672,8 +1672,8 @@ PROMPT Seeded kg_entity_filter (37 rows).
 -- one vocabulary, no snake_case role names.
 --
 --   22 kg_entity_sql rows  — one per drafted entity (fusion_table, pk).
---  127 kg_sql_column rows   — direct columns, is_default_projection='Y'.
---   12 kg_derived_projection — correlated scalar subqueries.
+--  126 kg_sql_column rows   — direct columns, is_default_projection='Y'.
+--   13 kg_derived_projection — correlated scalar subqueries.
 -- The 17 unbound roles (KG_FIELD_TRANSLATION.md gap register) get no
 -- row: they have no kg_entity_field.field_name to key on.
 --
@@ -1709,6 +1709,9 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Receiv
 -- Supplier
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'SupplierId', 'POZ_SUPPLIERS', 'VENDOR_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'SupplierNumber', 'POZ_SUPPLIERS', 'SEGMENT1', 'VARCHAR2', 120, 'Y');
+-- F-084: Supplier.Enabled -> ENABLED_FLAG is no longer seeded here; the
+-- Status derived projection below replaces it. See the note at the
+-- gap-reversal block for the measurement.
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'Supplier', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
 -- Invoice
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Invoice', 'InvoiceId', 'AP_INVOICES_ALL', 'INVOICE_ID', 'NUMBER', 22, 'Y');
@@ -1766,7 +1769,12 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Classification', 'POZ_BUS_CLASSIFICATIONS', 'LOOKUP_CODE', 'VARCHAR2', 120, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Classification', 'Status', 'POZ_BUS_CLASSIFICATIONS', 'STATUS', 'VARCHAR2', 4, 'Y');
 -- SQL-essential gap reversal (2026-11-19) — the 10 gap-role columns.
-INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Supplier', 'Enabled', 'POZ_SUPPLIERS', 'ENABLED_FLAG', 'VARCHAR2', 4, 'Y');
+-- F-084: Supplier.Enabled -> ENABLED_FLAG is one of them and is now GONE
+-- (127 -> 126). ENABLED_FLAG is 'Y' on every supplier on this pod, so
+-- projecting it reported every supplier as enabled; REST carries Status
+-- (ACTIVE/INACTIVE) instead, now derived from END_DATE_ACTIVE in
+-- kg_derived_projection. kg_entity_field keeps its Supplier.Enabled row
+-- as field-only — the role exists, it simply has no populated carrier.
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrder', 'SupplierName', 'HZ_PARTIES', 'PARTY_NAME', 'VARCHAR2', 1440, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('PurchaseOrder', 'BuyerName', 'PER_PERSON_NAMES_F', 'DISPLAY_NAME', 'VARCHAR2', 960, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('Contact', 'SupplierId', 'POZ_SUPPLIER_SITES_ALL_M', 'VENDOR_ID', 'NUMBER', 22, 'Y');
@@ -1904,8 +1912,17 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CustomerAccount', 'TotalOpenReceivablesForAccount', 'NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID), 0)', 'Y');
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('CustomerAccount', 'TotalTransactionsDueForAccount', 'NVL((SELECT SUM(S.ACCTD_AMOUNT_DUE_REMAINING) FROM AR_PAYMENT_SCHEDULES_ALL S WHERE S.CUSTOMER_ID = CA.CUST_ACCOUNT_ID AND S.CLASS IN (''INV'',''DM'') AND S.DUE_DATE <= TRUNC(SYSDATE)), 0)', 'Y');
 
+-- F-084: Supplier.Status is REST's ACTIVE/INACTIVE, which has no column
+-- of its own on POZ_SUPPLIERS (there is no INACTIVE_DATE). It is derived
+-- from END_DATE_ACTIVE, the same carrier the status filter uses (F-080b):
+-- verified against REST per SupplierNumber across the whole supplier set,
+-- 0 mismatches, with the same ACTIVE/INACTIVE split on both sides.
+-- A NULL END_DATE_ACTIVE falls through to 'ACTIVE' because NULL <= x is
+-- NULL, not false.
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('Supplier', 'Status', 'CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN ''INACTIVE'' ELSE ''ACTIVE'' END', 'Y');
+
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (127 rows), kg_derived_projection (12 rows).
+PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (126 rows), kg_derived_projection (13 rows).
 
 -- ============================================================

@@ -89,12 +89,12 @@ def test_emitted_inactive_sql_filters_on_the_end_date():
     where = _where_clause(sql)
     assert "END_DATE_ACTIVE" in where
     assert "ENABLED_FLAG" not in where
-    # ENABLED_FLAG is still in the SELECT list, but that is a DIFFERENT
-    # defect: the KG binds Supplier.Enabled to the same stub, so the
-    # projected column reads 'Y' where REST reads ACTIVE/INACTIVE. It
-    # needs a kg_schema seed change + KG rebuild, so it is recorded
-    # separately as F-084 rather than smuggled into this fix.
-    assert "P.ENABLED_FLAG" in sql, "F-084 record expects this; update it if fixed"
+    # F-084 (fixed in its own branch): the projected status column is now
+    # the Status derived projection, not the stub. This assertion used to
+    # pin the stub's presence to document the second defect; it now pins
+    # its absence, so a regression in either half fails here.
+    assert "P.ENABLED_FLAG" not in sql
+    assert "'INACTIVE' ELSE 'ACTIVE'" in sql  # the Status CASE expression
 
 
 def test_emitted_active_sql_is_the_complement():

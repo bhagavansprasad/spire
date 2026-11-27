@@ -339,7 +339,8 @@ scripts to retire.
 `scripts/sql/kg_schema.sql` (the KG seed), `src/spire/kg/loader.py`,
 `src/spire/executor/executor.py`, `src/spire/fusion/client.py`,
 `src/spire/graph/pipeline.py`, `src/spire/agent/*`, `tests/test_kg_metadata.py`,
-`scripts/print_kg.py`, `scripts/rebuild_kg.py`, `scripts/rebuild_kg.sh`.
+`scripts/print_kg.py`, `scripts/rebuild_kg.py`, `scripts/rebuild_kg.sh`
+(the last is now a thin wrapper around `rebuild_kg.py`).
 
 **When to request it:** checking KG-table-vs-code drift, or reading the
 executor's step semantics.
