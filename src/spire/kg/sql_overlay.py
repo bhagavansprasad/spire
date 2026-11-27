@@ -287,6 +287,30 @@ _ENTITIES = {
         ],
         base_joins=[],
     ),
+    # F-077: AP invoice lines. The six columns the prompt asks for are all
+    # populated on this pod (verified against invoice 1601397), and
+    # (INVOICE_ID, LINE_NUMBER) is unique across all 1,335,566 rows — so it
+    # is the identity of a line. AP_INVOICE_LINES_ALL exposes no
+    # INVOICE_LINE_ID column on dev49, so LINE_NUMBER carries the pk role.
+    "InvoiceLine": EntitySpec(
+        name="InvoiceLine",
+        fusion_table="AP_INVOICE_LINES_ALL",
+        alias="L",
+        pk_column="LINE_NUMBER",
+        select_columns=[
+            ("L", "LINE_NUMBER"),
+            ("L", "DESCRIPTION"),
+            ("L", "QUANTITY_INVOICED"),
+            ("L", "UNIT_PRICE"),
+            ("L", "AMOUNT"),
+            ("L", "LINE_TYPE_LOOKUP_CODE"),
+            ("L", "ITEM_DESCRIPTION"),
+            ("L", "UNIT_MEAS_LOOKUP_CODE"),
+            ("L", "ACCOUNTING_DATE"),
+            ("L", "ASSESSABLE_VALUE"),
+        ],
+        base_joins=[],
+    ),
     "ReceivablesInvoiceLine": EntitySpec(
         name="ReceivablesInvoiceLine",
         fusion_table="RA_CUSTOMER_TRX_LINES_ALL",
@@ -682,6 +706,14 @@ _FILTERS = {
         assumption="po_distribution_three_way_filter",
     ),
 
+    # AP child fetchers (F-077)
+    ("get_invoice_lines", "invoice_id"): FilterSpec(
+        tool_name="get_invoice_lines",
+        arg_name="invoice_id",
+        predicate_template="{alias}.INVOICE_ID = {value}",
+        assumption="ap_line_by_invoice_id",
+    ),
+
     # AR child fetchers (Phase 1)
     ("get_receivables_invoice_lines", "customer_transaction_id"): FilterSpec(
         tool_name="get_receivables_invoice_lines",
@@ -1065,6 +1097,15 @@ _ASSUMPTIONS = {
         "DESCRIPTION, QUANTITY_INVOICED, UNIT_SELLING_PRICE, "
         "EXTENDED_AMOUNT."
     ),
+    "ap_line_by_invoice_id": (
+        "AP line child filters on INVOICE_ID (the AP invoice's parent id, "
+        "per the endpoint path /invoices/{id}/child/invoiceLines). "
+        "Column names are: LINE_NUMBER, DESCRIPTION, QUANTITY_INVOICED, "
+        "UNIT_PRICE, AMOUNT, LINE_TYPE_LOOKUP_CODE. AP_INVOICE_LINES_ALL "
+        "exposes no INVOICE_LINE_ID on this pod, so (INVOICE_ID, "
+        "LINE_NUMBER) is the line identity - unique across all 1,335,566 "
+        "rows on dev49."
+    ),
     "po_by_id_resolves_number_then_id": (
         "get_purchase_order_by_id accepts either an OrderNumber or a "
         "POHeaderId and tries OrderNumber first. The predicate resolves "
@@ -1204,6 +1245,9 @@ OVERLAY = Overlay(
         "get_purchase_order_lines": "PurchaseOrderLine",
         "get_purchase_order_schedules": "POSchedule",
         "get_purchase_order_distributions": "PODistribution",
+        # F-077: AP invoice lines, keyed on the parent InvoiceId like every
+        # other child tool.
+        "get_invoice_lines": "InvoiceLine",
         "get_receivables_invoice_lines": "ReceivablesInvoiceLine",
         "get_buyer": "Buyer",
         "get_receivables_invoice_tax_lines": "ReceivablesTaxLine",

@@ -8,6 +8,7 @@
 
 payables:
   Invoice (aka: bill, invoice)
+  InvoiceLine (aka: AP invoice line, AP invoice lines, bill line, bill lines, payables invoice line, payables invoice lines)
 
 procurement:
   Buyer (aka: agent, buyer, purchasing agent)

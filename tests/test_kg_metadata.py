@@ -55,7 +55,7 @@ async def _read_clob(value) -> str:
 
 
 @pytest.mark.asyncio
-async def test_kg_entity_has_twentytwo_rows():
+async def test_kg_entity_has_twentythree_rows():
     """Entities: Supplier, Invoice, PurchaseOrder, Buyer, Address, Site,
     Classification, PurchaseOrderLine.
 
@@ -87,6 +87,11 @@ async def test_kg_entity_has_twentytwo_rows():
     /standardReceipts resource with a DIFFERENT projection (Status vs
     ProcessStatus, plus customer and bank columns), and the two disagree
     on count; only the child is modeled as an entity.
+
+    F-077 added InvoiceLine (the AP/payables invoice-lines child, reached
+    via the HAS_AP_LINE expansion edge). Before it, an SME-answerable
+    "invoice lines for <AP invoice>" prompt was refused with the false
+    claim that no such entity existed in the API schema.
     """
     persona = load_persona("default_dev")
     async with OracleClient(persona) as oc:
@@ -97,7 +102,7 @@ async def test_kg_entity_has_twentytwo_rows():
     assert names == [
         "AccountCreditMemo", "AccountReceipt", "AccountReceiptApplication",
         "Address", "Buyer", "Classification", "Contact", "CreditMemo",
-        "CustomerAccount", "CustomerTransaction", "Invoice",
+        "CustomerAccount", "CustomerTransaction", "Invoice", "InvoiceLine",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
         "ReceivablesInvoiceTransactionDFF", "ReceivablesTaxLine", "Site",
@@ -123,6 +128,8 @@ async def test_kg_entity_module_mapping():
     expected = {
         # payables
         "Invoice": "payables",
+        # F-077: the AP invoice-lines child. Payables, unlike its AR twin.
+        "InvoiceLine": "payables",
         # procurement
         "PurchaseOrder": "procurement",
         "PurchaseOrderLine": "procurement",
@@ -353,23 +360,28 @@ async def test_kg_table_row_counts_match_v1_1():
     """
     persona = load_persona("default_dev")
     expected = {
-        "kg_entity": 22,
-        "kg_entity_field": 227,
-        "kg_edge": 17,
+        # F-077 added one entity (InvoiceLine, payables), 10 fields, one edge
+        # (HAS_AP_LINE), one edge tool, one kg_entity_sql row, 10
+        # kg_sql_column rows and 6 unambiguous AP entity synonyms. Entity
+        # 22->23, field 227->237, edge 17->18, edge tool 16->17,
+        # entity_sql 22->23, sql_column 126->136, vocabulary 131->137.
+        "kg_entity": 23,
+        "kg_entity_field": 237,
+        "kg_edge": 18,
         "kg_pattern": 3,
-        "kg_vocabulary": 131,
+        "kg_vocabulary": 137,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 13,
         "kg_entity_filter": 37,
-        "kg_edge_tool": 16,
+        "kg_edge_tool": 17,
         # SQL satellites (KG schema corpus STEP 12). kg_entity_sql is the
         # per-entity fusion_table/pk carrier; kg_sql_column the direct
         # column bindings; kg_derived_projection the correlated subqueries.
         # The gap register ("accept unbound") is fully reversed: Site +
         # Classification (7) first, then the 10 SQL-essential gap roles,
         # so kg_entity_field 210->227 and kg_sql_column 40->57.
-        "kg_entity_sql": 22,
-        "kg_sql_column": 126,
+        "kg_entity_sql": 23,
+        "kg_sql_column": 136,
         "kg_derived_projection": 13,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted

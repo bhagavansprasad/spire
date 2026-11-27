@@ -51,6 +51,9 @@ _TOOL_PRIMARY_ARG: dict[str, str] = {
     # any single-arg reader, as the distributions and tax-line tools are.
     "get_purchase_order_lifecycle_status": "po_number",
     "get_purchase_order_lines": "po_header_id",
+    # F-077: AP invoice lines. The child tool keys off the parent InvoiceId,
+    # exactly as the PO and AR line tools key off theirs.
+    "get_invoice_lines": "invoice_id",
     # P3: PO schedules (flat endpoint), one-hop expansion by POHeaderId.
     "get_purchase_order_schedules": "po_header_id",
     # P4: supplier contacts, per-supplier child expansion by SupplierId.
