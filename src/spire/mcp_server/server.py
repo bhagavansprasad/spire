@@ -17,6 +17,7 @@ Tools currently exposed:
 - get_purchase_order_by_id
 - get_purchase_order_lifecycle_status
 - get_purchase_order_lines
+- get_invoice_lines
 - get_purchase_order_schedules
 - get_supplier_contacts
 - get_purchase_order_distributions
@@ -64,6 +65,9 @@ from spire.mcp_server.tools.po_lifecycle import (
 )
 from spire.mcp_server.tools.purchase_order_lines import (
     get_purchase_order_lines as _get_purchase_order_lines,
+)
+from spire.mcp_server.tools.invoice_lines import (
+    get_invoice_lines as _get_invoice_lines,
 )
 from spire.mcp_server.tools.receivables_invoice_by_id import (
     get_receivables_invoice_by_id as _get_receivables_invoice_by_id,
@@ -594,6 +598,38 @@ async def get_purchase_order_lines(
     async with FusionClient(_persona) as client:
         result = await _get_purchase_order_lines(
             client, po_header_id=po_header_id, limit=limit
+        )
+        return result.to_dict()
+
+
+@mcp.tool()
+async def get_invoice_lines(
+    invoice_id: int, limit: int = 50
+) -> dict:
+    """Fetch the line items of one AP (payables) invoice.
+
+    Use this for "show all invoice lines for invoice X" or as the second
+    half of "what is invoice X, show its lines" (call search_invoices for
+    the header, then this for the lines with the InvoiceId it returns).
+
+    This is the AP (buy-side) invoice's lines. The AR twin is
+    get_receivables_invoice_lines, which keys off CustomerTransactionId.
+
+    Args:
+        invoice_id: The numeric InvoiceId of the parent AP invoice — NOT
+            the invoice number. search_invoices returns it.
+        limit: Max line records to return (default 50). An AP invoice can
+            carry many lines including tax auto-lines (invoice 1601397 has
+            184), so raise this when the whole line set is wanted.
+
+    Returns:
+        A dict with the invoice's lines: LineNumber, Description, Quantity,
+        UnitPrice, LineAmount, LineType, and the item/UOM/date fields per
+        line.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _get_invoice_lines(
+            client, invoice_id=invoice_id, limit=limit
         )
         return result.to_dict()
 

@@ -453,7 +453,20 @@ INSERT INTO kg_entity VALUES (
   'receivables'
 );
 
-PROMPT Seeded kg_entity (22 rows).
+-- F-077: AP invoice lines. Before this entity existed, an "invoice lines
+-- for <AP invoice>" prompt was refused with "the InvoiceLine entity is not
+-- available in the API schema" - a false statement, since
+-- /invoices/{id}/child/invoiceLines returns every field such a prompt asks
+-- for. A line is a child of the AP Invoice, reachable only through the
+-- parent id in the URL path.
+INSERT INTO kg_entity VALUES (
+  'InvoiceLine', 'LineNumber', 'LineNumber',
+  '/fscmRestApi/resources/11.13.18.05/invoices/{InvoiceId}/child/invoiceLines',
+  'A line on an AP (payables) invoice. Child of Invoice at /invoices/{InvoiceId}/child/invoiceLines - the child segment is invoiceLines ("child/lines" 404s on this pod). Each line carries LineNumber, Description, Quantity, UnitPrice, LineAmount and LineType, plus item/UOM/date/assessable-value fields. AP_INVOICE_LINES_ALL exposes no INVOICE_LINE_ID on this pod, so (INVOICE_ID, LINE_NUMBER) is the identity - unique across all 1,335,566 rows. An AP invoice can carry many lines including tax auto-lines (invoice 1601397 has 184), so line fetches need a raised limit. The AR twin is ReceivablesInvoiceLine, keyed off CustomerTransactionId.',
+  'payables'
+);
+
+PROMPT Seeded kg_entity (23 rows).
 
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
@@ -644,6 +657,20 @@ INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'LineAmountInclude
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'AssessableValue',             'amount',       'numeric', 'Assessable value for tax.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceLine', 'TransacationBusinessCategory','projection',   'string',  'Transaction business category (e.g. ''Sales Transaction''). NOTE: Oracle misspells this field as ''TransacationBusinessCategory'' (sic); must be requested with the typo exactly.');
 
+-- F-077: InvoiceLine (AP_INVOICE_LINES_ALL). Field names match the REST
+-- child payload exactly, so a prompt asking for any of them projects the
+-- column the pod actually populates.
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'LineNumber',       'display_id',   'numeric', 'Line number within the invoice. Also the SQL pk role: AP_INVOICE_LINES_ALL has no INVOICE_LINE_ID on this pod, and (INVOICE_ID, LINE_NUMBER) is unique across all 1,335,566 rows.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'Description',      'projection',   'string',  'Line description (e.g. ''Services'').');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'Quantity',         'projection',   'numeric', 'Invoiced quantity. SQL carrier is QUANTITY_INVOICED.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'UnitPrice',        'projection',   'numeric', 'Unit price for the line.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'LineAmount',       'amount',       'numeric', 'Line amount. SQL carrier is AMOUNT.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'LineType',         'projection',   'string',  'Line type (Item / Tax / Freight / ...). SQL carrier is LINE_TYPE_LOOKUP_CODE, which returns uppercase (''ITEM'') where REST returns ''Item'' - a case difference only.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'ItemDescription',  'projection',   'string',  'Item description (often null on invoice-only lines).');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'UOM',              'projection',   'string',  'Unit of measure. SQL carrier is UNIT_MEAS_LOOKUP_CODE.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'AccountingDate',   'date',         'date',    'Accounting date for the line.');
+INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'AssessableValue',  'amount',       'numeric', 'Assessable value for tax.');
+
 -- AR-P3 DFF
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', 'CustomerTrxId',                'canonical_id', 'numeric', 'Parent invoice id echoed on the DFF child. Pod spells it CustomerTrxId (short form), not CustomerTransactionId.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context',              'projection',   'string',  'The descriptive-flexfield context name (e.g. ''DOO''). Set on this pod but with no populated segment columns behind it.');
@@ -764,7 +791,7 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Address1', 'projection', 'string
 INSERT INTO kg_entity_field VALUES ('Address', 'City', 'projection', 'string', 'City (HZ_LOCATIONS.CITY). SQL-only.');
 INSERT INTO kg_entity_field VALUES ('Address', 'State', 'projection', 'string', 'State (HZ_LOCATIONS.STATE). SQL-only.');
 
-PROMPT Seeded kg_entity_field (227 rows).
+PROMPT Seeded kg_entity_field (237 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -860,6 +887,17 @@ INSERT INTO kg_edge VALUES (
   NULL
 );
 
+-- F-077: AP invoice lines. Named HAS_AP_LINE, not HAS_LINE, because
+-- edge_name is the primary key and PurchaseOrder->PurchaseOrderLine
+-- already owns 'HAS_LINE'.
+INSERT INTO kg_edge VALUES (
+  'HAS_AP_LINE', 'Invoice', 'InvoiceLine', 'InvoiceId', 'InvoiceId', 'one_to_many',
+  'join_only',
+  'GET /fscmRestApi/.../invoices/{invoice.InvoiceId}/child/invoiceLines. A plain expansion: fetch all lines for the invoice. No server filter needed; ?fields= projection works on the child. NOT child/lines - that segment 404s on this pod.',
+  'Per-invoice child call, one HTTP call per invoice. Same shape as the PO HAS_LINE edge (join_only expansion). The parent id is carried in the URL path and is NOT echoed in the line body, so to_join_field is declarative only. An invoice can carry many lines including tax auto-lines (1601397 has 184), so the tool needs a raised limit for a complete set.',
+  NULL
+);
+
 
 -- AR-P3
 INSERT INTO kg_edge VALUES (
@@ -916,7 +954,7 @@ INSERT INTO kg_edge VALUES (
   'Per-account child call, one HTTP call per account. Same expansion shape as HAS_ACCOUNT_RECEIPT, but with client-side filtering: keep only ApplicationStatus=''Applied'' (unapplied rows have null transaction side). The tool uses an over-fetch pattern (fetch_limit) because filtering discards unapplied rows.',
   NULL
 );
-PROMPT Seeded kg_edge (17 rows).
+PROMPT Seeded kg_edge (18 rows).
 
 -- ============================================================
 -- STEP 6: Seed kg_pattern (3 rows for v1.1 with F2 negation pattern)
@@ -1119,6 +1157,22 @@ INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'receivables invoices', 'Rec
 -- parser edits alone would be unreachable.
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice line',          'ReceivablesInvoiceLine', 'Leading-noun form (a line on an AR invoice).');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice lines',         'ReceivablesInvoiceLine', 'Plural form.');
+
+-- F-077: AP (payables) invoice lines. These are the UNAMBIGUOUS forms — every
+-- term names the buy side explicitly, so they cannot collide with the AR
+-- terms above. Plain 'invoice line(s)' is deliberately LEFT on the AR entity
+-- (F-041) rather than being duplicated here: an ambiguous synonym would make
+-- the generated classifier menu ambiguous too. The AP entity is still reached
+-- for an unqualified prompt, because the classifier routes on the entity
+-- description (kg_entity) and the F-041 corrector adds receivables alongside
+-- it — verified: the F-077 prompt now classifies to
+-- ['payables','receivables'] and plans search_invoices -> get_invoice_lines.
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AP invoice line',       'InvoiceLine', 'Buy-side form; unambiguous against the AR entity.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'AP invoice lines',      'InvoiceLine', 'Buy-side plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'payables invoice line', 'InvoiceLine', 'Module-qualified buy-side form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'payables invoice lines','InvoiceLine', 'Module-qualified buy-side plural form.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'bill line',             'InvoiceLine', '''bill'' is the AP Invoice synonym, so its lines are AP lines.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'bill lines',            'InvoiceLine', 'Plural of ''bill line''.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax line',              'ReceivablesTaxLine', 'A tax line on an AR invoice line.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax lines',             'ReceivablesTaxLine', 'Plural form.');
 INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'tax breakdown',         'ReceivablesTaxLine', 'Colloquial synonym.');
@@ -1403,6 +1457,12 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes customer_transaction_id. Plain expansion: returns the invoice''s lines as a ToolResult. No filter, no keep-parent logic.'
 );
 
+INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
+  'HAS_AP_LINE',
+  'get_invoice_lines',
+  'Takes invoice_id. Plain expansion: returns the AP invoice''s lines as a ToolResult. No filter, no keep-parent logic.'
+);
+
 
 INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'HAS_TAX_LINE',
@@ -1444,7 +1504,7 @@ INSERT INTO kg_edge_tool (edge_name, mcp_tool_name, notes) VALUES (
   'Takes account_id. Fetches the account''s standardReceiptApplications child, newest first (orderBy=ApplicationDate:desc). Uses over-fetch (fetch_limit) and client-side filter to keep only ApplicationStatus=''Applied'' (unapplied rows have null transaction side).'
 );
 
-PROMPT Seeded kg_edge_tool (16 rows).
+PROMPT Seeded kg_edge_tool (17 rows).
 
 -- ============================================================
 -- STEP 11: Seed kg_entity_filter
@@ -1696,6 +1756,10 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Invoic
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CustomerTransaction','AR_PAYMENT_SCHEDULES_ALL','CUSTOMER_TRX_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoice', 'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('ReceivablesInvoiceLine', 'RA_CUSTOMER_TRX_LINES_ALL', 'CUSTOMER_TRX_LINE_ID');
+-- F-077: AP lines. pk_column is LINE_NUMBER, not an id: AP_INVOICE_LINES_ALL
+-- exposes no INVOICE_LINE_ID on this pod (verified), and (INVOICE_ID,
+-- LINE_NUMBER) is unique across all 1,335,566 rows.
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('InvoiceLine', 'AP_INVOICE_LINES_ALL', 'LINE_NUMBER');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CreditMemo',            'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('StandardReceipt',       'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('AccountReceipt',        'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
@@ -1808,6 +1872,19 @@ INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name,
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'Quantity', 'RA_CUSTOMER_TRX_LINES_ALL', 'QUANTITY_INVOICED', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'UnitSellingPrice', 'RA_CUSTOMER_TRX_LINES_ALL', 'UNIT_SELLING_PRICE', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('ReceivablesInvoiceLine', 'LineAmount', 'RA_CUSTOMER_TRX_LINES_ALL', 'EXTENDED_AMOUNT', 'NUMBER', 22, 'Y');
+-- F-077: InvoiceLine (AP_INVOICE_LINES_ALL) - all ten hand-authored columns
+-- verified present on dev49 via all_tab_columns, and the six the prompt asks
+-- for verified against invoice 1601397.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'LineNumber', 'AP_INVOICE_LINES_ALL', 'LINE_NUMBER', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'Description', 'AP_INVOICE_LINES_ALL', 'DESCRIPTION', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'Quantity', 'AP_INVOICE_LINES_ALL', 'QUANTITY_INVOICED', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'UnitPrice', 'AP_INVOICE_LINES_ALL', 'UNIT_PRICE', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'LineAmount', 'AP_INVOICE_LINES_ALL', 'AMOUNT', 'NUMBER', 22, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'LineType', 'AP_INVOICE_LINES_ALL', 'LINE_TYPE_LOOKUP_CODE', 'VARCHAR2', 100, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'ItemDescription', 'AP_INVOICE_LINES_ALL', 'ITEM_DESCRIPTION', 'VARCHAR2', 960, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'UOM', 'AP_INVOICE_LINES_ALL', 'UNIT_MEAS_LOOKUP_CODE', 'VARCHAR2', 100, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'AccountingDate', 'AP_INVOICE_LINES_ALL', 'ACCOUNTING_DATE', 'DATE', 7, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceLine', 'AssessableValue', 'AP_INVOICE_LINES_ALL', 'ASSESSABLE_VALUE', 'NUMBER', 22, 'Y');
 -- CreditMemo (RA_CUSTOMER_TRX_ALL) — mirror of ReceivablesInvoice; EnteredAmount derived from lines (see below).
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'CustomerTransactionId', 'RA_CUSTOMER_TRX_ALL', 'CUSTOMER_TRX_ID', 'NUMBER', 22, 'Y');
 INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('CreditMemo', 'TransactionNumber', 'RA_CUSTOMER_TRX_ALL', 'TRX_NUMBER', 'VARCHAR2', 80, 'Y');
@@ -1923,6 +2000,6 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (22 rows), kg_sql_column (126 rows), kg_derived_projection (13 rows).
+PROMPT Seeded kg_entity_sql (23 rows), kg_sql_column (136 rows), kg_derived_projection (13 rows).
 
 -- ============================================================

@@ -11,12 +11,12 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-080, F-081, F-082, F-083 and F-084
-fixed and live-verified on dev49**: all 22 litmus statements execute, and
-every statement REST can compare agrees with it. New **F-085** (the
+**Status:** Open — **F-078, F-079, F-080, F-081, F-082, F-083, F-084 and
+F-077 fixed and live-verified on dev49**: all 22 litmus statements execute,
+and every statement REST can compare agrees with it. New **F-085** (the
 documented `rebuild_kg.sh` reduced the KG to 8 tables / 5 entities and
 reported success; it now delegates to `rebuild_kg.py`). Still open:
-F-076, F-077.
+**F-076** — the only finding left in this queue.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
@@ -30,8 +30,8 @@ Five new findings are recorded in §6 — **F-078** (unmapped args → invalid
 SQL, 9 of 22 statements), **F-079** (number bound to internal id, 6
 statements → 0 rows), **F-080** (two wrong predicates → false zeros),
 **F-081** (requested columns silently dropped), **F-082** (AR by-number
-false negative). F-076 and F-077 remain open. Recommended fix order is at
-the end of §6.
+false negative), **F-077** (AP invoice lines refused as "not in the API
+schema"). F-076 remains open. Recommended fix order is at the end of §6.
 
 ---
 
@@ -1239,8 +1239,8 @@ renderer) surfaces `projection_gaps` the same way.
 | ~~1~~ | ~~**F-080b**~~ | **Fixed 2026-11-27** — `END_DATE_ACTIVE` carrier; p39 0 → 2 rows, identity-matched to REST | ~~S~~ |
 | ~~1~~ | ~~**F-084**~~ | **Fixed 2026-11-27** — Status derived from END_DATE_ACTIVE; 335/335 suppliers agree with REST | ~~S~~ |
 | ~~1~~ | ~~**F-085**~~ | **Fixed 2026-11-27** — `rebuild_kg.sh` delegates to `rebuild_kg.py`; it had been shrinking the KG | ~~S~~ |
+| ~~2~~ | ~~**F-077**~~ | **Fixed 2026-11-27** — AP `InvoiceLine` entity built end to end; building it also fixed the routing | ~~L~~ |
 | 1 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 2 | **F-077** | AP invoice lines: **SME-answerable refusal** (data exists in REST; entity never built). Feature build, not a patch | L |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
@@ -1649,7 +1649,7 @@ or KG change).
 
 ---
 
-### F-077 — an SME-answerable AP invoice-lines prompt is refused (OPEN, S1)
+### F-077 — an SME-answerable AP invoice-lines prompt is refused (FIXED, S1)
 
 **Record correction (2026-11-27).** This finding was cited three times
 before it had a section: the header list, the fix-order table
@@ -1725,7 +1725,7 @@ answer is produced to render); not the F-079 identifier-space problem
 (the refusal happens before any lookup — and the invoice number in the
 prompt resolves correctly, as F-078's p12 shows).
 
-**S6 (fix shape, not applied — this is a build, not a patch).** Adding
+**S6 (fix shape, applied).** Adding
 the entity is a feature-sized change touching eight places, which is why
 it is not folded into a bug-fix branch:
 
@@ -1746,33 +1746,117 @@ whether the payables module needs more vocabulary before it can compete
 with receivables' 11 entities. Adding the entity alone will not fix
 routing if the prompt still lands in `receivables`.
 
-**S7 (classification).** **Open, S1 harm.** Confirmed defect by the SME
-test. Deliberately not started inside a bug-fix branch: it is a feature
-build (new tool + KG entity + wiring), and the routing question is a
-separate decision.
+**S7 (classification).** **Fixed 2026-11-27** — but the fix turned out to
+be the *entity*, not the routing, because building the entity fixed the
+routing on its own. Details below.
 
-**S8 (miss record).** The prompt set that produced the litmus run had no
-AP invoice-lines question before prompt 13, so the gap never surfaced. The
-record itself is the second miss: F-077 was cited in three places for
-several windows — described as "receipts" and as a "silent zero" — without
-ever being reproduced. Nothing compared the cited list against the
-findings that actually had sections.
+**S7 / Resolution (2026-11-27).** **Fixed.** The AP `InvoiceLine` entity,
+end to end.
 
-**S9 (cross-link).** Same *class* as F-082 (refusal/false negative on an
+The surprise worth recording: **no router change was needed.** The
+classifier had been choosing `receivables`; once `InvoiceLine` existed in
+the payables module the classifier chooses `payables` (and the F-041
+corrector still adds `receivables`). The earlier plan of "add an entity,
+then separately fix routing" was wrong about the sequencing — the routing
+miss was a *symptom* of the missing entity, not an independent defect. The
+classifier menu is generated from `kg_entity.module`, so seeding the entity
+in `payables` is what put it on the menu:
+
+    payables:
+      Invoice (aka: bill, invoice)
+      InvoiceLine (aka: AP invoice line, AP invoice lines, bill line,
+                   bill lines, payables invoice line, payables invoice lines)
+
+What was built:
+
+| # | Change |
+|---|---|
+| 1 | `mcp_server/tools/invoice_lines.py` — `get_invoice_lines` over `/invoices/{id}/child/invoiceLines` |
+| 2 | `mcp_server/server.py` — registered, plus the module docstring list |
+| 3 | KG seed — `kg_entity`, 10 `kg_entity_field`, `kg_entity_sql`, 10 `kg_sql_column`, `kg_edge HAS_AP_LINE`, `kg_edge_tool`, 6 `kg_vocabulary` synonyms |
+| 4 | `kg/sql_overlay.py` — `InvoiceLine` EntitySpec, `("get_invoice_lines","invoice_id")` FilterSpec, `tool_to_entity`, assumption text |
+| 5 | `planner/registries.py` — `_TOOL_PRIMARY_ARG["get_invoice_lines"] = "invoice_id"` |
+| 6 | `nl_parser/context/payables/b_invoice_lines.sysprompt` + `order.manifest` |
+| 7 | Row counts: `tests/test_kg_metadata.py`, `scripts/print_kg.py`, seed banners |
+| 8 | `tests/test_f077_ap_invoice_lines.py` — 22 tests |
+
+**Two pod facts that shaped the design** (both measured, neither assumed):
+
+1. `AP_INVOICE_LINES_ALL` has **no `INVOICE_LINE_ID`** on this pod. The
+   column exists in Fusion's interface tables but not in the `_ALL` table.
+   `(INVOICE_ID, LINE_NUMBER)` is unique across **all 1,335,566 rows**
+   (0 duplicate groups), so `LINE_NUMBER` carries the pk role and the
+   identity is recorded as the pair.
+2. `LineType` is `LINE_TYPE_LOOKUP_CODE`, which holds **uppercase**
+   (`ITEM`) where REST returns `Item`. Case difference only — normalised
+   in the comparison, and recorded in the path-assumption text.
+
+**Verification (dev49, same session, `runsql.sh` + REST).** Emitted SQL for
+invoice 1601397 (`ERS-53004-755598`):
+
+    SELECT ... FROM AP_INVOICE_LINES_ALL L WHERE L.INVOICE_ID = '1601397'
+
+    SQL rows   184
+    REST rows  184
+    only-in-SQL   0
+    only-in-REST  0
+    field mismatches 0  (LineNumber, Description, Quantity, UnitPrice,
+                         LineAmount, LineType — all 184 rows)
+
+That is every field the prompt named, on every line, agreeing with REST.
+
+**The prompt now plans end to end** — including the *unqualified* original,
+which is the reproduced defect:
+
+    PROMPT: Show all invoice lines for invoice ERS-53004-755598. Include
+            line number, description, quantity, unit price, amount, and
+            line type.
+
+    modules  ['payables', 'receivables']        (was ['receivables'])
+    target   Invoice
+    filters  [{'type': 'invoice_number', 'value': 'ERS-53004-755598'}]
+    include  ['InvoiceLine']
+    STEP 1   search_invoices {'invoice_number': 'ERS-53004-755598'}
+    STEP 2   get_invoice_lines {'invoice_id': '$iteration_value'}
+
+**S8 (resolved — the record was the second miss).** The finding was cited
+in three places for several windows — described as "receipts" and as a
+"silent zero" — without ever being reproduced. Nothing compared the cited
+list against the findings that actually had sections. The "receipts"
+confusion is traceable: the seed file contains a `-- Prompt 13:` comment
+above the `StandardReceipt` entity (an AR prompt set's prompt 13), so a
+grep for "prompt 13" in the KG returns receipts, not invoice lines.
+
+**S10 (still not checked).** Whether other payables children are missing
+the same way (payments hold, distributions, tax); whether
+`AP_INVOICE_LINES_ALL` carries the same NULL/sentinel issues F-060 and
+F-083 found in its neighbours; and whether other entities are absent from
+the KG purely because no prompt in the set asked for them — the general
+form of this defect.
+
+**S10b (new, from this fix).** The parser leaves `fields` **empty** for a
+child-include prompt, so the projection falls back to the entity's default
+columns rather than the exact fields named. The AR twin behaves the same
+way and additionally reports `LineType` unresolved (its entity has no such
+field). Not fixed here: the default projection happens to include all six
+requested AP columns, so the answer is correct, and changing field
+resolution for child includes is a parser change with a much wider blast
+radius. Recorded so it is not mistaken for "the fields are being used".
+
+**S11 (covered).** `tests/test_f077_ap_invoice_lines.py` pins the tool's
+projection and path segment, the 404 contract, the overlay entity/filter
+mapping, the emitted SQL (including that it never touches
+`RA_CUSTOMER_TRX_LINES_ALL`), the planner arg, the server registration, the
+seed rows, and that the manifest block exists and is prose.
+
+**S9 (cross-link).** Same *class* as F-082 (false negative on an
 SME-answerable prompt) but a different mechanism: F-082 was a wrong
-identifier binding in an entity that existed; F-077 is an entity that was
-never built, plus a routing miss. Sibling of F-060…F-064 in spirit (the
-KG's coverage is incomplete), but at entity level rather than column
-level.
+identifier binding in an entity that existed; F-077 was an entity that was
+never built. Sibling of F-060…F-064 in spirit (the KG's coverage is
+incomplete), but at entity level rather than column level.
 
-**S10 (not checked).** Whether other payables children are missing the
-same way (payments hold, distributions, tax); whether the classifier
-misroutes other `payables` prompts to `receivables`; whether
-`AP_INVOICE_LINES_ALL` has the same NULL/sentinel issues F-060 and F-083
-found in its neighbours.
-
-**S11 (coverage expansion).** Sibling prompts of the same shape to add to
-the prompt set: "invoice lines for an AP invoice by number", "invoice
-lines by internal id", "line type distribution for an invoice",
-"invoice line amount vs header amount reconciliation", and the AR twin
-("receivables invoice lines", which already works — a useful control).
+**S11b (coverage expansion).** Sibling prompts to add to the set:
+"invoice lines for AP invoice X" (qualified form, now works), "line type
+distribution for an invoice", "invoice line amount vs header amount
+reconciliation", and the AR twin ("receivables invoice lines", which
+already worked — a useful control that kept this defect visible).
