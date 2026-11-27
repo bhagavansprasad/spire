@@ -24,7 +24,7 @@ statement REST can compare agrees with it.
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 
 **2026-11-21 addendum.** The first full run of the SME Module A litmus set
-(`prompts/sme_modules/sme_modules_litmus.txt`, log `t_f081_litmus_run.txt`)
+(`prompts/sme_module_a/sme_module_a_litmus.txt`, log `t_f081_litmus_run.txt`)
 scored **24 pass / 16 fail of 40**, and execution of every emitted SQL
 statement (`t_f081_sql/`) found **1 statement of 22 agreeing with REST**.
 Five new findings are recorded in §6 — **F-078** (unmapped args → invalid
@@ -817,7 +817,7 @@ window) is the first command to run it.
 ## 6. Litmus-run findings (2026-11-21, `Phase3-F081-Litmus-Findings`)
 
 Source of all five: the first full run of
-`prompts/sme_modules/sme_modules_litmus.txt` (40 prompts, log
+`prompts/sme_module_a/sme_module_a_litmus.txt` (40 prompts, log
 `t_f081_litmus_run.txt`), then execution of every emitted SQL statement
 via `./runsql.sh` (`t_f081_sql/pNN.sql` → `pNN.out`).
 

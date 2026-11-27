@@ -3,7 +3,7 @@
 **Source.** Module A's SME prompt list, 4 modules × 10 prompts, captured
 2026-11-21. Saved here as Spire's module-level litmus test.
 
-**Companion file.** `sme_modules_litmus.txt` is the runnable set — one
+**Companion file.** `sme_module_a_litmus.txt` is the runnable set — one
 prompt per line, `#` comments carrying status, expected content and
 evidence. This file holds the reasoning: the fill-value table, the
 readiness ledger, and the traps that make an answer look wrong when the
@@ -232,7 +232,7 @@ export PATH="/home/bhagavan/virtenv/spire/bin:$PATH"
 
 # the whole set
 python scripts/promptkit.py --run --prompt-file \
-    prompts/sme_modules/sme_modules_litmus.txt
+    prompts/sme_module_a/sme_module_a_litmus.txt
 ```
 
 Not yet registered in `scripts/manifests/promptkit_sets.yaml`, so a full

@@ -151,7 +151,7 @@ bundles:
   - prompts/README.md
   - prompts/refusals/refusals_refusal_examples.txt
   # External corpus — verbatim, no tier.
-  - prompts/sme/sme_testcases.txt
+  - prompts/sme_qei/sme_qei_testcases.txt
   - prompts/sample_prompts.txt
   - prompts/release_gate/release_gate_baseline.md
   - prompts/release_gate/release_gate_litmus.txt

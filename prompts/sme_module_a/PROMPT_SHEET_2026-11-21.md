@@ -12,9 +12,9 @@ already demoed). This sheet supersedes its prompt list for breadth; the
 "do NOT demo" list there still applies.
 
 **Authoritative copy:** the runnable set and its expectations now live in
-`prompts/sme_modules/` (`sme_modules_litmus.txt` +
-`sme_modules_expected.md`). This file is the session record; if they
-disagree, `prompts/sme_modules/` wins.
+`prompts/sme_module_a/` (`sme_module_a_litmus.txt` +
+`sme_module_a_expected.md`). This file is the session record; if they
+disagree, `prompts/sme_module_a/` wins.
 
 **Evidence:** `t_f078_verify.csv`, `t_f078_verify2.csv`, `t_f078_q1..q13`
 (`.sql` + `.csv`), `t_f078_cols*.csv`, `t_f078_kg.txt`.
