@@ -21,7 +21,7 @@ against the current branch before being used as implementation truth.
 | Resume the KG schema work | [Pending KG schema corpus](plan/PENDING_KG_SCHEMA_CORPUS.md), then check its dated status against the current branch |
 | Check the known-failure queue | [Fix Plan](fixes/FIX_PLAN.md); confirm its status against the latest entries and current work |
 | Apply Copilot-specific repository rules | [Copilot Working Style](plan/COPILOT_WORKING_STYLE.md) |
-| Find SME module test context | [Expected answers](../prompts/sme_modules/sme_modules_expected.md) and the [dated prompt sheet](../prompts/sme_modules/PROMPT_SHEET_2026-11-21.md) |
+| Find SME module test context | [Expected answers](../prompts/sme_module_a/sme_module_a_expected.md) and the [dated prompt sheet](../prompts/sme_module_a/PROMPT_SHEET_2026-11-21.md) |
 | Find Fusion endpoint notes | [Fusion Endpoints Reference](reference/spire_fusion_endpoints_reference.md); verify pod-specific details before use |
 
 ## Project and operator guides
@@ -79,8 +79,8 @@ or module-support specifications.
 | [prompts/README.md](../prompts/README.md) | Prompt-set layout, tier meanings, and corpus notes | Prompt-set guide; its link to `docs/prompt-sets/SURFACE.md` does not resolve in the current inventory |
 | [PROMPT_COUNTS.md](../prompts/PROMPT_COUNTS.md) | Counts of prompts by capability and tier | Snapshot dated 2026-10-10; recount after prompt-set changes |
 | [release_gate_baseline.md](../prompts/release_gate/release_gate_baseline.md) | Release-gate runtime and pass/fail baseline | Run dated 2026-09-29; historical baseline |
-| [PROMPT_SHEET_2026-11-21.md](../prompts/sme_modules/PROMPT_SHEET_2026-11-21.md) | Pod-verified fill values and readiness notes for 40 SME prompts | Dated validation sheet; verify live values before a new demo |
-| [sme_modules_expected.md](../prompts/sme_modules/sme_modules_expected.md) | Expected answers, fill values, readiness ledger, and scoring notes | Module A test reference captured 2026-11-21; pair with the runnable litmus set |
+| [PROMPT_SHEET_2026-11-21.md](../prompts/sme_module_a/PROMPT_SHEET_2026-11-21.md) | Pod-verified fill values and readiness notes for 40 SME prompts | Dated validation sheet; verify live values before a new demo |
+| [sme_module_a_expected.md](../prompts/sme_module_a/sme_module_a_expected.md) | Expected answers, fill values, readiness ledger, and scoring notes | Module A test reference captured 2026-11-21; pair with the runnable litmus set |
 | [tests/manual/ui/checklist.md](../tests/manual/ui/checklist.md) | Manual startup and UI checks | Manual checklist; run before UI-affecting merges |
 | [spire_sme_validation_checklist.md](../tests/spire_sme_validation_checklist.md) | Black-box SME validation procedure and scope | Validation checklist; its stated scope is historical and narrower than current module coverage |
 

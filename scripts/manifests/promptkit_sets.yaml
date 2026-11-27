@@ -54,7 +54,7 @@ sets:
   - modes/modes_verify
 
   # ── corpus — external, verbatim, no tier ────────────────────────
-  - sme/sme_testcases
+  - sme_qei/sme_qei_testcases
 
   # ── exhaust — overnight. Comment out for a faster pass. ─────────
   - dipstick/dipstick_exhaust

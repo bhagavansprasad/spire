@@ -10,7 +10,7 @@
 # WHY THE FILL VALUES MATTER: a prompt naming a record with no children
 # returns an empty list from Fusion, which is indistinguishable from Spire
 # being broken. Every substituted value below was queried first and its
-# child counts recorded in sme_modules_expected.md.
+# child counts recorded in sme_module_a_expected.md.
 #
 # CONTRACT (read before scoring):
 #   20 prompts are expected to ANSWER (marked PASS-EXPECTED).
@@ -23,7 +23,7 @@
 #     record.
 #
 # ORDERING: module order, easy-before-hard within each module. The full
-# set is ~40 prompts; the 8 in section 6 of sme_modules_expected.md are
+# set is ~40 prompts; the 8 in section 6 of sme_module_a_expected.md are
 # the ones to run first if time is short.
 #
 # WALL-CLOCK: not yet baselined. Record it on first full run.
