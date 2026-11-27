@@ -160,6 +160,49 @@ def _pod_null_count(table: str, column: str, exclude: str) -> int:
     return int(lines[-1])
 
 
+# Orphan foreign keys — the check a NULL count cannot make (F-083).
+#
+# A NULL-count check answers "is the key populated?". That is the wrong
+# question when the key is populated with a value that has no parent row.
+# AP_INVOICES_ALL.VENDOR_ID has **zero** NULLs and yet 11,227 of 53,129
+# invoices point at a VENDOR_ID with no POZ_SUPPLIERS row (the sentinel
+# -222 among them), so an inner join dropped 21% of invoices and the Q4
+# check reported PASS throughout.
+#
+# Each entry is (entity, child table, child column, parent table,
+# parent column). A non-zero count is only a failure when the entity's
+# overlay join is an INNER join — a LEFT JOIN propagates the missing
+# parent as NULL, which is what REST does.
+ORPHAN_KEYS: list[dict] = [
+    {
+        "entity": "Invoice",
+        "child": "AP_INVOICES_ALL",
+        "child_column": "VENDOR_ID",
+        "parent": "POZ_SUPPLIERS",
+        "parent_column": "VENDOR_ID",
+        # Set by the F-083 fix; asserts the overlay really is a LEFT JOIN.
+        "join_is_left": True,
+        "note": "sentinel VENDOR_IDs (-222) have no supplier row",
+    },
+]
+
+
+def _pod_orphan_count(child: str, child_column: str, parent: str,
+                      parent_column: str) -> int:
+    """Count child rows whose ``child_column`` matches no ``parent`` row."""
+    sql = (
+        f"SELECT COUNT(*) AS ORPHAN_CNT FROM {child} C "
+        f"WHERE NOT EXISTS (SELECT 1 FROM {parent} PP "
+        f"WHERE PP.{parent_column} = C.{child_column})"
+    )
+    out = _run_pod_sql(sql)
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if len(lines) < 2:
+        raise RuntimeError(f"unexpected runsql.sh output for {sql!r}: {out!r}")
+    return int(lines[-1])
+
+
+
 # ---------------------------------------------------------------------------
 # KG access (via the process-lifetime oracle pool)
 # ---------------------------------------------------------------------------
@@ -323,6 +366,52 @@ def _check_nullable_keys(check_pod: bool) -> tuple[list[str], bool]:
             ok = False
     return lines, ok
 
+def _check_orphan_keys(check_pod: bool) -> tuple[list[str], bool]:
+    """Run the orphan-foreign-key checks. Returns (report_lines, ok).
+
+    A populated-but-parentless key is invisible to a NULL count. The check
+    only fails when the entity's overlay join is INNER, because an INNER
+    join turns an absent parent into a silently dropped row.
+    """
+    lines: list[str] = []
+    if not check_pod:
+        lines.append("(skipped with --kg-only)")
+        return lines, True
+
+    from spire.kg.sql_overlay import OVERLAY
+
+    ok = True
+    for key in ORPHAN_KEYS:
+        count = _pod_orphan_count(
+            key["child"], key["child_column"], key["parent"],
+            key["parent_column"],
+        )
+        label = (
+            f"{key['entity']} {key['child']}.{key['child_column']} -> "
+            f"{key['parent']}.{key['parent_column']}"
+        )
+        if count == 0:
+            lines.append(f"[PASS] {label}: orphans = 0 ({key['note']})")
+            continue
+
+        # Orphans exist. That is fine if the overlay LEFT JOINs them in.
+        spec = OVERLAY.entities.get(key["entity"])
+        joins = " ".join(spec.base_joins) if spec else ""
+        is_left = "LEFT JOIN" in joins.upper()
+        if key.get("join_is_left") and is_left:
+            lines.append(
+                f"[PASS] {label}: orphans = {count}, JOIN is LEFT so they "
+                f"survive with NULL parent columns ({key['note']})"
+            )
+        else:
+            lines.append(
+                f"[FAIL] {label}: orphans = {count} and the overlay join is "
+                f"not LEFT, so those rows are silently dropped "
+                f"({key['note']})"
+            )
+            ok = False
+    return lines, ok
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -360,7 +449,13 @@ def main() -> int:
         print(line)
 
     print()
-    ok = derived_ok and nullable_ok
+    print("=== Orphan foreign-key checks (F-083) ===")
+    orphan_lines, orphan_ok = _check_orphan_keys(check_pod)
+    for line in orphan_lines:
+        print(line)
+
+    print()
+    ok = derived_ok and nullable_ok and orphan_ok
     if ok:
         print("Result: PASS")
         return 0

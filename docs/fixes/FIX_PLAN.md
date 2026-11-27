@@ -1,18 +1,18 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F079-Identifier-Space` (off `master`).
-Prior: `Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
+**Branch:** current work on `Phase3-F083-Invoice-Supplier-Join` (off `master`).
+Prior: `Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
+`Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
 `Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
 `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
 SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — **F-078, F-079, F-081 and F-082 fixed and live-verified
-on dev49 (2026-11-27)**: all 22 litmus statements execute, and every
-statement REST can compare agrees with it. New **F-083** (AP invoice inner
-join drops sentinel-vendor rows, found by that comparison). Still open:
-F-080b, F-076, F-077, F-083.
+**Status:** Open — **F-078, F-079, F-081, F-082 and F-083 fixed and
+live-verified on dev49 (2026-11-27)**: all 22 litmus statements execute,
+and every statement REST can compare agrees with it. Still open:
+F-080b, F-076, F-077.
 
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
@@ -1166,10 +1166,10 @@ renderer) surfaces `projection_gaps` the same way.
 | ~~1~~ | ~~**F-081**~~ | **Fixed 2026-11-27** — alias map fills the dropped columns; gaps now reported | ~~M~~ |
 | ~~1~~ | ~~**F-079**~~ | **Fixed 2026-11-27** — by-id specs resolve number-then-id; p02–p05 now return rows | ~~M~~ |
 | ~~2~~ | ~~**F-082**~~ | **Fixed 2026-11-27** — AR tool resolves both spaces; p22 agrees with REST on 9/9 fields | ~~M~~ |
-| 1 | **F-083** | AP invoice inner-join drops sentinel-vendor rows; same shape as F-074 | S |
-| 2 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
-| 3 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 4 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| ~~3~~ | ~~**F-083**~~ | **Fixed 2026-11-27** — LEFT JOIN; p11 now equals REST exactly (132 = 132) | ~~S~~ |
+| 1 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
+| 2 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
+| 3 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
 is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
@@ -1252,7 +1252,7 @@ id path, number-wins precedence (with a fake client, so it runs offline) and
 the unknown-value path.
 
 
-### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (OPEN, S1)
+### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (FIXED, S1)
 
 **S0.** The emitted AP-invoice statement joins
 `JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID` (an inner join), so
@@ -1298,11 +1298,72 @@ null `SupplierNumber`; add a validator rule for orphan FK rows on the
 join keys (rows whose parent is absent), and a regression test from the
 two invoice numbers above. Do **not** fix by filtering out `-222`.
 
-**S7 (classification).** **Open, S1 harm.** Row-count divergence on AP
-invoice prompts; sibling of F-074 (inner-join loss) and the invoice-side
+**S7 / Resolution (2026-11-27).** **Fixed.** The join change plus the
+validator rule, exactly as S6 proposed.
+
+1. `src/spire/kg/sql_overlay.py` Invoice `base_joins` →
+   `LEFT JOIN POZ_SUPPLIERS`. `S.SEGMENT1` (SupplierNumber) now comes
+   through as NULL for orphan rows, which is what REST reports.
+2. `scripts/validate_kg_schema.py` — new `ORPHAN_KEYS` + `_check_orphan_keys`
+   and a third report section. It counts child rows whose parent is
+   absent and fails only when the entity's overlay join is not LEFT, so
+   the check fails on the defect and passes once it is fixed.
+3. `tests/test_f083_invoice_supplier_join.py` — 7 tests.
+
+**Scale — much larger than the two rows that surfaced it.** The orphan
+population on dev49 is **11,227 of 53,129 invoices (21%)**, so the inner
+join was dropping a fifth of all AP invoices on *every* invoice answer,
+not just the two in the date window.
+
+**Why the Q4 NULL-count check never caught it.** `NULLABLE_KEYS` already
+had an `Invoice AP_INVOICES_ALL.VENDOR_ID` entry, and it reports
+`NULLs = 0` — correctly, because the column is populated on every row.
+The value is the problem, not its presence. `VENDOR_ID = -222` is a
+sentinel with no `POZ_SUPPLIERS` row. The validator now prints both:
+
+    [PASS] Invoice AP_INVOICES_ALL.VENDOR_ID: NULLs = 0
+    [PASS] Invoice AP_INVOICES_ALL.VENDOR_ID -> POZ_SUPPLIERS.VENDOR_ID:
+           orphans = 11227, JOIN is LEFT so they survive with NULL
+           parent columns
+
+which is the point of the addition: a passing NULL count next to a
+non-zero orphan count is the signal, not a contradiction.
+
+**Where REST gets the supplier name (checked, not assumed).** REST
+returns `Supplier: 'TEXAS CORP'`, `SupplierNumber: null` for 1072121 —
+so the name is available for orphan rows and simply dropping them was
+the wrong answer. The carrier is `AP_INVOICES_ALL.PARTY_ID`:
+`JOIN HZ_PARTIES ON PARTY_ID` returns `TEXAS CORP` / `Info-Systems Pvt
+Ltd` for the two sentinel rows, and `Staffing Services` on a normal
+invoice, agreeing with the `POZ_SUPPLIERS` path. This entity does not
+project the party name, so no join was added for it; recorded here
+because a future consumer of supplier *name* on Invoice must use
+`P.PARTY_ID`, not the supplier join.
+
+**Verification (dev49, same session, `runsql.sh` + REST).** p11
+(`invoices in the last 30 days`):
+
+    before (INNER JOIN):  116 rows
+    after  (LEFT JOIN):   132 rows
+    REST:                 132 rows
+    multiset diff REST-SQL: none   SQL-REST: none
+
+Both sides also carry the same three duplicate invoice numbers (`CM1`,
+`123`, `Inv-16` exist twice on the pod), so the comparison is exact
+rather than cardinality-only. The `LEFT_JOIN` vs `INNER` row count for
+that filter measured 118 vs 116 when sampled earlier, confirming the
+delta is the orphan rows and not a timing artefact.
+
+No other statement moved: the full 22-statement pass is byte-identical
+to the F-079 run except p11.
+
+**S7 (classification).** **Fixed (2026-11-27).** Row-count divergence on
+AP invoice prompts; sibling of F-074 (inner-join loss) and the invoice-side
 analogue of F-076 (row-count divergence).
 
 **S10 (not checked).** Whether the same sentinel pattern affects the
-`PurchaseOrder` supplier join or the AR entities' customer joins; whether
-more than these 2 invoices carry `VENDOR_ID = -222`.
+`PurchaseOrder` supplier join or the AR entities' customer joins. The
+`ORPHAN_KEYS` list has one entry (Invoice); the other join keys were not
+measured, so an all-zero orphan count for them is an assumption, not a
+finding.
 
