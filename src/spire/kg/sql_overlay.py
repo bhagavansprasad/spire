@@ -199,7 +199,21 @@ _ENTITIES = {
             ("P", "PAYMENT_STATUS_FLAG"),
         ],
         base_joins=[
-            "JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID",
+            # F-083: LEFT, not INNER. AP_INVOICES_ALL.VENDOR_ID is never
+            # NULL, but 11,227 of 53,129 rows carry a VENDOR_ID with no
+            # POZ_SUPPLIERS row (the sentinel -222 among them), so an
+            # inner join silently dropped 21% of invoices — with no NULL
+            # to show for it. REST returns those invoices with a supplier
+            # name and a null SupplierNumber.
+            #
+            # SupplierNumber therefore comes through as NULL here, which
+            # is what REST reports. The supplier NAME lives on the invoice
+            # itself: AP_INVOICES_ALL.PARTY_ID -> HZ_PARTIES.PARTY_NAME
+            # returns 'TEXAS CORP' / 'Info-Systems Pvt Ltd' for the two
+            # sentinel rows and agrees with the supplier path on normal
+            # invoices. (Joining POZ_SUPPLIERS here is about SEGMENT1
+            # only; the party name is not projected by this entity.)
+            "LEFT JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID",
         ],
     ),
     "ReceivablesInvoice": EntitySpec(
