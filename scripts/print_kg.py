@@ -63,7 +63,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 239,
+        "expected_rows": 244,
     },
     {
         "name": "kg_entity_sql",
@@ -142,7 +142,10 @@ TABLES: list[dict] = [
         "sql": "SELECT vocab_kind, term, canonical_value, notes "
                "FROM kg_vocabulary ORDER BY vocab_kind, term",
         "clob_cols": set(),
-        "expected_rows": 137,
+        # Was 137, which had drifted: the seed has seeded 138 since the AP-1
+        # synonym row landed, and test_kg_metadata already asserted 138. This
+        # tripwire would have failed the first time anyone ran print_kg.
+        "expected_rows": 145,
     },
     {
         "name": "kg_pattern_binding",
