@@ -22,6 +22,7 @@ against the current branch before being used as implementation truth.
 | Check the known-failure queue | [Fix Plan](fixes/FIX_PLAN.md); confirm its status against the latest entries and current work |
 | Apply the repository rules | [Working Style](plan/WORKING_STYLE.md) |
 | Find SME module test context | [Expected answers](../prompts/sme_module_a/sme_module_a_expected.md) and the [dated prompt sheet](../prompts/sme_module_a/PROMPT_SHEET_2026-11-21.md) |
+| Add or extend Fusion module support | [Module-support roadmap](plan/module-support/MODULE_SUPPORT_ROADMAP.md) for order and gates; [playbook](plan/module-support/MODULE_SUPPORT_PLAYBOOK.md) for the code procedure |
 | Find Fusion endpoint notes | [Fusion Endpoints Reference](reference/spire_fusion_endpoints_reference.md); verify pod-specific details before use |
 
 ## Project and operator guides
@@ -51,6 +52,7 @@ against the current branch before being used as implementation truth.
 | [WORKING_STYLE.md](plan/WORKING_STYLE.md) | The project rulebook: behavior rules, editing mechanics, evidence standards, and durable conventions | Governs every session; the long form of `.github/copilot-instructions.md` |
 | [PENDING_KG_SCHEMA_CORPUS.md](plan/PENDING_KG_SCHEMA_CORPUS.md) | KG schema corpus work register and progress notes | Contains a 2026-11-19 status snapshot; reconcile it with current code, branch, and fix queue |
 | [sme_prompts_status/](plan/sme_prompts_status/README.md) | The 40-prompt SME set: per-run results, the open SP queue, cross-run comparison, and resume context | Live queue; read `HANDOFF.md` first |
+| [module-support/](plan/module-support/STATUS.md) | Fusion module-support planning: portfolio and priority, the eight delivery gates, and the REST-first implementation playbook | Planning baseline; REST is the delivery path and SQL is deferred |
 | [HANDOVER_KG_SCHEMA.md](plan/HANDOVER_KG_SCHEMA.md) | Phase 1 KG schema strategy and handover | Historical handover; later revisions in the phase documents and pending register supersede parts of it |
 | [HANDOVER_KG_SCHEMA_PHASE2.md](plan/HANDOVER_KG_SCHEMA_PHASE2.md) | Phase 2 schema discovery, reversals, and role-map work | Historical handover; consult the pending register for the dated follow-on state |
 | [SESSION_STATUS_2026-11-19.md](plan/SESSION_STATUS_2026-11-19.md) | Evidence-backed KG schema and SQL-emitter status at that session close | Historical point-in-time snapshot; not current repository status |
