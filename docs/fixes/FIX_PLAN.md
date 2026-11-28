@@ -14,12 +14,13 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
 **Status:** **Open — one row.** **F-087** (the default test suite runs
-live-pod tests and hangs) is open. **F-089** is fixed (this branch): the
-measure qualifier put the alias on a function name, so
-`SUM(P.GREATEST(...))` failed with `ORA-00904` even though the answer was
-right. **F-088** is fixed and verified (PR #237): one result, one `Answer:`
-heading. **F-086** is fixed and verified end to end (PR #233) and
-**F-081/078/079** headings were corrected to match their own S7.
+live-pod tests and hangs) is open. **F-090** is fixed (this branch): the
+prompt harness scored an answer that showed no requested column as `[ok]`.
+**F-089** is fixed (PR #238): the measure qualifier put the alias on a
+function name, so `SUM(P.GREATEST(...))` failed with `ORA-00904` even though
+the answer was right. **F-088** is fixed and verified (PR #237): one result,
+one `Answer:` heading. **F-086** is fixed and verified end to end (PR #233)
+and **F-081/078/079** headings were corrected to match their own S7.
 Everything earlier in this file is fixed and live-verified on dev49:
 **F-076 through F-085**.
 
@@ -2489,6 +2490,125 @@ columns left alone; and a sweep over **every** template in `OVERLAY.aggregations
 asserting none emits `<alias>.<IDENT>(`. The last one is the guard that a
 future composite cannot slip past. The assertions were checked against the
 pre-fix implementation to confirm they fail on it.
+
+---
+
+### F-090 — an answer that showed nothing tallied as `[ok]` (S1, FIXED)
+
+**R (reproduce).** Ran the 10 AP prompts from
+`prompts/sme_module_a/sme_module_a_litmus.txt` (p11–p20) on merged `master`
+through `scripts/run_prompt_set.py`. The harness reported:
+
+```
+--- ap_prompts: 10/10 clean, 551s ---
+  [ok] (11.7s) Show the payment details for invoice ERS-53004-755598. ...
+  [ok] (15.8s) Check whether invoice ERS-53004-755598 has completed ...
+TOTAL: 10/10 ran cleanly.
+```
+
+Two of those `[ok]` prompts had answers that were, in full:
+
+```
+Answer:
+
+Note: the following columns aren't available on Invoice: 'payment number',
+'payment date', 'payment method', 'payment amount', 'payment status'.
+Available columns: ApprovalStatus, CreatedBy, ...
+
+(1 record(s) matched; no requested column was available.)
+```
+
+**S0 (claim).** The harness labels a prompt `ok` whenever the pipeline did not
+refuse and did not raise, without asking whether the answer carried any
+information. An answer with zero usable columns is scored identically to one
+that answered fully.
+
+**S1 (harm).** The roll-up is the only signal a batch run gives. It said
+10/10 clean on a run where, read properly, five prompts failed. That is worse
+than a missing signal: it actively certifies a run as better than it was, and
+it is the number a reader skims.
+
+**S2 (evidence).** `evidence/t_run_ap10.txt` — the 10/10 summary with p17 and
+p18 as `[ok]` and their empty bodies. The same run, graded by hand: 3 pass,
+2 partial, 5 fail.
+
+**S3 (mechanism).** `_run_one` in `scripts/run_prompt_set.py` had exactly
+three exits — `refused`, `error`, `ok` — where `ok` was the fall-through after
+`render_answer`. Nothing inspected `state["intent"].fields` or
+`unresolved_fields`, which the function already held in `_fields` and
+`_unresolved` for the diagnostics block.
+
+**S4 (probable root cause).** The label answers "did the pipeline work?" and
+was read as "did the reader get an answer?". Those coincide until a query is
+well-formed but asks for columns the entity does not have — which is exactly
+what COL-03 (F-081) allows by design: an unknown column does not refuse the
+query, it is reported. The harness never learned about that decision.
+
+**S5 (disprove one alternative).** *p17 and p18 are legitimate refusals of
+out-of-scope work, so `ok` is fine.* No. A refusal is a distinct, deliberate
+outcome with its own label and its own message ("Reason: … Solution: …
+Example: …"), and the harness already routes it separately. These two prompts
+were not refused: they were executed, matched a record, and produced an empty
+column set. Calling that `ok` conflates "declined" with "delivered nothing".
+
+**S6 (falsifier).** "If the label is the defect, then adding the structural
+test must flip exactly p17 and p18 and leave p12 and p14 alone." Run:
+`evidence/t_f090_rerun.txt` and `evidence/t_f090_partial.txt`.
+
+```
+p17  [empty: 0 of 5 requested column(s) available on Invoice — 12.1s]
+p18  [empty: 0 of 3 requested column(s) available on Invoice — 10.6s]
+TOTAL: 0/2 ran cleanly.        (exit=1)
+
+p12  [ok — 10.8s]      p14  [ok — 68.9s]
+TOTAL: 2/2 ran cleanly.        (exit=0)
+```
+
+p12 and p14 both name an unavailable column (BusinessUnit; "remaining
+balance") but also show real columns, so both must stay `ok` — and did.
+Passed on both sides.
+
+**S7 (classify).** **Confirmed** (S0–S6 all passed).
+
+**S8 (the miss record).** The harness's own footer had said for months that
+`'ran cleanly' means it did not error. It does NOT mean the answer is
+correct.` The caveat was accurate and was still not enough: it warns a reader
+not to over-read the tally, while the tally itself stayed wrong. A disclaimer
+is not a fix — the number should be right, and the disclaimer then has less to
+carry. The detection is structural (`fields` empty **and** `unresolved`
+populated) rather than a scan for the rendered sentence, because this same
+file already records the failure of matching message wording: the planner-guard
+check used `"require" in err` and broke when a message was reworded.
+
+**S9 (cross-link).** **F-081 / COL-03** is the behaviour that makes the empty
+answer possible (unknown columns are reported, not refused). The five failures
+in this run are traced in the analysis behind **AP-3/AP-4** (holds, zero-amount
+overdue) and in the two shape gaps recorded below as R1a/R1b (derived columns,
+child collections) — not yet register entries.
+
+**S10 (what was NOT checked).** The other eight prompts were not re-run on
+this branch. p11, p13, p15, p16, p19 and p20 were not re-labelled and the
+full-set tally was not recomputed; only the four prompts that discriminate
+between the new rule and the old one were executed. Also unchecked: whether a
+`PARTIAL` label (resolved columns present *and* named columns missing, i.e.
+p12 and p14) would be worth a fourth outcome. It is deliberately not
+introduced here — see S11.
+
+**S11 (coverage expansion).**
+`tests/test_f090_empty_answer_label.py` — 8 tests over the extracted
+`empty_answer_label` helper: p17's and p18's exact shapes flagged; p12's and
+p14's partial misses not flagged; naming no columns at all not flagged; absent
+or empty inputs not inventing a failure; and the roll-up's `_is_failure`
+predicate asserted to agree with the new label, so the label cannot become
+decoration. The assertions were checked against the pre-fix behaviour (every
+non-refusal path returning `ok`, i.e. the helper returning `None`) and fail on
+it.
+
+Not done here, on purpose: a distinct `partial:` label. p12 and p14 are
+"answered, with a named column unavailable" and a reader might want that
+counted separately from a clean pass. It is a behaviour change to the score
+itself, not a correction of a wrong one, so it needs a decision rather than a
+patch.
 
 ---
 
