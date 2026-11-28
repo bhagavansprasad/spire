@@ -479,7 +479,17 @@ def _format_sql(plan):
         return f"[show-sql] emitter unavailable: {exc}"
     if not plan:
         return "SQL projection: (empty plan)"
-    statements = _emit_sql(plan)
+    # The emitter RAISES by design for a step it cannot project — an arg in
+    # sql_disabled_args, or one with no FilterSpec. That is a fact about one
+    # prompt's plan, not a reason to end the batch: this whole block is a
+    # print-only diagnostic, so an unprojectable plan must be reported and
+    # the run must continue. Before this catch, the first such plan killed
+    # promptkit outright, so a 40-prompt set stopped at the first
+    # unprojectable prompt and every later prompt went unrun.
+    try:
+        statements = _emit_sql(plan)
+    except Exception as exc:  # noqa: BLE001
+        return f"SQL projection: (unavailable) {type(exc).__name__}: {exc}"
     parts = ["SQL projection:"]
     for i, stmt in enumerate(statements, start=1):
         if len(statements) > 1:
