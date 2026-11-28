@@ -27,4 +27,4 @@ sets:
   - date_filters/date_filters_verify
   - fields_and_include/fields_and_include_verify
   - modes/modes_verify
-  - sme/sme_testcases
+  - sme_qei/sme_qei_testcases

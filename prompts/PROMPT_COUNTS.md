@@ -36,7 +36,7 @@ A count is the number of non-blank, non-comment lines in a file. A prompt that a
 | retest/retest_prompts.txt | 17 |
 | scorer/scorer_parser_stress.txt | 68 |
 | scorer/scorer_tool_selection.txt | 24 |
-| sme/sme_testcases.txt | 34 |
+| sme_qei/sme_qei_testcases.txt | 34 |
 | **Total** | **236** |
 
 Grand total across both tables: **1,768**.

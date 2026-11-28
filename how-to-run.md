@@ -639,7 +639,7 @@ then `--validate` / `--run`. Full inventory in `docs/prompt-sets/SURFACE.md`.
 | `prompts/payables_supplier/` (etc.) | cross-module capabilities, top-level folders |
 | `prompts/refusals/refusals_smoke.txt` | out-of-scope. **A refusal is a pass** |
 | `prompts/columns/columns_verify.txt` | column selection |
-| `prompts/sme/sme_testcases.txt` | external QA corpus, verbatim |
+| `prompts/sme_qei/sme_qei_testcases.txt` | external QA corpus, verbatim |
 
 > `prompts/scorer/` holds parser-scorer corpora in a different format
 > (`EXPECT ||| prompt`) — not for promptkit.

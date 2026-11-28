@@ -19,3 +19,18 @@ default_dev:
     dsn: "localhost:1521/FREEPDB1"
     username: "spire"
     password: "your-oracle-password"
+
+  # Data scope (optional) — F-076.
+  #
+  # The business units the Fusion user can actually see. REST is scoped by
+  # the integration user's security profile, so pod row counts and REST row
+  # counts legitimately differ; declaring the visible set makes the emitted
+  # SQL reproduce REST's scope instead of counting rows the user cannot see.
+  #
+  # Names must match HR_OPERATING_UNITS.NAME, which is also what REST's
+  # `BusinessUnit` field returns. Omit this block for no scoping (SQL then
+  # returns every business unit — a superset of REST).
+  scope:
+    visible_business_units:
+      - "US1 Business Unit"
+      - "UK Business Unit"

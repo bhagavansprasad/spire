@@ -150,6 +150,34 @@ def plan_node(state: GraphState) -> dict:
         return {"error": f"plan: {exc}"}
 
 
+# ── Payload field aliases (F-081) ─────────────────────────────────────
+#
+# `intent.fields` speaks the REST/KG vocabulary; a tool payload speaks the
+# Fusion API's own key names. Where the two differ for the same quantity,
+# the projection translates. Without this, `_project_outputs` kept only
+# the keys present in both and dropped the rest with no signal, so
+# "supplier name, buyer name, currency, total, status" rendered three
+# columns and two em dashes while every layer below held the data
+# (`Supplier: 'EDF'`, `Buyer: 'Fox, Dan'`).
+#
+# A flat map is safe because the alias is consulted only when the exact
+# key is missing from the record, so an entity that genuinely carries
+# `SupplierName` keeps it.
+#
+# Every entry must cite the evidence that the two names are the same
+# quantity; do not add a "close enough" pair here. The coverage validator
+# (`scripts/validate_sql_coverage.py`) reports intent fields with no
+# payload alias, so a new mismatch shows up there first.
+_FIELD_ALIASES: dict[str, str] = {
+    # PO tool payload key: `Supplier` (HZ_PARTIES.PARTY_NAME via VENDOR_ID).
+    # KG: PurchaseOrder.SupplierName -> HZ_PARTIES.PARTY_NAME.
+    "SupplierName": "Supplier",
+    # PO tool payload key: `Buyer` (PER_PERSON_NAMES_F.DISPLAY_NAME).
+    # KG: PurchaseOrder.BuyerName -> PER_PERSON_NAMES_F.DISPLAY_NAME.
+    "BuyerName": "Buyer",
+}
+
+
 def _project_outputs(outputs: dict, fields: list) -> dict:
     """Trim each record in each output bucket to the requested fields.
 
@@ -157,9 +185,40 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
     missing all of them is left untouched (better to show something than
     an empty row). Returns a new dict; the original outputs are unchanged,
     so the synthesizer still sees full records.
+
+    Kept as a thin wrapper so existing callers and tests are unchanged;
+    the gap information that F-081 needs comes from
+    `_project_outputs_and_gaps`.
+    """
+    return _project_outputs_and_gaps(outputs, fields)[0]
+
+
+def _project_outputs_and_gaps(
+    outputs: dict, fields: list, aliases: dict | None = None
+) -> tuple[dict, list]:
+    """Project to `fields` and report the fields that did not resolve.
+
+    F-081: the intent carries REST/KG vocabulary (`SupplierName`,
+    `BuyerName`) while the tool payload uses the API's own keys
+    (`Supplier`, `Buyer`). The old body kept the intersection and threw
+    the rest away, so a five-column request silently rendered three, with
+    em dashes where the two dropped columns should be and nothing saying
+    anything was lost. Two changes:
+
+    1. A requested field that is absent from a record is filled from its
+       alias, keeping the requested name as the column header. Applied
+       only when the exact key is missing, so an entity that really
+       carries `SupplierName` is never shadowed.
+    2. Fields that still do not resolve are RETURNED, not swallowed. The
+       harm was the silence as much as the trimming.
+
+    The alias test is per-record rather than per-entity on purpose: a
+    bucket can hold records from different steps, and the per-record test
+    is both stricter and simpler.
     """
     if not fields:
-        return outputs
+        return outputs, []
+    aliases = _FIELD_ALIASES if aliases is None else aliases
     wanted = list(fields)
     projected: dict = {}
     for name, records in outputs.items():
@@ -185,10 +244,25 @@ def _project_outputs(outputs: dict, fields: list) -> dict:
             if not isinstance(rec, dict):
                 new_records.append(rec)
                 continue
-            trimmed = {k: rec[k] for k in wanted if k in rec}
+            trimmed = {}
+            for key in wanted:
+                if key in rec:
+                    trimmed[key] = rec[key]
+                    continue
+                alias = aliases.get(key)
+                if alias is not None and alias in rec:
+                    trimmed[key] = rec[alias]
             new_records.append(trimmed if trimmed else rec)
         projected[name] = new_records
-    return projected
+    present = {
+        key
+        for recs in projected.values()
+        for rec in recs
+        if isinstance(rec, dict)
+        for key in rec
+    }
+    return projected, [k for k in wanted if k not in present]
+
 
 
 # ── Execution cache ───────────────────────────────────────────────────
@@ -317,10 +391,15 @@ async def execute_node(state: GraphState) -> dict:
                 )
 
         fields = getattr(state.get("intent"), "fields", []) or []
-        projected = _project_outputs(outputs, fields)
+        projected, gaps = _project_outputs_and_gaps(outputs, fields)
         return {
             "outputs": outputs,
             "projected_outputs": projected,
+            # F-081: requested columns that no payload key (and no alias)
+            # could satisfy. The formatter folds these into the
+            # "column isn't available" note, so a dropped column is
+            # reported instead of rendering as a silent em dash.
+            "projection_gaps": gaps,
             "truncation_by_step": truncation,
             "metadata_by_step": metadata,   # added
         }

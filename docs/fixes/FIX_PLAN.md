@@ -1,28 +1,47 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F081-Litmus-Findings` (off `master`).
-Prior: `Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge
-`8030439`); SME litmus docs merged via PR #218 (merge `ce269a5`).
+**Branch:** current work on `Phase3-F084-Supplier-Status-Projection` (off `master`).
+Prior: `Phase3-F080b-Supplier-Status-Carrier` merged via PR #223 (merge `93185ee`);
+`Phase3-F083-Invoice-Supplier-Join` merged via PR #222 (merge `908e396`);
+`Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
+`Phase3-F078-SQL-Filter-Specs` merged via PR #220 (merge `196b5a7`);
+`Phase3-F081-Litmus-Findings` (litmus findings F-078..F-082);
+`Phase3-F073-Receipt-Site-Filter` merged via PR #217 (merge `8030439`);
+SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** Open — F-073 (customer_site filter), F-072 (account balances),
-F-075 (UnappliedAmount) fixed this window; F-061 decided (leave);
-F-076 (BU scoping) new Candidate; no regressions
+**Status:** **Closed** — every finding recorded in this file is fixed and
+live-verified on dev49: **F-076, F-077, F-078, F-079, F-080, F-081, F-082,
+F-083, F-084 and F-085**. All 22 litmus statements execute, and every
+statement REST can compare agrees with it.
+
+**This queue is empty.** F-076 and F-077 were the last two, both fixed
+2026-11-27.
+
+**Evidence-path note (2026-11-28).** All 400+ scratch evidence artifacts were
+moved out of the repo root into `evidence/`, which is gitignored. Citations
+below that read `t_f081_litmus_run.txt` or `t_f081_sql/pNN.sql` refer to
+`evidence/t_f081_litmus_run.txt` and `evidence/t_f081_sql/pNN.sql`. The
+`evidence/` prefix is omitted in the body text so the original citations stay
+readable; the filenames themselves are unchanged. Per-run SME results,
+comparison and the live queue now live in `docs/plan/sme_prompts_status/`.
+
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
 
 **2026-11-21 addendum.** The first full run of the SME Module A litmus set
-(`prompts/sme_modules/sme_modules_litmus.txt`, log `t_f081_litmus_run.txt`)
+(`prompts/sme_module_a/sme_module_a_litmus.txt`, log `t_f081_litmus_run.txt`)
 scored **24 pass / 16 fail of 40**, and execution of every emitted SQL
 statement (`t_f081_sql/`) found **1 statement of 22 agreeing with REST**.
 Five new findings are recorded in §6 — **F-078** (unmapped args → invalid
 SQL, 9 of 22 statements), **F-079** (number bound to internal id, 6
 statements → 0 rows), **F-080** (two wrong predicates → false zeros),
 **F-081** (requested columns silently dropped), **F-082** (AR by-number
-false negative). F-076 and F-077 remain open. Recommended fix order is at
-the end of §6.
+false negative), **F-077** (AP invoice lines refused as "not in the API
+schema"). F-076 and F-077 are both closed; **every finding in this queue
+is now fixed**. Recommended fix order is at the end of §6.
 
 ---
 
@@ -606,27 +625,129 @@ S.CASH_RECEIPT_ID = R.CASH_RECEIPT_ID), 0)` returns 0 / 0 / 0 / 0 for the
 four above (= REST), 1,135.2 (300000066476397), 550 (300000066476549),
 474.85 (619474), 438.98 (619507) — all equal REST (`t_f072_unapplied_verify.csv`).
 
-### F-076 — emitted SQL is not business-unit scoped (Candidate, OPEN)
+### F-076 — emitted SQL is not business-unit scoped (FIXED, S1)
 
-**S0.** REST AR collections return only the session's business unit; the
-emitted SQL has no `ORG_ID` filter, so it also counts rows from other BUs.
+**Status: fixed 2026-11-27 for `StandardReceipt` only.** The recorded
+mechanism was wrong and is corrected below. The other AR entities are
+**not** fixed, and deliberately so — see S5.
+
+**S0 (original claim).** REST AR collections return only the session's
+business unit; the emitted SQL has no `ORG_ID` filter, so it also counts
+rows from other BUs.
 
 **S1 (harm).** Row-count and total divergence on multi-org accounts:
 `AR_CASH_RECEIPTS_ALL` holds account 26370 in three orgs — 1,692
-(`300000046987012`, the REST BU) + 605 + 544. The emitted SQL returns 745
-Santa Clara receipts for the account where REST returns 742; the 3 extra
-are `ORG_ID=300000047498175` (`t_f073_outliers.txt`). Same shape for
-account *totals* (2,841 pod vs 1,692 REST) on every AR SQL answer, not
-just site filters.
+(`300000046987012`, the REST BU) + 605 + 544. The emitted SQL returned 745
+Santa Clara receipts for the account where REST returned 742; the 3 extra
+were `ORG_ID=300000047498175` (`t_f073_outliers.txt`). Same shape for
+account *totals* (2,841 pod vs 1,692 REST) on every AR SQL answer, not just
+site filters.
 
-**S3 (mechanism).** No `ORG_ID`/BU predicate appears in any AR
-`EntitySpec` or `kg_sql_column`; the KG has `BusinessUnit` documented as
-"numeric FK, REST is a name" and dropped.
+**S2 (re-measured 2026-11-27 — the premise was WRONG).** REST is **not**
+scoped to one business unit. It sees **14 of the 16** AR orgs. The full
+decomposition of the pod, every row accounted for:
 
-**S7 (classification).** Candidate. Corpus-wide, needs a deliberate
-decision (bind the session BU via `ORG_ID`, or accept BU-superset answers
-as richer-than-REST and document it) — out of scope for F-073 because it
-is not site-specific. Do **not** fix by guessing a BU id.
+    REST /standardReceipts total ........ 63,065
+    France Business Unit (hidden) .......  9,316
+    UK Business Unit (hidden) ...........  7,352
+    TYPE='MISC', 1 row (hidden) .........      1
+    ------------------------------------------------
+    pod AR_CASH_RECEIPTS_ALL total ...... 79,734   <- exact
+
+Per-BU agreement, probed by name via `q=BusinessUnit='...'` — 9 of 9
+exact:
+
+    US1 50004 = 50004     Supremo 12261 = 12261   University 628 = 628
+    Healthcare 117 = 117  Progress 33 = 33        India 4 = 4
+    Germany 2 = 2         France 0 (pod 9,316)    UK 0 (pod 7,352)
+
+**S3 (mechanism, corrected).** Two independent rules, neither of which is
+"the session BU":
+
+1. **Endpoint semantics.** `/standardReceipts` does not expose
+   miscellaneous receipts — the single `TYPE='MISC'` row is absent from
+   REST while all 79,733 `TYPE='CASH'` rows are reachable.
+2. **Data access.** The integration user's security profile hides France
+   and UK. Nothing in the business data encodes this; `SET_OF_BOOKS_ID`
+   does not group them (France `300000047488121` and UK `300000047488112`
+   are distinct ledgers, and the visible set spans several ledgers too).
+
+**S4 (root cause).** The SQL overlay models the physical tables, and the
+physical tables are not what REST returns. The gap between "rows in the
+table" and "rows this user can see" was never represented anywhere.
+
+**S5 (disproved fixes — this is why the original S6 would have hurt).**
+
+- **"Bind the session BU via `ORG_ID`" is wrong.** A single BU is not the
+  REST scope. `US1` alone is 50,004 receipts, i.e. **13,061 below** REST.
+  It would have converted an over-count into an under-count.
+- **"Accept BU-superset answers and document it" is also wrong.** The
+  extra rows are France/UK ledgers the user genuinely cannot see — not
+  extra detail.
+- **The scope is per-resource, so it cannot be applied globally.**
+  `/receivablesInvoices` returns UK invoices (its own first row is
+  `BusinessUnit='UK Business Unit'`) even though it hides UK receipts, and
+  `BusinessUnit` is not even queryable there (HTTP 400). Applying the
+  receipts rule to AR invoices would delete 47,838 real rows.
+- **AP is unaffected.** `/invoices` = 53,163 = pod 53,163 exactly. This is
+  an AR-only finding.
+
+**S6 (fix applied).** A persona-declared data scope, consumed by the
+emitter.
+
+| Layer | Change |
+|---|---|
+| `config.py` | new optional `DataScope.visible_business_units`; `Persona.scope` |
+| `sql_overlay.py` | `EntitySpec.scope_predicates` + `scope_assumption`; `TYPE='CASH'` declared on `StandardReceipt`; new assumption text |
+| `sql_emitter.py` | scope predicates seeded into `WHERE` *before* user filters; `_apply_data_scope` injects the BU filter from the persona; `_BU_SCOPED_COLUMNS = {"StandardReceipt": "ORG_ID"}` |
+| `personas.yaml` / `personas.example.yaml` | the visible set, documented, with the unset default spelled out |
+| `tests/test_f076_data_scope.py` | 18 tests |
+
+Design choices worth stating:
+
+- **Names, not ids.** The predicate is
+  `R.ORG_ID IN (SELECT ORGANIZATION_ID FROM HR_OPERATING_UNITS WHERE NAME IN (...))`.
+  Hardcoded `ORG_ID` values would rot on the next pod provisioning; the
+  names are what both the persona and REST's `BusinessUnit` field use.
+- **The BU half is optional; the endpoint half is not.** `TYPE='CASH'` is
+  a property of the resource and is always applied. The BU list is
+  unset by default, which reproduces the pre-F-076 behaviour exactly — so
+  an environment that has not measured its own scope is not silently
+  narrowed.
+- **Scope predicates are seeded before user filters** and survive the
+  KG rebuild (they are a data-access fact, not a column fact, so they are
+  carried across the `EntitySpec` reconstruction).
+
+**Verification (dev49, `runsql.sh` + REST, same session).**
+
+    emitted receipts statement      63,065
+    REST /standardReceipts total    63,065   -> AGREE exactly
+
+    account 26370 (the S1 case)      1,692
+    REST account 26370               1,692   -> AGREE exactly (was 2,841)
+
+Scope confinement checked by emitting the other statements and asserting
+the predicate is absent: `search_receivables_invoices`, `search_invoices`,
+`search_suppliers`, `search_purchase_orders` and
+`get_receivables_invoice_by_id` emit no `ORG_ID` / `HR_OPERATING_UNITS`
+predicate.
+
+**S7 (classification).** Fixed for the entity where it was measured.
+Silent row-count divergence between SQL and REST, AR-only.
+
+**S10 (not checked — deliberately).** The per-resource scope of the other
+18 entities. The mechanism is now available (`_BU_SCOPED_COLUMNS`), but
+adding an entity is a claim that needs its own measurement — the AR-invoice
+case proves extrapolating from receipts is wrong. Also unmeasured:
+`/receivablesInvoices` reports 201,385 against a pod count of 207,243; the
+5,858 gap is **not** the France/UK rule and has a different, unknown cause.
+
+**S11 (fragility, recorded not fixed).** A visible list fails *closed*: a
+business unit provisioned later and left out of the persona would silently
+drop rows from counts. An exclusion list would fail *open* instead. Neither
+is derivable, because the boundary is a security-profile property. The
+persona is where it belongs; the mitigation is that the assumption text is
+printed in every emitted statement so the restriction is visible.
 
 
 ### F-074 — `StandardReceipt` nullable join key `AR_CASH_RECEIPTS_ALL.PAY_FROM_CUSTOMER` has 39 NULLs (FIXED)
@@ -704,7 +825,7 @@ window) is the first command to run it.
 ## 6. Litmus-run findings (2026-11-21, `Phase3-F081-Litmus-Findings`)
 
 Source of all five: the first full run of
-`prompts/sme_modules/sme_modules_litmus.txt` (40 prompts, log
+`prompts/sme_module_a/sme_module_a_litmus.txt` (40 prompts, log
 `t_f081_litmus_run.txt`), then execution of every emitted SQL statement
 via `./runsql.sh` (`t_f081_sql/pNN.sql` → `pNN.out`).
 
@@ -773,17 +894,75 @@ the Plan block shows the arg present and correctly valued
 returns data. Not "the pod rejects the SQL" either: the same statement
 runs once a predicate is supplied.
 
-**S6 (fix shape, not yet applied).** (a) Author the missing specs for the
-in-scope args; (b) make the emitter **fail loudly** — if any tool_arg is
-unmapped, emit a marker that makes the statement unusable-by-accident
-(e.g. a `1=1 AND -- unmapped` is worse; better: raise, or emit `WHERE 1=0`
-with an explicit `-- SQL DISABLED: unmapped arg X` banner) so an
-unrunnable statement is never presented as a projection; (c) add a guard
-test that every declared tool arg has a spec or is in an explicit
-"not-in-SQL" allowlist.
+**S6 (implemented 2026-11-26; live-verified 2026-11-27).**
+The branch adds specs for the observed invoice-number, supplier-name,
+unpaid, created-since, account-number, supplier-number, and open-only args.
+The emitter now raises instead of returning a partial query for an
+unmapped arg or unresolved literal; intentional SQL-disabled args have
+explicit reasons and also raise if used. `scripts/validate_sql_coverage.py`
+checks registered tool signatures, overlay/intent-field mappings, and
+known substring/payload-alias gaps. It currently reports the open
+F-080b/F-081 mismatches. `overdue` is deliberately SQL-disabled until a
+populated due-date carrier is verified on this pod; the KG records that
+the AP invoice header has no due-date field.
 
-**S7 (classification).** **Open, S1 harm.** Highest priority of the four:
-it is the widest blast radius (9/22) and the cheapest to detect.
+Commit `8fbd4eb` (`F-078: Add SQL filter coverage and fail-loud emission`)
+is on branch `Phase3-F078-SQL-Filter-Specs`; targeted tests passed (26).
+The coverage validator still reports the known F-080b/F-081 gaps and no
+uncovered tool arguments.
+
+The regenerated statements have not been compared against the pod or REST.
+The dev42 BIP WSDLs respond, but authenticated `CatalogService` calls failed
+with an invalid-username-or-password SOAP fault; `runsql.sh` did not return
+SQL results. A BIP report was visible in the browser, but its existence
+does not establish that it accepts and executes `P_SQL`. No report or
+catalog object was created through SOAP. A separate fixed-query diagnostic
+report (`SELECT 1 FROM DUAL`) was approved, but creation is blocked until
+SOAP authentication works. Do not record credentials in this file or
+commit `personas.yaml`.
+
+Keep F-078 open until the pod check succeeds, the remaining blocked filter
+is resolved or explicitly accepted as SQL-disabled, and each result is
+compared with REST.
+
+**S7 (classification).** **Fixed (2026-11-27).** Every statement the
+emitter produces for this prompt set now executes, and every statement
+REST can check agrees with it. Residual zero-row answers belong to
+F-079 / F-080b / F-082.
+
+**Verification (2026-11-27, dev49, FUSIONU4).** BIP unblocked and all 22
+statements run. `runsql.sh` repaired: SOAP 1.1 on `PublicReportService`,
+credentials in the body (HTTP Basic alone yields
+`initSession Failure: due to empty userID`), HTTP-status and `faultstring`
+checks, `ORA-*` lines surfaced, and `xml` added to the report's
+`outputFormat` list. The report data model now runs
+`SELECT DBMS_XMLGEN.GETXML(:P_SQL) AS XMLDATA FROM DUAL` with a `P_SQL`
+string parameter, so the report accepts an arbitrary single statement.
+Full table: `t_f078_rest_compare.txt`.
+
+Result: **0 of 22 statements fail to execute** (was 9/22 ORA-00936).
+
+| Agree | SQL = REST |
+|---|---|
+| p12 / p17 / p18 (invoice number) | 1 = 1 |
+| p14 (unpaid, Staffing Services) | 827 = 827 |
+| p31 (`Supplier LIKE '%Dell%'`) | 1 = 1 |
+| p36 (addresses, supplier 1262) | 22 = 22 REST sites |
+| p37 (small-business supplier base) | 332 = 332 REST suppliers |
+
+Remaining divergence is owned by other findings: p02–p05 zero rows
+(F-079), p22 zero rows (F-082), p39 zero rows where REST reports 2
+expired suppliers (F-080b re-confirmed here: `InactiveDate <= today` = 2,
+`END_DATE_ACTIVE <= SYSDATE` = 2, `ENABLED_FLAG='N'` = 0). p11 returns
+104 of REST's 106 — a new inner-join defect, recorded as **F-083**.
+
+**Not REST-verifiable on dev49** (pod environment, not a code defect):
+`purchaseOrders` / `purchaseOrderSchedules` return 0 rows and `count=0`
+for this user (`purchaseOrders/2144` → 404) while the pod holds 13,473
+CLOSED orders, so p01/p06 have no REST baseline;
+`receivablesCustomerAccountActivities` returns 403, so p24/p25/p28/p30
+have none. p20 is an aggregation with no REST equivalent. p16 stays
+SQL-disabled by design (`overdue`).
 
 ### F-079 — an entity *number* is bound to an internal *id* (OPEN, S1)
 
@@ -836,10 +1015,66 @@ the plan — separate args (`po_number` vs `po_header_id`) or a
 `TRX_NUMBER` vs `CUSTOMER_TRX_ID`. This also removes the F-082 condition
 below.
 
-**S7 (classification).** **Open, S1 harm.** Silent wrong answer, six
-statements, and it is the mechanism behind one of the 16 prompt failures.
+**S6 correction (2026-11-27) — that fix shape does not work.** Splitting
+the arg or tagging the space both require someone to know which space the
+value is in *before* the plan is built, and that is precisely what a bare
+number does not say. The ambiguity is why `get_purchase_order_by_id`
+resolves instead of fetches (its own module docstring records the P6
+history: every test had used 2144, which happens to be a `PO_HEADER_ID`).
+Splitting the arg would only move the guess into the parser, where a wrong
+guess produces the same silent 0 rows. **The resolution is a runtime fact,
+so the SQL has to mirror it.**
 
-### F-080 — two filter specs point at the wrong predicate (OPEN, S1)
+**S7 / Resolution (2026-11-27).** **Fixed.** The two by-id `FilterSpec`s now
+resolve the same way the tools do — printed number first, internal id only
+when no row claims that number:
+
+```sql
+-- get_purchase_order_by_id.po_header_id
+{alias}.PO_HEADER_ID = COALESCE(
+  (SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H WHERE H.SEGMENT1 = {value}),
+  (SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H WHERE H.PO_HEADER_ID = {value}))
+
+-- get_receivables_invoice_by_id.customer_transaction_id
+{alias}.CUSTOMER_TRX_ID = COALESCE(
+  (SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T WHERE T.TRX_NUMBER = {value}),
+  (SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T WHERE T.CUSTOMER_TRX_ID = {value}))
+```
+
+`COALESCE` was chosen over `SEGMENT1 = :v OR PO_HEADER_ID = :v` deliberately:
+the `OR` form returns **two** POs when a number and an id collide, which
+REST never does (it performs one lookup per space). `MIN()` makes the result
+deterministic where the tool's `limit=1` takes whatever the pod returns
+first. Assumptions renamed and documented:
+`po_by_id` → `po_by_id_resolves_number_then_id`,
+`ar_id_maps_to_customer_trx_id` → `ar_id_resolves_number_then_trx_id`.
+
+**Child filters were deliberately left alone.** `get_purchase_order_lines`
+/ `schedules` / `distributions` receive `:iteration_value` from step 1's
+`POHeaderId` (the already-resolved id), so they keep the plain
+`PO_HEADER_ID = {value}` predicate. Re-resolving there would be wrong and
+would cost a subquery per row. A test asserts they are unchanged.
+
+**Verification (dev49).** Re-emitted and executed every statement:
+
+| | before | after |
+|---|---|---|
+| p02 PO 55040 header | 0 rows | **1 row** |
+| p03 lines | 0 | **1** |
+| p04 schedules | 0 | **1** |
+| p05 distributions | 0 | **1** |
+| p22 AR 112390 | 0 | **1** |
+
+p02 now returns `SEGMENT1=55040, PO_HEADER_ID=67, CLOSED, EDF, 12391` —
+the same record the pod holds, where the old predicate
+(`PO_HEADER_ID = '55040'`) matched nothing.
+
+**S7 (classification).** **Fixed (2026-11-27).** Silent wrong answer, six
+statements, and it was the mechanism behind one of the 16 prompt failures.
+Fixed together with F-082 (same decision, two tools).
+
+
+### F-080 — two filter specs point at the wrong predicate (FIXED, S1)
 
 **S0 (claim).** Two specs exist but express the wrong thing, so they
 return zero rows against correct data.
@@ -889,15 +1124,79 @@ time at predicate level rather than projection level.
 **S5 (disproved alternative).** Not "the data is absent" — the corrected
 predicates return 4 and 8 rows on the same pod in the same session.
 
-**S6 (fix shape, not yet applied).** (a) wrap the value in `%…%` for
-`*_contains` args (or make the spec declare `match='contains'` and let the
-emitter do it); (b) re-point `status` at `END_DATE_ACTIVE` (`INACTIVE` →
-`END_DATE_ACTIVE <= SYSDATE`, `ACTIVE` → `END_DATE_ACTIVE IS NULL OR >
-SYSDATE`); (c) extend `validate_kg_schema.py` to run a
-distribution/`COUNT(DISTINCT)` check on every column used in a predicate,
-so an all-one-value column cannot become a filter carrier again.
+**S6 (partial implementation 2026-11-23; not verified).** The emitter now
+supports a `contains` match mode and wraps substring values in `%...%`;
+this corrects F-080a's supplier-name predicate shape. F-080b remains open:
+the `search_suppliers.status` predicate still uses the unpopulated
+`ENABLED_FLAG` carrier. The new SQL coverage validator reports this known
+gap. No pod verification was possible in this window.
 
 **S7 (classification).** **Open, S1 harm.** Two prompts, both silent zeros.
+
+**F-080b Resolution (2026-11-27).** **Fixed.** The carrier is
+`POZ_SUPPLIERS.END_DATE_ACTIVE`, measured rather than chosen:
+
+| Measurement (dev49, one session) | value |
+|---|---|
+| `POZ_SUPPLIERS` rows | 334 |
+| `ENABLED_FLAG` distribution | **`'Y'` on 334/334** — no information |
+| `END_DATE_ACTIVE` populated | 2 rows (both `2022-11-19`) |
+| REST `Status` distribution | ACTIVE 332 / **INACTIVE 2** |
+| REST `InactiveDate` populated | 2 (both `2022-11-19`) |
+| `InactiveDate` == `END_DATE_ACTIVE` per SupplierNumber | **334 matched, 0 mismatches** |
+
+(These figures are from the F-080b session. The demo pod gained a
+supplier between windows, so F-084's later verification reads 335 — every
+count here moved by one on both sides.)
+| `POZ_SUPPLIERS` date/status columns | has `END_DATE_ACTIVE`, `START_DATE_ACTIVE`; **no `INACTIVE_DATE`** |
+
+So REST's `InactiveDate` *is* `END_DATE_ACTIVE` — there is no separate
+column it could be. The old S6 note's `END_DATE_ACTIVE <= SYSDATE` was the
+right column; what was missing was the proof and the ACTIVE half.
+
+ACTIVE and INACTIVE need opposite predicates, so the template branches on
+the resolved literal:
+
+```sql
+CASE WHEN UPPER('INACTIVE') = 'INACTIVE'
+     THEN CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 1 ELSE 0 END
+     ELSE CASE WHEN P.END_DATE_ACTIVE IS NULL
+                 OR P.END_DATE_ACTIVE > TRUNC(SYSDATE) THEN 1 ELSE 0 END
+END = 1
+```
+
+`value_map` still lists only ACTIVE/INACTIVE, so any other status resolves
+to no literal and the emitter **raises** — the F-078 fail-loud rule. A test
+asserts `status='ON_HOLD'` raises instead of quietly returning every
+supplier.
+
+**Validator rule generalised.** The old check was one hardcoded string:
+`if "ENABLED_FLAG" in search_suppliers.status.predicate_template`. That
+only ever guarded the one spec someone had already fixed. It is now a
+`STUB_COLUMNS` table (column → the measurement that makes it a stub,
+sourced from F-060/F-062/F-063/F-080b) checked against **every**
+`FilterSpec.predicate_template`, so the next spec cannot reuse any known
+stub silently. `scripts/validate_sql_coverage.py` now exits 0 — the first
+clean run in this record.
+
+**Verification (dev49, same session).**
+
+| | before | after | REST |
+|---|---|---|---|
+| p39 "inactive suppliers" | **0 rows** | **2 rows** | 2 |
+| same, ACTIVE | — | 332 | 332 |
+
+The two rows are the same suppliers REST reports, by identity not just
+count: `1421 Best Rig Corp` (InactiveDate 2022-11-19),
+`1422 Manali Petro Ltd` (2022-11-19).
+
+**S10 (not checked).** The `<=` vs `<` boundary for a supplier whose
+`END_DATE_ACTIVE` is today is unverified — both populated dates are in the
+past, so the forms are indistinguishable on this pod. A future-dated
+`END_DATE_ACTIVE` is treated as still active by this predicate and no row
+tests that.
+
+**Cross-link.** The projection half of the same stub is **F-084** (new).
 
 ### F-081 — `intent.fields` uses display names, so projection drops real columns (OPEN, S1)
 
@@ -958,35 +1257,121 @@ already exists and works well — prompts 12/16/17/18 used it); (c) add a
 regression test asserting a fully-populated PO row survives projection
 with all requested columns present.
 
-**S7 (classification).** **Open, S1 harm.** Affects every PO response, and
-the failure mode is invisible to the reader.
+**S7 (classification).** **Fixed (2026-11-27).** Both halves of S6 are
+implemented and the reader-visible output is corrected.
+
+**Resolution.** `src/spire/graph/pipeline.py`:
+
+- `_FIELD_ALIASES` — `SupplierName → Supplier`, `BuyerName → Buyer`.
+  Consulted **only when the exact key is missing from the record**, so an
+  entity that genuinely carries `SupplierName` is never shadowed. The
+  requested name stays the column header, which is what the formatter
+  builds its table from.
+- `_project_outputs_and_gaps(outputs, fields, aliases=None)` returns
+  `(projected, gaps)`. `_project_outputs` is now a thin wrapper keeping
+  the old two-argument contract, so no existing caller or test changed.
+- `execute` returns a new `projection_gaps` key alongside
+  `projected_outputs`.
+
+`src/spire/rendering/formatters.py`:
+
+- `_unresolved_columns(state)` merges `intent.unresolved_fields` (names
+  the catalog does not know, COL-03) with `projection_gaps` (names the
+  catalog knows but the payload cannot satisfy). Both render paths use
+  it, so a payload-level gap now reaches the existing
+  "columns aren't available on X" note instead of an unexplained em dash.
+
+**Verification.** Reproduced first against the real function:
+
+    _project_outputs({"po":[rec]}, ["SupplierName","BuyerName",
+                                    "CurrencyCode","Total","Status"])
+    -> {'CurrencyCode': 'GBP', 'Total': 14869.2, 'Status': 'Closed'}
+    SILENTLY DROPPED: ['SupplierName', 'BuyerName']   (no warning)
+
+After the fix, rendered through `_format_projected_table`:
+
+    BEFORE                              AFTER
+    SupplierName | BuyerName | ...      SupplierName | BuyerName | ...
+    —            | —         | ...      EDF          | Fox, Dan  | ...
+
+which is byte-for-byte the reported defect (`FIX_PLAN` §6 prompt 2)
+against the corrected answer.
+
+Pod check (`./runsql.sh`, dev49) — the two columns the projection now
+fills are populated in the emitted SQL itself, so the alias maps onto
+real values rather than onto another empty column:
+
+    BUYER_NAME  ORDER_NUMBER  SUPPLIER_NAME  TOTAL
+    ----------  ------------  -------------  -----
+    Dan Fox     55040         EDF            12391   1 row(s)
+
+(the statement is bound by `SEGMENT1` here because `PO_HEADER_ID='55040'`
+is F-079 — the emitted p02 still returns 0 rows until that lands. `TOTAL`
+is 12391 on dev49; the 14869.2 figure in the S2 evidence above came from
+the earlier pod, and is not part of this finding.)
+
+Tests: `tests/test_f081_field_projection.py` — 10 passed, covering alias
+fill, header preservation, unresolved reporting, exact-key precedence
+over the alias, the F-014 shape-wrapper skip, the empty-fields identity,
+the two-argument wrapper contract, and a guard that every alias target is
+a real PO payload key. Targeted run of the render/projection/parser
+subset: **209 passed, 2 skipped, 3 xfailed**.
+
+`scripts/validate_sql_coverage.py` now reads the same `_FIELD_ALIASES`
+map instead of assuming a `XxxName → Xxx` rule with no registry, so it
+reports only genuinely unfillable columns. Its error list dropped from
+five entries to one:
+
+    before: F-080b + 4 × "PurchaseOrder.{Buyer,Supplier}Name has no
+            payload alias"
+    after : F-080b only
+
+`tests/test_sql_coverage.py` asserts that outcome and, via monkeypatch,
+that removing the alias map makes the four errors reappear — the check
+stays live rather than being neutered by the fix. The earlier assertion
+that the validator *should* report `SupplierName`/`BuyerName` was
+inverted, because it encoded the bug as expected behaviour.
+
+
+**S10 (not checked).** Whether other entities have the same
+display-name/payload split; the alias table holds only the two pairs the
+coverage validator reports. Whether the API/UI path (as opposed to the CLI
+renderer) surfaces `projection_gaps` the same way.
+
 
 ### Fix order (recommended)
 
 | Order | Finding | Why here | Effort |
 |---|---|---|---|
-| 1 | **F-078** | Widest blast radius (9/22), cheapest: author missing specs + make unmapped args loud | M |
-| 2 | **F-081** | Affects every PO answer; fix is a mapping + a warning, no new data model | M |
-| 3 | **F-079** | Silent zeros; needs an identifier-space decision (also unblocks F-082) | M |
-| 4 | **F-080** | Two small spec fixes + a validator rule that prevents recurrence | S |
-| 5 | **F-076** | Blocks the *acceptance bar* for all of the above (SQL is a BU superset) | L |
-| 6 | **F-077** | Prompt-13 receipts; same "silent zero" class as F-079 | M |
+| ~~1~~ | ~~**F-078**~~ | **Fixed 2026-11-27** — all 22 statements execute and agree where REST is comparable | ~~M~~ |
+| ~~1~~ | ~~**F-081**~~ | **Fixed 2026-11-27** — alias map fills the dropped columns; gaps now reported | ~~M~~ |
+| ~~1~~ | ~~**F-079**~~ | **Fixed 2026-11-27** — by-id specs resolve number-then-id; p02–p05 now return rows | ~~M~~ |
+| ~~2~~ | ~~**F-082**~~ | **Fixed 2026-11-27** — AR tool resolves both spaces; p22 agrees with REST on 9/9 fields | ~~M~~ |
+| ~~3~~ | ~~**F-083**~~ | **Fixed 2026-11-27** — LEFT JOIN; p11 now equals REST exactly (132 = 132) | ~~S~~ |
+| ~~1~~ | ~~**F-080b**~~ | **Fixed 2026-11-27** — `END_DATE_ACTIVE` carrier; p39 0 → 2 rows, identity-matched to REST | ~~S~~ |
+| ~~1~~ | ~~**F-084**~~ | **Fixed 2026-11-27** — Status derived from END_DATE_ACTIVE; 335/335 suppliers agree with REST | ~~S~~ |
+| ~~1~~ | ~~**F-085**~~ | **Fixed 2026-11-27** — `rebuild_kg.sh` delegates to `rebuild_kg.py`; it had been shrinking the KG | ~~S~~ |
+| ~~1~~ | ~~**F-076**~~ | **Fixed 2026-11-27** — persona-declared data scope; receipts now equal REST (63,065) | ~~L~~ |
+| ~~2~~ | ~~**F-077**~~ | **Fixed 2026-11-27** — AP `InvoiceLine` entity built end to end; building it also fixed the routing | ~~L~~ |
 
 **Cross-cutting recommendation.** The common root of F-078, F-080 and F-081
-is that three lists are maintained by hand and never compared: tool
-signatures, `_FILTERS` specs, and `intent.fields` vocabulary. One
-`scripts/validate_sql_coverage.py` that diffs them — and a CI step that
-fails on any unmapped arg — would have caught all three before a prompt
-ever ran. That is the durable fix; the four entries above are the symptoms.
+is that tool signatures, `_FILTERS` specs, and `intent.fields` vocabulary
+were maintained by hand and never compared. `scripts/validate_sql_coverage.py`
+now checks argument coverage, SQL/intent field consistency, substring
+semantics, and the known PO payload-key mismatch; it currently reports the
+open F-080b/F-081 gaps. It is not yet a CI step and does not replace live
+column-population or REST-agreement checks.
 
-### F-082 — AR by-number lookup reports "none found" for an existing invoice (OPEN, S1, twin of F-079)
+### F-082 — AR by-number lookup reports "none found" for an existing invoice (FIXED, S1, twin of F-079)
 
 **S0.** Prompt 22 (`Get the complete details of AR invoice 112390`)
 answered **"No AR invoices found matching the criteria."** Invoice 112390
 exists: `CUSTOMER_TRX_ID = 1533822`, 240 lines, 180 tax lines, Sykes Gym.
 
 **S1 (harm).** A confident false negative on a primary RECEIVABLES prompt —
-the same harm class as F-077, in a second module.
+the same *harm class* as F-077 (an SME-answerable prompt answered wrongly
+or not at all), though a different mechanism: F-077 is a missing entity,
+this is a wrong identifier binding on one that exists.
 
 **S2 (evidence).** Run log block 22 (`Records returned: 0`, answer "No AR
 invoices found"); the pod holds the record
@@ -1011,5 +1396,579 @@ returns 0 with `ORG_ID` added.
 the PO tool has), plus the identifier-space tagging from F-079 so the SQL
 can follow.
 
-**S7 (classification).** **Open, S1 harm.** Fix together with F-079 — one
-decision, two tools.
+**S7 / Resolution (2026-11-27).** **Fixed.** Both halves applied:
+
+1. **Tool.** `receivables_invoice_by_id.py` now mirrors the PO tool:
+   `_try_transaction_number` (`q=TransactionNumber='X'`) first, then
+   `_try_customer_transaction_id` (`q=CustomerTransactionId='X'`), sharing
+   one `_lookup` helper. Both clauses are quoted — `TransactionNumber` is a
+   string, and the pod accepts the numeric id quoted too (verified:
+   `TransactionNumber='112390'` → 1 row, `CustomerTransactionId=1533822` →
+   1 row, both the same invoice). The module docstring's old
+   "WHY SINGLE-PATH" justification is replaced with the counter-evidence.
+2. **SQL.** The `FilterSpec` resolves both spaces with `COALESCE`
+   (see F-079 S6 correction for why a split arg cannot work).
+
+**Verification (dev49).** Tool, before → after:
+
+| Call | before | after |
+|---|---|---|
+| `get_receivables_invoice_by_id("112390")` | `None` | `1533822 / '112390' / Complete / 3949.1` |
+| `get_receivables_invoice_by_id("1533822")` | worked | still works (no regression) |
+| `get_receivables_invoice_by_id("999999999")` | `None` | `None` |
+
+p22 SQL went from 0 rows to 1, and **all nine projected fields agree with
+REST** on invoice 112390:
+
+| Field | REST | SQL |
+|---|---|---|
+| CustomerTransactionId | 1533822 | 1533822 |
+| TransactionNumber | 112390 | 112390 |
+| BillToCustomerName | Sykes Gym | Sykes Gym |
+| BillToCustomerNumber | 22108 | 22108 |
+| InvoiceCurrencyCode | USD | USD |
+| EnteredAmount | 3949.1 | 3949.1 |
+| InvoiceBalanceAmount | 0 | 0 |
+| InvoiceStatus | Complete | `COMPLETE_FLAG = Y` |
+| TransactionDate | 2025-08-25 | 2025-08-25 |
+
+Tests: `tests/test_f079_identifier_space.py` covers the tool's number path,
+id path, number-wins precedence (with a fake client, so it runs offline) and
+the unknown-value path.
+
+
+### F-083 — `search_invoices` inner-joins `POZ_SUPPLIERS`, dropping invoices with a sentinel `VENDOR_ID` (FIXED, S1)
+
+**S0.** The emitted AP-invoice statement joins
+`JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID` (an inner join), so
+any `AP_INVOICES_ALL` row whose `VENDOR_ID` has no supplier row is
+silently dropped — REST returns those invoices.
+
+**S1 (harm).** SQL row count is lower than REST, and the missing invoices
+are invisible: no warning, no NULL supplier column, just fewer rows.
+
+**S2 (evidence).** Found by the F-078 REST comparison on dev49.
+Prompt 11 (`invoices created in the last 30 days`) → SQL **104** rows,
+REST **106**. Set diff (`/tmp/s.txt` vs `/tmp/r.txt`, both `sort -u`):
+`only-in-REST = 2` (`1072121`, `1075121`), `only-in-SQL = 0`. Against the
+pod:
+
+    SELECT INVOICE_NUM, INVOICE_DATE, VENDOR_ID FROM AP_INVOICES_ALL
+    WHERE INVOICE_NUM IN ('1072121','1075121');
+    -- 1072121  2026-11-26  -222
+    -- 1075121  2026-11-27  -222
+
+    SELECT COUNT(*) FROM POZ_SUPPLIERS WHERE VENDOR_ID = -222;  -- 0
+
+REST still returns both, with a supplier name and no number:
+`1072121 -> TEXAS CORP / SupplierNumber None / 50`,
+`1075121 -> Info-Systems Pvt Ltd / None / 300`.
+
+**S3 (mechanism).** `src/spire/kg/sql_overlay.py` `Invoice` EntitySpec
+`base_joins` (`JOIN POZ_SUPPLIERS` + `JOIN HZ_PARTIES`, the latter only to
+project the supplier name).
+
+**S4 (root cause).** The same class as F-074: a join key was assumed
+non-null and populated. Here it is populated but *sentinel* (`-222`),
+so a NULL-count alone would not have caught it — the check that would
+have is "count rows with no matching parent", not "count NULL keys".
+
+**S5 (disproved alternative).** Not a date-boundary artefact — both
+invoices are dated inside the filter window and REST returns them under
+the same `InvoiceDate >= '2026-10-21'` predicate.
+
+**S6 (fix shape, not applied).** Switch the supplier joins to `LEFT JOIN`
+so the invoice survives with NULL supplier columns, matching REST's
+null `SupplierNumber`; add a validator rule for orphan FK rows on the
+join keys (rows whose parent is absent), and a regression test from the
+two invoice numbers above. Do **not** fix by filtering out `-222`.
+
+**S7 / Resolution (2026-11-27).** **Fixed.** The join change plus the
+validator rule, exactly as S6 proposed.
+
+1. `src/spire/kg/sql_overlay.py` Invoice `base_joins` →
+   `LEFT JOIN POZ_SUPPLIERS`. `S.SEGMENT1` (SupplierNumber) now comes
+   through as NULL for orphan rows, which is what REST reports.
+2. `scripts/validate_kg_schema.py` — new `ORPHAN_KEYS` + `_check_orphan_keys`
+   and a third report section. It counts child rows whose parent is
+   absent and fails only when the entity's overlay join is not LEFT, so
+   the check fails on the defect and passes once it is fixed.
+3. `tests/test_f083_invoice_supplier_join.py` — 7 tests.
+
+**Scale — much larger than the two rows that surfaced it.** The orphan
+population on dev49 is **11,227 of 53,129 invoices (21%)**, so the inner
+join was dropping a fifth of all AP invoices on *every* invoice answer,
+not just the two in the date window.
+
+**Why the Q4 NULL-count check never caught it.** `NULLABLE_KEYS` already
+had an `Invoice AP_INVOICES_ALL.VENDOR_ID` entry, and it reports
+`NULLs = 0` — correctly, because the column is populated on every row.
+The value is the problem, not its presence. `VENDOR_ID = -222` is a
+sentinel with no `POZ_SUPPLIERS` row. The validator now prints both:
+
+    [PASS] Invoice AP_INVOICES_ALL.VENDOR_ID: NULLs = 0
+    [PASS] Invoice AP_INVOICES_ALL.VENDOR_ID -> POZ_SUPPLIERS.VENDOR_ID:
+           orphans = 11227, JOIN is LEFT so they survive with NULL
+           parent columns
+
+which is the point of the addition: a passing NULL count next to a
+non-zero orphan count is the signal, not a contradiction.
+
+**Where REST gets the supplier name (checked, not assumed).** REST
+returns `Supplier: 'TEXAS CORP'`, `SupplierNumber: null` for 1072121 —
+so the name is available for orphan rows and simply dropping them was
+the wrong answer. The carrier is `AP_INVOICES_ALL.PARTY_ID`:
+`JOIN HZ_PARTIES ON PARTY_ID` returns `TEXAS CORP` / `Info-Systems Pvt
+Ltd` for the two sentinel rows, and `Staffing Services` on a normal
+invoice, agreeing with the `POZ_SUPPLIERS` path. This entity does not
+project the party name, so no join was added for it; recorded here
+because a future consumer of supplier *name* on Invoice must use
+`P.PARTY_ID`, not the supplier join.
+
+**Verification (dev49, same session, `runsql.sh` + REST).** p11
+(`invoices in the last 30 days`):
+
+    before (INNER JOIN):  116 rows
+    after  (LEFT JOIN):   132 rows
+    REST:                 132 rows
+    multiset diff REST-SQL: none   SQL-REST: none
+
+Both sides also carry the same three duplicate invoice numbers (`CM1`,
+`123`, `Inv-16` exist twice on the pod), so the comparison is exact
+rather than cardinality-only. The `LEFT_JOIN` vs `INNER` row count for
+that filter measured 118 vs 116 when sampled earlier, confirming the
+delta is the orphan rows and not a timing artefact.
+
+No other statement moved: the full 22-statement pass is byte-identical
+to the F-079 run except p11.
+
+**S7 (classification).** **Fixed (2026-11-27).** Row-count divergence on
+AP invoice prompts; sibling of F-074 (inner-join loss) and the invoice-side
+analogue of F-076 (row-count divergence).
+
+**S10 (not checked).** Whether the same sentinel pattern affects the
+`PurchaseOrder` supplier join or the AR entities' customer joins. The
+`ORPHAN_KEYS` list has one entry (Invoice); the other join keys were not
+measured, so an all-zero orphan count for them is an assumption, not a
+finding.
+
+
+### F-084 — the projected supplier `Enabled` column reads the `ENABLED_FLAG` stub (FIXED, S1)
+
+**S0 (claim).** The KG binds `Supplier.Enabled` to
+`POZ_SUPPLIERS.ENABLED_FLAG`, which is `'Y'` on all 334 suppliers, so the
+SQL projection reports every supplier as enabled while REST reports
+`Status` ACTIVE 332 / INACTIVE 2.
+
+**S1 (harm).** SQL ≠ REST on a column the prompts ask for. Prompt 39
+(`Find suppliers with inactive or expired supplier records. Include
+supplier number, supplier name, classification, and status`) now returns
+the right two rows after F-080b, but its status column reads `Y` for both
+where REST reads `INACTIVE`.
+
+**S2 (evidence).** Emitted p39 after the F-080b fix:
+
+    SELECT P.ENABLED_FLAG, HP.PARTY_NAME, P.VENDOR_ID, P.SEGMENT1
+    FROM POZ_SUPPLIERS P JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID
+    WHERE CASE WHEN UPPER('INACTIVE') = 'INACTIVE' THEN ... END = 1;
+
+    -- returns: Y | Best Rig Corp | 300000256953842 | 1421
+    --          Y | Manali Petro Ltd | 300000256953861 | 1422
+
+REST for the same two: `Status = 'INACTIVE'`. Pod:
+`ENABLED_FLAG` is `'Y'` on 334/334 (`SELECT ENABLED_FLAG, COUNT(*) ...
+GROUP BY ENABLED_FLAG` → `Y, 334`).
+
+**S3 (mechanism).** `scripts/sql/kg_schema.sql` line 1769 seeds
+`kg_sql_column ('Supplier', 'Enabled', 'POZ_SUPPLIERS', 'ENABLED_FLAG')`,
+and `EntitySpec.derived_columns`/select list for a KG-backed entity come
+from `kg_sql_column`, so the emitted column is the stub. Line 756's
+`kg_entity_field` for the same field already states the problem:
+"Supplier enabled flag (ENABLED_FLAG Y/N). SQL-only; the REST Status
+field is semantically different." The KG therefore knows `Enabled` is not
+`Status` — and has no `Status` SQL carrier at all, which is why the
+projection has nothing better to offer.
+
+**S4 (root cause).** The R-7 stub shape at the projection level, exactly
+as F-060/F-062/F-063 — but here the field (`Enabled`) has **no populated
+carrier at all** on this pod. `KG_FIELD_TRANSLATION.md` already recorded
+the gap: "Nearest field is `Status` (ACTIVE/INACTIVE), semantically
+different from ENABLED_FLAG Y/N."
+
+**S5 (disproved alternative).** Not a display-mapping problem that the
+formatter could fix: the value coming out of SQL is `'Y'`, and there is no
+row-level information in it — 334 of 334 rows are identical, so no
+mapping can recover which 2 are inactive.
+
+**S6 (fix shape, not applied).** Two seed changes, then a KG rebuild:
+(a) add `kg_derived_projection ('Supplier', 'Status',
+"CASE WHEN S.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 'INACTIVE' ELSE
+'ACTIVE' END")` — verified to reproduce REST's 332/2 split exactly in the
+F-080b predicate; (b) drop the `Enabled` `kg_sql_column` row rather than
+repoint it, because `ENABLED_FLAG` carries no information and `Enabled` is
+not `Status`. Row counts change (`kg_sql_column` −1,
+`kg_derived_projection` +1), so `test_kg_metadata.py` and
+`scripts/print_kg.py` need updating, and `scripts/validate_kg_schema.py`
+must stay PASS.
+
+**S7 (classification).** **Open, S1 harm.** Deliberately NOT folded into
+the F-080b branch: it needs a KG seed change plus a rebuild, which is a
+different unit of work from a filter-spec change, and mixing them would
+make a failing rebuild block a verified filter fix.
+
+**S8 (miss record).** F-080b's own tests caught it — asserting
+`"ENABLED_FLAG" not in sql` failed on the SELECT list after the WHERE
+clause was already correct. The literal assertion was too broad, which is
+what surfaced the second instance.
+
+**S7 / Resolution (2026-11-27).** **Fixed.** The KG seed change plus the
+rebuild it needed — and the rebuild turned out to be broken, recorded
+below as F-085.
+
+Seed (`scripts/sql/kg_schema.sql`):
+
+1. Added `kg_derived_projection ('Supplier', 'Status',
+   "CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN 'INACTIVE' ELSE
+   'ACTIVE' END", 'Y')`.
+2. Removed the `kg_sql_column ('Supplier', 'Enabled', 'POZ_SUPPLIERS',
+   'ENABLED_FLAG')` row. The `kg_entity_field` row for `Enabled` stays as
+   field-only: the role exists, it just has no populated carrier.
+3. Row counts: `kg_sql_column` 127 → **126**,
+   `kg_derived_projection` 12 → **13**. Updated in
+   `tests/test_kg_metadata.py`, `scripts/print_kg.py`, the seed header
+   comment and the seed's own `PROMPT Seeded ...` banner.
+
+The expression was verified against REST **before** it was seeded, per
+SupplierNumber across the whole supplier set:
+
+    CASE distribution  ACTIVE 333 / INACTIVE 2
+    REST distribution  ACTIVE 333 / INACTIVE 2
+    matched            335/335, 0 mismatches
+
+A NULL `END_DATE_ACTIVE` falls through to `'ACTIVE'` because `NULL <= x`
+is NULL, not false — so suppliers with an open-ended record stay active
+without an `NVL`.
+
+**Verification (dev49, same session, after the rebuild).** Emitted p37
+(the unfiltered supplier statement) and compared every row's status
+column with REST:
+
+    SQL rows 335   status distribution ACTIVE 333 / INACTIVE 2
+    REST rows 335  distribution        ACTIVE 333 / INACTIVE 2
+    matched 335    STATUS mismatches 0    -> AGREE
+
+p39 (`inactive suppliers`) now prints the column the prompt asked for:
+
+    BEFORE:  Y | Best Rig Corp    | 1421
+             Y | Manali Petro Ltd | 1422
+    AFTER:   INACTIVE | Best Rig Corp    | 1421
+             INACTIVE | Manali Petro Ltd | 1422
+
+The 22-statement pass is unchanged apart from pod growth (p11 147 → 148,
+p37 334 → 335).
+
+Tests: `tests/test_f084_supplier_status_projection.py` — 12 tests covering
+the seed rows, the emitted projection, that the expression renders
+`ACTIVE`/`INACTIVE` rather than `1`/`0`, and that the field row survives
+carrier removal. `scripts/validate_kg_schema.py` → PASS,
+`scripts/validate_sql_coverage.py` → PASS.
+
+**S10 (not checked).** Whether any other `kg_entity_field` in the KG is
+bound to a constant-valued column the same way. `validate_kg_schema.py`
+checks derived-projection columns exist and orphan FKs, but nothing
+asserts a projected column carries more than one distinct value.
+
+---
+
+### F-085 — `rebuild_kg.sh` did not rebuild the KG; it reduced it (FIXED, S1)
+
+**S0 (claim).** `scripts/rebuild_kg.sh` — the command the test docstrings
+and `ARCHITECTURE.md` told you to run — carried its own copy of the DDL
+and seed that was **8 tables and 5 entities** behind the canonical
+`scripts/sql/kg_schema.sql` (**12 tables, 22 entities**). Running it did
+not reload the KG, it shrank it, and it reported success either way.
+
+**S1 (harm).** Two failures at once, both silent:
+
+1. A seed edit to `kg_sql_column` / `kg_derived_projection` /
+   `kg_entity_sql` / `kg_entity_filter` could not take effect — the script
+   never created those tables, so **F-084 was unapplicable** by the
+   documented route.
+2. Because those four tables were also missing from its DROP list, the
+   drops of `kg_entity` and `kg_entity_field` failed with ORA-02449, the
+   old rows survived, and every seed INSERT then collided with ORA-00001.
+   The script still printed "All KG tables dropped" and "Rebuild
+   complete" and exited **0**.
+
+**S2 (evidence).** Running the old script on dev49:
+
+    $ bash scripts/rebuild_kg.sh oracle26ai_db_spire_iks ; echo $?
+    ... 2 x ORA-02449, 54 x ORA-00001 ...
+    "All KG tables dropped (or did not exist)."
+    "Rebuild complete."
+    0
+
+Live KG afterwards: `kg_entity 5`, `kg_entity_field 27`,
+`kg_entity_sql` **does not exist** (ORA-00942), and the new
+`Supplier.Status` row absent. Before the run it was 22 / 227 / 22 / 126 /
+12.
+
+**S3 (mechanism).** `scripts/rebuild_kg.sh` had its own inline DDL:
+`CREATE TABLE` for 8 tables only (`grep -c "CREATE TABLE"` → 8, no
+`kg_entity_sql`, `kg_sql_column`, `kg_derived_projection`,
+`kg_entity_filter`) and `grep -c "INSERT INTO kg_entity "` → 5.
+
+**S4 (root cause).** Two builders, one of them a copy. `rebuild_kg.py`
+was written later ("Unlike the old rebuild_kg.sh ...") and reads the whole
+seed over the network, but the old script was left in place and kept being
+named in the docs. The copy drifted when STEP 12 added the SQL
+satellites, and nothing compared the two.
+
+**S5 (disproved alternative).** Not a permissions or container problem:
+the canonical `rebuild_kg.py` against the same database printed
+`Loaded 660 statement(s) from kg_schema.sql` and produced 22 / 227 / 22 /
+126 / 13 in one run, with no ORA errors.
+
+**S6 (fix applied).** `scripts/rebuild_kg.sh` is now a 49-line wrapper
+that `exec`s `rebuild_kg.py`, keeps the old positional container argument
+working (accepted and ignored with a note), and honours
+`SPIRE_PYTHON`. The stale inline DDL/seed is deleted rather than
+maintained — one builder, no copy to drift. Doc and test references
+(`tests/test_planner.py`, `tests/test_kg_loader.py`,
+`tests/test_kg_metadata.py`, `docs/design/ARCHITECTURE.md`) now name
+`rebuild_kg.py` and describe the wrapper.
+
+**Verification.** Both invocations run clean and leave the full KG:
+
+    ./scripts/rebuild_kg.sh --quiet                      -> 0, 22/227/22/126/13
+    ./scripts/rebuild_kg.sh oracle26ai_db_spire_iks      -> 0, same counts
+                                                            (arg noted, ignored)
+    scripts/print_kg.py                                  -> every table "ok"
+
+**S7 (classification).** **Fixed.** S1: it silently destroyed seeded
+state, and it blocked a verified fix (F-084) from being applied.
+
+**S8 (miss record).** No test asserted that the rebuild path loads the
+canonical seed, or that the script creates every KG table. Added:
+`test_rebuild_shell_script_delegates_to_the_canonical_builder`,
+`test_canonical_builder_applies_the_file_that_holds_the_fix`, and a
+parametrised `test_seed_creates_every_sql_satellite`.
+
+**S10 (not checked).** Whether the running API/MCP server caches the old
+carrier set; it loads carriers once per process, so it needs a restart to
+pick up the new `Status` column (the documented rule for any `src/spire/`
+or KG change).
+
+---
+
+### F-077 — an SME-answerable AP invoice-lines prompt is refused (FIXED, S1)
+
+**Record correction (2026-11-27).** This finding was cited three times
+before it had a section: the header list, the fix-order table
+("Prompt-13 receipts; same 'silent zero' class as F-079") and F-082's S1
+("the same harm class as F-077"). **Both of those characterisations are
+wrong**, and they were wrong because nobody had reproduced the prompt.
+Prompt 13 is about AP invoice **lines**, not receipts, and the answer was
+an explicit **refusal**, not a silent zero. The corrected record follows.
+
+**R (reproduce).** `t_f081_litmus_run.txt`, block 13 of 40:
+
+    PROMPT: Show all invoice lines for invoice ERS-53004-755598. Include
+            line number, description, quantity, unit price, amount, and
+            line type.
+
+    Router: modules=['receivables']
+    Reason:   AP invoice lines are not supported as the InvoiceLine
+              entity is not available in the API schema.
+    (refusal: unparseable — AP invoice lines are not supported ...)
+
+**S0 (claim).** A prompt asking for the lines of an AP invoice is refused,
+even though the lines exist and every field it names is retrievable.
+
+**S1 (harm).** Refusal of an in-scope prompt. The working style's SME
+test applies directly: this question is answerable by an SME from the
+product UI, so refusing it is a defect, not a coverage gap. And the
+refusal is confident and plausible — it asserts the entity "is not
+available in the API schema", which is **false**: it is available, Spire
+just never modelled it.
+
+**S2 (evidence).** REST answers the prompt completely, on the invoice
+in the prompt (`InvoiceId` 1601397, amount 138,864.62):
+
+    GET /fscmRestApi/resources/11.13.18.05/invoices/1601397/child/invoiceLines
+
+    line 1  Description 'Services'  Quantity 1  UnitPrice 1997  LineAmount 1997  LineType 'Item'
+    line 2  Description 'Services'  Quantity 1  UnitPrice  999  LineAmount  999  LineType 'Item'
+    line 3  Description 'Services'  Quantity 1  UnitPrice 1331  LineAmount 1331  LineType 'Item'
+
+All six requested fields are present on the child payload
+(`LineNumber`, `Description`, `Quantity`, `UnitPrice`, `LineAmount`,
+`LineType`) — checked field by field, not inferred. The pod holds
+`AP_INVOICE_LINES_ALL` with **1,335,566** rows, so this is not a data
+gap either.
+
+**S3 (mechanism).** Two defects stacked:
+
+1. **Misrouting.** The classifier put an AP-invoice prompt in
+   `modules=['receivables']`. `kg_entity` has `payables` with exactly
+   **1** entity (`Invoice`) against `receivables` with **11** — so the
+   only module that could answer "invoice lines" is payables, and it was
+   not selected.
+2. **Missing entity.** No `InvoiceLine` entity exists: the 22 KG entities
+   include `PurchaseOrderLine`, `ReceivablesInvoiceLine` and
+   `ReceivablesTaxLine`, but nothing for AP invoice lines. The parser
+   context is generated from `kg_entity` / `kg_entity_field`
+   (`nl_parser/vocabulary.py:209`), so the LLM was told — correctly, for
+   its context — that the entity does not exist, and refused.
+
+The refusal text is therefore *model-generated from an incomplete
+context*, not a hardcoded guard. Nothing in the code decides the prompt is
+unsupported; the context simply lacks the entity.
+
+**S4 (root cause).** Coverage was built module by module as prompts
+demanded it, and AP invoice lines were never demanded by a P1–P3 prompt
+set. The payables module was never fleshed out past its header entity, so
+`Invoice` has no children in the KG and the classifier has almost nothing
+to route to.
+
+**S5 (disproved alternative).** Not a data-availability problem (REST and
+the pod both have the lines); not a rendering/projection problem (no
+answer is produced to render); not the F-079 identifier-space problem
+(the refusal happens before any lookup — and the invoice number in the
+prompt resolves correctly, as F-078's p12 shows).
+
+**S6 (fix shape, applied).** Adding
+the entity is a feature-sized change touching eight places, which is why
+it is not folded into a bug-fix branch:
+
+| # | Change |
+|---|---|
+| 1 | `mcp_server/tools/invoice_lines.py` — new tool over `/invoices/{id}/child/invoiceLines`, with the number-or-id resolution F-082 established |
+| 2 | `mcp_server/server.py` — register it |
+| 3 | KG seed — `kg_entity` (module `payables`), `kg_entity_field` (~7 fields), `kg_entity_sql` (`AP_INVOICE_LINES_ALL`, pk `INVOICE_LINE_ID`), `kg_sql_column`s, `kg_entity_tool`, `kg_edge` (`Invoice` → `InvoiceLine`) |
+| 4 | `kg/sql_overlay.py` — `InvoiceLine` EntitySpec + `invoice_id` FilterSpec + `tool_to_entity` |
+| 5 | `planner/registries.py` — `_TOOL_PRIMARY_ARG` |
+| 6 | Row-count contracts — `tests/test_kg_metadata.py`, `scripts/print_kg.py`, seed header/banner |
+| 7 | Rebuild (`scripts/rebuild_kg.py`) + `validate_kg_schema.py` / `validate_sql_coverage.py` PASS |
+| 8 | Tests + `runsql.sh` verification against the REST payload above |
+
+The routing half needs its own decision and should not ride this build:
+whether the classifier should prefer `payables` for AP-invoice wording, or
+whether the payables module needs more vocabulary before it can compete
+with receivables' 11 entities. Adding the entity alone will not fix
+routing if the prompt still lands in `receivables`.
+
+**S7 (classification).** **Fixed 2026-11-27** — but the fix turned out to
+be the *entity*, not the routing, because building the entity fixed the
+routing on its own. Details below.
+
+**S7 / Resolution (2026-11-27).** **Fixed.** The AP `InvoiceLine` entity,
+end to end.
+
+The surprise worth recording: **no router change was needed.** The
+classifier had been choosing `receivables`; once `InvoiceLine` existed in
+the payables module the classifier chooses `payables` (and the F-041
+corrector still adds `receivables`). The earlier plan of "add an entity,
+then separately fix routing" was wrong about the sequencing — the routing
+miss was a *symptom* of the missing entity, not an independent defect. The
+classifier menu is generated from `kg_entity.module`, so seeding the entity
+in `payables` is what put it on the menu:
+
+    payables:
+      Invoice (aka: bill, invoice)
+      InvoiceLine (aka: AP invoice line, AP invoice lines, bill line,
+                   bill lines, payables invoice line, payables invoice lines)
+
+What was built:
+
+| # | Change |
+|---|---|
+| 1 | `mcp_server/tools/invoice_lines.py` — `get_invoice_lines` over `/invoices/{id}/child/invoiceLines` |
+| 2 | `mcp_server/server.py` — registered, plus the module docstring list |
+| 3 | KG seed — `kg_entity`, 10 `kg_entity_field`, `kg_entity_sql`, 10 `kg_sql_column`, `kg_edge HAS_AP_LINE`, `kg_edge_tool`, 6 `kg_vocabulary` synonyms |
+| 4 | `kg/sql_overlay.py` — `InvoiceLine` EntitySpec, `("get_invoice_lines","invoice_id")` FilterSpec, `tool_to_entity`, assumption text |
+| 5 | `planner/registries.py` — `_TOOL_PRIMARY_ARG["get_invoice_lines"] = "invoice_id"` |
+| 6 | `nl_parser/context/payables/b_invoice_lines.sysprompt` + `order.manifest` |
+| 7 | Row counts: `tests/test_kg_metadata.py`, `scripts/print_kg.py`, seed banners |
+| 8 | `tests/test_f077_ap_invoice_lines.py` — 22 tests |
+
+**Two pod facts that shaped the design** (both measured, neither assumed):
+
+1. `AP_INVOICE_LINES_ALL` has **no `INVOICE_LINE_ID`** on this pod. The
+   column exists in Fusion's interface tables but not in the `_ALL` table.
+   `(INVOICE_ID, LINE_NUMBER)` is unique across **all 1,335,566 rows**
+   (0 duplicate groups), so `LINE_NUMBER` carries the pk role and the
+   identity is recorded as the pair.
+2. `LineType` is `LINE_TYPE_LOOKUP_CODE`, which holds **uppercase**
+   (`ITEM`) where REST returns `Item`. Case difference only — normalised
+   in the comparison, and recorded in the path-assumption text.
+
+**Verification (dev49, same session, `runsql.sh` + REST).** Emitted SQL for
+invoice 1601397 (`ERS-53004-755598`):
+
+    SELECT ... FROM AP_INVOICE_LINES_ALL L WHERE L.INVOICE_ID = '1601397'
+
+    SQL rows   184
+    REST rows  184
+    only-in-SQL   0
+    only-in-REST  0
+    field mismatches 0  (LineNumber, Description, Quantity, UnitPrice,
+                         LineAmount, LineType — all 184 rows)
+
+That is every field the prompt named, on every line, agreeing with REST.
+
+**The prompt now plans end to end** — including the *unqualified* original,
+which is the reproduced defect:
+
+    PROMPT: Show all invoice lines for invoice ERS-53004-755598. Include
+            line number, description, quantity, unit price, amount, and
+            line type.
+
+    modules  ['payables', 'receivables']        (was ['receivables'])
+    target   Invoice
+    filters  [{'type': 'invoice_number', 'value': 'ERS-53004-755598'}]
+    include  ['InvoiceLine']
+    STEP 1   search_invoices {'invoice_number': 'ERS-53004-755598'}
+    STEP 2   get_invoice_lines {'invoice_id': '$iteration_value'}
+
+**S8 (resolved — the record was the second miss).** The finding was cited
+in three places for several windows — described as "receipts" and as a
+"silent zero" — without ever being reproduced. Nothing compared the cited
+list against the findings that actually had sections. The "receipts"
+confusion is traceable: the seed file contains a `-- Prompt 13:` comment
+above the `StandardReceipt` entity (an AR prompt set's prompt 13), so a
+grep for "prompt 13" in the KG returns receipts, not invoice lines.
+
+**S10 (still not checked).** Whether other payables children are missing
+the same way (payments hold, distributions, tax); whether
+`AP_INVOICE_LINES_ALL` carries the same NULL/sentinel issues F-060 and
+F-083 found in its neighbours; and whether other entities are absent from
+the KG purely because no prompt in the set asked for them — the general
+form of this defect.
+
+**S10b (new, from this fix).** The parser leaves `fields` **empty** for a
+child-include prompt, so the projection falls back to the entity's default
+columns rather than the exact fields named. The AR twin behaves the same
+way and additionally reports `LineType` unresolved (its entity has no such
+field). Not fixed here: the default projection happens to include all six
+requested AP columns, so the answer is correct, and changing field
+resolution for child includes is a parser change with a much wider blast
+radius. Recorded so it is not mistaken for "the fields are being used".
+
+**S11 (covered).** `tests/test_f077_ap_invoice_lines.py` pins the tool's
+projection and path segment, the 404 contract, the overlay entity/filter
+mapping, the emitted SQL (including that it never touches
+`RA_CUSTOMER_TRX_LINES_ALL`), the planner arg, the server registration, the
+seed rows, and that the manifest block exists and is prose.
+
+**S9 (cross-link).** Same *class* as F-082 (false negative on an
+SME-answerable prompt) but a different mechanism: F-082 was a wrong
+identifier binding in an entity that existed; F-077 was an entity that was
+never built. Sibling of F-060…F-064 in spirit (the KG's coverage is
+incomplete), but at entity level rather than column level.
+
+**S11b (coverage expansion).** Sibling prompts to add to the set:
+"invoice lines for AP invoice X" (qualified form, now works), "line type
+distribution for an invoice", "invoice line amount vs header amount
+reconciliation", and the AR twin ("receivables invoice lines", which
+already worked — a useful control that kept this defect visible).

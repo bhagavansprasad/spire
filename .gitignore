@@ -46,21 +46,12 @@ t_after*.txt
 trash/
 t_*.txt
 
-# Scratch evidence artifacts (root only, so scripts/t_s1_*.py stays tracked).
-# Captured run output, query files and their results — cited by filename in
-# docs/fixes/FIX_PLAN.md, never committed.
-/t_*.json
-/t_*.csv
-/t_*.sql
-/t_*.out
-
-# Scratch evidence DIRECTORIES (e.g. t_f081_sql/ from the litmus run).
-# The root-only rules above match files, not files inside a t_* folder, so
-# a directory of per-prompt .sql/.out artifacts leaked into git status.
-# The artifacts are reproducible via scripts/t_s1_f081_emit.py +
-# scripts/t_s1_f081_run_sql.sh, so they do not need to be in git.
-/t_*_sql/
-/t_*_out/
+# Scratch evidence artifacts. Captured run output, query files and their
+# results — cited by filename in docs/fixes/FIX_PLAN.md, never committed.
+# They all live under evidence/ so the 400+ files stay out of the repo root.
+# Reproducible via the scripts in scripts/ (e.g. t_s1_f081_emit.py +
+# t_s1_f081_run_sql.sh), so nothing here needs to be in git.
+/evidence/
 
 # Overnight prompt runs and their derivatives
 overnight/

@@ -13,8 +13,8 @@ Three kinds of tests live here:
    anchor-question trace AND the original-prompt trace. The orchestrator
    tests are the headlines.
 
-If KG-dependent tests fail, run ./scripts/rebuild_kg.sh to reload seed
-data.
+If KG-dependent tests fail, run ./scripts/rebuild_kg.py to reload seed
+data (./scripts/rebuild_kg.sh is a wrapper around it).
 """
 
 from datetime import date
@@ -247,8 +247,10 @@ def test_step_ids_are_sequential(anchor_plan: Plan) -> None:
 # resolve_vocab — live KG tests
 #
 # Hit the live KG (oracle26ai_db_spire_iks container). Seed data lives in
-# scripts/rebuild_kg.sh. If these fail, run ./scripts/rebuild_kg.sh first
-# to ensure the vocabulary is loaded.
+# scripts/sql/kg_schema.sql, applied by scripts/rebuild_kg.py. If these
+# fail, run ./scripts/rebuild_kg.py first to ensure the vocabulary is
+# loaded. (F-085: ./scripts/rebuild_kg.sh used to carry a stale partial
+# seed that REDUCED the KG to 5 entities; it now delegates.)
 # ─────────────────────────────────────────────────────────────────────
 
 

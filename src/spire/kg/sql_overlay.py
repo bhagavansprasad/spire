@@ -22,6 +22,19 @@ class EntitySpec:
     # KG-backed overlay builder (spire.rendering.sql_emitter); the
     # hand-authored entities leave this empty.
     derived_columns: list[str] = field(default_factory=list)
+    # Predicates that constrain the entity to the dataset REST can see
+    # (F-076), as opposed to filtering on what the user asked for. Seeded
+    # into the WHERE clause of every statement over this entity, before
+    # the per-arg filters. `{alias}` is formatted in by the emitter.
+    #
+    # These are data-access facts, not business rules: REST is scoped by
+    # the integration user's security profile, which no column encodes.
+    # An empty list (the default) leaves the entity unscoped.
+    scope_predicates: list[str] = field(default_factory=list)
+    # Assumption text key explaining WHY the scope is applied, surfaced in
+    # the emitted SQL comment block so a reader can see the rows were
+    # restricted deliberately rather than by a mistaken filter.
+    scope_assumption: str | None = None
 
 
 @dataclass
@@ -33,6 +46,7 @@ class FilterSpec:
     vocab_kind: str | None = None
     requires_join: tuple[str, str] | None = None
     assumption: str | None = None
+    match_mode: str | None = None
 
 
 @dataclass
@@ -80,6 +94,8 @@ class Overlay:
     # "not expressible as one SELECT" comment rather than a fake
     # SELECT that would return wrong rows.
     not_expressible: set[str] = field(default_factory=set)
+    sql_control_args: set[str] = field(default_factory=set)
+    sql_disabled_args: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -196,7 +212,21 @@ _ENTITIES = {
             ("P", "PAYMENT_STATUS_FLAG"),
         ],
         base_joins=[
-            "JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID",
+            # F-083: LEFT, not INNER. AP_INVOICES_ALL.VENDOR_ID is never
+            # NULL, but 11,227 of 53,129 rows carry a VENDOR_ID with no
+            # POZ_SUPPLIERS row (the sentinel -222 among them), so an
+            # inner join silently dropped 21% of invoices — with no NULL
+            # to show for it. REST returns those invoices with a supplier
+            # name and a null SupplierNumber.
+            #
+            # SupplierNumber therefore comes through as NULL here, which
+            # is what REST reports. The supplier NAME lives on the invoice
+            # itself: AP_INVOICES_ALL.PARTY_ID -> HZ_PARTIES.PARTY_NAME
+            # returns 'TEXAS CORP' / 'Info-Systems Pvt Ltd' for the two
+            # sentinel rows and agrees with the supplier path on normal
+            # invoices. (Joining POZ_SUPPLIERS here is about SEGMENT1
+            # only; the party name is not projected by this entity.)
+            "LEFT JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID",
         ],
     ),
     "ReceivablesInvoice": EntitySpec(
@@ -267,6 +297,30 @@ _ENTITIES = {
             ("D", "PERCENTAGE"),
             ("D", "AMOUNT_ORDERED"),
             ("D", "STATUS"),
+        ],
+        base_joins=[],
+    ),
+    # F-077: AP invoice lines. The six columns the prompt asks for are all
+    # populated on this pod (verified against invoice 1601397), and
+    # (INVOICE_ID, LINE_NUMBER) is unique across all 1,335,566 rows — so it
+    # is the identity of a line. AP_INVOICE_LINES_ALL exposes no
+    # INVOICE_LINE_ID column on dev49, so LINE_NUMBER carries the pk role.
+    "InvoiceLine": EntitySpec(
+        name="InvoiceLine",
+        fusion_table="AP_INVOICE_LINES_ALL",
+        alias="L",
+        pk_column="LINE_NUMBER",
+        select_columns=[
+            ("L", "LINE_NUMBER"),
+            ("L", "DESCRIPTION"),
+            ("L", "QUANTITY_INVOICED"),
+            ("L", "UNIT_PRICE"),
+            ("L", "AMOUNT"),
+            ("L", "LINE_TYPE_LOOKUP_CODE"),
+            ("L", "ITEM_DESCRIPTION"),
+            ("L", "UNIT_MEAS_LOOKUP_CODE"),
+            ("L", "ACCOUNTING_DATE"),
+            ("L", "ASSESSABLE_VALUE"),
         ],
         base_joins=[],
     ),
@@ -456,6 +510,19 @@ _ENTITIES = {
             "LEFT JOIN HZ_CUST_ACCOUNTS CA ON CA.CUST_ACCOUNT_ID = R.PAY_FROM_CUSTOMER",
             "LEFT JOIN HZ_PARTIES HP ON HP.PARTY_ID = CA.PARTY_ID",
         ],
+        # F-076: /standardReceipts does not expose every AR_CASH_RECEIPTS_ALL
+        # row. It reports the standard cash receipts only — the single
+        # TYPE='MISC' row on dev49 is absent from REST while all 79,733
+        # TYPE='CASH' rows are reachable. Measured, not assumed: pod
+        # CASH-only receipts excluding the two non-visible business units
+        # reconcile to REST's total of 63,065 exactly.
+        #
+        # The business-unit half of the scope is NOT declared here: it is a
+        # property of the integration user's security profile, supplied by
+        # the persona (see spire.config.DataScope) and injected by the
+        # emitter.
+        scope_predicates=["{alias}.TYPE = 'CASH'"],
+        scope_assumption="receipts_scoped_to_rest_visible_dataset",
     ),
 }
 
@@ -469,9 +536,32 @@ _FILTERS = {
     ("search_suppliers", "status"): FilterSpec(
         tool_name="search_suppliers",
         arg_name="status",
-        predicate_template="{alias}.ENABLED_FLAG = {value}",
-        value_map={"ACTIVE": "'Y'", "INACTIVE": "'N'"},
-        assumption="status_maps_to_enabled_flag",
+        # F-080b: the arg is REST's `Status` (ACTIVE / INACTIVE, matched
+        # client-side against the payload). The old carrier was
+        # POZ_SUPPLIERS.ENABLED_FLAG, which is 'Y' on all 334 suppliers on
+        # this pod and therefore returned 0 rows for "inactive suppliers"
+        # while REST reports 2.
+        #
+        # The real carrier is END_DATE_ACTIVE: REST's InactiveDate equals
+        # it on 334/334 suppliers (0 mismatches) and REST's Status is
+        # ACTIVE 332 / INACTIVE 2 on exactly the two rows where it is set
+        # and past. There is no INACTIVE_DATE column on POZ_SUPPLIERS.
+        #
+        # ACTIVE and INACTIVE need opposite predicates, so the template
+        # branches on the resolved literal. `value_map` still lists only
+        # those two values, so any other status raises rather than
+        # silently returning suppliers (the F-078 fail-loud rule).
+        predicate_template=(
+            "CASE WHEN UPPER({value}) = 'INACTIVE' "
+            "THEN CASE WHEN {alias}.END_DATE_ACTIVE <= TRUNC(SYSDATE) "
+            "THEN 1 ELSE 0 END "
+            "ELSE CASE WHEN {alias}.END_DATE_ACTIVE IS NULL "
+            "OR {alias}.END_DATE_ACTIVE > TRUNC(SYSDATE) "
+            "THEN 1 ELSE 0 END "
+            "END = 1"
+        ),
+        value_map={"ACTIVE": "'ACTIVE'", "INACTIVE": "'INACTIVE'"},
+        assumption="status_maps_to_end_date_active",
     ),
     ("search_suppliers", "country"): FilterSpec(
         tool_name="search_suppliers",
@@ -485,6 +575,7 @@ _FILTERS = {
         arg_name="supplier_name_contains",
         predicate_template="HP.PARTY_NAME LIKE {value}",
         assumption="name_like_on_party_name",
+        match_mode="contains",
     ),
     ("search_suppliers_by_site_bu", "supplier_id"): FilterSpec(
         tool_name="search_suppliers_by_site_bu",
@@ -506,6 +597,18 @@ _FILTERS = {
         vocab_kind="supplier_classification",
         assumption="classification_literal_from_overlay",
     ),
+    ("search_suppliers_by_classification", "supplier_id"): FilterSpec(
+        tool_name="search_suppliers_by_classification",
+        arg_name="supplier_id",
+        predicate_template="{alias}.VENDOR_ID = {value}",
+        assumption="classification_supplier_id",
+    ),
+    ("get_supplier_contacts", "supplier_id"): FilterSpec(
+        tool_name="get_supplier_contacts",
+        arg_name="supplier_id",
+        predicate_template="PS.VENDOR_ID = {value}",
+        assumption="contact_supplier_id",
+    ),
     
     # PurchaseOrder filters
     ("search_purchase_orders", "status"): FilterSpec(
@@ -524,8 +627,27 @@ _FILTERS = {
         predicate_template="{alias}.VENDOR_ID = {value}",
         assumption="supplier_maps_to_vendor_id",
     ),
+    ("search_purchase_orders", "supplier_name"): FilterSpec(
+        tool_name="search_purchase_orders",
+        arg_name="supplier_name",
+        predicate_template="HP.PARTY_NAME LIKE {value}",
+        assumption="name_like_on_party_name",
+        match_mode="contains",
+    ),
+    ("search_purchase_orders", "created_since"): FilterSpec(
+        tool_name="search_purchase_orders",
+        arg_name="created_since",
+        predicate_template="{alias}.CREATION_DATE >= {value}",
+        assumption="po_created_since",
+    ),
 
     # Invoice filters
+    ("search_invoices", "invoice_number"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="invoice_number",
+        predicate_template="{alias}.INVOICE_NUM = {value}",
+        assumption="invoice_number_maps_to_invoice_num",
+    ),
     ("search_invoices", "supplier_number"): FilterSpec(
         tool_name="search_invoices",
         arg_name="supplier_number",
@@ -533,19 +655,49 @@ _FILTERS = {
         requires_join=("Invoice", "Supplier"),
         assumption="invoice_supplier_maps_to_segment1",
     ),
+    ("search_invoices", "supplier_name"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="supplier_name",
+        predicate_template=(
+            "S.VENDOR_ID IN (SELECT SI.VENDOR_ID FROM POZ_SUPPLIERS SI "
+            "JOIN HZ_PARTIES HI ON HI.PARTY_ID = SI.PARTY_ID "
+            "WHERE HI.PARTY_NAME LIKE {value})"
+        ),
+        requires_join=("Invoice", "Supplier"),
+        assumption="invoice_supplier_name",
+        match_mode="contains",
+    ),
     ("search_invoices", "invoice_date_after"): FilterSpec(
         tool_name="search_invoices",
         arg_name="invoice_date_after",
         predicate_template="{alias}.INVOICE_DATE >= {value}",
         assumption="invoice_date_filter",
     ),
+    ("search_invoices", "unpaid"): FilterSpec(
+        tool_name="search_invoices",
+        arg_name="unpaid",
+        predicate_template="{alias}.PAYMENT_STATUS_FLAG IN ('N', 'P')",
+        assumption="invoice_unpaid_status_flags",
+    ),
     
     # AR Invoice filters
     ("get_receivables_invoice_by_id", "customer_transaction_id"): FilterSpec(
         tool_name="get_receivables_invoice_by_id",
         arg_name="customer_transaction_id",
-        predicate_template="{alias}.CUSTOMER_TRX_ID = {value}",
-        assumption="ar_id_maps_to_customer_trx_id",
+        # F-079/F-082: the plan carries one bare number and cannot know
+        # which identifier space it is in — "invoice 112390" is a
+        # TRX_NUMBER (the id is 1533822). This mirrors the tool's
+        # resolution order exactly: TransactionNumber first, then
+        # CustomerTransactionId. MIN() makes it deterministic where the
+        # tool's limit=1 takes whatever the pod returns first.
+        predicate_template=(
+            "{alias}.CUSTOMER_TRX_ID = COALESCE("
+            "(SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T "
+            "WHERE T.TRX_NUMBER = {value}), "
+            "(SELECT MIN(T.CUSTOMER_TRX_ID) FROM RA_CUSTOMER_TRX_ALL T "
+            "WHERE T.CUSTOMER_TRX_ID = {value}))"
+        ),
+        assumption="ar_id_resolves_number_then_trx_id",
     ),
 
     # PO child fetchers (Phase 1)
@@ -564,12 +716,28 @@ _FILTERS = {
     ("get_purchase_order_distributions", "po_header_id"): FilterSpec(
         tool_name="get_purchase_order_distributions",
         arg_name="po_header_id",
-        predicate_template=(
-            "{alias}.PO_HEADER_ID = {value} "
-            "AND {alias}.PO_LINE_ID = :po_line_id "
-            "AND {alias}.LINE_LOCATION_ID = :line_location_id"
-        ),
+        predicate_template="{alias}.PO_HEADER_ID = {value}",
         assumption="po_distribution_three_way_filter",
+    ),
+    ("get_purchase_order_distributions", "po_line_id"): FilterSpec(
+        tool_name="get_purchase_order_distributions",
+        arg_name="po_line_id",
+        predicate_template="{alias}.PO_LINE_ID = {value}",
+        assumption="po_distribution_three_way_filter",
+    ),
+    ("get_purchase_order_distributions", "line_location_id"): FilterSpec(
+        tool_name="get_purchase_order_distributions",
+        arg_name="line_location_id",
+        predicate_template="{alias}.LINE_LOCATION_ID = {value}",
+        assumption="po_distribution_three_way_filter",
+    ),
+
+    # AP child fetchers (F-077)
+    ("get_invoice_lines", "invoice_id"): FilterSpec(
+        tool_name="get_invoice_lines",
+        arg_name="invoice_id",
+        predicate_template="{alias}.INVOICE_ID = {value}",
+        assumption="ap_line_by_invoice_id",
     ),
 
     # AR child fetchers (Phase 1)
@@ -584,8 +752,19 @@ _FILTERS = {
     ("get_purchase_order_by_id", "po_header_id"): FilterSpec(
         tool_name="get_purchase_order_by_id",
         arg_name="po_header_id",
-        predicate_template="{alias}.PO_HEADER_ID = {value}",
-        assumption="po_by_id",
+        # F-079: "PO 55040" is a SEGMENT1 (the id is 67), but "PO 2144" is
+        # a PO_HEADER_ID. The plan cannot tell them apart, so this mirrors
+        # the tool's resolution order: OrderNumber first, header id only
+        # when no PO claims that number. Binding a single space silently
+        # returned 0 rows for the number form.
+        predicate_template=(
+            "{alias}.PO_HEADER_ID = COALESCE("
+            "(SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H "
+            "WHERE H.SEGMENT1 = {value}), "
+            "(SELECT MIN(H.PO_HEADER_ID) FROM PO_HEADERS_ALL H "
+            "WHERE H.PO_HEADER_ID = {value}))"
+        ),
+        assumption="po_by_id_resolves_number_then_id",
     ),
 
     # Phase 2 filters
@@ -600,9 +779,14 @@ _FILTERS = {
         arg_name="customer_transaction_id",
         predicate_template=(
             "{alias}.TRX_ID = {value} "
-            "AND {alias}.TRX_LINE_ID = :line_id "
             "AND {alias}.ENTITY_CODE = 'TRANSACTIONS'"
         ),
+        assumption="ar_tax_line_filter",
+    ),
+    ("get_receivables_invoice_tax_lines", "line_id"): FilterSpec(
+        tool_name="get_receivables_invoice_tax_lines",
+        arg_name="line_id",
+        predicate_template="{alias}.TRX_LINE_ID = {value}",
         assumption="ar_tax_line_filter",
     ),
     ("get_receivables_invoice_transaction_dff", "customer_transaction_id"): FilterSpec(
@@ -621,11 +805,26 @@ _FILTERS = {
         predicate_template="HP.PARTY_NAME = {value}",
         assumption="customer_account_by_party_name",
     ),
+    ("get_customer_account_by_name", "account_number"): FilterSpec(
+        tool_name="get_customer_account_by_name",
+        arg_name="account_number",
+        predicate_template="{alias}.ACCOUNT_NUMBER = {value}",
+        assumption="customer_account_by_number",
+    ),
     ("get_customer_transactions", "account_id"): FilterSpec(
         tool_name="get_customer_transactions",
         arg_name="account_id",
         predicate_template="{alias}.CUSTOMER_ID = {value}",
         assumption="customer_transaction_by_customer_id",
+    ),
+    ("get_customer_transactions", "open_only"): FilterSpec(
+        tool_name="get_customer_transactions",
+        arg_name="open_only",
+        predicate_template=(
+            "{alias}.CLASS = 'INV' "
+            "AND {alias}.AMOUNT_DUE_REMAINING > 0"
+        ),
+        assumption="customer_transaction_open_invoice",
     ),
     ("get_account_credit_memos", "account_id"): FilterSpec(
         tool_name="get_account_credit_memos",
@@ -688,6 +887,27 @@ _FILTERS = {
             "WHERE LOC.CITY = {value})"
         ),
         assumption="standard_receipt_site_client_side",
+    ),
+    ("search_addresses", "supplier_number"): FilterSpec(
+        tool_name="search_addresses",
+        arg_name="supplier_number",
+        predicate_template=(
+            "EXISTS (SELECT 1 FROM POZ_SUPPLIERS SP "
+            "WHERE SP.PARTY_ID = PS.PARTY_ID AND SP.SEGMENT1 = {value})"
+        ),
+        assumption="address_supplier_number",
+    ),
+    ("search_addresses", "supplier_name"): FilterSpec(
+        tool_name="search_addresses",
+        arg_name="supplier_name",
+        predicate_template=(
+            "EXISTS (SELECT 1 FROM POZ_SUPPLIERS SP "
+            "JOIN HZ_PARTIES HP ON HP.PARTY_ID = SP.PARTY_ID "
+            "WHERE SP.PARTY_ID = PS.PARTY_ID "
+            "AND HP.PARTY_NAME LIKE {value})"
+        ),
+        assumption="address_supplier_name",
+        match_mode="contains",
     ),
 
     # Phase 5: aggregation argument filters
@@ -769,9 +989,13 @@ _LITERALS = {
 # ─────────────────────────────────────────────────────────────────────
 
 _ASSUMPTIONS = {
-    "status_maps_to_enabled_flag": (
-        "Supplier ACTIVE/INACTIVE maps to POZ_SUPPLIERS.ENABLED_FLAG "
-        "('Y'/'N')."
+    "status_maps_to_end_date_active": (
+        "search_suppliers.status is REST's Status (ACTIVE/INACTIVE) and "
+        "maps to POZ_SUPPLIERS.END_DATE_ACTIVE, not ENABLED_FLAG. "
+        "ENABLED_FLAG is 'Y' on all 334 suppliers on this pod; "
+        "END_DATE_ACTIVE is set on the same 2 rows REST reports INACTIVE, "
+        "and REST's InactiveDate equals it on 334/334 suppliers. A "
+        "supplier is inactive once END_DATE_ACTIVE has passed."
     ),
     "address_join_for_country": (
         "Supplier country lives on the child address. "
@@ -802,9 +1026,48 @@ _ASSUMPTIONS = {
     "invoice_date_filter": (
         "InvoiceDate filters against AP_INVOICES_ALL.INVOICE_DATE."
     ),
-    "ar_id_maps_to_customer_trx_id": (
-        "AR CustomerTransactionId maps to "
-        "RA_CUSTOMER_TRX_ALL.CUSTOMER_TRX_ID."
+    "po_created_since": (
+        "CreationDate filters against PO_HEADERS_ALL.CREATION_DATE."
+    ),
+    "invoice_number_maps_to_invoice_num": (
+        "InvoiceNumber filters against AP_INVOICES_ALL.INVOICE_NUM."
+    ),
+    "invoice_supplier_name": (
+        "Supplier substring matches resolve through POZ_SUPPLIERS and "
+        "HZ_PARTIES.PARTY_NAME."
+    ),
+    "invoice_unpaid_status_flags": (
+        "Unpaid includes AP_INVOICES_ALL.PAYMENT_STATUS_FLAG values N "
+        "and P (unpaid and partially paid)."
+    ),
+    "customer_account_by_number": (
+        "CustomerAccountNumber maps to HZ_CUST_ACCOUNTS.ACCOUNT_NUMBER."
+    ),
+    "customer_transaction_open_invoice": (
+        "Open customer transactions are invoice-class rows with a positive "
+        "AR_PAYMENT_SCHEDULES_ALL.AMOUNT_DUE_REMAINING."
+    ),
+    "address_supplier_number": (
+        "Address supplier number resolves through POZ_SUPPLIERS.SEGMENT1 "
+        "and the shared PARTY_ID."
+    ),
+    "address_supplier_name": (
+        "Address supplier name resolves through POZ_SUPPLIERS.PARTY_ID "
+        "to HZ_PARTIES.PARTY_NAME."
+    ),
+    "classification_supplier_id": (
+        "SupplierId scopes POZ_BUS_CLASSIFICATIONS.VENDOR_ID."
+    ),
+    "contact_supplier_id": (
+        "SupplierId scopes contacts through POZ_SUPPLIER_SITES_ALL_M."
+        "VENDOR_ID."
+    ),
+    "ar_id_resolves_number_then_trx_id": (
+        "get_receivables_invoice_by_id accepts a TransactionNumber or a "
+        "CustomerTransactionId and tries TransactionNumber first. The "
+        "predicate resolves the same way (COALESCE over TRX_NUMBER, then "
+        "CUSTOMER_TRX_ID). Confirmed on the pod: AR invoice 112390 is "
+        "TRX_NUMBER with CUSTOMER_TRX_ID 1533822."
     ),
     "bu_literal_from_overlay": (
         "Business-unit name resolves to a numeric BU_ID from "
@@ -852,6 +1115,19 @@ _ASSUMPTIONS = {
         "uses {value} for PO_HEADER_ID and named binds for the other "
         "two. The plan's tool_args must supply all three."
     ),
+    "receipts_scoped_to_rest_visible_dataset": (
+        "StandardReceipt SQL is restricted to the rows REST can actually "
+        "return (F-076). Two independent rules, both measured on dev49: "
+        "(1) TYPE = 'CASH' — /standardReceipts does not expose "
+        "miscellaneous receipts (1 MISC row on the pod, absent from REST); "
+        "(2) the business-unit filter injected from the persona's "
+        "scope.visible_business_units, because REST visibility is set by "
+        "the integration user's security profile and is not derivable "
+        "from any column. Without rule (2) the SQL returns receipts from "
+        "business units the user cannot see (France 9,316 and UK 7,352 on "
+        "dev49). Do NOT read this as one business unit: REST sees 14 of "
+        "the 16 AR orgs, not a single BU."
+    ),
     "ar_line_by_customer_trx_id": (
         "AR line child filters on CUSTOMER_TRX_ID (the AR invoice's "
         "parent id, per the endpoint path "
@@ -860,10 +1136,21 @@ _ASSUMPTIONS = {
         "DESCRIPTION, QUANTITY_INVOICED, UNIT_SELLING_PRICE, "
         "EXTENDED_AMOUNT."
     ),
-    "po_by_id": (
-        "get_purchase_order_by_id fetches one PO by PO_HEADER_ID (the "
-        "numeric internal id, not OrderNumber). Confirmed against the "
-        "pod: /purchaseOrders/2055 returns PO 55269."
+    "ap_line_by_invoice_id": (
+        "AP line child filters on INVOICE_ID (the AP invoice's parent id, "
+        "per the endpoint path /invoices/{id}/child/invoiceLines). "
+        "Column names are: LINE_NUMBER, DESCRIPTION, QUANTITY_INVOICED, "
+        "UNIT_PRICE, AMOUNT, LINE_TYPE_LOOKUP_CODE. AP_INVOICE_LINES_ALL "
+        "exposes no INVOICE_LINE_ID on this pod, so (INVOICE_ID, "
+        "LINE_NUMBER) is the line identity - unique across all 1,335,566 "
+        "rows on dev49."
+    ),
+    "po_by_id_resolves_number_then_id": (
+        "get_purchase_order_by_id accepts either an OrderNumber or a "
+        "POHeaderId and tries OrderNumber first. The predicate resolves "
+        "the same way (COALESCE over SEGMENT1, then PO_HEADER_ID) because "
+        "a bare number in a prompt does not say which space it is in. "
+        "Confirmed on the pod: PO 55040 is SEGMENT1 with PO_HEADER_ID 67."
     ),
     "buyer_person_id": (
         "get_buyer looks up PER_ALL_PEOPLE_F by PERSON_ID. Confirmed "
@@ -997,6 +1284,9 @@ OVERLAY = Overlay(
         "get_purchase_order_lines": "PurchaseOrderLine",
         "get_purchase_order_schedules": "POSchedule",
         "get_purchase_order_distributions": "PODistribution",
+        # F-077: AP invoice lines, keyed on the parent InvoiceId like every
+        # other child tool.
+        "get_invoice_lines": "InvoiceLine",
         "get_receivables_invoice_lines": "ReceivablesInvoiceLine",
         "get_buyer": "Buyer",
         "get_receivables_invoice_tax_lines": "ReceivablesTaxLine",
@@ -1062,6 +1352,48 @@ OVERLAY = Overlay(
         "aggregate_purchase_orders_by_supplier",
         "rank_customer_accounts_by_exposure",
         "summarize_open_purchase_orders",
+    },
+    sql_control_args={"limit", "fetch_limit", "ctx"},
+    sql_disabled_args={
+        ("search_suppliers", "business_relationship"): (
+            "business relationship has no verified SQL predicate"
+        ),
+        ("search_suppliers", "created_from"): (
+            "date-range handling is not yet represented in SQL"
+        ),
+        ("search_suppliers", "created_to"): (
+            "date-range handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "purchase_order"): (
+            "PO-number invoice filtering is not yet represented in SQL"
+        ),
+        ("search_invoices", "invoice_date_before"): (
+            "invoice date upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "amount_min"): (
+            "invoice amount lower-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "amount_max"): (
+            "invoice amount upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_invoices", "pending"): (
+            "pending approval has no verified SQL predicate"
+        ),
+        ("search_invoices", "overdue"): (
+            "the invoice due-date carrier has not been verified on this pod"
+        ),
+        ("search_addresses", "country"): (
+            "address country filtering is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "created_before"): (
+            "PO creation-date upper-bound handling is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "last_updated_before"): (
+            "PO last-update filtering is not yet represented in SQL"
+        ),
+        ("search_purchase_orders", "last_updated_after"): (
+            "PO last-update filtering is not yet represented in SQL"
+        ),
     },
 )
 

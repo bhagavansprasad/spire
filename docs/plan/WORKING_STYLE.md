@@ -1,909 +1,451 @@
 # SPIRE — Working Style
 
-**Reference for every session.** Read at the start of a new window.
-For the procedural checklist that accompanies this file, see
-`SESSION_STARTUP_CHECKLIST.md`. Cross-references Doc B index §7.
+The rulebook for every session in this repository, whether the worker is a
+human or GitHub Copilot. Read it at the start of a new window; read the
+section you need when a rule here is not enough.
+
+`.github/copilot-instructions.md` is auto-loaded and carries the short form.
+This file is the long form and governs where the two differ.
+
+**Provenance (2026-11-28).** This file supersedes `COPILOT_WORKING_STYLE.md`
+and the older general-purpose working style. The old document instructed a
+human-paste workflow — heredoc patch cells, "ask for a context bundle, never
+individual files", Doc A / Doc B — which contradicts how an editor-based
+agent actually works. Its durable rules are carried here. **Section numbers
+cited in handovers written before this date do not map onto this file.** Those
+handovers are historical records and are left as written.
 
 ---
 
-## Context and communication
-
-1. **Ask for context bundles, never individual files.** `context_bundles.yaml`
-   defines the bundles (`graph_kg`, `synthesizer`, `parser_planner`,
-   `mcp_server_tools`, `scripts`, etc.). When you need to see code, ask
-   for the bundle.
-
-2. **One command at a time.** In an interactive session, never give a
-   block of commands. Give one, wait for the output, then the next. If
-   a command fails mid-block, the remaining commands fire against an
-   unintended state.
-
-2.1. **"One command at a time" splits on uncertainty, not on count.**
-    Rule 2's "block of commands" means a block where a later command's
-    meaning depends on an earlier one's output. Commands whose outcome
-    is known in advance — `git checkout -b`, `git add <path>`,
-    `git commit`, `git stash pop`, `git branch`, `git status` on a
-    clean tree — do not qualify. They belong in the same cell as the
-    work they surround.
-
-    The reason rule 2 exists is that a failed command mid-block fires
-    the rest against an unintended state. `git checkout -b` either
-    creates the branch or fails loudly; there is no partial state for
-    the next command to trip over. Split only what can leave the tree
-    in a state the next command would misread.
-
-    What DOES take its own cell: a test run, a grep whose result
-    decides whether a fix landed, a build — any command whose
-    next-step meaning changes if the output surprises you.
-
-    **The shape of a cell: one command per line, no `&&` chaining.**
-    A cell is a block of commands the user pastes and runs together.
-    Each command stands on its own line; the shell executes them in
-    order. `&&` chaining is discouraged because it makes a mid-cell
-    failure stop the rest of the chain silently — the shell shows
-    only the failing command's error, and the commands after it
-    never ran. A newline-separated cell shows each command's own
-    output, so a mid-cell failure is visible at the line where it
-    happened. When a run's outcome genuinely depends on the previous
-    command's output, it takes its own cell (per §2.1's "split on
-    uncertainty"); when the outcome is predetermined, the commands
-    belong in one newline-separated block.
-
-2.2. **The user pastes once per cell when the shape is obvious.**
-    When the commands in a cell are all obvious (2.1), the user runs
-    them together and returns ONE output block — not one per
-    command, not "paste that, then paste this". Do not ask for the
-    output of a command whose result is predetermined. The user reads
-    their own terminal; they paste back when the shape of the output
-    determines what you hand them next.
-
-3. **Complete files, never fragments.** When producing a file, produce
-   the whole file in one block. Never "replace section X with Y" or
-   "insert this between lines N and M". If a change is small, still
-   produce the whole file. Fragments waste time and break copy/paste
-   tools.
-
-4. **No nested code fences.** Nested ` ``` ` inside ` ``` ` breaks copy
-   and download. Use `~~~` for the outer fence, or move the inner
-   content to a separate file. **This applies to every pasteable block
-   you produce** — findings, audit edits, handoffs. If the content
-   contains even one ` ``` ` inside it, the outer wrapper is `~~~`.
-   The user pastes verbatim; a mis-fenced block is a wasted turn.
-
-## Generation and approval
-
-5. **Approval before generating anything.** Never produce code, files,
-   or doc text without an explicit go-ahead. Acknowledge a task,
-   describe what you will produce, and wait.
-
-6. **Draft first, permission after.** Do not ask permission for
-   something already designed and approved in an earlier turn. Produce
-   the artifact. Ask only when the answer changes what you write.
-
-## Branching and merging
-
-7. **Branch-first for code, features, tooling, bug fixes.** Everything
-   that is not a pure doc lands on a branch first, then merges via PR.
-
-8. **Docs may go direct or branch.** README, Doc A, Doc B, tester-intro
-   — direct to the integration branch is fine if standalone; ride a
-   branch if bundled with code.
-
-9. **PR-based merges always.** No local `git merge` into a long-lived
-   branch. Push the branch, open a PR, merge the PR.
-
-10. **Integration branch is `master`.** All phase branches spawn off it
-    and merge back via PR. The runtime clone pulls from `master`.
-
-    No local merges into `master`; every change arrives via a PR. Do
-    not `git merge` a feature branch into `master` locally and push;
-    open the PR and merge it there.
-
-    (Until 2026-10-08 the integration branch was `hardening-master-v2`,
-    with `master` frozen at the fork point. That arrangement was
-    retired on 2026-10-08 when the SQL Overlay POC promoted to
-    `master` (PR #191, merge commit `3c4b208`). `hardening-master-v2`
-    is now a historical branch, left in place, not used for new work.)
-11. **Branch naming: `Phase{N}-{Descriptive}`.** Examples:
-    `Phase1-Audit-and-Baseline`, `Phase2-Correctness-Fixes`. Not
-    `phase-1`.
-
-## Documentation structure
-
-12. **Doc A is frozen.** No design edits, no phase renumbering, no
-    reordering. Status and deviation notes only.
-
-13. **Doc B is split:**
-    - `Doc_B_Index.md` — snapshot, registers, test taxonomy, session
-      pointers, design pointers, dev/runtime, working-style.
-    - `NN_Phase_NN_Name.md` — one file per phase, containing that
-      phase's session entries and designs.
-    - `TEMPLATE_Session_Entry.md` — the session template.
-    - Created only as phases begin.
-
-14. **Three update disciplines, three documents.**
-    - **Doc A — frozen.** No design edits, no renumbering. Status and
-      deviation notes only (see §12).
-    - **The phase-1 audit — working document.** Rows close in place: a
-      `pending` state changes to `agree` / `disagree`, with a closure
-      clause naming the F-NNN. Appending rather than editing a stale
-      state is the exception, not the rule.
-    - **The findings log — append-only.** Corrections are new entries
-      referencing old IDs. Nothing is deleted. Newest at the top.
-
-    In practice: an audit row that says "Pending — needs bundle X"
-    becomes "agree" or "disagree" once the bundle is read; the audit
-    keeps a clean current state. A finding that was written wrong is
-    not edited — a new finding cites the old and corrects it.
-
-15. **Every claim needs a command and an output.** If a command and its
-    output cannot be pasted, it is not evidence.
-
-    **Every edit to a file is delivered as a Python script plus shell
-    verification commands — see rule 15.3.** The anchor-uniqueness
-    discipline still holds; it is asserted by the cell-1 script and
-    confirmed by cell 2.
-
-15.1. **Capture the complete output of every run to a file, then grep
-    from the file. Always. No exceptions for "one-shot" checks.**
-    Redirect the COMPLETE stdout AND stderr to a file first, then run
-    `grep` / `sed` / `awk` against the file. Never pipe the run itself
-    through a filter (`grep`, `awk`, `head`, `tail`) at capture time.
-
-    This applies to EVERY run whose output you will read at all —
-    multi-prompt sweeps, single diagnostic runs, pytest invocations,
-    golden-prompt checks, ad-hoc probes. The earlier wording here read
-    "for any run you may inspect more than once", and that hedge has
-    tempted exactly the mistake it should forbid: a run judged
-    "one-shot" gets piped through a filter, and the full output is gone
-    the moment a follow-up question needs a line the filter did not
-    anticipate. The cost of guessing wrong is a re-run; the cost of
-    always capturing is one file on disk.
-
-    The reason is cost, not purity. A filtered run bakes one question
-    into the output and throws away everything that question did not
-    anticipate. When a later question needs a line the filter did not
-    match, the run has to be repeated — with a new filter, which may
-    itself miss something. One unfiltered file answers every subsequent
-    question by grep, at no extra cost.
-
-    The shape:
-
-        for p in ...; do
-            python scripts/promptkit.py --run --prompt "$p" --show-planner
-        done > t_<finding>.txt 2>&1
-
-    Inspection (any number of times, no re-run):
-
-        grep -nE 'pattern' t_<finding>.txt
-        sed -n '/start/,/end/p' t_<finding>.txt
-
-    Never:
-
-        ... | grep 'pattern'    # the question is baked in; a second
-                                # question means a second run
-        ... | head -80          # truncated permanently
-
-15.2. **Name a slow command's cost before the user runs it.**
-    Before handing over any command whose wall-clock may exceed about
-    thirty seconds, say so in the same reply, with a rough figure and,
-    when known, why it is slow. "This walks ~13k invoices across 26
-    pages, expect 2-4 minutes" is enough. Without it the user has no
-    way to decide whether to run it now, later, or ask for a cheaper
-    path.
-
-    Where a cheaper reproducer exists, offer it. Where none does — an
-    aggregate whose fetch is inherently the whole collection — say that
-    too, so the user knows the cost is not avoidable rather than the
-    tool being slow.
-
-    This is not a rule about laziness; it is a rule about consent. A
-    long fetch the user did not agree to spend time on is a longer
-    conversation than one they did.
-
-15.3. **Search-and-replace is a Python script + shell verification, in
-    two cells.** Every edit to a file — code, docs, this file itself — is
-    delivered as two cells, one command at a time.
-
-    **Cell 1 — the edit.** One Python script that does the search and
-    replace and writes the file. That is its whole job. It does not
-    verify its own work, does not print diagnostic checks, and the user
-    does not paste its output back.
-
-    **Cell 2 — the verification.** A separate list of SHELL commands —
-    `grep`, `sed -n`, `wc -l`, `tail` — that the user runs on its own,
-    after cell 1 has finished. The commands re-read the patched file
-    from disk and print the evidence directly: new content present, old
-    content absent, surrounding anchors intact, count-preserving edits
-    still count-preserving. The user pastes THIS output. Cell 2's output
-    is the only evidence that comes back.
-
-    **Do not blend the two.** The edit script and the verification
-    commands are separate cells, run separately. A script that edits
-    then checks itself reports whatever it wrote — the check is worth
-    nothing. The verification reads the file a second time, in a fresh
-    process, and the user sees the raw lines.
-
-    **Why a script, not a paste block.** The paste step is one that can
-    silently fail: a truncated selection, a dropped trailing newline, an
-    editor that auto-indents a block it should not. And the payload lives
-    inside Python string literals, not a Markdown fence, so rule 4's
-    outer-fence discipline does not apply — an edit whose content
-    contains ``` is a non-problem in a script and a real problem in a
-    paste block.
-
-    **Relationship to rule 15's former paragraph.** Rule 15 used to
-    describe a paste-block-with-grep-anchors procedure. That procedure is
-    superseded by this rule. Rule 15's principle — every claim needs a
-    command and its output — is unchanged. The anchor-uniqueness
-    discipline still holds; it is asserted by cell 1 and confirmed by
-    cell 2.
-
-    **Cell 2 must check both presence and absence, not just presence.**
-    A `SystemExit` inside cell 1 is a good failure — it aborts before
-    writing anything. But a patch that runs to completion and writes a
-    file that is missing a fragment is not. The failure signature is
-    identical in the terminal: the shell prompt returns, the user has
-    not pasted anything, and there is nothing to look at. Cell 2 exists
-    to catch that.
-
-15.3.1. **Multi-file commits are N two-cell patches, then one commit.**
-    When a single commit lands N files, do not deliver it as one big
-    patch followed by a commit. Deliver it as N file-by-file patches,
-    each as its own cell pair (cell A writes the file and stages it;
-    cell B reads the file back from disk), and only after all N files
-    are green does a final cell commit them together.
-
-    The failure this prevents is the one PR #4's Fix B records: a
-    patch that did not land, and the test the patch was supposed to
-    un-red did not catch it, because the test exercised the behaviour
-    rather than the file contents. Read-back per file catches a
-    non-landed patch at the file where it happened; a commit-then-
-    verify catches it only after N−1 other files have landed in a
-    commit that does not build. The cost is N extra verify cells;
-    the saving is (N−1) other files never seeing a broken commit.
-
-    The rule applies to the file, not the commit. A single-file
-    commit is one cell pair then the commit; a seven-file commit is
-    seven cell pairs then the commit. The commit message names the
-    logical unit (`green 1`, `green 2`, …), not the file count.
-
-    What is forbidden: batching multiple files into one cell because
-    the files are "small" or "related." The rule is not about size —
-    it is about attributing a non-landed patch to its own file, at
-    the moment of the failure, rather than to the commit.
-
-### 15.4 The patch/verify contract, promoted from the brief
-
-The per-window brief carries three rules that belong in the rulebook
-alongside §15.3. They apply to every patch cell this project produces.
-
-**Four postconditions on every patch cell.** A patch cell's verifier
-checks four things, not one: **(i)** the old block is present before
-the patch, **(ii)** the text changed, **(iii)** the old block is
-absent after the patch, **(iv)** the new block is present after the
-patch. A patch that checks only (iv) proves nothing about what it
-removed; the failure shape is a "verified" cell over a file that
-still contains the old text. This is the failure mode that
-motivated the rule.
-
-**`|| true` after any `grep -c` that legitimately expects zero.** A
-`grep -c` that finds nothing exits non-zero, and a cell written with
-`&&` chains or a guard clause will stop at the zero-match line even
-when the zero-match is the *desired* result. Write
-`grep -c 'pattern' file || true` when the expected count is zero,
-and state in the cell's text that zero is the expected outcome. A
-reader — and a shell — treats `0` on the first line and `0` on the
-twentieth identically; the `|| true` distinguishes them.
-
-**One-line anchor + fenced block.** A paste block for a human to
-review (not to run — running is the patch cell's job) is presented
-as: a single-line anchor naming what it is, then a fenced block
-containing the content, then the four verification commands from the
-first rule above. The anchor tells the reader which `#`-level or
-section marker this block belongs to. The fence is ``` for content
-with no inner fences, `~~~` for content that contains ``` (rule 4
-governs the fence choice). The four commands are the user's
-evidence; the block is what the user is verifying.
-
-    Every cell-2 verification should include at least one grep for the
-    new content and at least one grep confirming the old content is
-    absent. If the patch was supposed to remove `X` and add `Y`, then
-    cell 2 checks both. Without this pairing, a patch that silently
-    writes a partial file looks identical to a patch that succeeded.
-    **Anchor on the invariant character, not the predicted end of
-    line.** A `grep -cE '^def name$'` verifies nothing if the file's
-    function definitions end with `():` — the `$` after `name`
-    matches nothing, and the cell reports a false `0`. Anchor on
-    the character that is invariant across every occurrence the
-    pattern should match: `^def name\(`, because `(` is the only
-    character guaranteed to be present after the name. Same
-    principle for any anchor pattern that expects `$` at the end of
-    a line whose content the pattern only partially predicts.
-
-    **Both cells in the same reply.** Cell 1 and Cell 2 are
-    delivered together, in one reply, in that order. The user runs
-    cell 1, then cell 2, then pastes cell 2's output. What is
-    forbidden is asking the user to run cell 1, wait for a reply
-    that delivers cell 2, then run cell 2 — that costs an extra
-    round trip and lets the user lose the verify command between
-    turns. Two cells, one reply; not two replies, one cell each.
-
-    Rule 15.1's "capture everything, then grep" applies to the patch
-    script's own output too — a `SystemExit` from `count != 1` checks
-    prints nothing in the terminal if the whole heredoc is being pasted
-    as one cell; only the following prompt tells the reader something
-    went wrong, and only if the reader knows to check.
-
-### 15.4.1 Worked example — a §15.4 cell pair, and the loop §15.3.1 names
-
-This is what §15.4's four postconditions look like in practice, and
-what §15.3.1's multi-file loop looks like at the level of a single
-file. Both are shown together because in practice they are one
-pattern: the four postconditions are the file's contract, and the
-loop is the commit's.
-
-**Cell A — the edit.** One `python3 - <<'PYEOF'` heredoc. What it does:
-
-  - Read the file as bytes.
-  - Assert every anchor block matches exactly once. `text.count(old) != 1`
-    aborts with the count printed, so a match of 0 or 2 is visible in
-    the failure rather than silent.
-  - Replace.
-  - Write the file.
-  - For a `.py` file: `ast.parse(body)` and an import probe. The four
-    postconditions are necessary, not sufficient, for a `.py` file —
-    PR #6's `print_kg.py` patch satisfied all four and broke Python
-    syntax; the compile check is what caught it.
-  - `git add <path>` — stage, do not commit. The commit is the last
-    cell of the multi-file sequence, per §15.3.1.
-
-  Cell A is one command per line, no `&&` chaining (rule 2.1). If a
-  check fails, `sys.exit(1)` stops the script before writing; the
-  next command in the cell still runs, but the file on disk is
-  unchanged, so the read-back in cell B reports the old content and
-  the failure is attributable to cell A rather than to the file.
-
-**Cell B — the verify.** Four independent shell greps, one per line,
-run in a fresh shell so the output is the file as it is on disk, not
-what cell A claims it wrote:
-
-    grep -n '<new-content-anchor>'     <path>
-    grep -c '<new-content-anchor>'     <path>
-    grep -c '<old-content-anchor>'     <path> || true
-    grep -n '<invariant-anchor>'       <path>
-    wc -l                              <path>
-    git status --short
-
-  The four checks map to §15.4's four postconditions:
-
-  - `grep -n '<new-content-anchor>'` — postcondition (iv): the new
-    block is present after the patch. The `-n` form prints the line
-    number, so the reader sees where it landed, not just that it
-    landed.
-  - `grep -c '<new-content-anchor>'` — postcondition (iv) counted;
-    a value of `1` proves the patch did not duplicate the block. A
-    value of `2+` means an anchor matched more than once — the
-    insertion was applied twice — which is the failure §15.4's
-    "one-line anchor + fenced block" note names.
-  - `grep -c '<old-content-anchor>' <path> || true` — postconditions
-    (i) and (iii): the old block was present before, and is absent
-    after. The `|| true` is mandatory when the expected count is
-    zero (rule 15.4's second paragraph): a `grep -c` that finds
-    nothing exits non-zero, and a cell that `&&`-chains on it stops
-    at the zero-match line even though the zero-match is the
-    desired outcome. Without `|| true`, the desired zero is
-    indistinguishable from a missing file.
-  - `grep -n '<invariant-anchor>'` — a sanity check that the
-    surrounding content still exists, so a patch that landed but
-    clobbered a neighbour shows up.
-  - `wc -l <path>` — the total line count. For a whole-tail rewrite,
-    this is the only cheap guard against a duplicate block that left
-    the anchor counts intact (rule 15.4's closing note: "a whole-tail
-    rewrite can leave a duplicate block. Assert the file's total
-    line count"). For a small patch, the delta is expected and
-    sanity-checked against the reported insert count from cell A.
-  - `git status --short` — the file appears as `M` (staged) or `A`
-    (new file staged) for a cell A that wrote, or `D` (deleted) if
-    the patch removed a file. Silent is wrong at this point: a file
-    that cell A claimed to write but that `git status` does not show
-    as modified means the write did not land in the tree git tracks
-    (wrong path, wrong branch, or an aborted cell A) — a case the
-    greps against the path would not catch if the path were wrong.
-
-  What cell B does NOT do: it does not re-run cell A's script. A
-  fresh run of the edit script against the already-patched file would
-  fail its anchor check (`count != 1`) because the file already has
-  the new content — the "re-run the patch" temptation produces a
-  false negative, not a verification. Cell B reads the file. That is
-  the whole point of the two-cell split: cell A reports what it
-  wrote; cell B reports what is on disk.
-
-  This is why cell B is shell, not Python. The greps read the file in
-  a new process; they cannot see cell A's variables, so they can only
-  report the bytes that landed. The `ast.parse` in cell A is for
-  syntax; the import probe in cell A is for the module graph. Neither
-  replaces the greps; both are necessary (PR #6's `print_kg.py`
-  lesson) and neither is sufficient (§15.4's four postconditions are
-  the file's contract; `ast.parse` + import is the `.py`-specific
-  superset).
-
-**The loop.** §15.3.1 names the multi-file form of this pattern.
-Concretely, for a commit landing N files:
-
-  - Cell pair 1 for file 1: cell A writes and stages; cell B verifies.
-  - Cell pair 2 for file 2: cell A writes and stages; cell B verifies.
-  - … (repeat for each of the N files)
-  - Final cell: `git status` to confirm the N files are staged, then
-    `git commit -m '<message>'` to land them together.
-
-  If any cell B is red, stop: do not proceed to the next file, do not
-  commit. A red cell B at file k means files 1..k-1 are staged but
-  the commit would land k files where the k-th is broken. That is the
-  state §15.3.1's loop exists to prevent.
-
-  The loop's cost is N cell pairs and N commits' worth of back-and-
-  forth. The saving is (a) every non-landed patch is caught at its
-  own file, not at the commit; (b) a cell B that reveals a wrong
-  anchor (0 matches) or a duplicate (2 matches) never reaches the
-  next file, so files 1..k-1 remain in a good state for the next
-  attempt; and (c) the final `git status` before commit shows
-  exactly the N files the commit message names, so a commit that
-  accidentally stages a scratch file (a `personas.yaml` edit, a
-  `traces/` write) is visible.
-
-  The rule is not about ceremony. It is that a commit landing N files
-  is N decisions, each of which can be wrong in a file-local way, and
-  the only way to attribute a wrong decision to its own file is to
-  verify the file before the commit. Verifying the commit as a whole
-  attributes N−1 correct decisions and 1 wrong one to the same
-  commit, after the fact.
-
-## Evidence standard for findings (S0–S11)
-
-Before anything is written into a findings log as a bug, the claim
-walks through R and then S0–S11 in order. If a step fails, the claim stops at that
-step and is classified accordingly. The point is not caution for its
-own sake — it is that a wrong finding costs as much as a missed one,
-because a later session acts on it.
-
-**R — Reproduce the prompt.**
-Read the prompt end to end, exactly as it was written. Run it against
-the current pod. Run it again. Run the sibling prompt — the one nearest
-it in shape that passed. Capture all three runs to files (rule 15.1),
-paste the outputs.
-
-  - The prompt fails the same way it failed in the log → proceed to S0.
-  - The prompt now passes → the bug is closed as **not-reproducible**;
-    nothing further is walked. Cite the original run_id in the closure.
-  - The prompt fails intermittently → N≥20 runs before any
-    classification. This is the only case in which a rate may be quoted.
-
-Without R, a claim written from a stale log is a hypothesis. R is what
-makes it a bug.
-
-**S0 — State the claim in one sentence.**
-Either "X is a bug" or "X is not a bug." No other forms. "X looks
-wrong," "X is drift," "X is odd" are hunches. Hunches live in
-conversation; they do not enter a document.
-
-**S1 — Name the harm.**
-A bug is a harm. Pick exactly one:
-  - wrong data returned
-  - wrong narration (data right, words wrong)
-  - crash
-  - refusal of an in-scope prompt (Rule 28 — "in-scope" means an SME could answer it)
-  - silent omission
-  - cost regression (extra calls, tokens)
-  - inconsistency between two paths
-
-No harm → stop. It is an observation, not a bug. Observations can be
-attached to a related finding as a note; they do not get their own
-F-NNN.
-
-**S2 — Paste the evidence.**
-Evidence tiers, best to worst:
-  1. curl-verified — the pod directly confirms or refutes
-  2. runtime, output pasted — a prompt run, output pasted verbatim
-  3. static, cited by `file:line` — grep or code read
-  4. "I recall the code does X"
-
-Tier 4 is not evidence. It is a hypothesis. It may be investigated;
-it may not be written up.
-
-**S3 — Name the mechanism.**
-Cite the specific `file:line` or function that causes the harm. No
-line, no mechanism — just a correlation.
-
-**S4 — Name the probable root cause.**
-The mechanism is the line that fails. The root cause is why that line
-is written that way. State one:
-  - a design decision that is wrong
-  - a plan-template selection gap
-  - a parser grammar gap
-  - a missing guard or default
-  - a stale assumption about pod data
-
-If no root cause can be named, record "mechanism known, root cause
-unknown" explicitly. That tells the fix window it may be about to
-patch a symptom.
-
-**S5 — Disprove the alternative.**
-Name one alternative explanation and show it is not the cause. Common
-ones:
-  - the pod data changed between runs
-  - a different code path was actually taken
-  - the diagnostic is lying; the pipeline is fine
-  - it is by design (read the design doc first)
-
-If no alternative can be named, the cause has not been isolated.
-
-**S6 — Name the falsifier.**
-If someone said "no, this isn't a bug," what one command would prove
-them right? If no such command can be named, the claim is not
-falsifiable and cannot enter the log.
-
-**S7 — Classify.** Only now write the F-NNN entry:
-  - **Confirmed** — S1–S6 all passed.
-  - **Candidate** — some steps failed; note which.
-  - **Observation** — S1 failed; goes as a note under a related
-    finding, not its own entry.
-  - **Closed-as-not-a-bug** — a prior claim disproven by stronger
-    evidence; cite the old entry ID.
-
-**S7-notes — the two `closed-as-not-a-bug` shapes.**
-
-When a prior claim is disproven, it falls into one of two shapes.
-Naming which one it is clarifies what future sessions should and should
-not re-open.
-
-  - **Nondeterminism cleared at N≥20.** The audit recorded an
-    intermittent symptom; N runs of the same prompt (the audit's own
-    threshold is N≥20) produce identical output. The specific
-    reproducer does not fire; the audit row stays as written. Re-open
-    only if the same prompt starts varying again or the underlying
-    fetch/aggregation tool changes.
-  - **Audit-time observation diverged.** The audit's recorded symptom
-    does not appear at its own reproducer. Either the code changed
-    (silently, or with a fix whose comment names the prompt) or the pod
-    state changed. No git archaeology is done at closure time; the
-    audit row stays as written; the finding records both the closure
-    and the "not checked" clause about which side moved. Re-open only
-    if the original shape reappears or a change touches the named site.
-
-Both shapes cite the audit row in `Cross-refs` and both include the
-audit's original claim in the `Evidence` block for comparison. Neither
-edits the audit row's text.
-
-**S8 — The miss record.**
-A confirmed bug is also a miss by the prior audit. Answer three
-questions in order:
-
-  1. Did a prompt of this shape exist? — existing / passed-but-wrong /
-     absent.
-  2. Why did it not surface? — the reason, not the category. "The
-     prompt existed and passed" is a category. "The prompt existed and
-     passed because its plan happened to set
-     `filter_source_when_nonempty` while the sibling plan did not" is a
-     reason.
-  3. What would have caught it? — the prompt or check that did not
-     exist at the time.
-
-This is the record a future audit reads to find its blind spots.
-
-**S9 — Cross-link.**
-Every entry cites at least one §A / §B / §D row or another F-NNN.
+## Part A — Behavior rules
+
+1. **Do not modify files until asked.** Default to read-only. Explore,
+   explain, and propose — never edit, create, or delete a file without an
+   explicit go-ahead.
+
+2. **Explain before modifying.** Before any change, state what will change
+   and why, then wait for approval.
+
+3. **Keep answers short.** Answer the question, then stop. No preamble, no
+   extra background, no "consider also" — unless the user asks a specific
+   follow-up question.
+
+4. **Ask once when ambiguous.** If the answer changes what you produce, ask
+   — once, concisely. Do not re-litigate resolved points; if the answer was
+   given in a prior turn, use it.
+
+---
+
+## Part B — Editing mechanics
+
+Copilot edits files directly and has a shared terminal, so there are no
+paste cells to corrupt. The guarantees of a paste-and-verify workflow still
+apply to every edit:
+
+- **Old block present before** the edit (read the file first).
+- **Text actually changed.**
+- **Old block absent after** the edit.
+- **New block present after** the edit.
+
+Copilot runs these checks itself (`grep` / `git diff`) and shows the result,
+rather than asking the user to run a second cell.
+
+- **Per-file verification, not per-commit.** For a commit landing N files,
+  edit and verify each file before the single commit. A non-landed patch is
+  then attributable to its own file, at the moment of failure, rather than
+  to a commit that has already absorbed N−1 good files.
+- **`|| true` after a `grep -c` that legitimately expects zero.** A
+  `grep -c` that finds nothing exits non-zero, so a check that treats a
+  non-zero exit as failure reports the *desired* outcome as an error. Write
+  `grep -c 'pattern' file || true` and say in the same breath that zero is
+  expected.
+- **Anchor on the invariant character, not the predicted end of line.** A
+  pattern ending `$` after a name verifies nothing if the file's definition
+  lines end with `():`. Anchor on the character guaranteed to follow the
+  token you are locating.
+- **Fences:** use `~~~` for the outer fence whenever the content contains a
+  ` ``` ` fence. A mis-fenced block is a wasted turn.
+- **Python edits get a syntax check.** For a `.py` file the four
+  postconditions are necessary but not sufficient: a patch can satisfy all
+  four and still break the module. Run `ast.parse` (or import) before
+  calling it done.
+
+---
+
+## Part C — Project conventions
+
+### Context and communication
+
+- **Read source directly.** No need to assemble a context bundle first. Use
+  `build_context.py` (`--files ...`) only when a diagnostic needs a
+  persistent on-disk record of its code + evidence, not as the way to read
+  code.
+- **Name a bundle for the diagnostic, not `adhoc`.** `diag_2144`,
+  `fusion_err`, `sql_diag` — the name is how a future session recognises
+  what was looked at. Raw artifacts (a request/response pair, a log, a
+  captured output) ride in the same bundle as the code that failed.
+- **One logical step at a time.** Split on uncertainty, not on command
+  count. Run one command, read the output, then the next. Commands whose
+  outcome is known in advance may share a step; a command whose output
+  changes what you do next gets its own.
+
+### Branching and merging
+
+- **Branch-first** for code, features, tooling, and bug fixes. Docs may go
+  direct or ride a branch.
+- **PR-based merges always.** Integration branch is `master`. No local
+  merge into `master` — push the branch, open the PR, merge it there.
+- **Branch naming:** `Phase{N}-{Descriptive}` (e.g.
+  `Phase3-Merge-Working-Style`). Not `phase-3`.
+- **After a PR merges, the next window starts on a NEW branch off
+  `master`** — never a continuation of the merged branch. Merge via
+  `gh pr create --base master --head <branch>` then
+  `gh pr merge <num> --merge`, then `git checkout master && git pull
+  --ff-only origin master`.
+- **Ledger reconciliation opens every window.** Before picking new work,
+  list recently merged PRs and grep the fix register for rows still at
+  `fixed`:
+
+      gh pr list --state merged --limit 20 --json number,title,mergedAt \
+        --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
+      grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/fixes/FIX_PLAN.md
+
+  Every merged PR whose row still shows `fixed | —` is drift. Flip it to
+  `verified | #NNN` before any new work. The `fixed → verified` flip
+  happens at merge time, often in a different window from the one that
+  landed the code; without this step no checklist owns it.
+- *(Historical.)* Until 2026-10-08 the integration branch was
+  `hardening-master-v2`, with `master` frozen at the fork point. That
+  arrangement was retired when the SQL Overlay POC promoted to `master`
+  (PR #191, merge `3c4b208`). `hardening-master-v2` is a historical
+  branch, left in place, not used for new work.
+
+### Window discipline
+
+- **Keep windows medium-sized.** Switch to a fresh window at a natural
+  checkpoint — a coherent unit of work committed and verified — not
+  mid-task, and not after the context has grown huge. Flag the switch
+  point at wrap-up; do not stop mid-edit.
+- **At every window close:** (a) commit any pending work, (b) push,
+  (c) update the live status/handoff document for the work in progress,
+  (d) record open findings in the fix register, (e) name the next window's
+  starting point.
+
+**Resume by pointer, not by paste.** A new window in this workspace can
+read the files itself, so the resume brief is a short pointer plus the one
+thing a file cannot tell it — which document to open first:
+
+```
+Resume <task> (SPIRE) on a new branch off master.
+Read <path/to/HANDOFF.md>, then <path/to/FIX_PLAN.md>.
+```
+
+That is the whole brief. Pasting a 300-line rulebook into every new window
+costs context and goes stale the moment the file changes; pointing at it
+gets the current text for two lines. Paste content only when the next
+window genuinely cannot read the workspace.
+
+The pointer must state the branch instruction explicitly — the next window
+starts on a **new** branch off `master`, not on the branch that just
+merged. Name it: `git checkout master && git pull --ff-only origin master
+&& git checkout -b Phase{N}-{Descriptive}`.
+
+### Documentation
+
+- **An index describes; it does not duplicate.** If a folder index goes
+  stale it is worse than absent, because a reader trusts it. Prefer one
+  workspace-level index (`docs/README.md`) over a per-folder second index.
+- **Audit rows close in place.** The findings log is append-only;
+  corrections are new entries, nothing is deleted.
+- **A defect that belongs to a known finding class gets one line, not a
+  section.** When a review surfaces a defect that already has its own
+  finding file, the review records a single line pointing at that file.
+  The defect and its fix live in the finding file and ride their own
+  branch; a deferred class is not a blocker for the current PR.
+- **Dated documents are historical.** A snapshot titled with a date is a
+  record of that date. Do not update it to stay current — that destroys the
+  record — and do not file it where a resuming window reads it first.
+- **Evidence is cited by path.** Scratch captures live under `evidence/`,
+  which is gitignored, so nothing there is committed. Filenames are stable:
+  a citation written as `t_f081_litmus_run.txt` before the move resolves as
+  `evidence/t_f081_litmus_run.txt` today. Cite the path you can actually
+  open; do not conclude a citation is broken when it has only been
+  relocated.
+
+### Evidence and findings
+
+- **Every claim needs a command and its output.** No output = not
+  evidence. "I recall the code does X" is a hypothesis: it may be
+  investigated, it may not be written up.
+- **Capture complete stdout+stderr to a file, then grep the file.** Never
+  pipe the run itself through a filter at capture time. A filtered run bakes
+  one question into the output and discards everything that question did not
+  anticipate; the next question then needs a re-run with a new filter, which
+  may miss something else. One unfiltered file answers every later question
+  by grep, at no extra cost. This applies to every run whose output you will
+  read at all — including runs judged "one-shot".
+- **Name a slow command's cost before running it.** If wall-clock may
+  exceed ~30s, say so with a rough figure and why. Where a cheaper
+  reproducer exists, offer it; where none does, say the cost is inherent
+  rather than the tool being slow. This is a rule about consent, not
+  laziness: a long fetch the user did not agree to spend time on is a
+  longer conversation than one they did.
+- **Emitted SQL must be validated by execution, not just inspection.** Run
+  it against the pod with `./runsql.sh "<SQL>"` and confirm it (a) executes
+  and (b) returns the **same values as Spire's own REST answer** for that
+  prompt. "The SQL executes" is not enough — "the SQL agrees with the REST
+  answer" is the standard. This is what caught the F-060 stub-column defect.
+- **Column existence ≠ column populated.** A column present in a schema
+  dump may still be NULL on every row. When a role is bound to a physical
+  column, sanity-check population with a `COUNT(<col>)` / NULL-count, not
+  just a presence grep.
+- **A page count is not a total.** Never report `len(page)` as the number
+  of records. Check the response's own continuation flag before asserting a
+  count; when the true total is unknown, say unknown rather than stating the
+  page size. This is the SP-005 shape, and it was in three tools at once.
+- **Deferred test failures get an `xfail` + a register note, not a silent
+  ignore.** A failing test you are not fixing this window is marked
+  `@pytest.mark.xfail(reason="... (FIX_PLAN §n)", strict=False)` and
+  recorded in the fix register. Do not delete or comment out the test. Note
+  that an `xfail` on a *guard* reports failure as an expected outcome — if
+  the guard is the thing protecting you, prefer fixing the drift.
+- **Nondeterminism claims need N≥20.** A claim that a prompt behaves
+  differently across runs is not falsifiable from one observation or seven.
+  Twenty runs of the same prompt, same invocation, is the threshold. Report
+  the raw pass/fail shape across the N; a rate as high as ~14% is not
+  formally excluded by 20 clean runs, but 20 clean runs is a closed finding,
+  not a suspended one.
+- **The SME test.** When Spire refuses a prompt, the first question is not
+  "is the prompt well-formed?" and not "does this capability exist today?"
+  It is: could a Fusion SME, given this prompt and read access to Fusion,
+  produce an answer? If yes, the prompt is answerable, and Spire's refusal
+  is a **defect** — not a coverage gap, not a narrowing of scope, not "the
+  user asked the wrong thing." Descriptions of the gap — no vocabulary, no
+  parameter, no tool binding, outside this POC's scope — describe the
+  defect; they never excuse it.
+
+#### The findings walk: R then S0–S11
+
+Before anything enters a findings log as a bug, the claim walks R and then
+S0–S11 **in order**. If a step fails, the claim stops at that step and is
+classified accordingly. The point is not caution for its own sake — a wrong
+finding costs as much as a missed one, because a later session acts on it.
+
+**R — Reproduce.** Read the prompt end to end. Run it against the current
+pod. Run it again. Run the nearest sibling prompt of the same shape that
+passed. Capture all three to files and paste the outputs.
+
+- Fails the same way as logged → proceed to S0.
+- Now passes → closed **not-reproducible**; cite the original run id.
+- Fails intermittently → N≥20 runs before any classification. This is the
+  only case in which a rate may be quoted.
+
+**S0 — State the claim in one sentence.** "X is a bug" or "X is not a bug."
+No other forms. "X looks wrong" / "X is drift" / "X is odd" are hunches;
+hunches live in conversation and do not enter a document.
+
+**S1 — Name the harm.** Exactly one: wrong data returned · wrong narration
+(data right, words wrong) · crash · refusal of an in-scope prompt · silent
+omission · cost regression · inconsistency between two paths. No harm →
+stop; it is an observation, not a bug. Observations attach as a note to a
+related finding; they do not get their own ID.
+
+**S2 — Paste the evidence.** Tiers, best to worst: (1) curl-verified, the
+pod directly confirms; (2) runtime output pasted verbatim; (3) static,
+cited by `file:line`; (4) "I recall". Tier 4 is not evidence.
+
+**S3 — Name the mechanism.** The specific `file:line` or function that
+causes the harm. No line, no mechanism — only a correlation.
+
+**S4 — Name the probable root cause.** Wrong design decision · plan-template
+selection gap · parser grammar gap · missing guard or default · stale
+assumption about pod data. If none can be named, record "mechanism known,
+root cause unknown" explicitly — that tells the fix window it may be about
+to patch a symptom.
+
+**S5 — Disprove one alternative.** Pod data changed between runs · a
+different code path was taken · the diagnostic is lying · it is by design
+(read the design doc first). If no alternative can be named, the cause is
+not isolated.
+
+**S6 — Name the falsifier.** What one command would prove the claim wrong?
+If none can be named, the claim is not falsifiable and cannot enter the log.
+
+**S7 — Classify.** *Confirmed* (S1–S6 all passed) · *Candidate* (note which
+failed) · *Observation* (S1 failed; a note under a related finding) ·
+*Closed-as-not-a-bug* (a prior claim disproven by stronger evidence; cite
+the old ID).
+
+**S7-notes — the two `closed-as-not-a-bug` shapes.** Naming which one it is
+tells future sessions what may and may not be re-opened.
+
+- **Nondeterminism cleared at N≥20.** An intermittent symptom was recorded;
+  N runs produce identical output and the reproducer does not fire. The
+  original row stays as written. Re-open only if the same prompt starts
+  varying again, or the underlying fetch/aggregation changes.
+- **Observation-time symptom diverged.** The recorded symptom does not
+  appear at its own reproducer. Either the code changed or the pod state
+  changed. No git archaeology at closure time; the row stays as written and
+  the finding records both the closure and a "not checked" clause naming
+  which side may have moved. Re-open only if the original shape reappears.
+
+Both shapes cite the original row and include its claim for comparison.
+Neither edits the original row's text.
+
+**S8 — The miss record.** A confirmed bug is also a miss by the prior
+audit. Answer three questions in order: (1) Did a prompt of this shape
+exist — existing / passed-but-wrong / absent? (2) Why did it not surface —
+the *reason*, not the category. "The prompt existed and passed" is a
+category; "it passed because its plan happened to set
+`filter_source_when_nonempty` while the sibling plan did not" is a reason.
+(3) What would have caught it? This is the record a future audit reads to
+find its blind spots.
+
+**S9 — Cross-link.** Every entry cites at least one other row or finding.
 Orphan entries get re-checked before the next session.
 
-**S10 — List what was NOT checked.**
-Explicit. This is what a future session reads to decide where to look
-next. "Nothing else was checked" is a valid and useful entry.
+**S10 — List what was NOT checked.** Explicit. This is what a future
+session reads to decide where to look next. "Nothing else was checked" is a
+valid and useful entry.
 
-**S11 — Coverage expansion.**
-Every confirmed bug has a shape. List the sibling prompts that
-exercise the same shape — existing or to-be-written — naming the tier
-each belongs to (smoke / verify / exhaust). This produces work for the
-prompt-set tree, not the findings log. It is the step that closes the
-gap between "we found this bug" and "we find its siblings before a
-user does. Sibling prompts land in the fix's branch, in `prompts/<capability>/<tier>.txt`. A list in the fix file alone is not coverage; the next prompt-set sweep does not read fix files."
+**S11 — Coverage expansion.** Every confirmed bug has a shape. List the
+sibling prompts that exercise it, naming the tier each belongs to (smoke /
+verify / exhaust). Sibling prompts land in the fix's branch, in
+`prompts/<capability>/<tier>.txt` — a list in the fix file alone is not
+coverage, because the next sweep does not read fix files.
 
-**Nondeterminism claims need N≥20.** A claim that a prompt behaves
-differently across runs is not falsifiable from one observation or
-seven. Twenty runs of the same prompt, same invocation, is the
-threshold. Report the raw pass/fail shape across the N; a rate as high
-as ~14% is not formally excluded by 20 clean runs, but the audit's
-own threshold is N≥20 and empirical clean results at that N are a
-closed finding, not a suspended one.
+**The contract.** Every time an F-NNN is proposed, R and S0–S11 are walked
+in order and it is shown which passed. Any time "is this a bug?" is asked,
+the answer names the step, not a paragraph.
 
-**The contract.** Every time an F-NNN is proposed, the steps R and S0–S11
-are walked in order and it is shown which passed. Any time the question
-"is this a bug?" is asked, the answer names the step, not a paragraph.
+**A worked example — a claim wrongly filed as a bug.** "`top_invoices_by_amount`
+is in `draft.py` but not in `modes/m_aggregation.sysprompt`; that is a
+bug." S0 passed (stated). S1 failed (no harm named — no prompt broke, no
+wrong answer, no crash, no refusal). Under this standard it should have
+stopped at S1 as an observation under the related finding. It was instead
+written up as its own finding and disproven later, at the cost of a probe
+and a rewrite. The lesson is not that it was hard — it is that a label
+("drift") was treated as a finding before a harm had been shown.
 
-**A worked example — F-006, wrongly filed as a bug.** The claim was
-"`top_invoices_by_amount` is in `draft.py` but not in
-`modes/m_aggregation.sysprompt`; that is a bug." Under this standard:
+### Dev / runtime
 
-  - S0 passed — the claim was stated.
-  - S1 failed — no harm was named. No prompt broke because of the
-    disagreement; no wrong answer, no crash, no refusal.
-  - Under the standard, the claim should have stopped at S1 as an
-    observation, attached to F-003 (which it turned out to belong to)
-    rather than given its own F-NNN.
-  - It was instead written up as F-006 and only disproven later, at the
-    cost of a probe and a rewrite.
+- Run, start/stop/restart, and the port layout are in
+  `Quick_how_to_run.md`. Dev uses 4001/4002/4003; production 5000/5001/5002
+  (testers via ngrok). `SPIRE-PORTS.env` is the single source of truth — to
+  change a port, change it there only.
+- **Restart the API/MCP server after any change under `src/spire/`.**
+  Imports are cached at startup, so editing the file does not change the
+  running process's behavior. Host mode: `./spire-host.sh --restart dev`.
+  Docker mode: `./spire-docker.sh --restart dev`. Every subpackage counts:
+  `mcp_server/`, `kg/`, `rendering/`, `api/`, `synthesizer/`, `nl_parser/`,
+  `planner/`, `executor/`. The failure this prevents: a UI showing stale
+  output while `master` is current and the CLI is correct for the same
+  prompt — two responses to one prompt, one current and one stale, and
+  indistinguishable from a real bug without restarting to check.
+- **`spire-host.sh` needs the venv on `PATH`.** It shells out to
+  `fastmcp`; without the venv active the MCP server fails to start and the
+  failure reads as a port timeout. Export
+  `PATH="/home/bhagavan/virtenv/spire/bin:$PATH"` first.
+- **Stop services with `./spire-host.sh --stop`, never a broad `pkill`.**
+  A pattern like `pkill -f "spire.mcp_server.server"` also matches servers
+  started by the user or by another mode.
+- **Python interpreter is `/home/bhagavan/virtenv/spire/bin/python`**, not
+  bare `python`/`python3` — the bare interpreter lacks `oracledb`. Use the
+  full path for `python`, `pip`, and `pytest`. `./runsql.sh` (Oracle via
+  curl) does not need it.
+- **`./runsql.sh "<SQL>"` is the pod-SQL validator.** It posts to the
+  Fusion BI Publisher report and returns tabular rows. Credentials come from
+  `IKS_FUSION_USERNAME` / `IKS_FUSION_PASSWORD`.
+- **A check that costs nothing is not automatically worth running.** Match
+  the scope of the verification to the scope of the change: a docs-and-
+  scripts commit needs the tests that guard docs and scripts, not the whole
+  suite. State which tests you ran and why that set covers the change.
 
-The lesson is not "F-006 was hard." It is that a label ("drift") was
-treated as a finding before a harm had been shown. S1 is the step that
-was skipped.
+### Auth
 
-### 14.1 Out-of-scope classes get one line, not a §Deviations section
+- **No auth at the tunnel or app layer.** When auth lands, SPIRE owns it.
+  Do not add an extra module in front.
 
-When a PR's V-walk surfaces a defect that belongs to a **pre-existing
-finding class with its own finding file** — e.g. the SQL emitter
-defects recorded in `SQL_EMITTER_MULTIFIELD_ITERATION.md` — the PR's
-`§Deviations` records **one line** pointing at the finding file, not
-a description of the defect. The defect and its fix live in the
-finding file and its future window; the fix rides its own branch and
-PR. A `§Deviations` paragraph that enumerates instances of a known
-class expands the PR and duplicates the finding file. It is not the
-PR's job to re-record what the finding file already says, and a
-deferred class is not a PR blocker.
+### Reply discipline
 
-16. **Every window opens with a ledger reconciliation.** Before
-    picking the next FIX_PLAN row, list recently-merged PRs and
-    grep FIX_PLAN §5 for rows still at `fixed`:
+- Short, plain, no preamble.
+- **Report the queue after every closure.** After every bug fix or closure,
+  state how many rows remain pending in the fix register and name the next
+  one being picked up — a fix, a `closed-as-not-a-bug`, or a merge with its
+  tracking flip. This appears in the same reply that delivers the closure
+  news, before the next task. The user should never have to ask "what's
+  next?"
+- **The SME test governs S1.** "In-scope" there means an SME could answer
+  it, not that Spire supports it today. An SME-answerable refusal passes S1
+  as "refusal of an in-scope prompt", and the capability gap that caused the
+  refusal is the finding's root cause.
 
-        gh pr list --state merged --limit 20 --json number,title,mergedAt \
-          --jq '.[] | "\(.number)\t\(.mergedAt)\t\(.title)"'
-        grep -nE '^\| F-0[0-9]+ .*\| fixed \| — \|' docs/fixes/FIX_PLAN.md
-
-    Every merged PR whose F-NNN row still shows `fixed | —` is
-    drift. Flip to `verified | #NNN` (and phase-1-audit §B.6
-    accordingly) before any new work.
-
-    The `fixed → verified` flip happens at PR-merge time, often a
-    different window from the one that landed the code. Without
-    this step, the flip is a fact no checklist owns.
-
-## Deferred items
-
-17. **`personas.yaml` untrack (task 1.1) — deferred.** Handled at the
-    end of the plan. Not recorded as a deviation anywhere.
-
-18. **Integration tests (the 22 marked `integration`) — deferred.** Not
-    run, not investigated, not fixed during Phase 1.
-
-## Dev / runtime separation
-
-19. **Runtime clone at `~/aura/spire-runtime` is never disturbed.**
-    Ports 3001/3002/3003. Testers reach it via ngrok.
-
-20. **Dev tree at `~/aura/spire` uses 4001/4002/4003.** Set by the
-    `spire()` shell function from `SPIRE-PORTS.env`. The two sets are
-    `X00Y`, X=3 for runtime and 4 for dev.
-
-21. **The `spire.sh --dev | --runtime` flag is required.** There is
-    no default mode. `SPIRE_MODE` is set by `spire()` / `spirer()` in
-    `~/.bashrc`. `--status` and `--stop` are scoped to the current
-    mode and never touch the other tree's ports.
-
-22. **No promotion script.** Runtime updates are manual, deliberate,
-    rare — `git fetch && git reset --hard` in the runtime tree.
-
-22.1. **Restart after any change under `src/spire/`.** A running API or
-    MCP server imports its modules once at startup and holds those
-    imports in memory. Changing the file on disk does not change the
-    running process's behavior until the process restarts. The CLI
-    launches a fresh process per invocation and always picks up the
-    current file — but the API and MCP servers do not.
-
-    Host mode: `./spire-host.sh --restart dev` (or `--restart` for
-    production). Docker mode: `./spire-docker.sh --restart dev`. Every
-    file under `src/spire/` counts: `mcp_server/`, `kg/`, `rendering/`,
-    `api/`, `synthesizer/`, `nl_parser/`, `planner/`, `executor/`.
-
-    The failure this rule prevents: a UI that shows stale output while
-    `master` is current and the CLI produces correct output for the
-    same prompt. The session that wrote this rule had five commits land
-    on `master` and the UI still showed the pre-first-commit output,
-    because the API server had been running since before commit #1.
-    Two responses (CLI and UI) to the same prompt, one current and one
-    five commits stale, indistinguishable from a real bug without
-    restarting to check.
-
-## Auth
-
-23. **No auth at the tunnel or app layer.** When auth lands, SPIRE owns
-    it. Do not add an extra module in front.
-
-## Reply discipline
-
-24. **Short, plain, no preamble.** Skip "Great question!" and similar.
-    Answer, then stop.
-
-25. **Ask before assuming.** If something is ambiguous and the answer
-    changes what you produce, ask — but ask once, concisely.
-
-26. **No re-litigating resolved points.** If the answer was given in a
-    prior turn, use it.
-
-27. **After every bug fix, report the queue.** State how many rows
-    remain pending in `docs/fixes/FIX_PLAN.md` and name the next
-    one being picked up. This runs after every closure — a fix, a
-    `closed-as-not-a-bug`, a merge with its tracking flip — and it
-    appears in the same reply that delivers the closure news, before
-    the next task's commands. The user should never have to ask
-    "what's next?"; that question is answered proactively.
-
-28. **The SME test — an SME-answerable refusal is a defect.** When Spire
-    refuses a prompt, the first question is not "is the prompt
-    well-formed?" and not "does this capability exist today?" It is:
-    could a Fusion SME, given this prompt and read access to Fusion,
-    produce an answer? If yes, the prompt is answerable, and Spire's
-    refusal is a defect — not a coverage gap, not a narrowing of scope,
-    not an observation, not "the user asked the wrong thing."
-
-    Descriptions of the gap — no vocabulary, no parameter, no tool
-    binding, outside this POC's scope — describe the defect. They never
-    excuse it.
-
-    This governs S1. "In-scope" there means an SME could answer it, not
-    Spire supports it today. An SME-answerable refusal passes S1 as
-    "refusal of an in-scope prompt", and the capability gap that caused
-    the refusal is the finding's root cause.
-    
 ---
 
-## Log analysis — reading, classifying, recording
+## Appendix — log analysis
 
-This is the discipline for analyzing promptkit runs (smoke, verify,
-exhaust tiers), pytest output, and any future tool-run log. It runs
-alongside S0–S11: S0–S11 governs what becomes a finding; this governs how
-logs are read and how candidates are surfaced *before* the review gate.
+The discipline for reading promptkit runs (smoke / verify / exhaust tiers),
+pytest output, and any tool-run log. It runs alongside the findings walk:
+the walk governs what becomes a finding; this governs how logs are read and
+how candidates surface *before* the review gate.
 
-**LA-1 — Read-only until the review gate.**
-During log analysis: no code fixes, no findings-log writes, no
-repository changes except under `docs/plan/` and the analysis workspace.
-Output is a candidate list plus the on-disk session record. Logging and
-fixing happen after the gate, in a separate window with its own
-approval.
+**LA-1 Read-only until the review gate.** No code fixes, no findings-log
+writes, no repository changes except under `docs/` and the analysis
+workspace. Output is a candidate list plus the on-disk record. Logging and
+fixing happen after the gate, with its own approval.
 
-**LA-2 — On-disk files are the source of truth.**
-Chat is not. Every candidate, action item, classification, and set
-observation goes into a file before the window closes. If the window
-dies, the next reads the files and resumes; nothing depends on chat
+**LA-2 On-disk files are the source of truth.** Chat is not. If the window
+dies, the next one reads the files and resumes; nothing depends on chat
 history.
 
-**LA-3 — Per-set files, not one growing document.**
-Layout under `docs/audit/log_analysis_sessions/<run_id>_<tier>/`:
+**LA-3 One set at a time, one command at a time.** Extract one set, read
+it, classify it, write its file, update the index, move on. Never batch
+sets into one analytical pass unless the batch is small and explicitly
+named.
 
-- `_index.md` — resume protocol + per-set status table.
-- `_candidates.md` — stable IDs C-001, C-002, ...
-- `_action_items.md` — S0–S11 walk per candidate.
-- `<set>.md` — one per set.
-- `_step6_regression.md` — one per multi-set step that produces its own
-  artifact.
-- `_next_window.md` — read order and steps for the next window.
+**LA-4 Priority order for reading a run.** (1) Structural integrity: set
+count, per-set triad, timestamps, manifest match. (2) Exit-code triage —
+cheapest, highest signal. (3) Signature extraction on non-zero sets.
+(4) Prompt-level classification for all sets. (5) Cross-fix regression for
+the findings whose reproducers live in this tier. (6) Candidate list.
+(7) Review gate. Stop and ask.
 
-Append-only. Corrections go under `## Corrections` at the bottom of the
-per-set file; do not rewrite history.
-
-**LA-4 — One set at a time, one command at a time.**
-Extract one set, read it, classify it, write its file, update the
-index, move on. Never batch multiple sets into one analytical pass
-unless the batch is small and explicitly named.
-
-**LA-5 — Priority order for reading a run.**
-
-1. Structural integrity: set count, per-set triad (`.log`, `.txt`,
-   `_summary.log`), timestamps, manifest match.
-2. Exit-code triage: every non-zero exit from `_summary.log` and
-   `_run_log.txt`. Cheapest, highest-signal first pass.
-3. Signature extraction on non-zero sets.
-4. Prompt-level classification for all sets.
-5. Cross-fix regression check for the F-NNNs whose reproducers live in
-   this tier.
-6. Candidate list.
-7. Review gate. Stop and ask.
-
-**LA-6 — Classification vocabulary.**
-Exactly four classes per prompt:
-
+**LA-5 Four classes per prompt, exactly.**
 - `pass` — right rows, right claims.
 - `fail` — errored, or refused when it should not have.
 - `wrong-but-no-error` — reads correctly but says something false.
 - `regression` — a previously fixed behavior has reverted.
 
-An observation (no harm named) is not a class. Observations go in the
-per-set file under `## Observations`, and may be promoted to a
-candidate only if a harm can be named.
+An observation (no harm named) is not a class. Observations go under
+`## Observations` and may be promoted to a candidate only if a harm can be
+named.
 
-**LA-7 — Extraction patterns.**
-Capture complete output to a file first; never pipe the run through a
-filter at capture time.
-
-- Plans only: `awk '/^Intent:/,/^Outputs:/' <log>`
-- Answers only: `awk '/^PROMPT: /{p=1} p' <log>`
-- Signatures: `grep -nE '^(ERROR:|Reason:|Refusal|Traceback|KeyError|no plan|error|HDFE|finite)' <log>`
-- Header + first answer line + truncation per prompt: `awk '/^PROMPT: /{p=1; print "---"; print} /^Answer:/{print; getline; print} /^Reason:/{print} /^Truncation:/{getline; print}' <log>`
-- Set map across all sets: a `for` loop producing prompts / refusals /
-  truncations / prompt list.
-
-Prefer header + truncation for the initial pass; drop into full `cat`
-only for a specific prompt when the header is not enough to classify.
-
-**LA-8 — Watchlist of failure shapes.**
-
+**LA-6 Watchlist of failure shapes.** These are the shapes that have
+actually shipped:
 - Empty data behind confident prose.
-- A page count stated as a total.
+- **A page count stated as a total.**
 - A computation over a truncated sample stated as fact.
 - Customer-scoped results that never resolve an `AccountNumber`.
-- A generalisation true of the first few rows but not the set.
-- A list-shaped answer with no `Showing N of M` and no `Truncation:`
-  line.
-- A count computed over the sample rather than over the full set (the
-  F-010 shape).
-- Two prompts of the same shape that plan differently (one filters, one
-  does not).
+- A generalisation true of the first few rows but not of the set.
+- A list-shaped answer with no `Showing N of M` and no truncation line.
+- A count computed over the sample rather than over the full set.
+- Two prompts of the same shape that plan differently — one filters, one
+  does not.
+- A collection returning zero rows where the partition is known non-empty.
+  A 0-row HTTP 200 is not evidence that the data does not exist, and it
+  produces a *confident wrong answer* rather than an error.
 
-**LA-9 — Cross-set consistency.**
-Same prompt in two sets should behave the same. When it does not, that
-is a candidate until proven otherwise. Same for the same idempotent
-query across tiers.
+**LA-7 Cross-set consistency.** The same prompt in two sets should behave
+the same. When it does not, that is a candidate until proven otherwise.
 
-**LA-10 — Known mechanisms.**
-Maintain a list per run. For `20260925_150333 smoke`: `F-052`
-(confirmed at signature level) and `HDFE finite` (signature undefined,
-TODO). Add a mechanism to the plan file when confirmed.
+**LA-8 Extraction.** Capture complete output to a file first; never pipe
+the run through a filter at capture time. Plans only:
+`awk '/^Intent:/,/^Outputs:/' <log>`. Answers only:
+`awk '/^PROMPT: /{p=1} p' <log>`. Prefer header plus truncation for the
+first pass; drop into full `cat` only for the prompt the header cannot
+classify.
 
-**LA-11 — The plan template.**
-The reusable plan lives at `docs/audit/SPIRE_log_analysis_plan.md`. It
-carries the parameter block, step order, signature patterns,
-classification table shapes, review gate, severity-and-confidence
-extension, and the priority-reorder log. Read it before starting a new
-run; update it when a new mechanism or a new recording shape is found.
-
-**LA-12 — Slow commands.**
-Name the cost before handing a command over. A full `cat` of a log can
-be large; a set extraction is instant. Prefer the smallest read that
-answers the current question.
-
-**LA-13 — Review gate.**
-Analysis ends here. Bring the candidate list, the S0–S11 walk per
-candidate, and blast-radius findings. Decide together: log as new
-F-NNN, link to existing, or close-as-not-a-bug. Priority is decided.
-Stop. Do not propose fixes at the gate.
-
-**LA-14 — Working example.**
-The `20260925_150333 smoke` run is the first full application. Its
-artifacts live at `docs/audit/log_analysis_sessions/20260925_150333_smoke/`.
-Its handoff is `docs/plan/HANDOFF.md` Section B. Its next-window steps
-are in `_next_window.md`.
-
----
-
-*End of working style.*
----
-
-## Per-diagnostic context bundles (§1 addition, 2026-11-17)
-
-The `context_bundles.yaml` static bundles serve session startup — a
-resuming window reading state. A **per-diagnostic bundle** is the
-second mode, and is sanctioned:
-
-- **Ad-hoc via `--files`.** When a specific failure needs the files that
-  touch it plus its on-disk evidence, bundle exactly those:
-  `python build_context.py --files a.py b.py request.xml --name diag_x`.
-  The output is `context_out/diag_x.md`, which the window reads.
-- **Named for the diagnostic, not `adhoc`.** `diag_2144`, `fusion_err`,
-  `sql_diag` — the name is how a future session recognises what was
-  looked at.
-- **Raw artifacts ride with the code.** A diagnostic's on-disk evidence
-  (a request/response pair, a log, a captured output) goes in the same
-  bundle as the code. A `.xlsx` or `.zip` cannot be read; text-extract
-  first (openpyxl, `xmllint`, `pandas.read_excel().to_csv()`), then
-  bundle the text.
-
-This is what the `P.AMOUNT` window used (`sql_diag`, `fusion_err`,
-`current_overlay_and_emitter`, `schema_po_subset`). The static bundles
-are not replaced; they are joined by a second, smaller mode.
+**LA-9 The review gate.** Analysis ends here. Bring the candidate list, the
+findings walk per candidate, and the blast radius. Decide together: log as
+a new finding, link to an existing one, or close as not-a-bug. Priority is
+decided. Stop. **Do not propose fixes at the gate.**

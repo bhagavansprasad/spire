@@ -31,9 +31,11 @@ from spire.nl_parser.context_assembly import (
 _CONTEXT_DIR = Path(assembly_mod.__file__).resolve().parent / "context"
 _MANIFEST = _CONTEXT_DIR / "order.manifest"
 
-# The carve is fixed at 48 blocks for Phase 1 (design §4). A change to this
-# number is a deliberate re-carve and must update this expectation too.
-_EXPECTED_BLOCK_COUNT = 50
+# The carve is fixed at 50 blocks (Phase 1 design §4 said 48; later phases
+# added blocks). A change to this number is a deliberate re-carve and must
+# update this expectation too. F-077 added the 51st:
+# payables/b_invoice_lines.sysprompt.
+_EXPECTED_BLOCK_COUNT = 51
 
 # Subdirectories of context/ that hold .sysprompt files which are NOT carve
 # blocks and are deliberately absent from order.manifest. Phase 2's router adds

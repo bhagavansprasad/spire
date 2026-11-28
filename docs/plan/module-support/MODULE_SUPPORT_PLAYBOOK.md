@@ -247,7 +247,7 @@ ledger that says what "correct" means for each.
 
 ### 4.1 Shape
 
-Follow `prompts/sme_modules/sme_modules_litmus.txt`:
+Follow `prompts/sme_module_a/sme_module_a_litmus.txt`:
 
 - One prompt per line; `#` comments and blank lines ignored.
 - Header comments state tier, source, capture date, and **the fill-value
@@ -260,7 +260,7 @@ Follow `prompts/sme_modules/sme_modules_litmus.txt`:
 ### 4.2 Expected-disposition ledger
 
 Each prompt carries exactly one expected disposition, recorded beside the
-expected answer (`prompts/sme_modules/sme_modules_expected.md` is the model):
+expected answer (`prompts/sme_module_a/sme_module_a_expected.md` is the model):
 
 | Disposition | PASS means |
 |---|---|
@@ -269,6 +269,24 @@ expected answer (`prompts/sme_modules/sme_modules_expected.md` is the model):
 | `GAP-EXPECTED` | A clean refusal naming the missing capability. Do not score this as a regression, and do not delete the prompt to "fix" the file — the gap is the record. |
 
 A module whose ledger has no `PASS-EXPECTED` rows has not been specified.
+
+### 4.3 Cross-run scoring
+
+Keep one row per prompt and one column per run. A single run cannot answer
+"did that fix work?" — a score can fall because the pod changed, and the
+run-level total hides it. The working model is
+[`../sme_prompts_status/COMPARISON.md`](../sme_prompts_status/COMPARISON.md):
+
+- per-prompt status code (`OK(n)`, `ZERO`, `REFUSED`, `ERR403`, `BADSQL`),
+  with `→` for a change and `=` for none;
+- a **blocked-by** column naming the defect or environment cause;
+- a summary that separates **code movement** from **environment movement**,
+  and states the comparable denominator.
+
+That separation is what stopped a real regression being invented from a pod
+outage: run02 read 13 `OK` against run01's 11, but 10 prompts were
+simultaneously blocked by two access defects, so the comparable set answered
+and refused in exactly the same proportions. Report both numbers.
 
 ---
 
@@ -387,12 +405,13 @@ no entities — that warning is the cheap detector for "I edited five of six."
 ### 6.2 Entity-count tripwires
 
 Row counts are deliberately pinned, so growth must be acknowledged rather than
-absorbed:
+absorbed. **The count is 23 as of `InvoiceLine` (F-077); it was 22 before.**
 
-- `scripts/print_kg.py` — `expected_rows: 22` for `kg_entity` and for its
+- `scripts/print_kg.py` — `expected_rows: 23` for `kg_entity` and for its
   satellite
-- `tests/test_kg_metadata.py` — `"kg_entity": 22`, `"kg_entity_sql": 22`
-- `scripts/add_entity_module.py` — `patched != 22` assertion
+- `tests/test_kg_metadata.py` — `"kg_entity": 23`, `"kg_entity_sql": 23`
+- `scripts/add_entity_module.py` — `patched != 23` assertion (the script still
+  carries its own hardcoded count, so re-read it rather than trusting this line)
 
 A new entity increments each. A tripwire that fires is doing its job; silence
 would mean the count is no longer being checked.
@@ -476,6 +495,32 @@ the easiest to miss.
 - API/CLI: `src/spire/api/` and `scripts/` if the module must be reachable
   outside the MCP session. Most modules need nothing here.
 
+### 6.8 Documentation wiring
+
+Any new document is also wired in two places, and there is a test that fails
+if it is not:
+
+1. **`docs/README.md`** — add a row to the relevant table. It is the
+   workspace-wide inventory, not decoration.
+2. **`context_bundles.yaml`** — every tracked file must belong to a bundle or
+   be excluded, enforced by `tests/test_bundle_manifest.py`
+   (`test_every_tracked_file_is_in_a_bundle`). Use the bundles' own rule:
+   *does a resuming window need this to know where it is and what to do
+   next?* Yes → `plan`; consulted on demand → `reference`; a past record →
+   `history`.
+
+Run that test after adding or moving docs. It was added to the repository
+after this playbook was first drafted, and the first merge that brought the
+two together failed on exactly this — the module-support folder existed,
+linked correctly from the README, and was in no bundle.
+
+### 6.9 Restart the stack before believing a run
+
+The MCP server reads tool definitions and KG carriers at **startup**. After
+changing `src/spire/mcp_server/`, `src/spire/kg/`, or the KG seed, restart it
+(`./spire-host.sh --stop && ./spire-host.sh --start dev`) or the run executes
+the previous code and the result describes a tree that no longer exists.
+
 ---
 
 ## 7. Track A, step 5 — verify
@@ -491,6 +536,27 @@ others.
 
 ### 7.1 Commands
 
+**Check the endpoints are alive before scoring anything.** An empty collection
+returning HTTP 200 is indistinguishable from a correct empty answer, and will
+make a whole module look broken:
+
+```
+PYTHONPATH=src python -c "
+import asyncio
+from spire.config import load_persona
+from spire.fusion.client import FusionClient
+async def m():
+    p = load_persona('default_dev')
+    async with FusionClient(p) as c:
+        for path in ['/invoices', '/suppliers', '/purchaseOrders']:
+            print(path, await c.total_results('/fscmRestApi/resources/11.13.18.05' + path, ''))
+asyncio.run(m())"
+```
+
+Compare the counts against a direct SQL count of the backing table before
+trusting a `ZERO` result. On 2026-11-28 `/purchaseOrders` returned 0 while
+`PO_HEADERS_ALL` held 18,389 rows.
+
 Single prompt through the whole graph:
 
 ```
@@ -501,7 +567,7 @@ A set, with results written to a directory:
 
 ```
 PYTHONPATH=src python scripts/promptkit.py --run \
-  --prompt-file prompts/sme_modules/<module>_litmus.txt \
+  --prompt-file prompts/sme_module_a/sme_module_a_litmus.txt \
   --outdir t_<module>_run 2>&1 | tee t_<module>_run.txt
 ```
 
@@ -549,6 +615,10 @@ during discovery and expensive to reconstruct.
   binding to it produced SQL returning NULL where REST returned the true
   amount (F-060).
 - **Which REST field maps to which column**, when the mapping is not obvious.
+- **Identity columns that the pod does not expose.** AP invoice lines carry no
+  `INVOICE_LINE_ID` on this pod, so `(INVOICE_ID, LINE_NUMBER)` is the identity.
+  Record this kind of finding — it decides what the KG can key a child entity
+  on, and it is invisible from the REST shape alone.
 
 ### 8.2 Hand off, do not duplicate
 
@@ -590,21 +660,30 @@ and belongs to a different question.
 **9.5 Trusting the internal id for a user-facing number.** Zero rows, no
 error. Decide and document which identifier each tool accepts.
 
-**9.6 A context block not listed in `order.manifest`.** The file exists, the
+**9.6 An endpoint that answers 200 with zero rows.** The single most
+expensive failure in this repository. `/purchaseOrders` returned 0 rows while
+the backing table held 18,389, and the synthesizer reported *"No purchase
+orders found matching the criteria."* with no error anywhere — every
+procurement prompt scored `ZERO` and the code was never at fault (SP-003). An
+empty collection is never evidence that a filter works. Probe
+`total_results()` and compare against a SQL count before debugging a prompt,
+and always record which prompts are environment-blocked (§4.3).
+
+**9.7 A context block not listed in `order.manifest`.** The file exists, the
 tests pass, and the model never sees it.
 
-**9.7 Editing five of six module lists.** The classifier menu regeneration
+**9.8 Editing five of six module lists.** The classifier menu regeneration
 warns; the router raises on an unknown module. Run both before believing the
 wiring is done.
 
-**9.8 Deleting a `GAP-EXPECTED` prompt to make the set green.** The gap is
+**9.9 Deleting a `GAP-EXPECTED` prompt to make the set green.** The gap is
 the specification of what is not yet supported.
 
-**9.9 Treating an `--use-cache` run as a live result.** Replays announce
+**9.10 Treating an `--use-cache` run as a live result.** Replays announce
 themselves on stderr for this reason. A cached run cannot detect that a tool's
 return shape changed.
 
-**9.10 Declaring a module complete because the tools exist.** Completeness is
+**9.11 Declaring a module complete because the tools exist.** Completeness is
 the prompt ledger (§4.2) plus §7.2, not the file list.
 
 ---
@@ -623,6 +702,9 @@ the prompt ledger (§4.2) plus §7.2, not the file list.
       regenerated (§6.4).
 - [ ] Planner registries complete (§6.5).
 - [ ] Synthesizer model and builder; no projected field silently dropped (§6.6).
+- [ ] Stack restarted after the last MCP/KG change (§6.9).
+- [ ] Docs added to `docs/README.md` and to a `context_bundles.yaml` bundle;
+      `tests/test_bundle_manifest.py` green (§6.8).
 - [ ] `PASS`/`PARTIAL`/`GAP` results match the ledger; counts match `total_results`
       (§7).
 - [ ] Acceptance note cites capture files.
@@ -655,7 +737,8 @@ the prompt ledger (§4.2) plus §7.2, not the file list.
 | `scripts/rebuild_kg.py` | rebuild after seed changes |
 | `scripts/build_classifier_context.py` | regenerate classifier menu |
 | `scripts/promptkit.py`, `scripts/run_graph.py` | run prompts end to end |
-| `prompts/sme_modules/` | litmus set and expected ledger |
+| `prompts/sme_module_a/` | litmus set and expected ledger (the 40-prompt SME set; run results under `docs/plan/sme_prompts_status/`) |
+| `context_bundles.yaml`, `tests/test_bundle_manifest.py` | bundle membership and the drift guard that enforces it |
 
 ### 11.2 Known documentation drift
 

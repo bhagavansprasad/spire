@@ -120,6 +120,16 @@ response shape and field names were inspected without inspecting invoice
 values. This confirms endpoint access, not end-to-end prompt coverage or field
 semantics.
 
+**Update 2026-11-28 (run02 of the 40-prompt Module A set).** Discovery
+questions 1 and 2 below are now partly answered by evidence rather than by
+assumption: AP answers 8 of its 10 prompts, and the two remainder are recorded
+gaps. See [`STATUS.md`](./STATUS.md#ap-evidence--the-40-prompt-sme-set-run02-2026-11-28)
+and [`../sme_prompts_status/COMPARISON.md`](../sme_prompts_status/COMPARISON.md).
+AP invoice lines are supported (`InvoiceLine`, added by F-077); the remaining
+AP code gap is the capped line count (SP-005) and invoices on hold (SP-006).
+AP is also the only module not blocked by the pod-level defects SP-003 and
+SP-004.
+
 ### 5.2 Discovery questions to answer before implementation
 
 1. Which 10–20 AP prompts are most common and must not fail? What result does
@@ -221,7 +231,9 @@ Before starting the next module:
 ## 9. Open decisions
 
 - Confirm `CM` means Cash Management.
-- Receive Venu's first Financials/AP litmus prompts and expected results.
+- Receive the remaining litmus prompts for the 14 areas beyond AP, AR and PO.
+  The Module A 40-prompt set covers AP, AR, PO and Supplier only; prompts 11-20
+  are the AP baseline and are already scored across two runs.
 - Reconcile the REST `DueDate` field and the AP synthesized output with the
   older SQL-oriented SME note; verify which date "created" prompts should use.
 - Define the intended result-count disclosure and user-facing pagination

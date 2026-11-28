@@ -63,8 +63,12 @@ def test_shape_1_active_suppliers():
     assert "HP.PARTY_NAME" in body
     assert "FROM POZ_SUPPLIERS P" in body
     assert "JOIN HZ_PARTIES HP ON HP.PARTY_ID = P.PARTY_ID" in body
-    assert "WHERE P.ENABLED_FLAG = 'Y'" in body
-    assert "ASSUMPTION [status_maps_to_enabled_flag]" in sql
+    # F-080b: status maps to END_DATE_ACTIVE, not the ENABLED_FLAG stub
+    # ('Y' on all 334 suppliers). ACTIVE is the complement of INACTIVE.
+    assert "UPPER('ACTIVE') = 'INACTIVE'" in body
+    assert "P.END_DATE_ACTIVE IS NULL" in body
+    assert "P.ENABLED_FLAG = 'Y'" not in body
+    assert "ASSUMPTION [status_maps_to_end_date_active]" in sql
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -77,10 +81,10 @@ def test_shape_2_active_suppliers_in_us():
                  {"status": "ACTIVE", "country": "US"})]
     sql = emit_sql(plan)[0]
     body = _strip_comments(sql)
-    assert "P.ENABLED_FLAG = 'Y'" in body
+    assert "P.END_DATE_ACTIVE" in body  # F-080b carrier
     assert "L.COUNTRY = 'US'" in body
     assert "AND" in body
-    assert "ASSUMPTION [status_maps_to_enabled_flag]" in sql
+    assert "ASSUMPTION [status_maps_to_end_date_active]" in sql
     assert "ASSUMPTION [address_join_for_country]" in sql
 
 
@@ -390,3 +394,87 @@ def test_purchase_order_line_tax_is_from_distributions_not_schedule_stub():
     assert "NVL(" in body
     # The stub ESTIMATED_TAX_AMOUNT carrier must be gone.
     assert "ESTIMATED_TAX_AMOUNT" not in body
+
+
+def test_f078_filter_specs_cover_observed_tool_arguments():
+    cases = [
+        (
+            "search_purchase_orders",
+            {"created_since": "2026-10-21"},
+            "P.CREATION_DATE >= '2026-10-21'",
+        ),
+        (
+            "search_purchase_orders",
+            {"supplier_name": "Dell Inc"},
+            "HP.PARTY_NAME LIKE '%Dell Inc%'",
+        ),
+        (
+            "search_invoices",
+            {"invoice_number": "ERS-53004-755598"},
+            "P.INVOICE_NUM = 'ERS-53004-755598'",
+        ),
+        (
+            "search_invoices",
+            {"supplier_name": "Staffing Services"},
+            "HI.PARTY_NAME LIKE '%Staffing Services%'",
+        ),
+        (
+            "search_invoices",
+            {"unpaid": True},
+            "P.PAYMENT_STATUS_FLAG IN ('N', 'P')",
+        ),
+        (
+            "get_customer_account_by_name",
+            {"account_number": "26360"},
+            "CA.ACCOUNT_NUMBER = '26360'",
+        ),
+        (
+            "search_addresses",
+            {"supplier_number": "1262"},
+            "SP.SEGMENT1 = '1262'",
+        ),
+        (
+            "get_customer_transactions",
+            {"account_id": "$iteration_value", "open_only": True},
+            "T.AMOUNT_DUE_REMAINING > 0",
+        ),
+    ]
+
+    for tool_name, args, expected in cases:
+        body = _strip_comments(
+            emit_sql([Step(1, tool_name, args)])[0]
+        )
+        assert expected in body, (tool_name, args, body)
+
+
+def test_unmapped_filter_arg_fails_instead_of_emitting_invalid_where():
+    with pytest.raises(
+        ValueError,
+        match=r"Unmapped SQL argument search_invoices\.unknown_filter",
+    ):
+        emit_sql([Step(1, "search_invoices", {"unknown_filter": "x"})])
+
+
+@pytest.mark.parametrize("arg_name", ["pending", "overdue"])
+def test_known_sql_disabled_filter_fails_with_reason(arg_name):
+    with pytest.raises(
+        ValueError,
+        match=rf"SQL projection disabled for search_invoices\.{arg_name}",
+    ):
+        emit_sql([Step(1, "search_invoices", {arg_name: True})])
+
+
+def test_unmapped_aggregation_arg_fails_instead_of_emitting_comment():
+    with pytest.raises(
+        ValueError,
+        match=r"Unmapped SQL argument aggregate_invoices_by_supplier\.unknown",
+    ):
+        emit_sql(
+            [
+                Step(
+                    1,
+                    "aggregate_invoices_by_supplier",
+                    {"unknown": "x"},
+                )
+            ]
+        )
