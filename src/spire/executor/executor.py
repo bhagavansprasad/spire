@@ -682,6 +682,21 @@ async def execute_plan(
             items, metadata = await _execute_iterating_step(step, session, outputs)
             if metadata:
                 metadata_by_step[step.output_name] = metadata
+                # F-086. An iterating step used to land in metadata_by_step
+                # ONLY — so a capped child's total reached the executor and
+                # stopped there. The synthesizer's prompt is built from
+                # truncation_by_step, and _build_synthesis_prompt's metadata
+                # branch reads exactly one hardcoded bucket name, so the
+                # child's "184 total" was discarded and the model described
+                # the 50 rows it could see. p13 answered "50 line items" for
+                # an invoice with 184, across five tools.
+                #
+                # Filling truncation_by_step as well is what makes the cap
+                # visible. Both maps are fed because they serve different
+                # readers: truncation_by_step drives the prompt's truncation
+                # block, metadata_by_step drives the local summary builders.
+                if metadata.get("truncated"):
+                    truncation_by_step[step.output_name] = metadata
         outputs[step.output_name] = items
 
     return outputs, truncation_by_step, metadata_by_step

@@ -604,7 +604,7 @@ async def get_purchase_order_lines(
 
 @mcp.tool()
 async def get_invoice_lines(
-    invoice_id: int, limit: int = 50
+    invoice_id: int, limit: int = 200
 ) -> dict:
     """Fetch the line items of one AP (payables) invoice.
 
@@ -618,9 +618,10 @@ async def get_invoice_lines(
     Args:
         invoice_id: The numeric InvoiceId of the parent AP invoice — NOT
             the invoice number. search_invoices returns it.
-        limit: Max line records to return (default 50). An AP invoice can
-            carry many lines including tax auto-lines (invoice 1601397 has
-            184), so raise this when the whole line set is wanted.
+        limit: Max line records to return (default 200). An AP invoice can
+            carry many lines including tax auto-lines — invoice 1601397 has
+            184 — so 200 returns an ordinary invoice whole. Above 200 the
+            result states how many more exist.
 
     Returns:
         A dict with the invoice's lines: LineNumber, Description, Quantity,

@@ -466,6 +466,7 @@ bundles:
   # the sample-and-disclose suites. These were tracked but unbundled.
   - tests/test_f076_data_scope.py
   - tests/test_f077_ap_invoice_lines.py
+  - tests/test_f086_child_count_reaches_prompt.py
   - tests/test_f079_identifier_space.py
   - tests/test_f080b_supplier_status_carrier.py
   - tests/test_f081_field_projection.py

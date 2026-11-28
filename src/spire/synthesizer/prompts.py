@@ -392,16 +392,36 @@ def _build_synthesis_prompt(
         "output_name of a step; each value is a list of records returned "
         f"by that step.\n\n```json\n{rendered}\n```\n"
     ]
-    # ---- Add metadata note if available (fixes receipt-applications count) ----
+    # ---- Authoritative totals for capped steps the truncation block missed
+    #
+    # This used to read one hardcoded bucket name — "account_receipt_applications"
+    # — because that was the only case known to lose its count. Generalising
+    # it is what F-086 needs: the count was being fetched and stored for every
+    # capped step, and the model rendered only the rows it could see, so an
+    # invoice with 184 lines answered "50 line items".
+    #
+    # A step is listed when its total is known AND exceeds the rows actually
+    # shown AND the truncation block above does not already carry it. The
+    # third condition matters: iterating steps now populate truncation_by_step
+    # too, so repeating them here would state the same split twice.
     if metadata_by_step:
-        apps_meta = metadata_by_step.get("account_receipt_applications")
-        if apps_meta and apps_meta.get("total_available") is not None:
-            total = apps_meta["total_available"]
+        omitted_totals = {
+            name: meta["total_available"]
+            for name, meta in metadata_by_step.items()
+            if meta.get("total_available") is not None
+            and meta["total_available"] > len(outputs.get(name) or [])
+            and name not in (truncation_by_step or {})
+        }
+        if omitted_totals:
+            totals_rendered = json.dumps(omitted_totals, indent=2)
             parts.append(
-                f"\nThe total number of applied receipt applications for this account "
-                f"is {total}.\n"
+                "\nFor the following steps only a capped page was returned, "
+                "but the source reports more records than were shown. These "
+                "totals are authoritative — state them when the answer "
+                "describes how many records exist; do NOT describe the rows "
+                f"above as the complete set.\n\n```json\n{totals_rendered}\n```\n"
             )
-            
+
     if truncation_by_step:
         truncation_rendered = json.dumps(truncation_by_step, default=str, indent=2)
         parts.append(
