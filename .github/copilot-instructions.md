@@ -30,7 +30,10 @@ here is not enough.
 
 ## Durable project rules (from WORKING_STYLE.md)
 - Integration branch is `master`. Code/features/tooling/bug fixes go on
-  a branch named `Phase{N}-{Descriptive}`, then merge via PR. No local
+  a branch named `{Area}-{Descriptive}` — the Fusion module
+  (`Payables`, `Receivables`, `Procurement`, `Supplier`) when the work
+  belongs to one, otherwise the capability touched (`Truncation`, `KG`,
+  `Docs`). The old `Phase{N}-` prefix is retired. Merge via PR; no local
   merge into `master`.
 - Every claim needs a command and its output. Capture complete stdout
   and stderr to a file, then grep the file — never filter at capture
