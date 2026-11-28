@@ -3,18 +3,18 @@
 Everything a new window needs to pick this work up without re-deriving it.
 Read this, then `FIX_PLAN.md`, then the latest `runNN_` file.
 
-**Last updated:** 2026-11-28 (after PR #231 and #232 merged; `master` at `5ca21a2`).
+**Last updated:** 2026-11-28 (after PR #235 merged; `master` at `09fbaee`).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Base | `master` @ `5ca21a2` (PR #231 SP-005 data fix, #232 branch-naming rule) |
+| Base | `master` @ `09fbaee` (PR #233 count delivery, #234 AP-1 fields, #235 AP-2 outstanding) |
 | Latest run | run02 (2026-11-28), 40/40 prompts — **run03 is now overdue** |
 | Code score | 13 `OK`, 17 `REFUSED`, 0 `BADSQL` (run02, before #231) |
 | Environment blockers | 10 prompts (SP-003 ×6, SP-004 ×4) |
-| Open code defects | SP-001, SP-002, SP-006 — **SP-005 and AP-1 closed 2026-11-28** |
-| Not yet in a prompt row | **F-086** count not shown · **F-087** unmarked live tests · **F-088** p14 emits two answers |
+| Open code defects | SP-001, SP-002, SP-006 — **SP-005, AP-1 and AP-2 closed 2026-11-28** |
+| Not yet in a prompt row | **F-086** count did not reach the answer · **F-087** unmarked live tests · **F-088** p14 emits two answers |
 
 **Next window starts on a new branch off `master`, named
 `{Area}-{Descriptive}`** — for example `Payables-Line-Count-Display`. The

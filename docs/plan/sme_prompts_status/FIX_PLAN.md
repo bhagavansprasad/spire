@@ -27,8 +27,9 @@ a closed row, so the history stays readable.
 | SP-006 | Genuine filter/parser gaps (9 sub-items) | 9 | Spire | Open — triage first |
 
 Code defects: **SP-001, SP-002, SP-006**. **SP-005 is closed** (PR #231 data +
-PR #233 delivery; p13 states 184 on a restarted stack) and **AP-1 is closed**
-(Invoice `DueDate`, `Supplier`, `PaidStatus`, `ApprovalStatus` all render).
+PR #233 delivery; p13 states 184 on a restarted stack), **AP-1 is closed**
+(Invoice `DueDate`, `Supplier`, `PaidStatus`, `ApprovalStatus` all render) and
+**AP-2 is closed** (p20 ranks by outstanding with the month window applied).
 Environment: **SP-003, SP-004** — not fixable in this repo.
 
 ---
@@ -336,11 +337,12 @@ coverage gap".
 | F-078 | Tool args with no `FilterSpec` emitted `-- unmapped` SQL | PR #220 | 10 `BADSQL` → 0 (run02) |
 | F-082 | AR invoice *number* bound to `CUSTOMER_TRX_ID` | PR #221 | p22 0 → 1 row (run02) |
 | SP-005 | A child's page size stated as the collection total | PR #231 (data) + PR #233 (delivery) | p13 says **184** twice on a restarted stack |
-| AP-1 | Invoice's KG vocabulary was narrower than the tool projection | this branch | p12, p11, p14 all render `DueDate` / `Supplier` / statuses live |
+| AP-1 | Invoice's KG vocabulary was narrower than the tool projection | PR #234 | p12, p11, p14 all render `DueDate` / `Supplier` / statuses live |
+| AP-2 | p20 answered "spend, all time" for "outstanding, current month" | PR #235 | p20: `op='outstanding_by_supplier'`, `date_from='2026-11-01'`, 31 suppliers, twice |
 
 Full records for these are in `docs/fixes/FIX_PLAN.md`.
 
-## SP-005 and AP-1 — what the two closures actually changed
+## SP-005, AP-1 and AP-2 — what the three closures actually changed
 
 Both were the same shape: a value the pipeline **already held** was not
 shown, so the refusal described a boundary that did not exist.
@@ -380,6 +382,25 @@ p14  table: InvoiceNumber | InvoiceDate | DueDate | InvoiceAmount
 
 `Available columns` now lists 15 Invoice fields, including `DueDate` and
 `Supplier`, so a refusal at least hands the reader a real menu.
+
+**AP-2 was the one defect where the answer was not merely incomplete but a
+different question.** p20 asked for outstanding for the current month and got
+spend over all time — and it scored `OK`, because rows came back. Two
+substitutions, one per half:
+
+- *Measure.* The only AP aggregation summed `InvoiceAmount`. Outstanding is
+  `InvoiceAmount - AmountPaid` over non-cancelled invoices, so the fix is a
+  second bounded tool with its own shape tag, response model and row type.
+  Sharing any of those would let a spend figure render under an Outstanding
+  heading. The duplication is the safety property.
+- *Period.* Two independent defects, both found only by running the prompt:
+  `_PERIOD_ANCHORED_RE` matched `this|last` but **not `current`**, and the
+  correction was gated to `op == 'by_supplier'` — correct when that was the
+  only date-capable aggregation, and silently wrong for the next one. It now
+  reads `_AGGREGATION_PARAMS`.
+
+Both were invisible to a unit-test-only fix, which is the same lesson as
+F-086: the run is the gate, not the patch.
 
 ## Recommended order
 
