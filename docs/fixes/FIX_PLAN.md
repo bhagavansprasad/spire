@@ -13,11 +13,12 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** **Open — two rows.** **F-087** (the default test suite runs
-live-pod tests and hangs) and **F-088** (p14 emits two `Answer:` blocks) are
-open. **F-086** is fixed and verified end to end on `Payables-Line-Count-Display`
-(PR #233). Everything earlier in this file is fixed and live-verified on
-dev49: **F-076 through F-085**.
+**Status:** **Open — one row.** **F-087** (the default test suite runs
+live-pod tests and hangs) is open. **F-088** is fixed and verified (PR #237):
+one result, one `Answer:` heading. **F-086** is fixed and verified end to end
+(PR #233) and **F-081/078/079** headings were corrected to match their own S7.
+Everything earlier in this file is fixed and live-verified on dev49:
+**F-076 through F-085**.
 
 **Correction (2026-11-28).** F-086 was recorded as `Candidate→Fixed` after the
 first fix merged (PR #231), then reopened the same day because the ANSWER still
@@ -2343,7 +2344,55 @@ guard is the thing protecting you.
 
 ---
 
-### F-088 — p14 emits two `Answer:` blocks for one result (S1, open)
+### F-088 — one result printed two `Answer:` blocks (S1, FIXED)
+
+**Fixed 2026-11-28, PR #237.** Verified live on both prompts that showed it.
+
+**S3 (mechanism) — RESOLVED, and both of my candidates were wrong.** The
+entry was left as a Candidate because S3 could not name a mechanism and said
+so rather than guessing. It listed two possibilities: (a) the sample-and-
+disclose path emitting its own summary before a second renderer, (b) the
+refusal-note renderer firing as well as the disclosure one. Neither was it.
+
+The actual cause: `render_answer` and `render_cli_stdout` both emit the
+synthesized summary **and then** the projected-columns table, and **both
+opened with the literal heading `Answer:`**. The table is a continuation of
+the answer, not a second one. Two renderers were not fighting — one renderer
+was labelling its second half as a new answer.
+
+**S6 (falsifier) — what it would have said.** "Instrument the response
+builder to log which renderer writes each block; if one renderer writes both
+under two headings, the cause is a heading bug and not a duplicate path."
+That is exactly what it was. The falsifier was written correctly and then not
+run; running it first would have saved a wrong guess.
+
+**A second symptom, found while fixing the first.** p12's first block was
+EMPTY — `Answer:` with nothing under it — because `_format_synthesized`'s
+`summary_only` branch printed the heading unconditionally, including for an
+empty summary. Same class: a heading emitted for content that is not there.
+
+**S7 (classify).** **Confirmed** — S0–S6 all pass, and the fix is verified by
+re-running the two prompts.
+
+**S10 (what was not checked).** Whether the API/UI path shows the same shape
+— it goes through `render_cli_stdout`, which was fixed identically, but only
+the CLI was run. Whether other prompts with a column refusal and a summary
+were also doubling; the two that were observed both did.
+
+**A mistake worth recording.** The first fix keyed the table's heading on
+`heading=not fields`, which suppressed it whenever columns were requested.
+That was one heading too few: p12's summary is empty, so the answer then began
+with a bare `Note:` and no heading at all. The 7 new tests passed in both
+versions — they asserted the counts I had already chosen. Re-running the
+prompt is what caught it. Same lesson as F-086 and AP-2: the run is the gate,
+not the patch and not the test.
+
+---
+
+**Original entry, kept because the hypothesis it recorded was wrong in an
+instructive way.**
+
+### F-088 (as first logged, SUPERSEDED — see the fixed entry above) — p14 emits two `Answer:` blocks (S1, open)
 
 **R (reproduce).** Observed 2026-11-28 on merged `master`, one manual run,
 verbatim shape:
