@@ -115,6 +115,42 @@ def _block(log, text: str) -> None:
     log.debug("%s\n", text)
 
 
+def empty_answer_label(
+    fields: list[str] | None,
+    unresolved: list[str] | None,
+    entity: str | None,
+) -> str | None:
+    """Label for an answer that matched records but can show no wanted column.
+
+    Returns None when the answer carried something — either because at least
+    one requested column resolved, or because no columns were named at all
+    and the entity's default projection answers the question.
+
+    F-090. p17 ("payment details") and p18 ("validation and accounting") each
+    returned a bare note plus "(1 record(s) matched; no requested column was
+    available.)" and each tallied `[ok]`, so a batch whose answers were
+    half-empty reported 10/10 clean.
+
+    The test is STRUCTURAL, not textual. An earlier check in this file
+    matched message wording (`"require" in err`) and broke when the wording
+    changed; the lesson is recorded beside that check. Empty `fields` with a
+    non-empty `unresolved` list is the condition intent_validation produces
+    when every named column misses the entity's catalog, and it is what the
+    renderer's `not cols` branch keys on.
+
+    A PARTIAL miss stays None on purpose: p12 named an unavailable
+    BusinessUnit and p14 an unavailable "remaining balance", but both showed
+    real columns and answered the question. Labelling those failures would
+    drown the ones that matter.
+    """
+    if fields or not unresolved:
+        return None
+    return (
+        f"empty: 0 of {len(unresolved)} requested column(s) available "
+        f"on {entity}"
+    )
+
+
 def load_prompts(path: Path) -> list[str]:
     """Read prompts from a text file: one per line, skipping blank lines
     and '#' comment lines."""
@@ -206,6 +242,16 @@ async def _run_one(prompt: str, menu, client) -> str:
     _summary_log.info(
         "%s", _format_summary(state["plan"], _outputs, state.get("response"))
     )
+
+    # F-090. An answer that matched records but can show NONE of the columns
+    # the reader asked for is not a success, and this harness used to call it
+    # one. See empty_answer_label for the rule and why it is structural.
+    _label = empty_answer_label(
+        _fields, _unresolved, state["intent"].target_entity
+    )
+    if _label:
+        return _label
+
     return "ok"
 
 
@@ -263,7 +309,10 @@ async def _run_all(sets: list[tuple[str, list[str]]]) -> int:
 
     def _is_failure(label: str) -> bool:
         # A crash counts as a failure: its label starts with "crash:",
-        # which is neither "ok" nor a "refused" prefix.
+        # which is neither "ok" nor a "refused" prefix. An "empty:" label
+        # (F-090 — matched records but no requested column was available)
+        # counts the same way, and for the same reason: the reader got no
+        # information out of the run.
         return label != "ok" and not label.startswith("refused")
 
     all_failures: list[tuple[str, str]] = []
@@ -295,6 +344,9 @@ async def _run_all(sets: list[tuple[str, list[str]]]) -> int:
     # Read the answers.
     print("\nNOTE: 'ran cleanly' means it did not error. It does NOT mean")
     print("the answer is correct. Read the answers, not this tally.")
+    print("Labels: 'refused' is an expected decline, not a pass. 'empty'")
+    print("means records matched but no requested column was available, so")
+    print("the answer carried no information (F-090) — counted as a failure.")
     return 1 if all_failures else 0
 
 
