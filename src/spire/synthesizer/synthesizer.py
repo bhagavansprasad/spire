@@ -78,6 +78,7 @@ from spire.synthesizer.p2p import (  # noqa: F401
     AddressResponse,
     ContactInfo,
     DistributionInfo,
+    InvoiceHoldResponse,
     InvoiceRecord,
     InvoiceResponse,
     LineInfo,
@@ -221,6 +222,7 @@ SYNTHESIS_SCHEMAS: dict[str, type[BaseModel]] = {
     "CustomerAccount": CustomerAccountResponse,
     "CreditMemo": CreditMemoListResponse,
     "StandardReceipt": StandardReceiptResponse,
+    "InvoiceHold": InvoiceHoldResponse,
 }
 
 
@@ -237,6 +239,7 @@ _ENTITY_LABEL: dict[str, str] = {
     "CustomerAccount": "customer accounts",
     "CreditMemo": "credit memos",
     "StandardReceipt": "receipts",
+    "InvoiceHold": "invoice holds",
 }
 
 

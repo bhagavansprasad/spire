@@ -466,8 +466,34 @@ INSERT INTO kg_entity VALUES (
   'payables'
 );
 
-PROMPT Seeded kg_entity (23 rows).
+-- p15 (2026-11-28). Invoice HOLDS. A hold is its own resource, not a field or
+-- a child of the invoice: /invoices exposes no hold column and lists no holds
+-- child (its children are appliedPrepayments, attachments,
+-- availablePrepayments, invoiceDff, invoiceGdf, invoiceInstallments,
+-- invoiceLines). Before this entity existed p15 was refused with "Filtering
+-- invoices by hold status is not supported" — which was a coverage gap, not a
+-- Fusion limitation, and the SME test fails it.
+--
+-- Discovered per SCHEMA_DISCOVERY_METHOD.md. Layer 1: FUSION.AP_HOLDS is a
+-- SYNONYM onto AP_HOLDS_ALL (VIEW, 41 columns), alongside AP_HOLD_CODES
+-- (VIEW). Layer 2: the view carries INVOICE_ID, HOLD_LOOKUP_CODE, HOLD_REASON,
+-- HOLD_DETAILS, HOLD_DATE, HELD_BY, RELEASE_LOOKUP_CODE, RELEASE_REASON and
+-- WF_STATUS. Layer 3: AP_HOLDS_ALL.INVOICE_ID -> AP_INVOICES_ALL.INVOICE_ID.
+--
+-- Active holds are the unreleased ones. Measured on the pod's own database:
+-- 14,772 holds total, 376 with RELEASE_LOOKUP_CODE IS NULL, and the same 376
+-- with RELEASE_REASON IS NULL. Only the latter is accepted by Fusion REST's
+-- q=, so the REST predicate is `ReleaseReason is null` and it returns all 374
+-- REST-visible active holds in ONE page. 2 holds are orphans: their INVOICE_ID
+-- has no AP_INVOICES_ALL row.
+INSERT INTO kg_entity VALUES (
+  'InvoiceHold', 'HoldId', 'HoldName',
+  '/fscmRestApi/resources/11.13.18.05/invoiceHolds',
+  'A hold placed on an AP (payables) invoice. Identity is HoldId. Carries the hold name, reason, details, who placed it and when, and the release fields. A hold is ACTIVE when it has not been released: RELEASE_REASON IS NULL, which selects the same rows as RELEASE_LOOKUP_CODE IS NULL and is the spelling Fusion REST accepts. The invoice row itself carries no hold field and has no holds child, so this resource is the only route to hold state. REST exposes InvoiceNumber but NOT InvoiceId, and invoice numbers repeat across suppliers on this pod (6 numbers are shared), so joining an amount through /invoices needs the Supplier as a second key.',
+  'payables'
+);
 
+PROMPT Seeded kg_entity (24 rows).
 -- ============================================================
 -- STEP 4: Seed kg_entity_field
 -- ============================================================
@@ -715,6 +741,21 @@ INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'UOM',              'projecti
 INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'AccountingDate',   'date',         'date',    'Accounting date for the line.');
 INSERT INTO kg_entity_field VALUES ('InvoiceLine', 'AssessableValue',  'amount',       'numeric', 'Assessable value for tax.');
 
+-- InvoiceHold (p15). Eight fields, all curl-confirmed on /invoiceHolds
+-- 2026-11-28. The five the litmus asks for are InvoiceNumber, Supplier,
+-- InvoiceAmount, HoldReason and HoldStatus; the last is derived from the
+-- release pair below rather than being a column of its own.
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldId',          'canonical_id', 'numeric', 'Hold identifier (HoldId). One invoice can carry several holds, and each is its own row — 376 active holds sit on 170 distinct invoices. Distinct from InvoiceNumber, which is not unique either.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'InvoiceNumber',   'reference',    'string',  'Number of the held invoice. Joins to Invoice.InvoiceNumber, but NOT uniquely: 6 numbers are shared by more than one invoice on this pod (1122 is both 295,759.13 and 2,000). The row''s Supplier is the second key that disambiguates. REST exposes no InvoiceId here.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'Supplier',        'display_name', 'string',  'Supplier display name for the held invoice. Byte-identical to Invoice.Supplier, which is what makes the (InvoiceNumber, Supplier) join safe.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldName',        'display_name', 'string',  'Name of the hold type, e.g. ''Line variance'', ''Incomplete invoice'', ''Duplicate Invoice''.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldReason',      'status',       'string',  'Why the invoice is held, in words, e.g. ''Total of invoice lines does not equal invoice amount.''');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldDetails',     'projection',   'string',  'Free-text details on the hold. Often null.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldDate',        'date',         'iso_date','When the hold was placed.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'WorkflowStatus',  'status',       'string',  'Hold workflow state as the pod reports it (WF_STATUS). Often null; the reliable active test is the release pair, not this.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'HoldStatus',      'status',       'string',  'DERIVED: ''On hold'' when RELEASE_REASON IS NULL, ''Released'' otherwise. The pod has no status column — this is the release pair read as a state. Declared as a field so the parser can resolve "hold status" and the projection can print it; the CASE expression lives in kg_derived_projection.');
+INSERT INTO kg_entity_field VALUES ('InvoiceHold', 'InvoiceAmount',   'amount',       'number',  'Amount of the held invoice, joined from AP_INVOICES_ALL.ON INVOICE_ID. The hold row carries no amount of its own, so this is read through the parent invoice. Null when the parent is missing (2 of the 376 active holds are orphans) — never reported as zero.');
+
 -- AR-P3 DFF
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', 'CustomerTrxId',                'canonical_id', 'numeric', 'Parent invoice id echoed on the DFF child. Pod spells it CustomerTrxId (short form), not CustomerTransactionId.');
 INSERT INTO kg_entity_field VALUES ('ReceivablesInvoiceTransactionDFF', '__FLEX_Context',              'projection',   'string',  'The descriptive-flexfield context name (e.g. ''DOO''). Set on this pod but with no populated segment columns behind it.');
@@ -835,7 +876,7 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Address1', 'projection', 'string
 INSERT INTO kg_entity_field VALUES ('Address', 'City', 'projection', 'string', 'City (HZ_LOCATIONS.CITY). SQL-only.');
 INSERT INTO kg_entity_field VALUES ('Address', 'State', 'projection', 'string', 'State (HZ_LOCATIONS.STATE). SQL-only.');
 
-PROMPT Seeded kg_entity_field (244 rows).
+PROMPT Seeded kg_entity_field (254 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1115,6 +1156,15 @@ INSERT INTO kg_vocabulary VALUES ('field_synonym', 'overdue days',      'Overdue
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'number of overdue days', 'OverdueDays',   'p16 word-for-word phrasing.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'validation status', 'ValidationStatus',  'p18: the invoice''s validation outcome.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'accounting status', 'AccountingStatus',  'p18: the invoice''s accounting outcome.');
+-- p15. The everyday phrasings for hold state. Targets are InvoiceHold columns,
+-- which is why the entity's own name is also seeded as a synonym below.
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'hold reason', 'HoldReason', 'p15: why the invoice is held.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'hold status', 'HoldStatus', 'p15: whether the invoice is currently held. Derived from the release pair, not a pod column.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'hold name',   'HoldName',   'p15: the hold type, e.g. Line variance.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'hold',  'InvoiceHold', 'An invoice hold.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'holds', 'InvoiceHold', 'Invoice holds.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice hold',  'InvoiceHold', 'An invoice hold.');
+INSERT INTO kg_vocabulary VALUES ('entity_synonym', 'invoice holds', 'InvoiceHold', 'Invoice holds.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx', 'TransactionNumber', 'Legacy EBS: trx -> TransactionNumber (AR).');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx number', 'TransactionNumber', 'Legacy EBS: trx number -> TransactionNumber (AR).');
 
@@ -1447,7 +1497,16 @@ INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALU
   'Account-number resolver for CustomerAccount. Same tool as the by-name resolver; the filter type selects the query clause (AccountNumber vs CustomerName). Returns the account(s) whose AccountNumber matches exactly. Registered as its own (entity, filter_type) row because the planner looks up the fetcher by the filter type it picked.'
 );
 
-PROMPT Seeded kg_entity_tool (13 rows).
+-- p15. The default fetcher for InvoiceHold. `on_hold` is the only filter and
+-- it is not a narrowing: it selects the active holds, which is the whole
+-- question. Registered as a (entity, filter_type) row because the planner
+-- looks the fetcher up by the filter type the parser picked.
+INSERT INTO kg_entity_tool (entity_name, filter_type, mcp_tool_name, notes) VALUES (
+  'InvoiceHold', 'on_hold', 'search_invoice_holds',
+  'Default fetcher for InvoiceHold. Returns unreleased holds with the held invoice amount joined through Supplier. No required narrowing argument: an active hold is the population, not a filter over a larger set.'
+);
+
+PROMPT Seeded kg_entity_tool (14 rows).
 
 -- ============================================================
 -- STEP 10: Seed kg_edge_tool
@@ -1787,7 +1846,18 @@ INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name
   'Invoices pending approval, the default reading of "pending" in AP. Server clause q=ApprovalStatus=''Required''. The answer must disclose the reading and name the alternative (pending control check, pending payment). See docs/design/INVOICE_STATUS_ACCEPTANCE.md §4.1.'
 );
 
-PROMPT Seeded kg_entity_filter (37 rows).
+-- p15. The only filter on InvoiceHold, and it is not a narrowing — it selects
+-- the active population. query_style is server_q because the predicate IS
+-- pushed to Fusion: `ReleaseReason is null` returns all 374 REST-visible
+-- active holds in one page. Measured against the pod database, that clause
+-- selects the same 376 rows (374 joined) as RELEASE_LOOKUP_CODE IS NULL;
+-- ReleaseDate is null is NOT queryable, which is why the reason is used.
+INSERT INTO kg_entity_filter (entity_name, filter_type, mechanism, tool_arg_name, vocab_kind, target_entity, kg_filter_type, implicit_vocab_kind, implicit_term, query_style, filter_field, filter_op, notes) VALUES (
+  'InvoiceHold', 'on_hold', 'entity_level', 'on_hold', NULL, NULL, NULL, NULL, NULL, 'server_q', 'ReleaseReason', 'is_null',
+  'Invoices currently on hold: holds that have not been released. Server clause q=ReleaseReason is null. Verified 2026-11-28 against AP_HOLDS_ALL: 14,772 holds total, 376 with RELEASE_LOOKUP_CODE IS NULL and the same 376 with RELEASE_REASON IS NULL; the REST page returns 374 because 2 holds are orphans with no AP_INVOICES_ALL row.'
+);
+
+PROMPT Seeded kg_entity_filter (38 rows).
 
 -- ============================================================
 -- STEP 12: Seed kg_entity_sql, kg_sql_column, kg_derived_projection
@@ -1825,6 +1895,10 @@ INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('Receiv
 -- exposes no INVOICE_LINE_ID on this pod (verified), and (INVOICE_ID,
 -- LINE_NUMBER) is unique across all 1,335,566 rows.
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('InvoiceLine', 'AP_INVOICE_LINES_ALL', 'LINE_NUMBER');
+-- p15. InvoiceHold's SQL carrier. AP_HOLDS_ALL is the VIEW (41 columns) that
+-- FUSION.AP_HOLDS is a synonym onto; the emitter names the view directly
+-- because that is what the discovery layer found under ALL_VIEWS.
+INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('InvoiceHold', 'AP_HOLDS_ALL', 'HOLD_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('CreditMemo',            'RA_CUSTOMER_TRX_ALL',      'CUSTOMER_TRX_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('StandardReceipt',       'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
 INSERT INTO kg_entity_sql (entity_name, fusion_table, pk_column) VALUES ('AccountReceipt',        'AR_CASH_RECEIPTS_ALL',     'CASH_RECEIPT_ID');
@@ -2063,8 +2137,21 @@ INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_defau
 -- NULL, not false.
 INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('Supplier', 'Status', 'CASE WHEN P.END_DATE_ACTIVE <= TRUNC(SYSDATE) THEN ''INACTIVE'' ELSE ''ACTIVE'' END', 'Y');
 
+-- p15. InvoiceHold column carriers on AP_HOLDS_ALL. HoldStatus is derived, not
+-- a column: the pod has no status field, only the release pair, and an active
+-- hold is the one with RELEASE_REASON NULL. The expression mirrors the REST
+-- predicate exactly so the emitted SQL and the tool agree on which rows are
+-- held.
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'HoldId',         'AP_HOLDS_ALL', 'HOLD_ID',             'NUMBER',   22,  'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'HoldReason',     'AP_HOLDS_ALL', 'HOLD_REASON',         'VARCHAR2', 240, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'HoldDetails',    'AP_HOLDS_ALL', 'HOLD_DETAILS',        'VARCHAR2', 240, 'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'HoldDate',       'AP_HOLDS_ALL', 'HOLD_DATE',           'DATE',     7,   'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'HoldName',       'AP_HOLDS_ALL', 'HOLD_LOOKUP_CODE',    'VARCHAR2', 30,  'Y');
+INSERT INTO kg_sql_column (entity_name, field_name, physical_table, column_name, data_type, data_length, is_default_projection) VALUES ('InvoiceHold', 'WorkflowStatus', 'AP_HOLDS_ALL', 'WF_STATUS',           'VARCHAR2', 30,  'Y');
+INSERT INTO kg_derived_projection (entity_name, field_name, expression, is_default_projection) VALUES ('InvoiceHold', 'HoldStatus', 'CASE WHEN H.RELEASE_REASON IS NULL THEN ''On hold'' ELSE ''Released'' END', 'Y');
+
 COMMIT;
 
-PROMPT Seeded kg_entity_sql (23 rows), kg_sql_column (136 rows), kg_derived_projection (13 rows).
+PROMPT Seeded kg_entity_sql (24 rows), kg_sql_column (142 rows), kg_derived_projection (14 rows).
 
 -- ============================================================

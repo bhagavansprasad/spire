@@ -40,6 +40,9 @@ from spire.mcp_server.tools.aggregate_outstanding_invoices import (
     aggregate_outstanding_invoices_by_supplier as
     _aggregate_outstanding_invoices_by_supplier,
 )
+from spire.mcp_server.tools.invoice_holds import (
+    search_invoice_holds as _search_invoice_holds,
+)
 from spire.mcp_server.tools.aggregate_purchase_orders import (
     aggregate_purchase_orders_by_supplier as _aggregate_purchase_orders_by_supplier,
     aggregate_purchase_orders_by_status as _aggregate_purchase_orders_by_status,
@@ -492,6 +495,55 @@ async def aggregate_outstanding_invoices_by_supplier(
             top_n=top_n,
             report_progress=ctx.report_progress,
         )
+
+
+@mcp.tool()
+async def search_invoice_holds(
+    ctx: Context,
+    on_hold: bool = True,
+    limit: int = 100,
+) -> dict:
+    """Return AP invoices currently ON HOLD, with the held invoice amount.
+
+    Use this for "invoices on hold", "held invoices", "which invoices are
+    blocked", "invoices on hold with the hold reason". A hold is its own
+    resource on Fusion, not a field or a child of the invoice — the invoice
+    carries no hold column at all — so this cannot be answered by filtering
+    invoices.
+
+    A hold is ACTIVE when it has not been released. The server predicate is
+    q=ReleaseReason is null, which was measured against the pod's own database
+    to select exactly the same rows as RELEASE_LOOKUP_CODE IS NULL (376 of
+    14,772 holds). It returns all 374 REST-visible active holds in one page,
+    so this is a lookup rather than a scan.
+
+    The invoice amount is joined from /invoices because /invoiceHolds does not
+    expose InvoiceId. Invoice numbers repeat across suppliers on this pod — 6
+    numbers are shared, and invoice 1122 alone is 295,759.13 at one supplier
+    and 2,000 at another — so the join requires BOTH InvoiceNumber and
+    Supplier. Where the supplier cannot corroborate, the amount is omitted
+    rather than guessed.
+
+    Args:
+        limit: Max hold rows to return (default 100). An invoice can carry
+            several holds and each is its own row: 374 active holds sit on 170
+            distinct invoices.
+
+    Returns:
+        {"shape": "invoice_hold_list", "items": [...], "total_available": n,
+        "returned": n, "truncated": bool}. Each item carries HoldId,
+        InvoiceNumber, Supplier, InvoiceAmount, HoldName, HoldReason,
+        HoldDate, WorkflowStatus and HoldStatus.
+    """
+    async with FusionClient(_persona) as client:
+        result = await _search_invoice_holds(
+            client,
+            on_hold=on_hold,
+            limit=limit,
+            report_progress=ctx.report_progress,
+        )
+        payload = result.to_dict()
+        return {"shape": "invoice_hold_list", **payload}
 
 
 @mcp.tool()

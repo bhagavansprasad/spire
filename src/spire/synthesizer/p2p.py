@@ -360,6 +360,66 @@ class SupplierSummaryResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class InvoiceHoldRecord(BaseModel):
+    """One active AP invoice hold in a hold-rooted response.
+
+    p15. A hold is its own entity: the invoice carries no hold field and has
+    no holds child, so this cannot be expressed as an Invoice attribute. One
+    invoice can carry several holds — 374 active holds sit on 170 distinct
+    invoices on the dev49 pod — so a record is a HOLD, not an invoice.
+
+    hold_id is the identity. invoice_amount is optional because the amount is
+    joined from /invoices through (InvoiceNumber, Supplier) and the pod does
+    not always corroborate: 2 of the 376 active holds are orphans whose
+    INVOICE_ID has no invoice row, and invoice numbers repeat across
+    suppliers. A missing amount stays missing rather than becoming 0.00.
+    """
+
+    hold_id: int = Field(
+        description="The hold's HoldId (numeric key). Must appear in the data."
+    )
+    invoice_number: str = Field(
+        default="",
+        description="Number of the held invoice. Repeated numbers across "
+        "suppliers exist on this pod, so it is not unique on its own.",
+    )
+    supplier_name: str = Field(
+        default="", description="The held invoice's supplier display name."
+    )
+    invoice_amount: float | None = Field(
+        default=None,
+        description="The held invoice's amount. Null when it could not be "
+        "resolved — do NOT report a missing amount as zero.",
+    )
+    hold_name: str = Field(
+        default="", description="The hold type, e.g. 'Line variance'."
+    )
+    hold_reason: str = Field(
+        default="", description="Why the invoice is held, in words."
+    )
+    hold_date: str = Field(default="", description="When the hold was placed.")
+    hold_status: str = Field(
+        default="", description="'On hold' for every row in this response."
+    )
+
+
+class InvoiceHoldResponse(BaseModel):
+    """InvoiceHold-rooted synthesized response (p15)."""
+
+    summary: str = _SUMMARY_FIELD
+    invoice_holds: list[InvoiceHoldRecord] = Field(
+        default_factory=list,
+        description="One entry per ACTIVE hold in the final set. Empty if "
+        "none. An invoice with several holds appears once per hold.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+    narrowing_tip: str = Field(
+        default="",
+        description="Optional completeness advisory (QA-12). Set only when "
+        "the answer is a SAMPLE (examined < total).",
+    )
+
+
 class InvoiceResponse(BaseModel):
     """Invoice-rooted synthesized response."""
 
