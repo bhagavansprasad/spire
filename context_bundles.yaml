@@ -471,6 +471,7 @@ bundles:
   - tests/test_ap1_invoice_field_vocabulary.py
   - tests/test_ap2_outstanding_by_supplier.py
   - tests/test_f088_single_answer_block.py
+  - tests/test_f089_measure_qualification.py
   - tests/test_f079_identifier_space.py
   - tests/test_f080b_supplier_status_carrier.py
   - tests/test_f081_field_projection.py

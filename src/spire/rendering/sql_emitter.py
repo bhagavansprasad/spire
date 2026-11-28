@@ -402,38 +402,126 @@ def _resolve_value(
     return f"'{safe}'"
 
 
+# Words that are never a column reference inside a measure expression.
+# Function names do not need to be listed: a token immediately followed by
+# "(" is treated as a call and left alone, which also covers any function
+# added to a template later.
+_MEASURE_KEYWORDS = frozenset(
+    {
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "AND",
+        "OR",
+        "NOT",
+        "NULL",
+        "DISTINCT",
+        "CASE",
+        "WHEN",
+        "THEN",
+        "ELSE",
+        "END",
+        "AS",
+        "IN",
+        "IS",
+        "LIKE",
+        "BETWEEN",
+        "GROUP",
+        "BY",
+        "ORDER",
+        "HAVING",
+        "OVER",
+        "PARTITION",
+        "EXISTS",
+        "UNION",
+        "ALL",
+        "ON",
+        "JOIN",
+        "LEFT",
+        "RIGHT",
+        "INNER",
+        "OUTER",
+    }
+)
+
+
 def _qualify_measure(template: str, alias: str) -> str:
-    """Prefix the column inside a measure template with an alias.
+    """Prefix every bare column reference inside a measure with an alias.
 
     "SUM(AMOUNT)" -> "SUM(P.AMOUNT)"
     "SUM(INVOICE_AMOUNT)" -> "SUM(P.INVOICE_AMOUNT)"
     "COUNT(DISTINCT VENDOR_ID)" -> "COUNT(DISTINCT P.VENDOR_ID)"
+    "SUM(GREATEST(NVL(A, 0) - NVL(B, 0), 0))"
+        -> "SUM(GREATEST(NVL(P.A, 0) - NVL(P.B, 0), 0))"
 
-    The base table's columns are the ones intended; without the alias,
-    a joined table that happens to have a same-named column makes the
-    query ambiguous. None of the current aggregations collide, but the
-    rule is too narrow to leave implicit.
+    The base table's columns are the ones intended; without the alias, a
+    joined table that happens to have a same-named column makes the query
+    ambiguous.
 
-    If the template does not match the `<FN>(<COL>)` shape, it is
-    returned unchanged — a composite expression (e.g. a ratio) would
-    not have one column to qualify and would need per-tool handling.
+    F-089: the previous version wrapped the WHOLE inner expression in the
+    alias — `SUM(P.GREATEST(NVL(...) - NVL(...), 0))` — which Oracle rejects
+    with ORA-00904 because `P.GREATEST` names a function as a column. It was
+    written for a single-function-single-column shape and the docstring
+    claimed composites were "returned unchanged", but the pattern it matched
+    on accepted any inner text at all, so that guard never fired.
+    Qualification is therefore done per token rather than per expression.
+
+    A token is left alone when it is a function call (followed by "("), is
+    already qualified (preceded or followed by "."), is a SQL keyword, or is
+    inside a string literal. A correlated subquery is returned unchanged — it
+    carries its own aliases.
     """
     import re
 
-    m = re.match(r"^(\w+)\((.+)\)$", template)
+    m = re.match(r"^(\w+)\((.+)\)$", template.strip())
     if not m:
         return template
     fn, inner = m.group(1), m.group(2)
-    inner_stripped = inner.strip()
-    # A nested correlated subquery (e.g. a derived amount measure) already
-    # carries its own table aliases — do not prefix it with the base alias.
-    if "SELECT" in inner_stripped.upper():
+    if "SELECT" in inner.upper():
         return template
-    # COUNT(DISTINCT col)
-    if inner_stripped.upper().startswith("DISTINCT "):
-        col = inner_stripped[len("DISTINCT "):].strip()
-        return f"{fn}(DISTINCT {alias}.{col})"
-    return f"{fn}({alias}.{inner_stripped})"
+
+    out: list[str] = []
+    i = 0
+    n = len(inner)
+    while i < n:
+        ch = inner[i]
+        if ch == "'":
+            # Copy the whole literal verbatim; a column name inside quotes
+            # is data, not a reference. Doubled quotes escape.
+            j = i + 1
+            while j < n:
+                if inner[j] == "'":
+                    if j + 1 < n and inner[j + 1] == "'":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            out.append(inner[i : j + 1])
+            i = j + 1
+            continue
+        if ch.isalpha() or ch == "_":
+            j = i
+            while j < n and (inner[j].isalnum() or inner[j] == "_"):
+                j += 1
+            token = inner[i:j]
+            prev = inner[i - 1] if i > 0 else ""
+            k = j
+            while k < n and inner[k] == " ":
+                k += 1
+            nxt = inner[k] if k < n else ""
+            if (
+                prev == "."
+                or nxt in (".", "(")
+                or token.upper() in _MEASURE_KEYWORDS
+            ):
+                out.append(token)
+            else:
+                out.append(f"{alias}.{token}")
+            i = j
+            continue
+        out.append(ch)
+        i += 1
+    return f"{fn}({''.join(out)})"
 
 
 def _emit_aggregation_step(step: Any, spec: Any, overlay: Overlay) -> str:
