@@ -29,7 +29,7 @@ Returns a ToolResult whose items are the projected tax-line dicts.
 import httpx
 
 from spire.fusion.client import FusionClient
-from spire.mcp_server.tools.tool_result import ToolResult
+from spire.mcp_server.tools.tool_result import ToolResult, child_page_count
 
 
 # Grandchild tax-lines path template; formatted with the parent invoice
@@ -86,6 +86,9 @@ async def get_receivables_invoice_tax_lines(
     params = {
         "onlyData": "true",
         "limit": limit,
+        # SP-005. The child reports `count` as the page size; ask for the
+        # real total instead. See child_page_count.
+        "totalResults": "true",
         "fields": ",".join(_PROJECTED_FIELDS),
     }
     try:
@@ -112,8 +115,10 @@ async def get_receivables_invoice_tax_lines(
     for row in projected:
         row["ParentCustomerTransactionLineId"] = line_id
 
+    total_available, capped = child_page_count(response, projected)
     return ToolResult.build(
         items=projected,
         limit_applied=limit,
-        total_available=len(projected),
+        total_available=total_available,
+        capped=capped,
     )

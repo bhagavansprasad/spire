@@ -1972,3 +1972,74 @@ incomplete), but at entity level rather than column level.
 distribution for an invoice", "invoice line amount vs header amount
 reconciliation", and the AR twin ("receivables invoice lines", which
 already worked — a useful control that kept this defect visible).
+
+---
+
+### F-086 — five child tools stated a page size as the collection total (FIXED, S1)
+
+Recorded here as **SP-005** in `docs/plan/sme_prompts_status/FIX_PLAN.md`;
+that file is the prompt-set view and carries the full evidence. This entry
+is the defect register's copy.
+
+**S0 (claim).** `get_invoice_lines` set `total_available=len(projected)`.
+On a child resource the pod reports `count` as the **page** size, so the
+tool claimed "this is everything", `truncated` computed False, and the
+synthesizer stated the cap as fact. p13 answered *"The invoice contains 50
+line items"* for an invoice with **184**.
+
+**S1 (harm).** The only AP answer that was *incorrectly confident* rather
+than a refusal. Everything else in the module that failed, failed by
+declining.
+
+**S3 (what the probe changed).** The planned fix was to read `hasMore` and
+report an unknown total — "at least 184". `totalResults` turns out to be
+honoured on the child path, so the total is knowable **exactly**. Measured
+on dev49, 2026-11-28, invoice 1601397:
+
+```
+limit=50    count=50  hasMore=True   totalResults=184   items=50
+limit=100   count=58  hasMore=False  totalResults=58    items=58
+```
+
+`count` is `min(total, limit)`; it carries no information the caller cannot
+already see. `receivablesInvoices/1002/child/receivablesInvoiceLines`
+reports `totalResults: 4` — the AR side honours it too. The PO lines child
+could not be probed: PO `2144` 404s and `/purchaseOrders` returns 0 rows
+(SP-003).
+
+**S4 (fix).**
+
+1. `child_page_count(response, items)` in
+   `mcp_server/tools/tool_result.py` — one shared implementation, because
+   five copies is how the bug spread. Returns `(total_available, capped)`.
+2. `ToolResult.build(..., capped=False)`. Necessary and not cosmetic:
+   `truncated` is derived from the counts, so leaving `total_available=None`
+   alone would also force `truncated=False` and render "unknown" as
+   "complete".
+3. All five child tools request `totalResults=true`:
+   `get_invoice_lines`, `get_purchase_order_lines`,
+   `get_receivables_invoice_lines`, `get_receivables_invoice_tax_lines`,
+   `get_receivables_invoice_transaction_dff`. The last two were **not in the
+   original report** — found by grepping for the copied pattern.
+4. `get_invoice_lines` default limit 50 → 200. No invoice on dev49 exceeds
+   200; pagination deferred rather than built speculatively.
+
+**S5 (evidence).** `tests/test_line_counts.py` — 23 tests: the helper's
+three cases, `ToolResult.build`'s combinations, all five tools parametrised
+×3 (capped with a total, complete page, pod omits `totalResults`), and the
+two rendering statements.
+
+**S5b (what is NOT verified, stated rather than glossed).** The PO half
+cannot be exercised live (`/purchaseOrders` 0 rows, SP-003); the AR
+customer-account endpoint 403s (SP-004). For those two, unit tests are the
+only proof. The AP half is verified against the pod.
+
+**S9 (cross-link).** Same class as F-077 in that both were introduced by
+copying a sibling rather than by a wrong idea; unlike F-077 the copy was
+three lines long, which is why it survived review in five places.
+
+**S11b (coverage expansion).** The probe that settled it — "does this child
+honour `totalResults`?" — is now `docs/plan/module-support/PROBE_CATALOGUE.md`
+row 5/6, so the next module asks it before writing a count.
+
+Branch: `SP-005-line-count` (off `master` `d6098d2`).
