@@ -96,6 +96,8 @@ bundles:
   history:
   - docs/plan/DEMO_SME_2026-11-20.md
   - docs/plan/HANDOVER_KG_SCHEMA_PHASE2.md
+  - docs/plan/sme_prompts_status/run01_2026-11-21_results.md
+  - docs/plan/sme_prompts_status/run02_2026-11-28_results.md
   - docs/spire-prism/Unified-Data-Strategy.md
   - docs/spire-prism/fusion-data-explorer-2026-10-28.md
   - docs/spire-prism/platform_comparison.md
