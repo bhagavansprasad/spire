@@ -50,10 +50,10 @@ against the current branch before being used as implementation truth.
 | [FIX_PLAN.md](fixes/FIX_PLAN.md) | Deferred failures, findings, and fix queue | Designated issue queue; use the current working copy and latest entries, not only its dated summary |
 | [WORKING_STYLE.md](plan/WORKING_STYLE.md) | The project rulebook: behavior rules, editing mechanics, evidence standards, and durable conventions | Governs every session; the long form of `.github/copilot-instructions.md` |
 | [PENDING_KG_SCHEMA_CORPUS.md](plan/PENDING_KG_SCHEMA_CORPUS.md) | KG schema corpus work register and progress notes | Contains a 2026-11-19 status snapshot; reconcile it with current code, branch, and fix queue |
-| [SESSION_STATUS_2026-11-19.md](plan/SESSION_STATUS_2026-11-19.md) | Evidence-backed KG schema and SQL-emitter status at that session close | Historical point-in-time snapshot; not current repository status |
-| [SQL-EMITTER-FILES.md](plan/SQL-EMITTER-FILES.md) | Index and reading order for six KG schema corpus documents | Narrow folder index; this map is the workspace-wide inventory |
+| [sme_prompts_status/](plan/sme_prompts_status/README.md) | The 40-prompt SME set: per-run results, the open SP queue, cross-run comparison, and resume context | Live queue; read `HANDOFF.md` first |
 | [HANDOVER_KG_SCHEMA.md](plan/HANDOVER_KG_SCHEMA.md) | Phase 1 KG schema strategy and handover | Historical handover; later revisions in the phase documents and pending register supersede parts of it |
 | [HANDOVER_KG_SCHEMA_PHASE2.md](plan/HANDOVER_KG_SCHEMA_PHASE2.md) | Phase 2 schema discovery, reversals, and role-map work | Historical handover; consult the pending register for the dated follow-on state |
+| [SESSION_STATUS_2026-11-19.md](plan/SESSION_STATUS_2026-11-19.md) | Evidence-backed KG schema and SQL-emitter status at that session close | Historical point-in-time snapshot; not current repository status |
 | [KG_ROLE_MAPS.md](plan/KG_ROLE_MAPS.md) | Per-entity SQL role maps and evidence | Append-only authored reference, per its header |
 | [KG_FIELD_TRANSLATION.md](plan/KG_FIELD_TRANSLATION.md) | Translation between drafted SQL roles and KG field names | Mapping/design reference; confirm against current KG seed before changing it |
 | [SCHEMA_DISCOVERY_METHOD.md](plan/SCHEMA_DISCOVERY_METHOD.md) | Reusable procedure for discovering Fusion tables, fields, and joins | Reusable method document; use with current pod access and verify results |

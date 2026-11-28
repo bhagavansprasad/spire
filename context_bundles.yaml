@@ -59,19 +59,22 @@ bundles:
   # playbook, the endpoints reference) lives in `reference` and is
   # loaded on demand — not read start to finish.
   #
-  # Re-pointed 2026-11-27. This bundle used to open with HANDOFF.md, which
-  # no longer exists; after the drift cleanup it would have held only two
-  # files, neither of which says where the work stands. The roll-up docs
-  # that serve that role today are below — session status first, then the
-  # open-findings queue, then the working rules.
-  - docs/plan/SESSION_STATUS_2026-11-19.md
-  - docs/fixes/FIX_PLAN.md
+  # Re-pointed 2026-11-27, then 2026-11-28. This bundle used to open with
+  # HANDOFF.md, which no longer exists; after the drift cleanup it would
+  # have held only two files, neither of which says where the work stands.
+  #
+  # 2026-11-28: the dated SESSION_STATUS snapshot and the Phase 1 handover
+  # were moved to `history`. This bundle's own rule is below — "does a
+  # resuming window need this to know where it is and what to do next?" —
+  # and a 9-day-old snapshot of a branch that has since moved answers no.
+  # It was also the FIRST file here, so every resuming window opened with
+  # stale state. Lead with the live queue instead.
   - docs/plan/sme_prompts_status/README.md
   - docs/plan/sme_prompts_status/HANDOFF.md
   - docs/plan/sme_prompts_status/FIX_PLAN.md
+  - docs/fixes/FIX_PLAN.md
   - docs/plan/sme_prompts_status/COMPARISON.md
   - docs/plan/WORKING_STYLE.md
-  - docs/plan/HANDOVER_KG_SCHEMA.md
   - docs/plan/PENDING_KG_SCHEMA_CORPUS.md
   - docs/design/ARCHITECTURE.md
 
@@ -84,7 +87,6 @@ bundles:
   - docs/plan/KG_ROLE_MAPS.md
   - docs/plan/KG_FIELD_TRANSLATION.md
   - docs/plan/SCHEMA_DISCOVERY_METHOD.md
-  - docs/plan/SQL-EMITTER-FILES.md
 
   # ── the historical record ──
   # Past sessions, findings, fixes, evidence, log-analysis runs.
@@ -94,7 +96,9 @@ bundles:
   # -> plan. No -> history.
   history:
   - docs/plan/DEMO_SME_2026-11-20.md
+  - docs/plan/HANDOVER_KG_SCHEMA.md
   - docs/plan/HANDOVER_KG_SCHEMA_PHASE2.md
+  - docs/plan/SESSION_STATUS_2026-11-19.md
   - docs/plan/sme_prompts_status/run01_2026-11-21_results.md
   - docs/plan/sme_prompts_status/run02_2026-11-28_results.md
   - docs/spire-prism/Unified-Data-Strategy.md
