@@ -1602,6 +1602,86 @@ def _format_projected_table(
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
 
+def _format_included_tables(
+    outputs: dict[str, list[dict]],
+    include: list[str] | None,
+    menu,
+    heading: bool = False,
+) -> str:
+    """Render each included child collection as its own table.
+
+    R1b (2026-11-28). p13 asks for the 184 lines of invoice
+    ERS-53004-755598. The executor fetches them and they arrive in the
+    `invoiceline` bucket — the run log says
+    `invoiceline: 184 record(s)` and `Final raw output: 184 record(s) under
+    'invoiceline'` — and then the answer showed the invoice header alone.
+
+    Two things conspired:
+
+    1. All six requested columns ("line number, description, quantity, unit
+       price, amount, line type") are columns of InvoiceLine, so
+       intent_validation classified them as SATISFIED BY THE INCLUDE and
+       removed them from `fields` entirely. The rendered turn therefore has
+       `fields == []` and `unresolved == []`, which is the branch that
+       renders the typed synthesized response and NOT a projected table.
+    2. The typed response for an Invoice root is InvoiceResponse, which has
+       no field for child rows. The 184 rows had nowhere to land, so they
+       were parsed, counted, passed to the prompt, and then discarded.
+
+    This renders them from the executor output instead, which is the one
+    place they definitely still exist. It is deterministic — no LLM, no
+    re-fetch — and mirrors what F-086 did for a capped child's COUNT: state
+    what we actually hold rather than hoping the prose carried it.
+
+    Column choice is the include entity's KG catalog order intersected with
+    the keys the rows actually carry, then any remaining row keys appended
+    so nothing the tool returned is hidden. Using the catalog for order is
+    what makes the table read like the entity ("LineNumber, Description,
+    Quantity, UnitPrice, LineAmount, LineType") instead of like a Python
+    dict.
+
+    The bucket is found by matching the include entity name
+    case-insensitively against the output names, because the planner's
+    naming convention is `_OUTPUT_NAME_BY_ENTITY.get(name, name.lower())` —
+    so InvoiceLine -> `invoiceline`. A missing bucket or an empty one is
+    skipped silently: an include that returned nothing is not an error, and
+    announcing an empty table for it would be noise.
+    """
+    if not outputs or not include:
+        return ""
+
+    parts: list[str] = []
+    for inc in include:
+        bucket = next(
+            (name for name in outputs if name.lower() == str(inc).lower()),
+            None,
+        )
+        if bucket is None:
+            continue
+        rows = [r for r in (outputs.get(bucket) or []) if isinstance(r, dict)]
+        if not rows:
+            continue
+
+        catalog = list(menu.available_columns(inc)) if menu else []
+        present = {k for r in rows for k in r}
+        cols = [c for c in catalog if c in present]
+        cols.extend(k for k in rows[0] if k not in cols)
+        if not cols:
+            continue
+
+        parts.append(
+            _format_projected_table(
+                {bucket: rows},
+                cols,
+                [],
+                catalog,
+                inc,
+                heading=heading,
+            )
+        )
+    return "\n\n".join(parts)
+
+
 def render_answer(state: dict, menu, emit) -> None:
     """Render the final answer for one pipeline run.
 
@@ -1640,6 +1720,16 @@ def render_answer(state: dict, menu, emit) -> None:
 
     if not (fields or unresolved):
         emit(_format_synthesized(state.get("response")))
+        # R1b: an include's rows live in the executor output, not in the
+        # typed response (InvoiceResponse has no child collection), so
+        # render them from there. This was p13 showing an invoice header
+        # and none of its 184 lines.
+        _included = _format_included_tables(
+            outputs, state["intent"].include, menu
+        )
+        if _included:
+            emit("")
+            emit(_included)
         return
 
     entity = state["intent"].target_entity
@@ -1696,6 +1786,14 @@ def render_cli_stdout(state: dict, menu) -> str:
     parts: list[str] = []
     if not (fields or unresolved):
         parts.append(_format_synthesized(state.get("response")))
+        # R1b: same rule as render_answer — the include's rows are in the
+        # executor output, and the typed response cannot carry them.
+        _included = _format_included_tables(
+            outputs, state["intent"].include, menu
+        )
+        if _included:
+            parts.append("")
+            parts.append(_included)
     else:
         entity = state["intent"].target_entity
         available = menu.available_columns(entity)
