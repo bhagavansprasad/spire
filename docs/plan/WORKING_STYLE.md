@@ -95,8 +95,19 @@ rather than asking the user to run a second cell.
   direct or ride a branch.
 - **PR-based merges always.** Integration branch is `master`. No local
   merge into `master` — push the branch, open the PR, merge it there.
-- **Branch naming:** `Phase{N}-{Descriptive}` (e.g.
-  `Phase3-Merge-Working-Style`). Not `phase-3`.
+- **Branch naming:** `{Area}-{Descriptive}`. `{Area}` is the Fusion module
+  the work belongs to, when it belongs to one — `Payables`, `Receivables`,
+  `Procurement`, `Supplier` — and otherwise the capability or surface the
+  work touches (`Truncation`, `KG`, `Parser`, `Docs`). Capitalised,
+  hyphenated, no lower-case-only names. Examples: `Payables-Line-Counts`,
+  `Receivables-Outstanding-Balance`, `Docs-Branch-Naming`.
+
+  **The `Phase{N}-` prefix is retired.** It numbered a sequence the work no
+  longer follows: module support is now delivered one module at a time, so
+  the module is the axis a branch belongs to — a phase number told a reader
+  nothing about which module a branch served. The prefix survives only in
+  historical records (merged branch names quoted in `FIX_PLAN.md` and the
+  handovers), which are records of what happened and are not rewritten.
 - **After a PR merges, the next window starts on a NEW branch off
   `master`** — never a continuation of the merged branch. Merge via
   `gh pr create --base master --head <branch>` then
@@ -148,7 +159,7 @@ window genuinely cannot read the workspace.
 The pointer must state the branch instruction explicitly — the next window
 starts on a **new** branch off `master`, not on the branch that just
 merged. Name it: `git checkout master && git pull --ff-only origin master
-&& git checkout -b Phase{N}-{Descriptive}`.
+&& git checkout -b {Area}-{Descriptive}`.
 
 ### Documentation
 
