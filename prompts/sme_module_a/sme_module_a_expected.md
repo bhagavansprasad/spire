@@ -102,16 +102,23 @@ entity or filter; the prompt is unanswerable as written.
 
 | # | Prompt subject | Status | How to score it |
 |---|---|---|---|
-| 1 | AP invoices last 30 days | PASS | 781 |
-| 2 | Invoice `ERS-53004-755598` | PARTIAL | pass if it says due date is unavailable; fail if it fabricates one |
-| 3 | Invoice lines | GAP | no InvoiceLine entity |
-| 4 | Unpaid for `Staffing Services` | PARTIAL | count is real (12,347 pod-wide) but includes zero-amount rows |
-| 5 | Invoices on hold | GAP | not modelled |
-| 6 | Overdue invoices | PARTIAL | filter exists, `DUE_DATE` absent → no "overdue days" |
-| 7 | Payment details | GAP | no Payment entity |
-| 8 | Validation/accounting status | PARTIAL | only `PAYMENT_STATUS_FLAG` |
-| 9 | Duplicates | PARTIAL | listing for comparison is a pass; an asserted duplicate count is not |
-| 10 | Outstanding by supplier | PASS | REST count is per-page — a page size stated as a total fails |
+| 1 | AP invoices last 30 days | PASS | all five columns render (`Supplier`, both statuses added in PR #234). Window count drifts — score the columns, not the total |
+| 2 | Invoice `ERS-53004-755598` | PARTIAL | due date **is** available (REST returns `2026-12-04`); fail if it fabricates one. Remaining PARTIAL is `business unit` |
+| 3 | Invoice lines | PASS | `InvoiceLine` exists (F-077) and the count is fixed (#231/#233) — the answer must state **184**, not 50 |
+| 4 | Unpaid for `Staffing Services` | PARTIAL | count is real but includes zero-amount and cancelled rows; due date now renders, `remaining balance` does not |
+| 5 | Invoices on hold | GAP | holds exist on `invoiceInstallments`, not the header — a refusal is correct for the collection-wide form |
+| 6 | Overdue invoices | PARTIAL | filter exists, due date now renders; no "overdue days" |
+| 7 | Payment details | GAP | no payment document anywhere on the AP REST path — an absence, not an undiscovered endpoint |
+| 8 | Validation/accounting status | PARTIAL | `ValidationStatus`/`FundsStatus` are on the header but not projected; `PaidStatus` is not a substitute |
+| 9 | Duplicates | GAP | refusal is correct by design; a listing was never the behaviour |
+| 10 | Outstanding by supplier | PASS | must rank by OUTSTANDING with the month window (#235). Spend, or all-time, is a fail — REST count is per-page, so a page size stated as a total also fails |
+
+**Re-annotated 2026-11-28 (AP-5).** Rows 2, 3, 4, 6, 7, 9 and 10 were stale:
+they asserted gaps that had closed (row 3), an SQL-only fact as a REST
+boundary (rows 2, 4, 6), and a PARTIAL where Spire correctly refuses (row 9).
+This table and `sme_module_a_litmus.txt` are the two ledgers; when they
+disagree the disagreement is the finding, which is exactly what happened
+here.
 
 ### Module 3 — Receivables
 

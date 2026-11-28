@@ -13,14 +13,27 @@
 # child counts recorded in sme_module_a_expected.md.
 #
 # CONTRACT (read before scoring):
-#   20 prompts are expected to ANSWER (marked PASS-EXPECTED).
-#   13 are expected to answer PARTIALLY (PARTIAL-EXPECTED) - a clean
+#   21 prompts are expected to ANSWER (marked PASS-EXPECTED).
+#   12 are expected to answer PARTIALLY (PARTIAL-EXPECTED) - a clean
 #     answer that omits an unmodelled field is a PASS; inventing the field
 #     is a FAIL.
 #    7 are known GAPS (GAP-EXPECTED). A clean refusal naming the missing
 #     capability is the PASS for these. Do NOT score a GAP as a regression,
 #     and do NOT "fix" the file by deleting the prompt - the gap is the
 #     record.
+#
+# DISPOSITIONS ARE RE-ANNOTATED, NEVER ASSUMED STILL TRUE (AP-5, 2026-11-28).
+# The counts above were 20/13/7 until then. Two changed:
+#   - p13 (invoice lines) GAP-EXPECTED -> PASS-EXPECTED. F-077 built the
+#     InvoiceLine entity; the annotation had kept asserting a gap that had
+#     closed, which made the prompt ledger describe a different system from
+#     the run ledger.
+#   - p19 (duplicate invoices) PARTIAL-EXPECTED -> GAP-EXPECTED. Spire refuses
+#     this, and by this file's own rule a clean refusal of a real gap is a
+#     GAP, not a partial answer. The refusal is correct and stays.
+# A stale disposition is worse than a missing one: it tells the next reader a
+# capability is absent when it works, or that a refusal is a failure when it
+# is the expected outcome.
 #
 # ORDERING: module order, easy-before-hard within each module. The full
 # set is ~40 prompts; the 8 in section 6 of sme_module_a_expected.md are
@@ -80,46 +93,139 @@ Get the total purchase order amount by supplier for the current month. Display s
 # MODULE 2 - PAYABLES: supplier invoices
 # ==========================================================================
 
-# PASS-EXPECTED. 781 AP invoices in the 30-day window.
+# PASS-EXPECTED. Every named column is available: Supplier, InvoiceNumber,
+# InvoiceDate, InvoiceAmount and both statuses render (PR #234).
+# Window count drifts with pod data - run02 saw 25 of 157, a later live check
+# 25 of 205 - so do NOT judge this prompt by its total, only by whether the
+# five requested columns appear.
+# 'created' is answered as InvoiceDate, and the answer does not say so
+# (defect AP-6, open).
 Show all supplier invoices created in the last 30 days. Include invoice number, supplier name, invoice date, amount, and status.
 
 # PARTIAL-EXPECTED. ERS-53004-755598 = InvoiceId 1601397, 184 lines,
-# 138,864.62, Staffing Services. DUE_DATE DOES NOT EXIST on
-# AP_INVOICES_ALL (ORA-00904) - an answer that invents a due date fails.
+# 138,864.62, Staffing Services, DueDate 2026-12-04.
+#
+# STALE NOTE REMOVED (AP-5, 2026-11-28). This comment used to say "DUE_DATE
+# DOES NOT EXIST on AP_INVOICES_ALL (ORA-00904) - an answer that invents a due
+# date fails." That is an SQL fact, not a REST one, and it was wrong here:
+# /invoices RETURNS DueDate and always did. It caused a real defect - the field
+# was fetched, projected, and then refused as unavailable (AP-1, fixed in PR
+# #234). A due date is now expected, not fabricated.
+#
+# The remaining PARTIAL is 'business unit', which is genuinely not on the
+# Invoice entity.
 Get the complete details of invoice ERS-53004-755598. Include supplier, invoice date, due date, invoice amount, currency, business unit, and payment status.
 
-# GAP-EXPECTED. No InvoiceLine entity or tool. The 184 lines exist in
-# AP_INVOICE_LINES_ALL; Spire has nothing to call.
+# PASS-EXPECTED (was GAP-EXPECTED). The InvoiceLine entity and tool exist -
+# F-077 closed the gap, and run02 answered with 51 records.
+#
+# Two things this annotation had wrong, both now corrected:
+#   1. "No InvoiceLine entity or tool" was true before F-077 and stale after
+#      it. The prompt set kept asserting a gap that had closed.
+#   2. Even once it answered, the count was wrong: "50 line items" for an
+#      invoice with 184 (SP-005). Fixed in PR #231 (the data) and #233 (the
+#      answer), both verified live - this prompt now states 184.
+#
+# SCORING: a stated line count that does not match 184 is a FAIL, not a pass
+# with a caveat. That distinction is the whole point of SP-005.
 Show all invoice lines for invoice ERS-53004-755598. Include line number, description, quantity, unit price, amount, and line type.
 
 # PARTIAL-EXPECTED. The unpaid filter exists (PAYMENT_STATUS_FLAG = 'N',
-# 12,347 rows pod-wide). Two limits: DUE_DATE is absent, and the filter
-# admits zero-amount invoices - 12,347 includes them, so a "top by lines"
-# list looks broken without an INVOICE_AMOUNT > 0 guard.
+# 12,347 rows pod-wide).
+#
+# DUE DATE IS NOW ANSWERED (AP-1, PR #234) - the older note here listed
+# DUE_DATE as absent, which was an SQL fact misapplied to REST. It renders.
+#
+# Two limits remain, and they are different kinds:
+#   - 'remaining balance' is not modelled. That is genuinely AP-2 territory
+#     (needs AmountPaid as a per-row field, not just as an aggregate) and is
+#     an honest PARTIAL.
+#   - the unpaid filter admits ZERO-AMOUNT invoices - it includes cancelled
+#     rows - so an amount-ranked list looks broken without an
+#     INVOICE_AMOUNT > 0 guard (AP-4, open). The answer must disclose that,
+#     and a top-N list of 0.00 rows is a legitimate FAIL.
 Find all unpaid invoices for supplier Staffing Services. Show invoice number, invoice date, due date, amount, and remaining balance.
 
-# GAP-EXPECTED. Invoice holds are not modelled.
+# GAP-EXPECTED. Holds are not modelled - still true, but the reason is
+# narrower than "holds do not exist". They are NOT on the invoice header:
+# they live on /invoices/{id}/child/invoiceInstallments (HoldFlag,
+# HoldReason, HoldType, HeldBy, HoldDate), verified 2026-07-29 and already
+# fetched by po_lifecycle.py.
+#
+# So this is a REST-coverage gap, not an absence, and answering the prompt as
+# written means one installment call per invoice across ~53,000 invoices. That
+# is why it stays a refusal: the collection-wide form is not buildable, the
+# per-invoice form is. Recorded as AP-3 in the module assessment; the
+# re-scoping decision is still open.
 Show all invoices currently on hold. Include invoice number, supplier, invoice amount, hold reason, and hold status.
 
-# PARTIAL-EXPECTED. The overdue filter exists on AP Invoice (unlike AR),
-# but DUE_DATE is absent, so "number of overdue days" is unanswerable.
-# An answer that states the day count is fabricating it.
+# PARTIAL-EXPECTED. The overdue filter exists on AP Invoice (unlike AR).
+#
+# DUE DATE IS NOW ANSWERED (AP-1, PR #234) - the older note here said
+# DUE_DATE was absent, which was an SQL-only fact. The per-row due date
+# renders.
+#
+# Still unanswerable: 'number of overdue days'. No derived field computes it,
+# so an answer that states a day count is fabricating one.
+#
+# And 'outstanding amount' per row is still not projected. Outstanding now
+# exists as an AGGREGATE (PR #235), which does not make it a per-invoice
+# column - do not read the aggregate's arrival as closing this.
 Find all overdue supplier invoices. Show invoice number, supplier, due date, outstanding amount, and number of overdue days.
 
-# GAP-EXPECTED. No Payment entity - payment number/date/method are unreachable.
+# GAP-EXPECTED. No payment document exists anywhere on the AP REST path -
+# this is an ABSENCE, not an undiscovered endpoint. Verified 2026-07-29 by
+# listing .links[] on a single invoice: children are appliedPrepayments,
+# attachments, availablePrepayments, invoiceDff, invoiceGdf,
+# invoiceInstallments, invoiceLines. No payments, no holds.
+#
+# A clean refusal naming the absence is the PASS. An answer that returns a row
+# with "no requested column was available" (the run02 shape) is NOT a pass -
+# it reads like a hit. Recorded as AP-6/D-PAY-003.
 Show the payment details for invoice ERS-53004-755598. Include payment number, payment date, payment method, payment amount, and payment status.
 
-# PARTIAL-EXPECTED. Only PAYMENT_STATUS_FLAG is modelled; validation and
-# accounting status and their error queues are not.
+# PARTIAL-EXPECTED. Only PAYMENT_STATUS_FLAG (as 'PaidStatus') is modelled.
+#
+# ValidationStatus and FundsStatus ARE on the invoice header (verified
+# 2026-07-29) - they are simply not projected, so this is a projection gap
+# rather than a REST boundary, and the honest answer declines. Accounting
+# status and its error queues are not modelled at all.
+#
+# An answer MUST NOT infer "validated and accounted" from PaidStatus: those
+# are different states, and a paid invoice can still be unaccounted.
 Check whether invoice ERS-53004-755598 has completed validation and accounting. Show validation status, accounting status, and any errors.
 
-# PARTIAL-EXPECTED. No duplicate-detection tool. Passing means listing the
-# supplier's invoices and letting the reader compare - not asserting a
-# duplicate count the SQL cannot support.
+# GAP-EXPECTED (was PARTIAL-EXPECTED). Duplicate detection needs
+# cross-record comparison, which no single tool does, so Spire refuses with
+# unsupported_operation.
+#
+# The disposition changed, not the code. PARTIAL-EXPECTED said "passing means
+# listing the supplier's invoices and letting the reader compare" - but Spire
+# does not list them, it refuses, and by this file's own contract a clean
+# refusal naming the missing capability is the PASS for a gap. Keeping it as
+# PARTIAL asked the run to score a refusal as a partial answer, which is how
+# the two ledgers came to disagree about this prompt.
+#
+# This refusal is CORRECT and should stay. Do not "fix" it by loosening the
+# parser, and do not delete the prompt.
 Find duplicate invoices for supplier Staffing Services. Compare invoice numbers, invoice dates, and invoice amounts.
 
-# PASS-EXPECTED. aggregate_invoices_by_supplier with date_from/date_to.
-# REST reports count PER PAGE, so a page size stated as a total is a fail.
+# PASS-EXPECTED. op='outstanding_by_supplier', a bounded aggregation added
+# in PR #235: SUM(GREATEST(InvoiceAmount - AmountPaid, 0)) over non-cancelled
+# invoices, grouped by supplier.
+#
+# TWO FAILURES THIS PROMPT HAS PRODUCED, both worth scoring against:
+#   1. The answer used to substitute SPEND for outstanding and drop the
+#      period entirely - "Total Spend" over 53,221 invoices. It scored OK
+#      because rows came back (AP-2).
+#   2. The period half had two causes: the extractor did not recognise the
+#      word 'current', and the correction was gated to one op name.
+#
+# SCORING: the answer must (a) rank by OUTSTANDING, not spend, and (b) cover
+# the current month. A spend figure, or an all-time window, is a FAIL - the
+# number being plausible is what made the original defect hard to see.
+# REST reports count PER PAGE, so a page size stated as a total is also a
+# fail.
 Show the total outstanding invoice amount grouped by supplier for the current month. Include supplier name, invoice count, and outstanding amount.
 
 # ==========================================================================
