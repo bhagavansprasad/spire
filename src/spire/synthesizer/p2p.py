@@ -231,6 +231,29 @@ class InvoiceRecord(BaseModel):
     supplier_number: str = Field(
         description="The supplier's SupplierNumber. Must appear in the data."
     )
+    # AP-1 (2026-11-28). Three fields the pod returns, tools/invoices.py
+    # projects, and this model dropped — so an answer could not show a due
+    # date or a status even after the KG learned to accept the request.
+    # All default to "" for the same reason PurchaseOrderRecord's
+    # supplier_site does: an older row shape or a null degrades to an
+    # omitted column rather than a validation failure. Free text, not
+    # identifiers, so none is cross-checked by the hallucination guard.
+    due_date: str = Field(
+        default="",
+        description="Invoice due date (ISO string) as REST returns it. "
+        "Empty when the source row carried none.",
+    )
+    paid_status: str = Field(
+        default="",
+        description="Payment status, e.g. 'Paid', 'Unpaid', 'Partially "
+        "paid'. A status, never a money figure — a partly paid invoice is "
+        "not in 'Paid' status, so money must come from a paid amount.",
+    )
+    approval_status: str = Field(
+        default="",
+        description="Approval status, e.g. 'Required', 'Approved', "
+        "'Not required'.",
+    )
 
 
 class PurchaseOrderRecord(BaseModel):
@@ -1182,6 +1205,11 @@ def build_invoice_records(rows: list[dict]) -> list[InvoiceRecord]:
                 invoice_currency=str(row.get("InvoiceCurrency") or ""),
                 supplier_name=row.get("Supplier") or "",
                 supplier_number=str(row.get("SupplierNumber") or ""),
+                # AP-1: pass through, not derive. All three are plain
+                # strings on the row; "" when absent.
+                due_date=str(row.get("DueDate") or ""),
+                paid_status=str(row.get("PaidStatus") or ""),
+                approval_status=str(row.get("ApprovalStatus") or ""),
             )
         )
     return records

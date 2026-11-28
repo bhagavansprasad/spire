@@ -505,11 +505,28 @@ INSERT INTO kg_entity_field VALUES ('Classification', 'Status',          'status
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceId',       'canonical_id', 'numeric', 'System primary key.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceNumber',   'display_id',   'string',  'Human-readable identifier.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceDate',     'date',         'iso_date','Used for date-window filters.');
+-- AP-1 (2026-11-28). /invoices RETURNS DueDate, and tools/invoices.py has
+-- projected it since the tool was written — but the KG never declared it, so
+-- every request for a due date was refused as an unavailable column while the
+-- value sat in the row. The value is real: p17's executor row carried
+-- 'DueDate': '2026-12-04' for invoice ERS-53004-755598.
+--
+-- Deliberately NO kg_sql_column row. AP_INVOICES_ALL has no DUE_DATE column
+-- (ORA-00904), which is the honest split: REST exposes it, the physical table
+-- does not. An SQL carrier here would fabricate a column.
+INSERT INTO kg_entity_field VALUES ('Invoice', 'DueDate',         'date',         'iso_date','Invoice due date from REST. Fetched and projected; NOT in AP_INVOICES_ALL (no DUE_DATE column), so no SQL carrier.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceAmount',   'amount',       'numeric', NULL);
 INSERT INTO kg_entity_field VALUES ('Invoice', 'InvoiceCurrency', 'projection',   'string',  NULL);
 INSERT INTO kg_entity_field VALUES ('Invoice', 'PaidStatus',      'status',       'string',  'Display string values like ''Paid'', ''Unpaid''.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'ApprovalStatus',  'status',       'string',  'Display string values like ''Not required'', ''Approved''.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'SupplierNumber',  'reference',    'string',  'Join key back to Supplier.SupplierNumber. Note: not SupplierId on this endpoint.');
+-- AP-1 (2026-11-28). The supplier DISPLAY NAME is on the invoice row —
+-- tools/invoices.py projects 'Supplier', build_invoice_records renders
+-- supplier_name from it, and the answer shows it. The KG declared only
+-- SupplierNumber, so 'supplier name' was refused as an unavailable column on
+-- an entity whose own table prints that column. Role display_name, matching
+-- Supplier.Supplier on the parent entity.
+INSERT INTO kg_entity_field VALUES ('Invoice', 'Supplier',        'display_name', 'string',  'Supplier display name as returned on the invoice row. Rendered as supplier_name. Distinct from SupplierNumber, which is the join key.');
 
 -- PurchaseOrder
 INSERT INTO kg_entity_field VALUES ('PurchaseOrder', 'POHeaderId',   'canonical_id', 'numeric', 'System primary key.');
@@ -791,7 +808,7 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Address1', 'projection', 'string
 INSERT INTO kg_entity_field VALUES ('Address', 'City', 'projection', 'string', 'City (HZ_LOCATIONS.CITY). SQL-only.');
 INSERT INTO kg_entity_field VALUES ('Address', 'State', 'projection', 'string', 'State (HZ_LOCATIONS.STATE). SQL-only.');
 
-PROMPT Seeded kg_entity_field (237 rows).
+PROMPT Seeded kg_entity_field (239 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1049,6 +1066,11 @@ INSERT INTO kg_vocabulary VALUES ('field_synonym', 'created details', 'CreatedBy
 -- dist, req, party, SLA) are NOT field synonyms and are omitted.
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor', 'Supplier', 'Legacy EBS: vendor -> Supplier.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor name', 'Supplier', 'Legacy EBS: vendor name -> Supplier.');
+-- AP-1 (2026-11-28). The legacy EBS synonym 'vendor name' was mapped and the
+-- everyday phrase was not, so "include supplier name" was refused while
+-- "include vendor name" resolved. Same target, same meaning, and the AP
+-- litmus asks for it in those words (p11).
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'supplier name', 'Supplier', 'Everyday phrasing of vendor name -> the invoice row''s Supplier display name.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor number', 'SupplierNumber', 'Legacy EBS: vendor number -> SupplierNumber.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx', 'TransactionNumber', 'Legacy EBS: trx -> TransactionNumber (AR).');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx number', 'TransactionNumber', 'Legacy EBS: trx number -> TransactionNumber (AR).');
