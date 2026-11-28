@@ -43,7 +43,43 @@ from spire.synthesizer.synthesizer import (
     ExposureRankingResponse,
     ReceiptMethodDistributionResponse,
     POLifecycleResponse,
+    _truncated_steps,
 )
+
+
+def _truncation_disclosure(state: dict) -> str:
+    """Completeness note for a capped fetch, for paths that print no summary.
+
+    p15's first answer rendered a 100-row table headed
+    "invoicehold (100 record(s))" while the source held 222. Nothing in the
+    output said so, which is the SP-005 defect shape: a page size read as a
+    total.
+
+    Truncation is normally disclosed in the synthesized summary, which is
+    exactly why this gap existed — when synthesis overruns its token cap the
+    summary is skipped, and the disclosure went with it. The reader is left
+    with a confident-looking sample and no sign it is one.
+
+    So this reads the same executor metadata the summary would have used
+    (`_truncated_steps`, the one place that decides what counts as capped) and
+    states the total directly. Returns "" when nothing was capped, so a
+    complete result is not cluttered with a note about nothing.
+    """
+    lines: list[str] = []
+    for name, entry in _truncated_steps(
+        state.get("truncation_by_step"), state.get("metadata_by_step")
+    ):
+        total = entry.get("total_available")
+        if isinstance(total, int):
+            lines.append(
+                f"Note: {total} {name} record(s) exist in the source; the "
+                f"table above is a sample."
+            )
+        else:
+            lines.append(
+                f"Note: more {name} records exist than the table above shows."
+            )
+    return "\n".join(lines)
 
 
 def _format_intent(intent) -> str:
@@ -1453,6 +1489,35 @@ def _pick_projection_bucket(
     return best_name
 
 
+# Longest a single table cell may occupy before it is clipped.
+#
+# p15's first answer had a `HoldReason` column whose widest value is 163
+# characters, so one line of a five-column table reached roughly 400
+# characters and wrapped into unreadable ribbons. Measured on dev49 across the
+# 376 active holds: 345 of the reasons are 61 characters or fewer, and only 31
+# exceed 125. A cap of 64 therefore prints every common reason IN FULL —
+# "Total of invoice lines/distributions does not equal invoice amount." — and
+# clips only the rare long ones.
+#
+# Clipping rather than wrapping is deliberate: a wrapped cell breaks the row
+# alignment the whole table depends on, and the reader can always ask about a
+# specific invoice to get its full reason. The ellipsis is what makes a clipped
+# value visibly clipped instead of looking like a shorter stored value.
+_MAX_CELL_WIDTH = 64
+
+
+def _clip_cell(text: str) -> str:
+    """Shorten one cell to _MAX_CELL_WIDTH, marking the cut with an ellipsis.
+
+    Numbers are never long enough to be affected, so no value is corrupted —
+    but the guard is length-based, not type-based, because a column's type is
+    not known here.
+    """
+    if len(text) <= _MAX_CELL_WIDTH:
+        return text
+    return text[: _MAX_CELL_WIDTH - 1] + "…"
+
+
 def _format_projected_table(
     outputs: dict[str, list[dict]],
     fields: list[str],
@@ -1585,12 +1650,14 @@ def _format_projected_table(
     widths = {}
     for f in cols:
         cell_lens = [
-            len(str(r.get(f))) if isinstance(r, dict) and r.get(f) is not None else 1
+            len(_clip_cell(str(r.get(f))))
+            if isinstance(r, dict) and r.get(f) is not None
+            else 1
             for r in rows
         ]
-        widths[f] = max([len(f)] + cell_lens)
+        widths[f] = min(max([len(f)] + cell_lens), _MAX_CELL_WIDTH)
 
-    header = "  " + " | ".join(f.ljust(widths[f]) for f in cols)
+    header = "  " + " | ".join(_clip_cell(f).ljust(widths[f]) for f in cols)
     rule = "  " + "-+-".join("-" * widths[f] for f in cols)
     lines.append(header)
     lines.append(rule)
@@ -1598,7 +1665,7 @@ def _format_projected_table(
         cells = []
         for f in cols:
             v = r.get(f) if isinstance(r, dict) else None
-            cells.append(("—" if v is None else str(v)).ljust(widths[f]))
+            cells.append(("—" if v is None else _clip_cell(str(v))).ljust(widths[f]))
         lines.append("  " + " | ".join(cells))
     return "\n".join(lines)
 
@@ -1746,6 +1813,11 @@ def render_answer(state: dict, menu, emit) -> None:
             "Answer summary: (skipped — result too large to summarize; "
             "showing the table only)"
         )
+        # The summary normally carries the truncation note. It was skipped, so
+        # the note has to be stated here or a capped list reads as complete.
+        _note = _truncation_disclosure(state)
+        if _note:
+            summary_text = f"{summary_text}\n\n{_note}"
     elif fields:
         summary_text = _format_synthesized(
             state.get("response"),
@@ -1805,6 +1877,11 @@ def render_cli_stdout(state: dict, menu) -> str:
                 "Answer summary: (skipped — result too large to "
                 "summarize; showing the table only)"
             )
+            # Same reason as render_answer: the skipped summary took the
+            # truncation disclosure with it, so state it here.
+            _note = _truncation_disclosure(state)
+            if _note:
+                summary_text = f"{summary_text}\n\n{_note}"
         elif fields:
             summary_text = _format_synthesized(
                 state.get("response"),

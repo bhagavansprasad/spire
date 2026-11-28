@@ -477,6 +477,7 @@ bundles:
   - tests/test_r1a_invoice_derived_fields.py
   - tests/test_r1b_invoice_line_rendering.py
   - tests/test_p15_invoice_holds.py
+  - tests/test_p15_display.py
   - tests/test_f079_identifier_space.py
   - tests/test_f080b_supplier_status_carrier.py
   - tests/test_f081_field_projection.py
