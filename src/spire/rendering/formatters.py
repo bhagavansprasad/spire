@@ -430,6 +430,13 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
             # Not a summary-bearing shape; fall through to the full
             # render rather than printing nothing.
             return _format_synthesized(response)
+        if not summary:
+            # F-088. An empty summary is legitimate (the table below says
+            # everything), but printing the heading for it produced a bare
+            # "Answer:" with nothing under it — measured on p12, which
+            # rendered two Answer blocks and the first was blank. Say
+            # nothing instead of nothing under a heading.
+            return ""
         return _with_truncation(["Answer:", summary], response)
 
     lines = ["Answer:"]
@@ -1452,6 +1459,7 @@ def _format_projected_table(
     unresolved_fields: list[str] | None = None,
     available_columns: list[str] | None = None,
     entity: str | None = None,
+    heading: bool = True,
 ) -> str:
     """Print the final output bucket as a table of exactly the requested
     columns, in the order named.
@@ -1552,9 +1560,16 @@ def _format_projected_table(
     if not cols:
         n = len(rows)
         body = note if note else "No columns to display."
-        return f"Answer:\n\n{body}\n\n({n} record(s) matched; no requested column was available.)"
+        head = "Answer:\n\n" if heading else ""
+        return f"{head}{body}\n\n({n} record(s) matched; no requested column was available.)"
 
-    lines = ["Answer:"]
+    # F-088. This table is usually the SECOND half of one answer: the caller
+    # emits the synthesized summary first and then this table with exactly
+    # the columns the reader asked for. Emitting "Answer:" in both places
+    # printed two headings over one result, so a reader had to decide which
+    # was the answer (measured on p12 and p14). `heading` is False when a
+    # heading was already emitted; the table then continues that answer.
+    lines = ["Answer:"] if heading else []
     if note:
         lines.append(note)
         lines.append("")
@@ -1629,21 +1644,30 @@ def render_answer(state: dict, menu, emit) -> None:
 
     entity = state["intent"].target_entity
     available = menu.available_columns(entity)
-    if not fields:
-        pass  # no summary; the note below is the answer
-    elif synth_failed:
-        emit(
+    # F-088. The table is a CONTINUATION of the summary when one printed, and
+    # a new answer when none did. That distinction has to be observed, not
+    # inferred from `fields`: a fields-bearing intent whose summary is empty
+    # (p12) prints nothing above the table, so the table must carry the
+    # heading — and an intent with a real summary (p14) must not open a second
+    # "Answer:" over the same result.
+    summary_text = ""
+    if fields and synth_failed:
+        summary_text = (
             "Answer summary: (skipped — result too large to summarize; "
             "showing the table only)"
         )
-        emit("")
-    else:
-        emit(_format_synthesized(
+    elif fields:
+        summary_text = _format_synthesized(
             state.get("response"),
             summary_only=not state["intent"].include,
-        ))
+        )
+    if summary_text.strip():
+        emit(summary_text)
         emit("")
-    emit(_format_projected_table(outputs, fields, unresolved, available, entity))
+    emit(_format_projected_table(
+        outputs, fields, unresolved, available, entity,
+        heading=not summary_text.strip(),
+    ))
 
 
 
@@ -1675,22 +1699,25 @@ def render_cli_stdout(state: dict, menu) -> str:
     else:
         entity = state["intent"].target_entity
         available = menu.available_columns(entity)
-        if not fields:
-            pass
-        elif synth_failed:
-            parts.append(
+        # F-088. Same rule as render_answer: the table continues the summary
+        # when one printed, and carries the heading when none did.
+        summary_text = ""
+        if fields and synth_failed:
+            summary_text = (
                 "Answer summary: (skipped — result too large to "
                 "summarize; showing the table only)"
             )
-            parts.append("")
-        else:
-            parts.append(_format_synthesized(
+        elif fields:
+            summary_text = _format_synthesized(
                 state.get("response"),
                 summary_only=not state["intent"].include,
-            ))
+            )
+        if summary_text.strip():
+            parts.append(summary_text)
             parts.append("")
         parts.append(_format_projected_table(
             outputs, fields, unresolved, available, entity,
+            heading=not summary_text.strip(),
         ))
 
     return "\n".join(parts)
