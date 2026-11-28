@@ -10,8 +10,9 @@ invoice-line support landed independently on `master` while this was parked.
 - [`MODULE_SUPPORT_ROADMAP.md`](./MODULE_SUPPORT_ROADMAP.md) — portfolio,
   priority, the eight gates, open decisions.
 - [`MODULE_SUPPORT_PLAYBOOK.md`](./MODULE_SUPPORT_PLAYBOOK.md) — the
-  code-grounded procedure for one module: REST discovery, tool shapes, wiring
-  points, verification. SQL deferred.
+  code-grounded procedure for one module, including a 29-touchpoint inventory
+  spanning REST discovery, the intent KG and SQL seed, parser, planner,
+  synthesizer, SQL overlay, validators, tests and docs. SQL deferred.
 - [`MODULE_SUPPORT_MEETING_MINUTES.md`](./MODULE_SUPPORT_MEETING_MINUTES.md) —
   one shared record of discussions, newest first.
 - [`AP_COVERAGE_ASSESSMENT.md`](./AP_COVERAGE_ASSESSMENT.md) — the first

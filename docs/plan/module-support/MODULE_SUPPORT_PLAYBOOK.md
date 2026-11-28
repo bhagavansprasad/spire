@@ -382,8 +382,59 @@ in the output invites the reader to doubt it.
 
 ## 6. Track A, step 4 — wire it into Spire
 
-A tool that works in isolation answers nothing. These are the wiring points,
-in the order that fails fastest.
+A tool that works in isolation answers nothing. This section is the complete
+set of places a module touches, and **§6.0 is the canonical work order**. The
+subsections after it are reference detail, deliberately not in execution
+order — consult them from the table.
+
+The scope is wider than a tool plus some KG rows. Adding a module touches the
+REST layer, the intent knowledge graph, the SQL seed, the parser, the planner,
+the synthesizer, the renderer, the validators, the tests, and the docs. Any one
+of them omitted produces a module that either does not route, does not execute,
+or answers wrongly — and several fail silently.
+
+### 6.0 The complete touchpoint inventory
+
+Twenty-nine touchpoints. Work them top to bottom. The **Gate** column says
+whether it blocks REST delivery: `REST` = required for prompt→results,
+`SQL` = deferred (Track B, §8), `both` = needed either way.
+
+| # | Stage | File / location | What to add | Gate | Detail |
+|---:|---|---|---|---|---|
+| 1 | Discovery | pod + Fusion REST | endpoint inventory: path, filterable fields, `expand`, paging, count, roles | REST | §3 |
+| 2 | Discovery | pod Oracle catalogs | physical table/view and columns behind each resource; population counts | SQL | §6.10 |
+| 3 | Tool | `src/spire/mcp_server/tools/<module>.py` | the tool module — copy a shape from §5 | REST | §5 |
+| 4 | Tool | `src/spire/mcp_server/server.py` | import + thin `@mcp.tool()` wrapper, persona-scoped client | REST | §5.1 |
+| 5 | Intent KG | `scripts/sql/kg_schema.sql` STEP 3 | `kg_entity` row(s): id field, display field, `endpoint_path`, description, **`module`** | REST | §6.3 |
+| 6 | Intent KG | `…kg_schema.sql` STEP 4 | `kg_entity_field` — one row per projectable field, with `field_role` | REST | §6.3 |
+| 7 | Intent KG | `…kg_schema.sql` STEP 9 | `kg_entity_tool` — the fetcher per filter type (`none`, `by_id`, …) | REST | §6.3 |
+| 8 | Intent KG | `…kg_schema.sql` STEP 11 | `kg_entity_filter` — one row per supported filter: mechanism, tool arg, `query_style`, `filter_field`/`filter_op` | REST | §6.3 |
+| 9 | Intent KG | `…kg_schema.sql` STEP 5 + 10 | `kg_edge` + `kg_edge_tool` — one row per traversal, with `iter_fields_json` | REST | §6.3 |
+| 10 | Intent KG | `…kg_schema.sql` STEP 7 | `kg_vocabulary` — `entity_synonym`, `field_synonym`, controlled values | REST | §6.3 |
+| 11 | Intent KG | `…kg_schema.sql` STEP 6 + 8 | `kg_pattern` + `kg_pattern_binding` — **only** if reusing a named pattern | REST | §6.3 |
+| 12 | Intent KG | `…kg_schema.sql` STEP 12 | `kg_entity_sql`, `kg_sql_column`, `kg_derived_projection` | SQL | §6.3, §6.11 |
+| 13 | KG runtime | `scripts/rebuild_kg.py` | rebuild after any seed change | REST | §6.4 |
+| 14 | KG runtime | `scripts/build_classifier_context.py` | regenerate `routing/classifier_menu.sysprompt` | REST | §6.4 |
+| 15 | Parser | `src/spire/nl_parser/context/<module>/` | one `b_*.sysprompt` per filter/teaching block | REST | §6.4 |
+| 16 | Parser | `src/spire/nl_parser/context/order.manifest` | append every new block — unlisted blocks are never sent | REST | §6.4 |
+| 17 | Parser | `src/spire/nl_parser/context_assembly.py` | `KNOWN_MODULES` | REST | §6.1 |
+| 18 | Parser | `src/spire/nl_parser/router.py` | `ModuleChoice` description **and** `_CLASSIFIER_INSTRUCTION` | REST | §6.1 |
+| 19 | Planner | `src/spire/planner/registries.py` | the seven registries (§6.5) | REST | §6.5 |
+| 20 | Planner | `src/spire/planner/planner.py` | prose entity guard (required reference / supported filters) | REST | §6.13 |
+| 21 | Planner | `src/spire/planner/plan_builders.py` | only if the module introduces a new arg shape or iteration | REST | §6.5 |
+| 22 | Synthesizer | `src/spire/synthesizer/p2p.py` | record model + `build_*_records` | REST | §6.6 |
+| 23 | Synthesizer | `src/spire/synthesizer/synthesizer.py` | `target_entity` dispatch branch | REST | §6.6 |
+| 24 | Refusals | `src/spire/nl_parser/capability.py` | message text for any new unanswerable kind | REST | §6.14 |
+| 25 | Rendering | `src/spire/rendering/formatters.py` | the entity's block; `_render_records` itself is generic | REST | §6.14 |
+| 26 | SQL overlay | `src/spire/kg/sql_overlay.py` | `_ENTITIES`, `_FILTERS`, `_JOINS`, `_LITERALS`, `aggregations`, `not_expressible` | SQL | §6.11 |
+| 27 | Validation | `scripts/validate_kg_schema.py`, `scripts/validate_sql_coverage.py` | must pass; they catch seed/overlay drift | both | §6.12 |
+| 28 | Tests | `tests/test_kg_metadata.py`, `tests/test_router.py`, new tests | bump count tripwires; add behaviour tests | both | §6.2 |
+| 29 | Docs | `docs/README.md`, `context_bundles.yaml` | index row + bundle membership | both | §6.8 |
+
+Run it in this order because later steps read earlier ones: the classifier
+menu is generated *from* the KG, the parser menu is assembled *from* the KG at
+import, and the SQL overlay's coverage validator compares *both* against the
+tool signatures.
 
 ### 6.1 The module list is hardcoded in six places
 
@@ -416,9 +467,30 @@ absorbed. **The count is 23 as of `InvoiceLine` (F-077); it was 22 before.**
 A new entity increments each. A tripwire that fires is doing its job; silence
 would mean the count is no longer being checked.
 
-### 6.3 KG rows
+### 6.3 The intent knowledge graph
 
-`scripts/sql/kg_schema.sql`, seeded by step. What a module typically adds:
+`scripts/sql/kg_schema.sql`, seeded by step. This is the module's **intent
+graph**: the runtime does not hardcode what a module can answer — it reads it
+from these tables. Getting the rows right is what makes a new module
+answerable; the Python changes mostly teach the pipeline that the module
+exists.
+
+**Which KG table drives which stage.** This mapping is why the KG cannot be
+half-filled: each table feeds a different consumer, and a gap in one produces a
+failure in a different layer.
+
+| KG table | Read by | Effect when missing |
+|---|---|---|
+| `kg_entity` | parser menu, classifier menu, planner | entity unknown; prompts never route |
+| `kg_entity_field` | parser `COLUMNS` menu, projection | requested columns refused (see AP-1 in the AP assessment) |
+| `kg_entity_tool` | planner, executor | entity is known but has no fetcher, so cannot be a root |
+| `kg_entity_filter` | parser menu, planner arg construction | filter unrecognised, or recognised but unbuildable |
+| `kg_edge` / `kg_edge_tool` | planner includes, executor iteration | `include` silently does nothing |
+| `kg_vocabulary` | parser normalisation, classifier menu | synonyms and coded values do not resolve |
+| `kg_pattern_binding` | planner | a reused pattern has no mechanics |
+| `kg_entity_sql` / `kg_sql_column` / `kg_derived_projection` | SQL emitter only | REST unaffected; SQL projection incomplete |
+
+What a module typically adds:
 
 | Table | Add |
 |---|---|
@@ -430,13 +502,18 @@ would mean the count is no longer being checked.
 | `kg_vocabulary` | terms for any controlled value the parser must canonicalise (`entity_synonym`, `country`, statuses, …) |
 | `kg_pattern_binding` | only if the filter reuses a named pattern; a bespoke filter needs none |
 
-Two traps:
+Three traps:
 
 - `kg_vocabulary.vocab_kind` has its own CHECK list. A new vocabulary kind is
   a schema change, not a data change.
 - Entity **descriptions are read by the parser and the classifier menu**. Keep
   them behavioural ("note: this endpoint exposes SupplierNumber, not
   SupplierId") — they are prompt text, not documentation for humans.
+- **`kg_entity_field` must be at least as wide as the tool's projection.** The
+  AP assessment's AP-1 is exactly this: the tool projects `DueDate` and
+  `Supplier`, the KG declares neither, and every answer asking for them is
+  refused as an unavailable column — while the value sits in the row. Diff
+  `_PROJECTED_FIELDS` against the seed before declaring an entity done.
 
 ### 6.4 Parser context blocks
 
@@ -520,6 +597,111 @@ The MCP server reads tool definitions and KG carriers at **startup**. After
 changing `src/spire/mcp_server/`, `src/spire/kg/`, or the KG seed, restart it
 (`./spire-host.sh --stop && ./spire-host.sh --start dev`) or the run executes
 the previous code and the result describes a tree that no longer exists.
+
+### 6.10 Discovery — the physical tables and columns behind the endpoints
+
+This is the investigation the REST work cannot supply and the SQL work depends
+on. Do it while the module is already open, because it is cheap now and
+expensive to reconstruct later.
+
+For each resource and child in the endpoint inventory (§3.1), record:
+
+| Fact | How | Why it is recorded |
+|---|---|---|
+| Physical table or view | objects under the prefix: `ALL_TABLES` ∪ `ALL_VIEWS` ∪ `ALL_SYNONYMS` | Fusion usually exposes views; the REST resource name is not the object name |
+| Columns, in physical order | `ALL_TAB_COLUMNS … ORDER BY COLUMN_ID` | the role map and `kg_sql_column` need it |
+| Which columns are **populated** | `SELECT COUNT(*), COUNT(<col>) FROM <table>` | existence is not evidence; a stub column binds a role to nulls |
+| Identity when the pod exposes no PK | `COUNT(DISTINCT …)` on candidate keys | AP invoice lines have no `INVOICE_LINE_ID`, so `(INVOICE_ID, LINE_NUMBER)` is the identity |
+| Join keys and their nullability | Both sides, plus `NULLABLE` | a nullable join key silently drops rows under an inner join |
+| REST field → column mapping | Field-by-field, where not obvious | the emitter projects physical columns, not REST names |
+
+The full procedure, its six failure modes and its cell templates are in
+[`../SCHEMA_DISCOVERY_METHOD.md`](../SCHEMA_DISCOVERY_METHOD.md) — use it
+rather than improvising queries, and note that it does **not** cover the REST
+side in §3.
+
+Where this record lives: the module's acceptance note or a handover section,
+not a new file per module. `docs/plan/KG_ROLE_MAPS.md` is the existing
+append-only home for role maps.
+
+### 6.11 SQL overlay — the second place a module is declared
+
+**Deferred for delivery, still a real touchpoint.** `src/spire/kg/sql_overlay.py`
+is a hand-authored overlay beside the KG, not derived from it, so a new entity
+can be fully wired for REST and still have no SQL. That is acceptable while SQL
+is deferred — but it must not be mistaken for "nothing to do", because
+`scripts/validate_sql_coverage.py` checks the overlay against tool signatures
+and will report the gap.
+
+What lives there:
+
+| Registry | Contents |
+|---|---|
+| `tool_to_entity` | MCP tool name → entity; the emitter's entry point |
+| `_ENTITIES` | `EntitySpec` per entity: `fusion_table`, `select_columns`, `base_joins`, `pk_column`, `alias` |
+| `_FILTERS` | `FilterSpec` per `(entity, filter_type)`: the predicate template |
+| `_JOINS` | `JoinSpec` per traversal |
+| `_LITERALS` | pod-specific literal values |
+| `_ASSUMPTIONS` | stated assumptions, emitted as comments in the SQL |
+| `aggregations` | `AggregationSpec` per aggregation tool |
+| `not_expressible` | tools that are not one SELECT — declared, not faked |
+| `sql_control_args`, `sql_disabled_args` | args that must not reach the emitter, and why |
+
+Two rules that matter:
+
+- **A tool absent from `tool_to_entity` emits no SQL and is not an error** —
+  the emitter prints an explicit comment rather than inventing a SELECT. A tool
+  that *is* present but has a missing column is a different, louder failure.
+- **`not_expressible` is the honest answer for multi-resource reconciliations**
+  (lifecycle, comparisons). Do not fabricate a single SELECT to silence a
+  coverage warning; that is how wrong rows get produced.
+
+### 6.12 Validators — run them, in this order
+
+Both read the live KG, and the first also reads the pod.
+
+| Order | Script | Checks | Run after |
+|---:|---|---|---|
+| 1 | `python scripts/validate_kg_schema.py` | resolves every `kg_derived_projection` expression to a physical table and classifies each referenced column as validated / on-pod / **missing** | any seed or role-map change |
+| 2 | `python scripts/validate_sql_coverage.py` | overlay coverage against tool signatures, the KG vocabulary, and a measured list of columns that exist but never carry data | any tool or overlay change |
+| 3 | `python scripts/build_classifier_context.py` | regenerates the classifier menu, and **warns when a known module has no entities** | any KG change |
+
+Validator 3's warning is the cheapest detector for an incomplete module: it
+fires when `KNOWN_MODULES` contains a module the KG does not populate, which is
+what "I edited five of six places" looks like from the KG's side.
+
+### 6.13 Planner entity guards
+
+`src/spire/planner/planner.py` carries **prose** guards, one per entity shape,
+that decide the refusal a user sees when a query is under-specified. They are
+not in the KG and not derived from it, so a new entity without one fails in a
+generic way.
+
+The existing set to mirror:
+
+- *"Invoice queries require a supplier reference…"* — a root requirement
+- *"Address queries require a supplier or a country…"* — a disjunction
+- *"CustomerAccount cannot be filtered by …"* — an unsupported-filter refusal,
+  which routes through `capability.py` so it reads as an answer
+
+Write one only if the module has a genuine root requirement or a filter that
+must be refused rather than ignored. A guard that refuses too eagerly converts
+an answerable question into a refusal — the failure mode the SME litmus set
+exists to catch.
+
+### 6.14 Refusal text and rendering
+
+Two small surfaces, both user-visible:
+
+- **`src/spire/nl_parser/capability.py`** — refusal messages are structured
+  answers (Reason / Solution / Example), not error strings. A new unanswerable
+  kind needs text here or the refusal reads as breakage. Its module docstring
+  records why: an earlier version classified nearly every refusal as an unknown
+  entity by scanning for capitalised words.
+- **`src/spire/rendering/formatters.py`** — `_render_records` is generic (title,
+  rows, columns, empty text), so most entities need only a block that chooses
+  the columns. Do not add a second table renderer; the per-entity bullet blocks
+  were removed for that reason.
 
 ---
 
@@ -692,21 +874,30 @@ the prompt ledger (§4.2) plus §7.2, not the file list.
 
 - [ ] Branch `ModuleSupport-<Family>-<Module>` off updated `master`.
 - [ ] Endpoint inventory with captured evidence (§3.6).
+- [ ] Physical tables, columns, population and join keys recorded (§6.10).
 - [ ] Prompt set with dispositions; every fill value pod-verified (§4).
 - [ ] Tools implemented in the right shape; quirks documented in their
       docstrings (§5).
 - [ ] `ToolResult` metadata honest; capped ≠ complete (§5.4).
-- [ ] All six module lists consistent; entity-count tripwires bumped (§6.1–6.2).
-- [ ] KG rows seeded; `rebuild_kg.py` run (§6.3).
-- [ ] Context blocks added **and** manifest updated; classifier menu
-      regenerated (§6.4).
-- [ ] Planner registries complete (§6.5).
-- [ ] Synthesizer model and builder; no projected field silently dropped (§6.6).
+- [ ] Intent KG seeded: `kg_entity`, `kg_entity_field`, `kg_entity_tool`,
+      `kg_entity_filter`, edges, vocabulary (§6.3).
+- [ ] `kg_entity_field` at least as wide as the tool's `_PROJECTED_FIELDS`
+      — no fetched-then-refused column (§6.3, AP-1).
+- [ ] `rebuild_kg.py` run; classifier menu regenerated (§6.4).
+- [ ] Context blocks added **and** `order.manifest` updated (§6.5).
+- [ ] All six module lists consistent (§6.1); entity-count tripwires bumped
+      (§6.2).
+- [ ] Planner registries complete (§6.5) and an entity guard written if the
+      module has a root requirement (§6.13).
+- [ ] Synthesizer model and builder; no projected field silently dropped
+      (§6.6); renderer block added (§6.14).
+- [ ] `validate_kg_schema.py` and `validate_sql_coverage.py` pass (§6.12).
+- [ ] SQL overlay entries added or the gap explicitly deferred (§6.11).
 - [ ] Stack restarted after the last MCP/KG change (§6.9).
 - [ ] Docs added to `docs/README.md` and to a `context_bundles.yaml` bundle;
       `tests/test_bundle_manifest.py` green (§6.8).
-- [ ] `PASS`/`PARTIAL`/`GAP` results match the ledger; counts match `total_results`
-      (§7).
+- [ ] `PASS`/`PARTIAL`/`GAP` results match the ledger; counts match
+      `total_results` (§7).
 - [ ] Acceptance note cites capture files.
 - [ ] No SQL work required for acceptance (§2).
 - [ ] Roadmap updated: capability matrix, known gaps, status (§6.1 of roadmap's
