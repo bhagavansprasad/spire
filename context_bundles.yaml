@@ -296,6 +296,7 @@ bundles:
   - src/spire/mcp_server/server.py
   - src/spire/mcp_server/tools/addresses.py
   - src/spire/mcp_server/tools/aggregate_invoices.py
+  - src/spire/mcp_server/tools/aggregate_outstanding_invoices.py
   - src/spire/mcp_server/tools/buyer.py
   - src/spire/mcp_server/tools/invoices.py
   - src/spire/mcp_server/tools/purchase_orders.py
@@ -468,6 +469,7 @@ bundles:
   - tests/test_f077_ap_invoice_lines.py
   - tests/test_f086_child_count_reaches_prompt.py
   - tests/test_ap1_invoice_field_vocabulary.py
+  - tests/test_ap2_outstanding_by_supplier.py
   - tests/test_f079_identifier_space.py
   - tests/test_f080b_supplier_status_carrier.py
   - tests/test_f081_field_projection.py
