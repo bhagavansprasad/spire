@@ -131,6 +131,21 @@ _RANKING_FIELDS: dict[str, dict[str, Any]] = {
         "source_label": "invoices",
         "measure_label": "spend",
     },
+    # AP-2 (2026-11-28). Same structure as the spend ranking, different
+    # measure word — and the word matters: "spend" over an outstanding
+    # number is exactly the substitution prompt 20 was failing on.
+    "supplier_outstanding_ranking": {
+        "label_key": "supplier",
+        "measure_key": "total_outstanding",
+        "total_key": "total_suppliers",
+        "entity_label": "suppliers",
+        # total_available and examined count INVOICES, not suppliers, so the
+        # truncation note must say "invoices" — printing "25,000 of 48,931
+        # suppliers" over a pod holding a few hundred is the confident-wrong
+        # number this module exists to remove.
+        "source_label": "invoices",
+        "measure_label": "outstanding",
+    },
     "supplier_po_value_ranking": {
         "label_key": "supplier",
         "measure_key": "total_ordered",

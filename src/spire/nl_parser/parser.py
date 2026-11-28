@@ -70,6 +70,12 @@ from spire.nl_parser.vocabulary import (
 from spire.nl_parser.vocabulary import KGMenu, load_kg_menu
 
 from spire.nl_parser.context_assembly import _build_system_prompt
+# AP-2 (2026-11-28). The set of date-capable aggregation ops is read from
+# the planner's registry rather than restated here. registries.py is pure
+# data with no imports of its own, so this cannot create a cycle — and the
+# alternative (naming the ops in this file too) is how 'by_supplier' came
+# to be the only op the period correction applied to.
+from spire.planner.registries import _AGGREGATION_PARAMS
 
 from pathlib import Path
 
@@ -623,7 +629,11 @@ def _extract_list_cap(prompt: str) -> int | None:
 # pattern matches the four period phrases only; the rolling shapes are
 # left for their own rules.
 _PERIOD_ANCHORED_RE = re.compile(
-    r"\b(this|last)\s+(year|quarter|month)\b",
+    # AP-2 (2026-11-28). 'current' was missing, and prompt 20 says exactly
+    # "for the current month" — so the phrase that most needs resolving was
+    # the one the extractor did not recognise. Treated as a synonym of
+    # 'this'; 'last' is the only one that shifts.
+    r"\b(this|current|last)\s+(year|quarter|month)\b",
     re.IGNORECASE,
 )
 
@@ -649,6 +659,8 @@ def _extract_period_bounds(prompt: str) -> tuple[str, str] | None:
     if m is None:
         return None
     which, unit = m.group(1).lower(), m.group(2).lower()
+    if which == "current":
+        which = "this"  # synonym; only 'last' shifts the window
     today = date.today()
 
     if unit == "year":
@@ -1019,13 +1031,22 @@ def parse(
     # Same class as the other post-parse corrections in this function:
     # pure Python, runs after the LLM, overrides the shape the model
     # gets wrong.
-    if (
-        intent.aggregate is not None
-        and intent.aggregate.get("op") == "by_supplier"
-    ):
-        bounds = _extract_period_bounds(prompt)
-        if bounds is not None:
-            intent.aggregate["date_from"], intent.aggregate["date_to"] = bounds
+    # Scope (AP-2, 2026-11-28): ANY aggregation op that accepts a date
+    # range, read from _AGGREGATION_PARAMS rather than a hardcoded op name.
+    # The original guard named 'by_supplier' alone, which was correct when
+    # it was the only date-capable aggregation — and then silently excluded
+    # the next one, so prompt 20's "current month" produced date_from=None
+    # and the answer covered all time with no disclosure. Deriving the set
+    # from the registry is what stops a third op from repeating it.
+    if intent.aggregate is not None:
+        _op = intent.aggregate.get("op")
+        _op_args = _AGGREGATION_PARAMS.get(_op, ())
+        if "date_from" in _op_args or "date_to" in _op_args:
+            bounds = _extract_period_bounds(prompt)
+            if bounds is not None:
+                intent.aggregate["date_from"], intent.aggregate["date_to"] = (
+                    bounds
+                )
 
     # --- F-016: plain-list row cap from the raw prompt ---
     #

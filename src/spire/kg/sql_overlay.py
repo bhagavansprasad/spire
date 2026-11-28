@@ -923,6 +923,21 @@ _FILTERS = {
         predicate_template="{alias}.INVOICE_DATE < {value}",
         assumption="aggregation_arg_handling",
     ),
+    # AP-2 (2026-11-28). Same two bounds, same predicate shapes, different
+    # tool. The value reachability requires a third FilterSpec row here or
+    # validate_sql_coverage reports both args uncovered.
+    ("aggregate_outstanding_invoices_by_supplier", "date_from"): FilterSpec(
+        tool_name="aggregate_outstanding_invoices_by_supplier",
+        arg_name="date_from",
+        predicate_template="{alias}.INVOICE_DATE >= {value}",
+        assumption="aggregation_arg_handling",
+    ),
+    ("aggregate_outstanding_invoices_by_supplier", "date_to"): FilterSpec(
+        tool_name="aggregate_outstanding_invoices_by_supplier",
+        arg_name="date_to",
+        predicate_template="{alias}.INVOICE_DATE < {value}",
+        assumption="aggregation_arg_handling",
+    ),
     ("aggregate_standard_receipts_by_method", "customer_name"): FilterSpec(
         tool_name="aggregate_standard_receipts_by_method",
         arg_name="customer_name",
@@ -1310,6 +1325,23 @@ OVERLAY = Overlay(
             base_entity="Invoice",
             group_by_column="VENDOR_ID",
             measure_template="SUM(INVOICE_AMOUNT)",
+            assumption="aggregation_measures",
+            top_n_arg="top_n",
+        ),
+        # AP-2 (2026-11-28). The measure subtracts AmountPaid, which is on
+        # the invoice header. NVL guards the nulls this pod carries on
+        # unpaid rows so the subtraction never yields NULL. Cancelled rows
+        # are excluded because a cancelled invoice is not owed — 725 of
+        # them exist and the first page of 'Unpaid' is mostly cancelled
+        # zero-amount rows.
+        "aggregate_outstanding_invoices_by_supplier": AggregationSpec(
+            tool_name="aggregate_outstanding_invoices_by_supplier",
+            base_entity="Invoice",
+            group_by_column="VENDOR_ID",
+            measure_template=(
+                "SUM(GREATEST(NVL(INVOICE_AMOUNT, 0) "
+                "- NVL(AMOUNT_PAID, 0), 0))"
+            ),
             assumption="aggregation_measures",
             top_n_arg="top_n",
         ),

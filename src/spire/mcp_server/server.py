@@ -36,6 +36,10 @@ from spire.fusion.client import FusionClient
 from spire.mcp_server.tools.aggregate_invoices import (
     aggregate_invoices_by_supplier as _aggregate_invoices_by_supplier,
 )
+from spire.mcp_server.tools.aggregate_outstanding_invoices import (
+    aggregate_outstanding_invoices_by_supplier as
+    _aggregate_outstanding_invoices_by_supplier,
+)
 from spire.mcp_server.tools.aggregate_purchase_orders import (
     aggregate_purchase_orders_by_supplier as _aggregate_purchase_orders_by_supplier,
     aggregate_purchase_orders_by_status as _aggregate_purchase_orders_by_status,
@@ -438,6 +442,50 @@ async def aggregate_invoices_by_supplier(
     """
     async with FusionClient(_persona) as client:
         return await _aggregate_invoices_by_supplier(
+            client,
+            date_from=date_from,
+            date_to=date_to,
+            top_n=top_n,
+            report_progress=ctx.report_progress,
+        )
+
+
+@mcp.tool()
+async def aggregate_outstanding_invoices_by_supplier(
+    ctx: Context,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Rank suppliers by total OUTSTANDING (unpaid) invoice amount.
+
+    Use this for "total outstanding by supplier", "how much do we owe each
+    supplier", "outstanding payables this month". The tool groups invoices by
+    supplier and sums what is still owed: InvoiceAmount - AmountPaid, over
+    non-cancelled invoices. Grouping and measure are fixed — this is a bounded
+    aggregation, not an engine.
+
+    NOT the same as aggregate_invoices_by_supplier. That one sums what was
+    BILLED (InvoiceAmount) and answers "spend"; this one sums what is still
+    OWED and answers "outstanding". Substituting one for the other is the
+    defect recorded as AP-2 — the answer named spend while the question asked
+    about outstanding.
+
+    Args:
+        date_from: ISO "YYYY-MM-DD". Inclusive lower bound on InvoiceDate.
+            For the current month: date_from="2026-11-01".
+        date_to: ISO "YYYY-MM-DD". Exclusive upper bound on InvoiceDate. For
+            the current month: date_to="2026-12-01".
+        top_n: Number of suppliers to return (default 10).
+
+    Returns:
+        A "supplier_outstanding_ranking" dict: ranked rows of
+        {supplier, supplier_number, total_outstanding, total_invoiced,
+        total_paid, invoice_count} plus total_suppliers, returned, truncated,
+        examined, invoices_counted, cancelled_excluded and the echoed range.
+    """
+    async with FusionClient(_persona) as client:
+        return await _aggregate_outstanding_invoices_by_supplier(
             client,
             date_from=date_from,
             date_to=date_to,

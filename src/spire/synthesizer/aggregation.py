@@ -54,6 +54,43 @@ class SupplierSpendRankingResponse(BaseModel):
     truncation_notes: list[str] = _TRUNCATION_FIELD
 
 
+class SupplierOutstandingRow(BaseModel):
+    """One supplier in an OUTSTANDING ranking (AP-2).
+
+    Deliberately a separate row type from SupplierSpendRow even though the
+    fields line up one-for-one. The measure is different — `total_outstanding`
+    is what is still owed, `total_spend` is what was billed — and two models
+    means a spend row cannot be rendered under an outstanding heading by
+    accident. That substitution is the defect AP-2 records.
+    """
+
+    supplier_name: str = Field(description="The supplier's display name.")
+    supplier_number: str = Field(
+        description="The supplier's SupplierNumber (human-readable id)."
+    )
+    total_outstanding: float = Field(
+        description="Total still owed to this supplier: sum of "
+        "(InvoiceAmount - AmountPaid) over non-cancelled invoices in the "
+        "range, copied exactly from the ranking data. Never recompute."
+    )
+    invoice_count: int = Field(
+        description="Number of non-cancelled invoices counted for this "
+        "supplier, copied from the ranking data."
+    )
+
+
+class SupplierOutstandingRankingResponse(BaseModel):
+    """Aggregation response: suppliers ranked by outstanding amount (AP-2)."""
+
+    summary: str = _SUMMARY_FIELD
+    suppliers: list[SupplierOutstandingRow] = Field(
+        default_factory=list,
+        description="Suppliers in ranked order (highest outstanding first), "
+        "copied from the ranking data. Do not reorder, add, or drop suppliers.",
+    )
+    truncation_notes: list[str] = _TRUNCATION_FIELD
+
+
 class InvoiceAmountRow(BaseModel):
     """One invoice in an amount ranking (top-N invoices by InvoiceAmount).
 
@@ -731,6 +768,32 @@ def build_supplier_spend_ranking(bucket: dict) -> SupplierSpendRankingResponse:
     )
 
 
+def build_supplier_outstanding_ranking(
+    bucket: dict,
+) -> SupplierOutstandingRankingResponse:
+    """supplier_outstanding_ranking -> response, no LLM.
+
+    A separate builder from the spend ranking even though the shape is
+    identical, because the MEASURE is not: total_outstanding is what is still
+    owed, total_spend is what was billed. Sharing one builder would let a
+    spend row be rendered under an Outstanding heading with no error — the
+    AP-2 substitution, reintroduced at the last step.
+    """
+    return SupplierOutstandingRankingResponse(
+        summary=_summary_text(bucket),
+        suppliers=[
+            SupplierOutstandingRow(
+                supplier_name=_s(r.get("supplier")),
+                supplier_number=_s(r.get("supplier_number")),
+                total_outstanding=_f(r.get("total_outstanding")),
+                invoice_count=_i(r.get("invoice_count")),
+            )
+            for r in bucket.get("rows") or []
+        ],
+        truncation_notes=[],
+    )
+
+
 def build_invoice_amount_ranking(bucket: dict) -> InvoiceAmountRankingResponse:
     """invoice_amount_ranking -> response, no LLM.
 
@@ -871,6 +934,7 @@ def build_receipt_method_distribution(
 # is a new row here, not another branch in the routing.
 _LOCAL_AGGREGATION_BUILDERS = {
     "supplier_spend_ranking": build_supplier_spend_ranking,
+    "supplier_outstanding_ranking": build_supplier_outstanding_ranking,
     "supplier_po_value_ranking": build_supplier_po_value_ranking,
     "po_status_breakdown": build_po_status_breakdown,
     "open_po_summary": build_open_po_summary,

@@ -119,6 +119,8 @@ from spire.synthesizer.aggregation import (  # noqa: F401
     ReceiptMethodDistributionRow,
     SupplierPOValueRankingResponse,
     SupplierPOValueRow,
+    SupplierOutstandingRankingResponse,
+    SupplierOutstandingRow,
     SupplierSpendRankingResponse,
     SupplierSpendRow,
     _build_comparison_response,
@@ -359,6 +361,12 @@ AGGREGATION_SCHEMAS: dict[str, tuple[type[BaseModel], str]] = {
     "supplier_spend_ranking": (
         SupplierSpendRankingResponse,
         "SupplierSpendRanking",
+    ),
+    # AP-2 (2026-11-28). Its own shape tag, its own response, its own row
+    # type. The measure differs from spend, so the tag must too.
+    "supplier_outstanding_ranking": (
+        SupplierOutstandingRankingResponse,
+        "SupplierOutstandingRanking",
     ),
     "supplier_po_value_ranking": (
         SupplierPOValueRankingResponse,

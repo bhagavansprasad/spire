@@ -38,6 +38,7 @@ from spire.synthesizer.aggregation import (
     POStatusBreakdownResponse,
     ReceiptMethodDistributionResponse,
     SupplierPOValueRankingResponse,
+    SupplierOutstandingRankingResponse,
     SupplierSpendRankingResponse,
 )
 
@@ -451,6 +452,26 @@ def _validate_supplier_spend_ranking(
     _raise_if_bad(parts)
 
 
+def _validate_supplier_outstanding_ranking(
+    response: SupplierOutstandingRankingResponse, valid: dict[str, set]
+) -> None:
+    """Same supplier-number cross-check as the spend ranking.
+
+    Kept separate rather than shared via a loop over response types: the
+    two responses carry different row models, and a shared validator would
+    quietly pass if one model gained a field the other did not.
+    """
+    bad_snum = [
+        row.supplier_number
+        for row in response.suppliers
+        if row.supplier_number not in valid["supplier_numbers"]
+    ]
+    parts = []
+    if bad_snum:
+        parts.append(f"supplier_numbers={bad_snum}")
+    _raise_if_bad(parts)
+
+
 def _validate_supplier_po_value_ranking(
     response: SupplierPOValueRankingResponse, valid: dict[str, set]
 ) -> None:
@@ -535,6 +556,7 @@ _VALIDATORS = {
     CustomerAccountResponse: _validate_customer_account,
     CreditMemoListResponse: _validate_credit_memo,
     SupplierSpendRankingResponse: _validate_supplier_spend_ranking,
+    SupplierOutstandingRankingResponse: _validate_supplier_outstanding_ranking,
     SupplierPOValueRankingResponse: _validate_supplier_po_value_ranking,
     POStatusBreakdownResponse: _validate_no_ids,
     OpenPOSummaryResponse: _validate_no_ids,

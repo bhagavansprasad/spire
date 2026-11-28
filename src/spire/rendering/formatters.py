@@ -34,6 +34,7 @@ from spire.synthesizer.synthesizer import (
     CountResponse,
     ComparisonResponse,
     InvoiceAmountRankingResponse,
+    SupplierOutstandingRankingResponse,
     SupplierSpendRankingResponse,
     SupplierPOValueRankingResponse,
     POStatusBreakdownResponse,
@@ -1012,6 +1013,27 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                     for i, row in enumerate(response.suppliers, 1)
                 ],
                 ["Rank", "Supplier", "SupplierNumber", "Total Spend", "Invoices"],
+                "No suppliers found.",
+            )
+        )
+        return _with_truncation(lines, response)
+
+    if isinstance(response, SupplierOutstandingRankingResponse):
+        _append_summary(lines, response)
+        lines.extend(
+            _render_records(
+                "Top suppliers by outstanding amount",
+                [
+                    {
+                        "Rank": i,
+                        "Supplier": row.supplier_name,
+                        "SupplierNumber": row.supplier_number,
+                        "Outstanding": f"{row.total_outstanding:,.2f}",
+                        "Invoices": row.invoice_count,
+                    }
+                    for i, row in enumerate(response.suppliers, 1)
+                ],
+                ["Rank", "Supplier", "SupplierNumber", "Outstanding", "Invoices"],
                 "No suppliers found.",
             )
         )

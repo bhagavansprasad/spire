@@ -109,6 +109,14 @@ _AGGREGATION_TOOLS: dict[str, str] = {
     # op string, for tidiness only. The P6 ops below carry the fuller
     # source+measure+grouping naming, so the pattern is set going forward.
     "by_supplier": "aggregate_invoices_by_supplier",
+    # AP-2 (2026-11-28). A different MEASURE over the same rows, so a
+    # different tool — never a flag on the spend one. 'by_supplier' above
+    # sums what was billed; this sums what is still owed. The naming
+    # carries source + measure + grouping, per the precedent set by the
+    # P6 ops.
+    "outstanding_by_supplier": (
+        "aggregate_outstanding_invoices_by_supplier"
+    ),
     "po_value_by_supplier": "aggregate_purchase_orders_by_supplier",
     "po_count_by_status": "aggregate_purchase_orders_by_status",
     "open_po_summary": "summarize_open_purchase_orders",
@@ -129,6 +137,11 @@ _AGGREGATION_TOOLS: dict[str, str] = {
 # tool call.
 _AGGREGATION_PARAMS: dict[str, tuple[str, ...]] = {
     "by_supplier": ("date_from", "date_to", "top_n"),
+    # Same three args but a different meaning: these dates bound the
+    # outstanding measure, not spend. The parser must emit them from a
+    # period phrase ('current month') or the answer silently covers all
+    # time — that was the AP-2 period half.
+    "outstanding_by_supplier": ("date_from", "date_to", "top_n"),
     "po_value_by_supplier": ("status", "top_n"),  # no date: PO dates aren't filterable
     "po_count_by_status": (),                     # groups by status; takes nothing
     "open_po_summary": (),                        # open by identity; takes nothing
