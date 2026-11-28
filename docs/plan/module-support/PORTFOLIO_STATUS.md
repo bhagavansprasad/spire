@@ -27,13 +27,15 @@ once the module has a `DECISIONS.md`: `blocked` (naming who unblocks),
 
 ## Financials — Payables (AP), first detailed module
 
+Module file: [`financials/payables.md`](./financials/payables.md) — sub-module
+rows, boundary, decisions, coverage, open defects.
 Evidence: `AP_COVERAGE_ASSESSMENT.md` (run02, 2026-11-28).
 
 | Sub | Scope | Prompts | State | Branch / blocker |
 |---|---|---|---:|---|
 | AP.1 | Supplier invoices — list, date window, supplier, amount, unpaid, overdue, pending, by-id | 11, 12, 14, 16 | `verified` with open defects | AP-1 field vocabulary narrower than the tool projection; AP-4 zero-amount overdue; AP-6 "created" disclosure |
 | AP.2 | Invoice lines | 13 | `verified` — count is wrong | `SP-005-line-count` (the count is a page size, not a total) |
-| AP.3 | Holds | 15 | `boundary agreed` | holds live on `/child/invoiceInstallments`, not the invoice header; p15 wording **under decision** |
+| AP.3 | Holds | 15 | `blocked` | holds live on `/child/invoiceInstallments`, not the invoice header; p15 wording is an **open decision** |
 | AP.4 | Outstanding and paid amounts | 20, 14 (partial) | `boundary agreed` | header `AmountPaid` is the only usable paid figure; installments are context, never money |
 | AP.5 | Validation and accounting status | 18 | `modelled` | `ValidationStatus` / `FundsStatus` on the invoice header |
 | AP.6 | Payment documents | 17 | `accepted refusal` | no payment document exists anywhere on the AP REST path — an absence, not an undiscovered endpoint |

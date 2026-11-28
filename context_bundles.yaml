@@ -95,6 +95,7 @@ bundles:
   - docs/plan/module-support/MODULE_SUPPORT_MEETING_MINUTES.md
   - docs/plan/module-support/AP_COVERAGE_ASSESSMENT.md
   - docs/plan/module-support/PROBE_CATALOGUE.md
+  - docs/plan/module-support/financials/payables.md
 
   # ── the historical record ──
   # Past sessions, findings, fixes, evidence, log-analysis runs.
