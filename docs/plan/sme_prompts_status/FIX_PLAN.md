@@ -188,13 +188,40 @@ has it. **Verify with:** re-run prompts 24, 25, 28, 30.
 
 ## SP-005 — `get_invoice_lines` reports a capped count as the total
 
-**Status: Fixed on `SP-005-line-count` (2026-11-28), awaiting PR and a
-run03 re-run of p13.**
+**Status: REOPENED (2026-11-28). The data layer is fixed and merged; the
+answer is still wrong.** PR #231 (`SP-005-line-count`, merge `e4bf061`) made
+`total_available` truthful — it now reports 184 — but a manual re-run on the
+merged code, after `./spire-host.sh --restart dev`, still prints:
 
-**Prompt:** 13 (scored `OK`, but the number it stated was wrong).
+```
+invoiceline: 50 record(s)
+Final raw output:     50 record(s) under 'invoiceline'
+```
 
-**Symptom.** The answer said *"The invoice contains **50** line items."*
-Invoice `1601397` has **184**.
+Two causes were left undone, and both are visible in the code:
+
+1. **`src/spire/mcp_server/server.py:607`** — the MCP wrapper still declares
+   `async def get_invoice_lines(invoice_id: int, limit: int = 50)`. The *tool*
+   default was raised to 200; the executor calls the **wrapper**, and the plan
+   passes no `limit` (`tool_args: {'invoice_id': '$iteration_value'}`), so 50
+   is what reaches the tool. The fix was applied to the layer that is not
+   called.
+2. **The count sentence is model prose, not a template.** Two runs of the
+   same prompt worded it differently — one said "contains 50 associated line
+   items", the next mentioned no line count at all while the summary still
+   read 50. Generated text is the signature. `local_list_summary`
+   (`local_summary.py:205-222`) has the truthful sentences and this path does
+   not call it.
+
+Full walk with both reproductions and the corrected classification: **F-086**
+in `docs/fixes/FIX_PLAN.md`. The earlier `Fixed` label is left visible in that
+file rather than rewritten.
+
+**Prompt:** 13 (scored `OK`, because a prompt returning rows scores `OK`
+regardless of the sentence above them).
+
+**Symptom.** The answer states *"50 line items"* for invoice `1601397`, which
+has **184**.
 
 **Evidence, before the fix.**
 
@@ -227,7 +254,7 @@ honours it too (`receivablesInvoices/1002/child/receivablesInvoiceLines`
 → `totalResults: 4`). The PO lines child could not be probed: PO `2144`
 404s and `/purchaseOrders` returns 0 rows (SP-003).
 
-**Fix, as landed.**
+**Fix, as landed — the data layer only.**
 1. New `child_page_count(response, items)` in `tools/tool_result.py`, shared
    by all five tools — one implementation, because five copies is how the
    bug spread. Returns `(total_available, capped)`: `totalResults` when
@@ -251,10 +278,19 @@ honours it too (`receivablesInvoices/1002/child/receivablesInvoiceLines`
 **Not verifiable live, and said so rather than glossed.** The PO half cannot
 be exercised (`/purchaseOrders` 0 rows, SP-003); the AR customer-account
 endpoint 403s (SP-004). Unit tests are their only proof. The AP half is
-verified against the pod.
+verified against the pod — at tool level. **Not at answer level, which is why
+this row is open.**
 
-**Effort:** S. **Verify with:** run03 prompt 13 (expect 184, or "50 of at
-least 184" if the pod stops reporting `totalResults`).
+**Still to do.**
+1. Raise the wrapper default at `server.py:607` to 200.
+2. Make the child-lines answer quote `total_available` instead of leaving the
+   count to the model.
+3. Check whether other wrappers in `server.py` carry the same divergence
+   between wrapper default and tool default — only this one was inspected.
+
+**Effort:** S for the wrapper, M for the prose. **Verify with:** p13 on the
+merged fix — it must state **184** (or "50 of at least 184"), and two runs
+must word the count the same way.
 
 ---
 

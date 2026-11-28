@@ -3,20 +3,23 @@
 Everything a new window needs to pick this work up without re-deriving it.
 Read this, then `FIX_PLAN.md`, then the latest `runNN_` file.
 
-**Last updated:** 2026-11-28 (after run02; merged to `master` as `41621e5`).
+**Last updated:** 2026-11-28 (after PR #231 and #232 merged; `master` at `5ca21a2`).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Base | `master` @ `41621e5` (all SME-status work merged; branch deleted) |
-| Latest run | run02 (2026-11-28), 40/40 prompts |
-| Code score | 13 `OK`, 17 `REFUSED`, 0 `BADSQL` |
+| Base | `master` @ `5ca21a2` (PR #231 SP-005 data fix, #232 branch-naming rule) |
+| Latest run | run02 (2026-11-28), 40/40 prompts — **run03 is now overdue** |
+| Code score | 13 `OK`, 17 `REFUSED`, 0 `BADSQL` (run02, before #231) |
 | Environment blockers | 10 prompts (SP-003 ×6, SP-004 ×4) |
-| Open code defects | SP-001, SP-002, SP-005, SP-006 |
+| Open code defects | SP-001, SP-002, **SP-005 reopened**, SP-006 |
+| Not yet in a prompt row | **F-086** count not shown · **F-087** unmarked live tests · **F-088** p14 emits two answers |
 
-**Next window starts on a new branch off `master`** — not on
-`Phase3-SME-Prompt-Status`, which no longer exists.
+**Next window starts on a new branch off `master`, named
+`{Area}-{Descriptive}`** — for example `Payables-Line-Count-Display`. The
+`Phase{N}-` prefix is retired (PR #232). Do not continue on
+`SP-005-line-count` or `Docs-Module-Branch-Naming`; both are merged.
 
 **Read this first if you have 60 seconds:** the code work from the F-07x
 batch landed — F-077, F-078 and F-082 are all proven fixed by run02. The
@@ -24,6 +27,14 @@ run does **not** look better overall (11 → 13 `OK`) because 10 prompts are
 simultaneously blocked by two Fusion access problems that have nothing to do
 with the code. Do not start by "fixing" procurement or receivables — check
 SP-003 and SP-004 first.
+
+**What changed since the previous handoff: SP-005 was closed, then
+reopened.** PR #231 made the total truthful (`total_available` is 184, not 50)
+and it is merged and unit-tested — but a manual re-run on the merged code
+still prints `invoiceline: 50 record(s)`. Two causes remain: the MCP wrapper
+at `server.py:607` still defaults `limit=50`, and the count sentence is model
+prose rather than `local_list_summary`. Read F-086 before touching this; the
+mistake it records is "fixed the layer that is not called".
 
 ## The three things most likely to waste your time
 
@@ -159,6 +170,8 @@ disagreement *is* the finding; record it, do not silently prefer either.
 | PR #229 | this folder; `promptkit.py` resilience; `t_*` → `evidence/` |
 | PR #230 | the two working-style docs merged into `docs/plan/WORKING_STYLE.md` |
 | `41621e5` | deleted `SQL-EMITTER-FILES.md`; dated snapshot + Phase 1 handover moved to `history` |
+| PR #231 | SP-005 data layer — `totalResults` read, `capped` param, 5 tools, limit 200 on the **tool**. **Answer text unchanged; see F-086** |
+| PR #232 | branch naming moved from `Phase{N}-{Descriptive}` to `{Area}-{Descriptive}` |
 
 `75f4422` matters more than it looks: the root went from 433 entries to 33,
 and one `/evidence/` gitignore rule replaced eleven root-anchored patterns.

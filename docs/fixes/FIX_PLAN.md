@@ -1,6 +1,8 @@
 # SPIRE — Fix Plan
 
-**Branch:** current work on `Phase3-F084-Supplier-Status-Projection` (off `master`).
+**Branch:** nothing in flight. Last merges: **#232** `Docs-Module-Branch-Naming`
+(merge `5ca21a2`, branch-naming rule) and **#231** `SP-005-line-count` (merge
+`e4bf061`, the F-086 data-layer fix).
 Prior: `Phase3-F080b-Supplier-Status-Carrier` merged via PR #223 (merge `93185ee`);
 `Phase3-F083-Invoice-Supplier-Join` merged via PR #222 (merge `908e396`);
 `Phase3-F079-Identifier-Space` merged via PR #221 (merge `5249e9e`);
@@ -11,14 +13,22 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** **Open — two rows.** F-086 (child count stated as total) is fixed
-on `SP-005-line-count` and awaits a run03 re-run to be called *verified*;
-F-087 (the default suite runs live-pod tests) is open and unfixed. Everything
-earlier in this file is fixed and live-verified on dev49: **F-076, F-077,
-F-078, F-079, F-080, F-081, F-082, F-083, F-084 and F-085**.
+**Status:** **Open — three rows.** F-086 (child count stated as total) was
+fixed in the data layer and **reopened** the same day: a manual re-run still
+answers "50", because the MCP wrapper's limit was not raised and the count
+sentence is model prose. F-087 (the default suite runs live-pod tests) is
+open and unfixed. F-088 (p14 emits two answers) is new. Everything earlier in
+this file is fixed and live-verified on dev49: **F-076, F-077, F-078, F-079,
+F-080, F-081, F-082, F-083, F-084 and F-085**.
 
 **Prior state:** this queue was empty on 2026-11-28 before F-086 and F-087
 were opened — F-076 and F-077 were the last two fixed, 2026-11-27.
+
+**Correction (2026-11-28).** F-086 was recorded as
+`Candidate→Fixed` after the data-layer fix merged (PR #231). That was wrong:
+the fix made `total_available` truthful but the *answer text* still stated a
+page size, which is the harm S1 names. A status is a claim about the harm,
+not about the patch. F-086 is reopened below with the re-run as its evidence.
 
 **Evidence-path note (2026-11-28).** All 400+ scratch evidence artifacts were
 moved out of the repo root into `evidence/`, which is gitignored. Citations
@@ -1976,14 +1986,88 @@ already worked — a useful control that kept this defect visible).
 
 ---
 
-### F-086 — five child tools stated a page size as the collection total (S1, Candidate→Fixed)
+### F-086 — five child tools stated a page size as the collection total (S1, REOPENED)
 
 Recorded as **SP-005** in `docs/plan/sme_prompts_status/FIX_PLAN.md`; that
 file is the prompt-set view and carries the per-prompt disposition. This entry
 is the defect register's copy and carries the full findings walk.
 
-**R (reproduce).** The prompt was not re-run through promptkit in this
-window, and that is stated rather than implied. What was reproduced:
+**R2 (reproduce AFTER the fix — this is what reopened it).** PR #231 was
+merged, the dev stack restarted on the merge (`./spire-host.sh --restart dev`,
+MCP PID 79430, so imports were current), and p13 re-run manually:
+
+```
+$ python scripts/promptkit.py --run --prompt "Show all invoice lines for
+  invoice ERS-53004-755598. Include line number, description, quantity,
+  unit price, amount, and line type."
+
+  invoiceline: 50 record(s)
+  Final raw output:     50 record(s) under 'invoiceline'
+```
+
+A second manual run, same window, same code:
+
+```
+Answer:
+The dataset contains one invoice for supplier Staffing Services ... The
+invoice is currently in an unpaid status and has an approval status of Not
+required.
+
+Records returned:     51 (across all steps)
+Final raw output:     50 record(s) under 'invoiceline'
+```
+
+So the harm S1 names — a page size stated as the line total — **survives the
+fix**, and in the second run it survives as something arguably worse: the
+answer does not mention lines at all while the summary line says 50, so the
+reader has held 184 lines, been shown 50, and told neither number.
+
+**Two causes, both visible in the code, neither fixed by PR #231.**
+
+1. **The MCP wrapper's default was not raised.**
+   `src/spire/mcp_server/server.py:607`:
+
+   ```python
+   async def get_invoice_lines(
+       invoice_id: int, limit: int = 50
+   ) -> dict:
+   ```
+
+   PR #231 changed the *tool* default to 200 and left the *wrapper* at 50.
+   The executor calls the wrapper, so 50 is what reaches the tool. The plan
+   emits `tool_args: {'invoice_id': '$iteration_value'}` — no `limit` — so the
+   wrapper default applies. **The fix was applied to the layer that is not
+   called.**
+
+2. **The count sentence is model prose, not a template.** PR #231 made
+   `total_available` truthful (184) and that value never reaches the answer:
+   the second run's Answer names no line count, and the first run's Answer
+   said "contains 50 associated line items" — a different wording each run,
+   which is the signature of generated text. `local_list_summary` has the
+   truthful sentences (`local_summary.py:205-222`) and this path does not
+   call it.
+
+**S7 (classify, revised).** **Confirmed** — R2 reproduces the harm on merged
+`master`. The earlier `Candidate→Fixed` label was wrong and is left visible
+above rather than rewritten.
+
+**S8 addendum (why the first R was too weak).** R said the prompt "was not
+re-run through promptkit in this window". That was disclosed but not
+actable: a fix that is never exercised end to end cannot be called Fixed.
+The rule that failed is not "reproduce before fixing" but **"reproduce again
+before declaring fixed."**
+
+**S10 addendum (what R2 did not check).** Whether other wrappers in
+`server.py` carry a stale default that diverges from their tool; only
+`get_invoice_lines` was inspected. Whether raising the wrapper default to 200
+is enough, or the synthesizer must also be changed so the prose quotes
+`total_available`.
+
+---
+
+**R (original, kept for the record).** The prompt was not re-run through
+promptkit in this window, and that is stated rather than implied. What was
+reproduced:
 
 - The **answer**, verbatim from run02 (`evidence/t_f076_litmus_run.txt:837`):
   *"The invoice contains 50 line items detailing services and associated
@@ -2165,3 +2249,108 @@ in modules this branch does not touch, and it should ride its own branch. It
 is **not** `xfail`-ed: an `xfail` would report the drift as an expected
 outcome and bury it, which is the case the rulebook says to avoid when the
 guard is the thing protecting you.
+
+---
+
+### F-088 — p14 emits two `Answer:` blocks for one result (S1, open)
+
+**R (reproduce).** Observed 2026-11-28 on merged `master`, one manual run,
+verbatim shape:
+
+```
+Answer:
+Showing 25 of 935 invoices.
+All 25 have InvoiceCurrency USD.
+...
+Truncation:
+  - invoices: 935 total in source; 25 returned.
+--- Tip ---
+Reading all 935 invoices is slow. Narrow with a filter: ...
+
+Answer:                                  <- second block
+Note: the following columns aren't available on Invoice: 'due date',
+'remaining balance'.
+Available columns: ApprovalStatus, ... SupplierNumber.
+
+invoices (25 record(s)) — columns: InvoiceNumber, InvoiceDate, InvoiceAmount
+  InvoiceNumber | InvoiceDate | InvoiceAmount
+  ...
+```
+
+**S0 (claim).** One prompt produces two answers, each describing the same
+result set.
+
+**S1 (harm).** Wrong narration — data right, words wrong, twice. The reader
+is given two summaries of one result and must decide which one is the answer.
+The second block also mixes a **column refusal** into the middle of a
+successful list, which reads as a partial failure of a query that in fact
+succeeded.
+
+**S2 (evidence).** Tier 2 — runtime output pasted verbatim above. Not yet
+curl-verified because the defect is in Spire's own composition, not in the
+pod's response.
+
+**S3 (mechanism).** Not yet isolated. Two candidates, both plausible and not
+yet distinguished: (a) the sample-and-disclose path emits its own summary and
+returns control to a second renderer that emits the plain-table summary;
+(b) the refusal-note-and-table renderer fires as well as the disclosure
+renderer. The distinguishing probe is a run with `--show-synthesizer` and a
+trace of which renderer wrote the first block.
+
+**S4 (probable root cause).** Missing guard on an exclusive path — two
+branches of the response builder both able to write an answer.
+
+**S5 (disprove one alternative).** *The second block is the table renderer's
+normal output and the first is a note.* Disproved as a whole: both blocks are
+labelled `Answer:` in the output, and the first contains a truncation
+subsection plus a tip, which no note renderer emits.
+
+**S6 (falsifier).** Instrument the response builder to log which renderer
+writes each block. If one renderer writes both under two headings, the cause
+is a heading bug and not a duplicate path.
+
+**S7 (classify).** **Candidate** — S3 and S6 unresolved.
+
+**S8 (the miss record).** (1) Did a prompt of this shape exist? Yes — p14,
+run twice, scored `OK(25)` both times. (2) Why did it not surface? The run
+scores by row count; a doubled answer does not change the row count. Same
+blind spot as F-086's S8: the scoring model has no slot for narration.
+(3) What would have caught it? Reading the answer text, which the manual run
+did.
+
+**S9 (cross-link).** Same class as F-086 (narration harm invisible to a
+row-count score) and related to the rulebook's watchlist entry "A list-shaped
+answer with no `Showing N of M`" — here it has one, twice.
+
+**S10 (what was NOT checked).** Whether other prompts with a truncation also
+double; whether the API/UI path doubles as well or only the CLI; which of the
+two candidates in S3 is real.
+
+**S11 (coverage expansion).** A prompt set for double-answer shapes already
+exists as `prompts/truncation/truncation_verify.txt`; p14 should be added to
+it once the cause is known, so the guard and the reproducer live together.
+
+---
+
+### Observation — the emitted SQL repeats one join (no harm named)
+
+`p14`'s SQL emits the same join twice:
+
+```sql
+FROM AP_INVOICES_ALL P
+LEFT JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID
+JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID
+```
+
+**Executed, because inspection is not evidence.** `./runsql.sh` with the exact
+projection (`SELECT P.INVOICE_NUM, S.SEGMENT1 ... WHERE P.PAYMENT_STATUS_FLAG
+IN ('N','P')`) returns `ERS-67001-261332 | 1254` — one correct row.
+
+**No harm, so no finding.** S1 cannot name a harm: the statement runs, the
+alias resolves, and the values agree with the REST answer. It is redundant
+and ugly, not wrong. Recorded here as a note under F-086 rather than given an
+ID, per the rulebook's own worked example about labelling drift a finding
+before a harm is shown.
+
+Worth a look when the emitter is next touched: a duplicated join implies the
+join assembly does not deduplicate by `(left, right, alias)`.
