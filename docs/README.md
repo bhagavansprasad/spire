@@ -20,7 +20,7 @@ against the current branch before being used as implementation truth.
 | Find current prompt-coverage gaps | [Prompt Coverage](../prompt_coverage.md) |
 | Resume the KG schema work | [Pending KG schema corpus](plan/PENDING_KG_SCHEMA_CORPUS.md), then check its dated status against the current branch |
 | Check the known-failure queue | [Fix Plan](fixes/FIX_PLAN.md); confirm its status against the latest entries and current work |
-| Apply Copilot-specific repository rules | [Copilot Working Style](plan/COPILOT_WORKING_STYLE.md) |
+| Apply the repository rules | [Working Style](plan/WORKING_STYLE.md) |
 | Find SME module test context | [Expected answers](../prompts/sme_module_a/sme_module_a_expected.md) and the [dated prompt sheet](../prompts/sme_module_a/PROMPT_SHEET_2026-11-21.md) |
 | Find Fusion endpoint notes | [Fusion Endpoints Reference](reference/spire_fusion_endpoints_reference.md); verify pod-specific details before use |
 
@@ -48,8 +48,7 @@ against the current branch before being used as implementation truth.
 | Document | Contains | State |
 |---|---|---|
 | [FIX_PLAN.md](fixes/FIX_PLAN.md) | Deferred failures, findings, and fix queue | Designated issue queue; use the current working copy and latest entries, not only its dated summary |
-| [COPILOT_WORKING_STYLE.md](plan/COPILOT_WORKING_STYLE.md) | Copilot-specific rules and durable repository conventions | Governs Copilot sessions according to its own description |
-| [WORKING_STYLE.md](plan/WORKING_STYLE.md) | General project workflow and evidence conventions | General working-style reference; Copilot sessions should follow the Copilot-specific companion |
+| [WORKING_STYLE.md](plan/WORKING_STYLE.md) | The project rulebook: behavior rules, editing mechanics, evidence standards, and durable conventions | Governs every session; the long form of `.github/copilot-instructions.md` |
 | [PENDING_KG_SCHEMA_CORPUS.md](plan/PENDING_KG_SCHEMA_CORPUS.md) | KG schema corpus work register and progress notes | Contains a 2026-11-19 status snapshot; reconcile it with current code, branch, and fix queue |
 | [SESSION_STATUS_2026-11-19.md](plan/SESSION_STATUS_2026-11-19.md) | Evidence-backed KG schema and SQL-emitter status at that session close | Historical point-in-time snapshot; not current repository status |
 | [SQL-EMITTER-FILES.md](plan/SQL-EMITTER-FILES.md) | Index and reading order for six KG schema corpus documents | Narrow folder index; this map is the workspace-wide inventory |
@@ -108,9 +107,11 @@ inventory. This map does not silently treat their targets as existing:
   `docs/prompt-sets/SURFACE.md`.
 - [EXTENDING.md](design/sql_overlay/EXTENDING.md) points to absent
   `docs/design/SQL_OVERLAY_POC.md`.
-- [WORKING_STYLE.md](plan/WORKING_STYLE.md) refers to
-  `SESSION_STARTUP_CHECKLIST.md`, which is not present in the current
-  inventory.
+- *(Resolved 2026-11-28.)* `WORKING_STYLE.md` used to point at
+  `SESSION_STARTUP_CHECKLIST.md`, Doc A / Doc B, and a runtime clone layout
+  that no longer exists. Those references were removed when the two
+  working-style documents were merged into one; the file now describes only
+  what is in the tree.
 
 ## Updating this map
 

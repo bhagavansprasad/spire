@@ -1,9 +1,8 @@
 # Copilot Instructions (SPIRE)
 
 Auto-loaded at the start of every VS Code session. These rules govern
-how Copilot works in this repository. The full working style lives in
-`docs/plan/WORKING_STYLE.md` (source of truth) and its Copilot-specific
-companion `docs/plan/COPILOT_WORKING_STYLE.md`. Read those when a rule
+how Copilot works in this repository. The full rulebook lives in
+`docs/plan/WORKING_STYLE.md` — read the relevant section when a rule
 here is not enough.
 
 ## Behavior rules (apply always)
@@ -30,7 +29,6 @@ here is not enough.
   single commit; verify per-file, not per-commit.
 
 ## Durable project rules (from WORKING_STYLE.md)
-
 - Integration branch is `master`. Code/features/tooling/bug fixes go on
   a branch named `Phase{N}-{Descriptive}`, then merge via PR. No local
   merge into `master`.
@@ -41,4 +39,4 @@ here is not enough.
   or closure, before the next task.
 - SME test: an SME-answerable refusal is a defect, not a coverage gap.
 
-See `docs/plan/COPILOT_WORKING_STYLE.md` for the full mapping.
+See `docs/plan/WORKING_STYLE.md` for the full rulebook.
