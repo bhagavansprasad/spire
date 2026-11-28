@@ -13,22 +13,24 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** **Open — three rows.** F-086 (child count stated as total) was
-fixed in the data layer and **reopened** the same day: a manual re-run still
-answers "50", because the MCP wrapper's limit was not raised and the count
-sentence is model prose. F-087 (the default suite runs live-pod tests) is
-open and unfixed. F-088 (p14 emits two answers) is new. Everything earlier in
-this file is fixed and live-verified on dev49: **F-076, F-077, F-078, F-079,
-F-080, F-081, F-082, F-083, F-084 and F-085**.
+**Status:** **Open — two rows.** **F-087** (the default test suite runs
+live-pod tests and hangs) and **F-088** (p14 emits two `Answer:` blocks) are
+open. **F-086** is fixed and verified end to end on `Payables-Line-Count-Display`
+(PR #233). Everything earlier in this file is fixed and live-verified on
+dev49: **F-076 through F-085**.
 
-**Prior state:** this queue was empty on 2026-11-28 before F-086 and F-087
-were opened — F-076 and F-077 were the last two fixed, 2026-11-27.
+**Correction (2026-11-28).** F-086 was recorded as `Candidate→Fixed` after the
+first fix merged (PR #231), then reopened the same day because the ANSWER still
+stated a page size — the harm S1 names. It was fixed properly on PR #233.
+A status is a claim about the harm, not about the patch.
 
-**Correction (2026-11-28).** F-086 was recorded as
-`Candidate→Fixed` after the data-layer fix merged (PR #231). That was wrong:
-the fix made `total_available` truthful but the *answer text* still stated a
-page size, which is the harm S1 names. A status is a claim about the harm,
-not about the patch. F-086 is reopened below with the re-run as its evidence.
+**Ledger correction (2026-11-28).** F-081's heading still read `(OPEN, S1)`
+while its own S7 recorded it fixed on 2026-11-27; the code
+(`_FIELD_ALIASES`, `_project_outputs_and_gaps` in `graph/pipeline.py`) and its
+10 passing tests confirm the body was right and the heading was stale. Found
+by the merge-time reconciliation, which the `fixed | —` table grep did not
+catch — this file records status in section headings, not in the table the
+rulebook's grep looks at.
 
 **Evidence-path note (2026-11-28).** All 400+ scratch evidence artifacts were
 moved out of the repo root into `evidence/`, which is gitignored. Citations
@@ -851,7 +853,7 @@ short and intact, and `emit_sql` is a pure function of the plan, so
 plans with no further LLM calls. That script and
 `scripts/t_s1_f081_run_sql.sh` are the reproducers for this section.
 
-### F-078 — tool args with no `FilterSpec` emit an empty WHERE (OPEN, S1)
+### F-078 — tool args with no `FilterSpec` emit an empty WHERE (FIXED, S1)
 
 **S0 (claim).** When a plan step carries a `tool_arg` that has no
 `FilterSpec` in `sql_overlay._FILTERS`, the emitter appends only a comment
@@ -975,7 +977,7 @@ CLOSED orders, so p01/p06 have no REST baseline;
 have none. p20 is an aggregation with no REST equivalent. p16 stays
 SQL-disabled by design (`overdue`).
 
-### F-079 — an entity *number* is bound to an internal *id* (OPEN, S1)
+### F-079 — an entity *number* is bound to an internal *id* (FIXED, S1)
 
 **S0.** The planner puts the human-facing number into the
 identifier argument, and the SQL overlay binds it to the physical id
@@ -1209,7 +1211,7 @@ tests that.
 
 **Cross-link.** The projection half of the same stub is **F-084** (new).
 
-### F-081 — `intent.fields` uses display names, so projection drops real columns (OPEN, S1)
+### F-081 — `intent.fields` uses display names, so projection drops real columns (FIXED, S1)
 
 **S0 (claim).** The parser emits `fields` in REST/KG vocabulary
 (`SupplierName`, `BuyerName`) while the tool payload uses the API's own
