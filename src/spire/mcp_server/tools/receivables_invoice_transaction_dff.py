@@ -41,7 +41,7 @@ complete result from a capped subset.
 import httpx
 
 from spire.fusion.client import FusionClient
-from spire.mcp_server.tools.tool_result import ToolResult
+from spire.mcp_server.tools.tool_result import ToolResult, child_page_count
 
 
 # Child-DFF path template; formatted with a CustomerTransactionId per call.
@@ -82,6 +82,9 @@ async def get_receivables_invoice_transaction_dff(
     params = {
         "onlyData": "true",
         "limit": limit,
+        # SP-005. The child reports `count` as the page size; ask for the
+        # real total instead. See child_page_count.
+        "totalResults": "true",
         "fields": ",".join(_PROJECTED_FIELDS),
     }
     try:
@@ -100,8 +103,10 @@ async def get_receivables_invoice_transaction_dff(
     items = response.get("items", [])
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
 
+    total_available, capped = child_page_count(response, projected)
     return ToolResult.build(
         items=projected,
         limit_applied=limit,
-        total_available=len(projected),
+        total_available=total_available,
+        capped=capped,
     )

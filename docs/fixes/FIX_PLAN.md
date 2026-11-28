@@ -11,13 +11,14 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 **Created:** 2026-11-19 (fresh; prior FIX_PLAN content is superseded and
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
-**Status:** **Closed** — every finding recorded in this file is fixed and
-live-verified on dev49: **F-076, F-077, F-078, F-079, F-080, F-081, F-082,
-F-083, F-084 and F-085**. All 22 litmus statements execute, and every
-statement REST can compare agrees with it.
+**Status:** **Open — two rows.** F-086 (child count stated as total) is fixed
+on `SP-005-line-count` and awaits a run03 re-run to be called *verified*;
+F-087 (the default suite runs live-pod tests) is open and unfixed. Everything
+earlier in this file is fixed and live-verified on dev49: **F-076, F-077,
+F-078, F-079, F-080, F-081, F-082, F-083, F-084 and F-085**.
 
-**This queue is empty.** F-076 and F-077 were the last two, both fixed
-2026-11-27.
+**Prior state:** this queue was empty on 2026-11-28 before F-086 and F-087
+were opened — F-076 and F-077 were the last two fixed, 2026-11-27.
 
 **Evidence-path note (2026-11-28).** All 400+ scratch evidence artifacts were
 moved out of the repo root into `evidence/`, which is gitignored. Citations
@@ -1972,3 +1973,195 @@ incomplete), but at entity level rather than column level.
 distribution for an invoice", "invoice line amount vs header amount
 reconciliation", and the AR twin ("receivables invoice lines", which
 already worked — a useful control that kept this defect visible).
+
+---
+
+### F-086 — five child tools stated a page size as the collection total (S1, Candidate→Fixed)
+
+Recorded as **SP-005** in `docs/plan/sme_prompts_status/FIX_PLAN.md`; that
+file is the prompt-set view and carries the per-prompt disposition. This entry
+is the defect register's copy and carries the full findings walk.
+
+**R (reproduce).** The prompt was not re-run through promptkit in this
+window, and that is stated rather than implied. What was reproduced:
+
+- The **answer**, verbatim from run02 (`evidence/t_f076_litmus_run.txt:837`):
+  *"The invoice contains 50 line items detailing services and associated
+  taxes, and is currently unpaid."*
+- The **mechanism**, curl-verified twice on dev49 (2026-11-28), invoice
+  1601397:
+
+  ```
+  limit=50    count=50  hasMore=True   totalResults=184   items=50
+  limit=100   count=58  hasMore=False  totalResults=58    items=58
+  ```
+
+- The **true count** from a second, independent record: the AR child
+  (`receivablesInvoices/1002/child/receivablesInvoiceLines`) reports
+  `totalResults: 4` against `count: 4`, so `totalResults` is honoured on
+  child resources generally and is not an artifact of this one path.
+- The nearest sibling prompt of the same shape — p12, invoice details for
+  the same invoice — passed in run02. That is the control: the failure is
+  specific to the child-collection path, not to the invoice.
+
+**S0 (claim).** `get_invoice_lines` reports a page size as the invoice's
+line total, so the answer states a confident wrong number.
+
+**S1 (harm).** Wrong narration — data right, words wrong. The row count is
+honest; the sentence that describes it is false. This is the only AP prompt
+that failed by being *incorrectly confident* rather than by declining.
+
+**S2 (evidence).** Tier 1 (curl, quoted above) and Tier 2 (runtime answer,
+cited by log line). No Tier 4 claims.
+
+**S3 (mechanism).** `mcp_server/tools/invoice_lines.py:109`,
+`total_available=len(projected)`, copied into
+`purchase_order_lines.py:100`, `receivables_invoice_lines.py:107`,
+`receivables_invoice_tax_lines.py:118`,
+`receivables_invoice_transaction_dff.py:106`. Because
+`ToolResult.build` derives `truncated` from `total is not None and total >
+len(items)`, a `len()` total can never exceed `len(items)`, so truncation
+computes False and no disclosure is emitted.
+
+**S4 (probable root cause).** Wrong design decision: treat the collection
+`count` as authoritative. On this pod `count` is `min(total, limit)`, which
+is information the caller already has.
+
+**S5 (disprove one alternative).** *Pod data changed between runs* —
+disproved: the two curl calls in the same session, minutes apart, differ only
+in `limit`, and `totalResults` returns the SQL-consistent 184 in both.
+*A different code path was taken* — disproved: the tool is the only caller of
+this child path for p13, and its projection is what the answer renders.
+
+**S6 (falsifier).** `curl` the child with `limit=200&totalResults=true`. If
+`totalResults` were absent or equal to `count`, the claim would be wrong.
+
+**S7 (classify).** **Candidate — one step incomplete.** S0–S6 passed; R is
+partial because the prompt was not re-run through the pipeline after the fix.
+It becomes *Confirmed* when run03 re-runs p13 and the answer states 184.
+
+**S8 (the miss record).**
+
+1. *Did a prompt of this shape exist?* Yes — p13, already in the set, and it
+   **passed but was wrong**: run02 scored it `OK` because it returned rows.
+2. *Why did it not surface?* Because the run scores by what came back
+   (`OK(n)`, `ZERO`, `REFUSED`) and not by whether the answer is true. A
+   prompt that returns 51 rows scores `OK` no matter what sentence the
+   synthesizer writes over them. The scoring model had no slot for
+   "answered, but the number is a page size".
+3. *What would have caught it?* Comparing every stated count in an answer
+   against a second source — the pod's own `totalResults`, or a SQL
+   `COUNT(*)`. That is now `PROBE_CATALOGUE.md` rows 5 and 6.
+
+**S9 (cross-link).** Same class as **F-012** (a cap with no source total
+narrated as fact) and **F-036** (unfiltered cap × over-fetch), both of which
+built the disclosure machinery this defect bypassed. Same *shape* as the
+rulebook's own watchlist entry "a page count is not a total" — meaning the
+rule existed and the code did not follow it, which is why S8 question 2 is
+about the scoring model rather than about knowledge.
+
+**S10 (what was NOT checked).**
+
+- p13 was not re-run through promptkit after the fix; the server was not
+  restarted. The fix is proven at tool level, not end to end.
+- The PO lines child could not be probed at all: PO `2144` 404s and
+  `/purchaseOrders` returns 0 rows (**SP-003**). The PO half rests on unit
+  tests alone.
+- The AR tax-lines and transaction-DFF children were not probed; they were
+  fixed by pattern. Only `receivablesInvoiceLines` was verified.
+- Whether `count` behaves as `min(total, limit)` on *every* child resource on
+  this pod, or only on the two measured.
+- Nothing else in the five tools was reviewed.
+
+**S11 (coverage expansion).** Sibling prompts, appended to
+`prompts/truncation/truncation_exhaust.txt` §H — the child-count shape on
+AP lines, AP lines above the cap, PO lines, AR lines, AR tax lines, and a
+negative (a child small enough that no disclosure should fire).
+
+**Fix, as landed.**
+
+1. `child_page_count(response, items)` in `mcp_server/tools/tool_result.py` —
+   one shared implementation, because five copies is how the bug spread.
+2. `ToolResult.build(..., capped=False)`. Necessary and not cosmetic:
+   `truncated` is derived from the counts, so leaving `total_available=None`
+   would also force `truncated=False` and render "unknown" as "complete".
+3. All five child tools request `totalResults=true`.
+4. `get_invoice_lines` default limit 50 → 200. No invoice on dev49 exceeds
+   200; pagination deferred rather than built speculatively.
+
+**Evidence:** `tests/test_line_counts.py` — 23 tests: the helper's three
+cases, `ToolResult.build`'s combinations, all five tools parametrised ×3
+(capped with a total, complete page, pod omits `totalResults`), and the two
+rendering statements.
+
+Branch: `SP-005-line-count` (off `master` `d6098d2`).
+
+---
+
+### F-087 — the default test suite runs live-pod tests and hangs (S1, open)
+
+**S0 (claim).** Five test files make live pod or MCP-server calls but carry no
+`pytest.mark.integration`, so `pytest -q` runs them even though
+`pyproject.toml` sets `addopts = "-m 'not integration'"` precisely to exclude
+that traffic.
+
+**S1 (harm).** Cost regression plus misleading signal. A developer's default
+run either fails with assertion noise that looks like a code regression, or
+hangs until it is killed.
+
+**S2 (evidence).** Per-file run of the affected files on
+`SP-005-line-count`, and matching runs on `master` in a throwaway worktree
+(`evidence/t_sp005_perfile.txt`, `evidence/t_sp005_baseline.txt`):
+
+```
+tests/test_f006_alpha_order_number.py        1 failed, 1 passed    (4.08s)
+tests/test_purchase_order_distributions_tool  2 failed, 1 passed    (4.31s)
+tests/test_purchase_order_detail_tool.py      4 failed, 2 passed    (8.87s)
+tests/test_purchase_orders_tool.py            2 failed, 3 passed   (47.23s)
+tests/test_invoices_tool.py                   ran > 90s, killed twice
+```
+
+Identical results on `master`, so none is a regression from SP-005.
+
+**S3 (mechanism).** `grep -c 'pytest.mark.integration'` returns **0** for all
+five files, while three import `FusionClient` + `load_persona` and one calls
+the MCP server. `tests/test_purchase_order_distributions_tool.py:16-17`,
+`tests/test_purchase_order_detail_tool.py:11-12`,
+`tests/test_f006_alpha_order_number.py:81`.
+
+**S4 (probable root cause).** Missing guard. The integration marker was added
+to the project configuration but never applied to these five files.
+
+**S5 (disprove one alternative).** *The failures are SP-003.* Partly — the
+assertions are empty PO results (`ToolResult(items=[], total_available=0)`),
+so SP-003 is what makes them fail today. But that is the *trigger*, not the
+defect: a correctly marked live test would be skipped and could not fail on
+pod state at all. Both are true and both need fixing.
+
+**S6 (falsifier).** Add the marker and confirm
+`pytest -q` no longer collects them.
+
+**S7 (classify).** **Confirmed** (S0–S6 all passed).
+
+**S8 (the miss record).** (1) The shape existed — every default test run.
+(2) It did not surface because the suite was last run with the pod healthy
+and the PO collection populated; SP-003 turned a latent configuration defect
+into visible noise. (3) A rule "any test importing `load_persona` must carry
+the marker" — checkable by grep, and worth a test of its own.
+
+**S9 (cross-link).** **SP-003** is the trigger. Related to the rulebook's
+own instruction to "match the scope of the verification to the scope of the
+change" — a suite that silently includes 47-second live fetches cannot be
+scoped.
+
+**S10 (what was NOT checked).** Whether other files under `tests/` also make
+unmarked live calls — only the five that failed or hung were inspected.
+
+**S11 (coverage expansion).** A test asserting that every file importing
+`load_persona` or opening an MCP session carries `pytest.mark.integration`.
+
+**Not fixed here**, deliberately: the fix is a marker sweep across five files
+in modules this branch does not touch, and it should ride its own branch. It
+is **not** `xfail`-ed: an `xfail` would report the drift as an expected
+outcome and bury it, which is the case the rulebook says to avoid when the
+guard is the thing protecting you.

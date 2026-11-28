@@ -188,14 +188,15 @@ has it. **Verify with:** re-run prompts 24, 25, 28, 30.
 
 ## SP-005 — `get_invoice_lines` reports a capped count as the total
 
-**Status: Open. Introduced with F-077. Correctness, not completeness.**
+**Status: Fixed on `SP-005-line-count` (2026-11-28), awaiting PR and a
+run03 re-run of p13.**
 
-**Prompt:** 13 (scores `OK`, but the number it states is wrong).
+**Prompt:** 13 (scored `OK`, but the number it stated was wrong).
 
-**Symptom.** The answer says *"The invoice contains **50** line items."*
+**Symptom.** The answer said *"The invoice contains **50** line items."*
 Invoice `1601397` has **184**.
 
-**Evidence.**
+**Evidence, before the fix.**
 
 ```
 REST  /invoices/1601397/child/invoiceLines?limit=50
@@ -206,25 +207,54 @@ Pod   SELECT COUNT(*) FROM AP_INVOICE_LINES_ALL WHERE INVOICE_ID=1601397  -> 184
 ```
 
 **Root cause.** `total_available=len(projected)`. Because REST reports
-`count` as the *page* size on this child resource, the tool always claims
-"this is everything". `truncated` then computes False, so no disclosure is
-emitted.
+`count` as the *page* size on this child resource, the tool always claimed
+"this is everything". `truncated` then computed False, so no disclosure was
+emitted. The same three lines were copied into four sibling child tools.
 
-**The same pattern is in the other two child tools** —
-`get_purchase_order_lines` and `get_receivables_invoice_lines` — which I
-copied from. Fixing one and not the others leaves the identical bug in
-place, so fix all three together.
+**What the probe found, and why the fix is better than planned.** The
+original plan was to read `hasMore` and leave the total unknown — an
+"at least 184" answer. `totalResults` turns out to be honoured on this child
+resource, so the total is knowable exactly. Measured on dev49, same invoice:
 
-**Fix shape.**
-1. Read `hasMore` from the child response.
-2. When `hasMore` is true, leave `total_available=None` (unknown) rather than
-   asserting the page size — `ToolResult` already distinguishes this.
-3. Raise the default limit for invoice lines, or paginate, so an ordinary
-   invoice returns its full set.
-4. Add a test that a capped response never yields a confident total.
+```
+limit=50    count=50  hasMore=True   totalResults=184   items=50
+limit=100   count=58  hasMore=False  totalResults=58    items=58
+```
 
-**Effort:** S. **Verify with:** run03 prompt 13 (expect 184, or an explicit
-"50 of at least 184").
+`count` is `min(total, limit)` and carries no information the caller cannot
+already see. `totalResults` is the true total. The AR invoice-lines child
+honours it too (`receivablesInvoices/1002/child/receivablesInvoiceLines`
+→ `totalResults: 4`). The PO lines child could not be probed: PO `2144`
+404s and `/purchaseOrders` returns 0 rows (SP-003).
+
+**Fix, as landed.**
+1. New `child_page_count(response, items)` in `tools/tool_result.py`, shared
+   by all five tools — one implementation, because five copies is how the
+   bug spread. Returns `(total_available, capped)`: `totalResults` when
+   present, else `capped=True` with an unknown total when `hasMore`, else
+   the page is complete and its own size is the total.
+2. `ToolResult.build(..., capped=False)`. Without it, `total_available=None`
+   also forces `truncated=False`, so "unknown" would render as "complete" —
+   the same defect in quieter clothes.
+3. All five child tools send `totalResults=true`:
+   `get_invoice_lines`, `get_purchase_order_lines`,
+   `get_receivables_invoice_lines`, `get_receivables_invoice_tax_lines`,
+   `get_receivables_invoice_transaction_dff`. The last two were found by
+   grep, not by the original report.
+4. `get_invoice_lines` default limit 50 → 200, so an ordinary invoice
+   returns in full instead of being capped at a round number. Pagination is
+   deferred: no invoice on dev49 exceeds 200.
+5. `tests/test_line_counts.py` — 23 tests: the helper's three cases,
+   `ToolResult.build`'s combinations, and all five tools parametrised ×3
+   (capped with a total, complete, and a pod that omits `totalResults`).
+
+**Not verifiable live, and said so rather than glossed.** The PO half cannot
+be exercised (`/purchaseOrders` 0 rows, SP-003); the AR customer-account
+endpoint 403s (SP-004). Unit tests are their only proof. The AP half is
+verified against the pod.
+
+**Effort:** S. **Verify with:** run03 prompt 13 (expect 184, or "50 of at
+least 184" if the pod stops reporting `totalResults`).
 
 ---
 

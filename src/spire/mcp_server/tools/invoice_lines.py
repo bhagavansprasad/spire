@@ -37,7 +37,7 @@ complete result from a capped subset.
 import httpx
 
 from spire.fusion.client import FusionClient
-from spire.mcp_server.tools.tool_result import ToolResult
+from spire.mcp_server.tools.tool_result import ToolResult, child_page_count
 
 
 # Child-lines path template; formatted with an InvoiceId per call.
@@ -65,7 +65,7 @@ _PROJECTED_FIELDS = [
 async def get_invoice_lines(
     client: FusionClient,
     invoice_id,
-    limit: int = 50,
+    limit: int = 200,
 ) -> ToolResult:
     """Fetch the lines of one AP (payables) invoice.
 
@@ -74,8 +74,11 @@ async def get_invoice_lines(
             This is the numeric id, NOT the invoice number — the KG edge
             supplies it from the resolved header.
         limit: Max line records to return. An AP invoice can carry many
-            lines (tax auto-lines included): invoice 1601397 has 184. Callers
-            that need every line must pass a limit at or above the count.
+            lines (tax auto-lines included): invoice 1601397 has 184, so
+            the default of 200 returns an ordinary invoice in full rather
+            than capping it at a round number and calling the cap a total.
+            Above 200 the result says how many more exist — pagination is
+            deliberately not implemented yet; no invoice on dev49 needs it.
 
     Returns:
         ToolResult whose items are the projected line dicts for this
@@ -86,6 +89,10 @@ async def get_invoice_lines(
     params = {
         "onlyData": "true",
         "limit": limit,
+        # SP-005. Without this the child reports `count` as the page size
+        # and the tool stated that page as the invoice's line total. See
+        # child_page_count.
+        "totalResults": "true",
         "fields": ",".join(_PROJECTED_FIELDS),
     }
     try:
@@ -103,8 +110,10 @@ async def get_invoice_lines(
     items = response.get("items", [])
     projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in items]
 
+    total_available, capped = child_page_count(response, projected)
     return ToolResult.build(
         items=projected,
         limit_applied=limit,
-        total_available=len(projected),
+        total_available=total_available,
+        capped=capped,
     )
