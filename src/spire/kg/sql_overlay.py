@@ -300,6 +300,48 @@ _ENTITIES = {
         ],
         base_joins=[],
     ),
+    # p15 (2026-11-28). AP invoice holds. Expressible as one SELECT, and more
+    # accurately than the REST tool: SQL joins on INVOICE_ID, where REST only
+    # exposes InvoiceNumber and needs the Supplier to disambiguate (6 invoice
+    # numbers repeat across suppliers on this pod, and invoice 1122 is
+    # 295,759.13 at one supplier and 2,000 at another).
+    #
+    # The join is LEFT because 2 of the 376 active holds are orphans: their
+    # INVOICE_ID has no AP_INVOICES_ALL row. An inner join would drop them and
+    # the answer would silently under-count the active holds.
+    #
+    # HoldStatus is not a column — the pod carries only the release pair — so
+    # it comes from kg_derived_projection as a CASE over RELEASE_REASON, which
+    # is the same test the REST predicate uses.
+    "InvoiceHold": EntitySpec(
+        name="InvoiceHold",
+        fusion_table="AP_HOLDS_ALL",
+        alias="H",
+        pk_column="HOLD_ID",
+        select_columns=[
+            ("H", "HOLD_ID"),
+            ("H", "HOLD_LOOKUP_CODE"),
+            ("H", "HOLD_REASON"),
+            ("H", "HOLD_DATE"),
+            ("H", "WF_STATUS"),
+            ("H", "RELEASE_REASON"),
+            ("I", "INVOICE_NUM"),
+            ("I", "INVOICE_AMOUNT"),
+        ],
+        base_joins=[
+            "LEFT JOIN AP_INVOICES_ALL I ON I.INVOICE_ID = H.INVOICE_ID",
+        ],
+        # The entity Spire exposes IS the active holds, not the released
+        # history: RELEASE_REASON IS NULL is the definition, the same test the
+        # REST tool's server clause uses. It therefore belongs here rather
+        # than on an optional argument — an arg-keyed filter would silently
+        # vanish whenever the planner did not pass the arg, and the emitted
+        # SQL would then return all 14,772 holds while the answer claimed to
+        # list the active ones. That is the executes-but-wrong shape this
+        # codebase has removed before, so the predicate is unconditional.
+        scope_predicates=["{alias}.RELEASE_REASON IS NULL"],
+    ),
+
     # F-077: AP invoice lines. The six columns the prompt asks for are all
     # populated on this pod (verified against invoice 1601397), and
     # (INVOICE_ID, LINE_NUMBER) is unique across all 1,335,566 rows — so it
@@ -1313,6 +1355,9 @@ OVERLAY = Overlay(
         "get_account_receipts": "AccountReceipt",
         "get_account_receipt_applications": "AccountReceiptApplication",
         "search_standard_receipts": "StandardReceipt",
+        # p15. AP invoice holds. A top-level collection, not a child tool:
+        # there is no parent id in the path.
+        "search_invoice_holds": "InvoiceHold",
     },
     entities=_ENTITIES,
     filters=_FILTERS,
@@ -1385,7 +1430,11 @@ OVERLAY = Overlay(
         "rank_customer_accounts_by_exposure",
         "summarize_open_purchase_orders",
     },
-    sql_control_args={"limit", "fetch_limit", "ctx"},
+    # 'on_hold' joins the control args: the predicate it represents is already
+    # unconditional in InvoiceHold's scope_predicates, so keeping the argument
+    # out of the WHERE builder is what prevents the same test being emitted
+    # twice (or, worse, once with the wrong polarity).
+    sql_control_args={"limit", "fetch_limit", "ctx", "on_hold"},
     sql_disabled_args={
         ("search_suppliers", "business_relationship"): (
             "business relationship has no verified SQL predicate"

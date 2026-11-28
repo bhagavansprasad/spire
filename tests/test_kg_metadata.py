@@ -102,7 +102,8 @@ async def test_kg_entity_has_twentythree_rows():
     assert names == [
         "AccountCreditMemo", "AccountReceipt", "AccountReceiptApplication",
         "Address", "Buyer", "Classification", "Contact", "CreditMemo",
-        "CustomerAccount", "CustomerTransaction", "Invoice", "InvoiceLine",
+        "CustomerAccount", "CustomerTransaction", "Invoice", "InvoiceHold",
+        "InvoiceLine",
         "PODistribution", "POSchedule", "PurchaseOrder",
         "PurchaseOrderLine", "ReceivablesInvoice", "ReceivablesInvoiceLine",
         "ReceivablesInvoiceTransactionDFF", "ReceivablesTaxLine", "Site",
@@ -130,6 +131,7 @@ async def test_kg_entity_module_mapping():
         "Invoice": "payables",
         # F-077: the AP invoice-lines child. Payables, unlike its AR twin.
         "InvoiceLine": "payables",
+        "InvoiceHold": "payables",
         # procurement
         "PurchaseOrder": "procurement",
         "PurchaseOrderLine": "procurement",
@@ -365,14 +367,14 @@ async def test_kg_table_row_counts_match_v1_1():
         # kg_sql_column rows and 6 unambiguous AP entity synonyms. Entity
         # 22->23, field 227->237, edge 17->18, edge tool 16->17,
         # entity_sql 22->23, sql_column 126->136, vocabulary 131->137.
-        "kg_entity": 23,
-        "kg_entity_field": 244,
+        "kg_entity": 24,
+        "kg_entity_field": 254,
         "kg_edge": 18,
         "kg_pattern": 3,
-        "kg_vocabulary": 145,
+        "kg_vocabulary": 152,
         "kg_pattern_binding": 3,
-        "kg_entity_tool": 13,
-        "kg_entity_filter": 37,
+        "kg_entity_tool": 14,
+        "kg_entity_filter": 38,
         "kg_edge_tool": 17,
         # SQL satellites (KG schema corpus STEP 12). kg_entity_sql is the
         # per-entity fusion_table/pk carrier; kg_sql_column the direct
@@ -380,9 +382,17 @@ async def test_kg_table_row_counts_match_v1_1():
         # The gap register ("accept unbound") is fully reversed: Site +
         # Classification (7) first, then the 10 SQL-essential gap roles,
         # so kg_entity_field 210->227 and kg_sql_column 40->57.
-        "kg_entity_sql": 23,
-        "kg_sql_column": 136,
-        "kg_derived_projection": 13,
+        #
+        # p15 added one entity (InvoiceHold, payables): 254-9 = 9 fields, one
+        # entity_tool row, one entity_filter row, one kg_entity_sql row, 6
+        # kg_sql_column rows and one kg_derived_projection (HoldStatus, the
+        # release pair read as a state). Entity 23->24, field 244->254,
+        # entity_tool 13->14, entity_filter 37->38, entity_sql 23->24,
+        # sql_column 136->142, derived_projection 13->14, vocabulary
+        # 145->152 (7 hold synonyms: 3 field + 4 entity).
+        "kg_entity_sql": 24,
+        "kg_sql_column": 142,
+        "kg_derived_projection": 14,
     }
     # Collect ALL mismatches before asserting. The previous loop asserted
     # per table and stopped at the first failure, so a phase that moved

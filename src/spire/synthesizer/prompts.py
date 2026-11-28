@@ -339,6 +339,17 @@ _SYSTEM_PROMPT_BY_ENTITY: dict[str, str] = {
         "In the summary, state how many accounts were ranked and name the top "
         "one or two with their exposure amounts."
     ),
+    "InvoiceHold": (
+        "This is an INVOICE-HOLD-rooted query (AP invoices currently on hold). "
+        "For each hold in the final set, emit one entry under 'invoice_holds' "
+        "with its hold_id, invoice_number, supplier_name, invoice_amount, "
+        "hold_name, hold_reason, hold_date and hold_status. hold_id must appear "
+        "in the data. A record is a HOLD, not an invoice: one invoice can carry "
+        "several holds, so do not merge rows that share an invoice number. "
+        "Copy every amount exactly, and when invoice_amount is null say the "
+        "amount is not available rather than reporting it as zero. If no hold "
+        "matches, say plainly that no invoices are currently on hold."
+    ),
     "StandardReceipt": (
         "This is a STANDARD-RECEIPT-rooted query (top-level cash receipts). "
         "For each receipt in the final set, emit one entry under 'standard_receipts' "

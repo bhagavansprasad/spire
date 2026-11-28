@@ -50,7 +50,7 @@ TABLES: list[dict] = [
                "endpoint_path, description, module FROM kg_entity "
                "ORDER BY entity_name",
         "clob_cols": {"description"},
-        "expected_rows": 23,
+        "expected_rows": 24,
     },
     {
         "name": "kg_entity_field",
@@ -63,7 +63,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 244,
+        "expected_rows": 254,
     },
     {
         "name": "kg_entity_sql",
@@ -145,7 +145,8 @@ TABLES: list[dict] = [
         # Was 137, which had drifted: the seed has seeded 138 since the AP-1
         # synonym row landed, and test_kg_metadata already asserted 138. This
         # tripwire would have failed the first time anyone ran print_kg.
-        "expected_rows": 145,
+        # Now 152: +7 R1a field synonyms and +7 p15 hold synonyms.
+        "expected_rows": 152,
     },
     {
         "name": "kg_pattern_binding",
@@ -172,7 +173,7 @@ TABLES: list[dict] = [
         "sql": "SELECT entity_name, filter_type, mcp_tool_name, notes "
                "FROM kg_entity_tool ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 13,
+        "expected_rows": 14,
     },
     {
         "name": "kg_entity_filter",
@@ -189,7 +190,7 @@ TABLES: list[dict] = [
                "filter_field, filter_op, notes "
                "FROM kg_entity_filter ORDER BY entity_name, filter_type",
         "clob_cols": set(),
-        "expected_rows": 37,
+        "expected_rows": 38,
     },
     {
         "name": "kg_edge_tool",
