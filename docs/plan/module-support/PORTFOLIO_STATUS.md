@@ -47,7 +47,7 @@ Evidence: `AP_COVERAGE_ASSESSMENT.md` (run02, 2026-11-28).
 |---|---|---|
 | Procurement (PO) | `discovered` | `/purchaseOrders` returns 0 rows with HTTP 200 — SP-003, not code |
 | Receivables (AR) | `discovered` | SP-004 (403) blocks 4 prompts; SP-002 blocks 1 |
-| Supplier | `discovered` | SP-001 blocks 6 prompts with one missing parameter |
+| Supplier | `prompts collected` | [`financials/supplier.md`](./financials/supplier.md); SP-001 blocks 6 prompts with one missing parameter |
 | GL, CM (Cash Management), FA, SLA, OM, INV, WIP, BOM, Cost Management | `not started` | roadmap §2; confirm `CM` = Cash Management with the product owner |
 | HCM — Global HR, Payroll, Absence, Benefits, OTL, ORC | `not started` | HCM is not a routed module today |
 

@@ -56,6 +56,7 @@ against the current branch before being used as implementation truth.
 | [PORTFOLIO_STATUS.md](plan/module-support/PORTFOLIO_STATUS.md) | One row per module and sub-module, each naming the last gate closed | The only live module-state record; update it in the same commit as the work |
 | [PROBE_CATALOGUE.md](plan/module-support/PROBE_CATALOGUE.md) | Module-independent investigation recipes that cost one call each | Append-only; add a row when a probe is verified, not when it is proposed |
 | [financials/payables.md](plan/module-support/financials/payables.md) | AP: sub-module rows, MVP boundary, decisions, coverage, open defects | First detailed module; one file per module, decisions appended |
+| [financials/supplier.md](plan/module-support/financials/supplier.md) | Supplier master data: sub-module rows, measured run02 state, SP-001 as a defect, open questions | Shared master data filed under financials; boundary not yet agreed |
 | [HANDOVER_KG_SCHEMA.md](plan/HANDOVER_KG_SCHEMA.md) | Phase 1 KG schema strategy and handover | Historical handover; later revisions in the phase documents and pending register supersede parts of it |
 | [HANDOVER_KG_SCHEMA_PHASE2.md](plan/HANDOVER_KG_SCHEMA_PHASE2.md) | Phase 2 schema discovery, reversals, and role-map work | Historical handover; consult the pending register for the dated follow-on state |
 | [SESSION_STATUS_2026-11-19.md](plan/SESSION_STATUS_2026-11-19.md) | Evidence-backed KG schema and SQL-emitter status at that session close | Historical point-in-time snapshot; not current repository status |

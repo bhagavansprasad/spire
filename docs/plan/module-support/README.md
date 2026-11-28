@@ -30,16 +30,20 @@ Shared, one copy for the whole portfolio:
 | `PROBE_CATALOGUE.md` | module-independent investigation recipes | **append-only** |
 | `MODULE_SUPPORT_MEETING_MINUTES.md` | shared discussion record, newest first | **append-only** |
 | `AP_COVERAGE_ASSESSMENT.md` | dated evidence artifact (run02, unmerged-PR record) | **frozen** |
-| `supplier.md` | the shared-master-data module; it belongs to no family | living |
 
 Three family folders, **one file per module, no folders inside them**:
 
 ```
 financials/  payables.md  receivables.md  gl.md  cash_management.md
-             fixed_assets.md  sla.md
+             fixed_assets.md  sla.md  supplier.md
 scm/         procurement.md  om.md  inv.md  wip.md  bom.md  cost_management.md
 hcm/         global_hr.md  payroll.md  absence.md  benefits.md  otl.md  orc.md
 ```
+
+`supplier` is shared master data used by several modules, but it is filed
+under `financials/` because that is where its prompts and its owning family
+sit. Family membership is a filing decision, not a claim about who may query
+it.
 
 Each module file holds, in this order: brief and sub-module list; MVP boundary
 (gate 3); decisions `D-<MOD>-NNN`; coverage matrix and per-prompt verdicts;
