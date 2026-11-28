@@ -14,9 +14,12 @@ SME litmus docs merged via PR #218 (merge `ce269a5`).
 not carried forward — see docs/plan/PENDING_KG_SCHEMA_CORPUS.md for the
 live KG-schema work queue)
 **Status:** **Open — one row.** **F-087** (the default test suite runs
-live-pod tests and hangs) is open. **F-088** is fixed and verified (PR #237):
-one result, one `Answer:` heading. **F-086** is fixed and verified end to end
-(PR #233) and **F-081/078/079** headings were corrected to match their own S7.
+live-pod tests and hangs) is open. **F-089** is fixed (this branch): the
+measure qualifier put the alias on a function name, so
+`SUM(P.GREATEST(...))` failed with `ORA-00904` even though the answer was
+right. **F-088** is fixed and verified (PR #237): one result, one `Answer:`
+heading. **F-086** is fixed and verified end to end (PR #233) and
+**F-081/078/079** headings were corrected to match their own S7.
 Everything earlier in this file is fixed and live-verified on dev49:
 **F-076 through F-085**.
 
@@ -2386,6 +2389,106 @@ with a bare `Note:` and no heading at all. The 7 new tests passed in both
 versions — they asserted the counts I had already chosen. Re-running the
 prompt is what caught it. Same lesson as F-086 and AP-2: the run is the gate,
 not the patch and not the test.
+
+---
+
+### F-089 — the measure qualifier put the alias on a function name (S1, FIXED)
+
+**R (reproduce).** Emitted p20's SQL and executed it via `runsql.sh`. The
+statement the emitter produced was:
+
+```sql
+SELECT P.VENDOR_ID,
+       SUM(P.GREATEST(NVL(INVOICE_AMOUNT, 0) - NVL(AMOUNT_PAID, 0), 0))
+FROM AP_INVOICES_ALL P
+LEFT JOIN POZ_SUPPLIERS S ON S.VENDOR_ID = P.VENDOR_ID
+WHERE P.INVOICE_DATE >= '2026-11-01'
+  AND P.INVOICE_DATE < '2026-12-01'
+GROUP BY P.VENDOR_ID
+ORDER BY SUM(P.GREATEST(NVL(INVOICE_AMOUNT, 0) - NVL(AMOUNT_PAID, 0), 0)) DESC
+FETCH FIRST 10 ROWS ONLY;
+```
+
+`evidence/t_ap2_sql_exec.txt`:
+
+```
+SQL FAILED (HTTP 500):
+ORA-19202: Error occurred in XML processing
+ORA-00904: "P"."GREATEST": invalid identifier
+```
+
+**S0 (claim).** `_qualify_measure` prefixes the table alias onto the whole
+inner expression of a measure template instead of onto the column references
+inside it, so any measure containing a function emits invalid Oracle SQL.
+
+**S1 (harm).** The SQL artifact for `aggregate_outstanding_invoices_by_supplier`
+cannot be executed at all. Anything downstream of the emitted SQL — validation,
+audit, the "show me the SQL" surface — fails outright, on a tool whose ANSWER
+is correct.
+
+**S2 (evidence).** Two runs, same day:
+
+- Emitted SQL as-is → `ORA-00904: "P"."GREATEST": invalid identifier`
+  (`evidence/t_ap2_sql_exec.txt`).
+- The same measure with qualification applied to the columns →
+  `exit=0`, 10 rows (`evidence/t_f089_sql_exec.txt`).
+
+**S3 (mechanism).** `src/spire/rendering/sql_emitter.py:405` matched the
+template with `re.match(r"^(\w+)\((.+)\)$", template)`. For
+`SUM(GREATEST(NVL(...) - NVL(...), 0))` that yields `fn="SUM"` and
+`inner="GREATEST(NVL(...) - NVL(...), 0)"`, and the fall-through line
+`return f"{fn}({alias}.{inner_stripped})"` inserted the alias immediately
+before `GREATEST`.
+
+**S4 (probable root cause).** The function was written for the
+`<FN>(<COL>)` shape and its docstring said so — "If the template does not
+match the `<FN>(<COL>)` shape, it is returned unchanged". But `.+` matches any
+inner text, so the guard never fired for a composite; the only protection was
+an incidental `"SELECT" in inner` check that happens to cover the
+correlated-subquery template in `aggregate_purchase_orders_by_status` and
+nothing else. AP-2 (#235) introduced the first non-subquery composite template
+and walked straight into it.
+
+**S5 (disprove one alternative).** *The measure is wrong.* No — the corrected
+SQL returns the same top 10 in the same order as the live answer, row for row:
+530000 / 206200 / 92000 / 44000 / 35000 / 18100 / 16455 / 11620 / 10115 /
+7980 against BBC Supplier / AMEX Corporation / VENKATA KRISHNA / ABDUL /
+Aarna USA / Tammi / Lenovo / Info-Systems / Aqwa Sports / Delights Org. The
+measure template is correct; only its qualification was not.
+
+**S6 (falsifier).** "If the defect is the qualifier and not the measure, then
+swapping in a qualifier that leaves function calls alone must make the emitted
+statement execute AND return the live answer's ranking." Run: `exit=0`, ten
+identical amounts in identical order. Passed.
+
+**S7 (classify).** **Confirmed** (S0–S6 all passed).
+
+**S8 (the miss record).** Everything except execution said the artifact was
+fine. `validate_sql_coverage.py` passed; the AP-2 unit tests (23 of them)
+passed because they assert on the tool's Python aggregation, not on the
+emitted text; and the live REST answer was correct, because the tool never
+runs the SQL. Three independent checks, all green, on a statement Oracle
+refuses to parse. The rulebook's "emitted SQL must be validated by execution"
+was written for exactly this and this is the first case where it was the ONLY
+thing that caught a defect.
+
+**S9 (cross-link).** **AP-2 / F-086** introduced the template. Related to
+**F-088** and **F-086** as the third instance this session of "the run is the
+gate, not the patch and not the test".
+
+**S10 (what was NOT checked).** The other four measure templates were fixed by
+the same token walk but only the two composites were reasoned through
+explicitly. No attempt was made to execute the PO-status aggregation's emitted
+SQL against the pod on this branch.
+
+**S11 (coverage expansion).**
+`tests/test_f089_measure_qualification.py` — 9 tests: the verbatim defect
+template; single-column, `DISTINCT`, and `CASE` forms; the correlated subquery
+returned unchanged; string-literal contents never qualified; already-qualified
+columns left alone; and a sweep over **every** template in `OVERLAY.aggregations`
+asserting none emits `<alias>.<IDENT>(`. The last one is the guard that a
+future composite cannot slip past. The assertions were checked against the
+pre-fix implementation to confirm they fail on it.
 
 ---
 
