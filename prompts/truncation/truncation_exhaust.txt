@@ -75,3 +75,30 @@ Purchase orders older than 6 months
 Show the AR invoice with CustomerTransactionId 1002 with transaction number and flexfield
 Show PO 2144 with order number and its lines
 Show supplier EIP Inc with supplier number and its contacts
+
+# ====================================================================
+# H. F-086 / SP-005 — a child's page size stated as its total
+# ====================================================================
+# The shape: a child collection whose `count` is the page size, rendered as
+# "N line items". Any answer here that states a count must match the pod's
+# totalResults, not the page it fetched. Run02 answered "50 line items" for
+# an invoice with 184.
+#
+# Control first — a child small enough that NO disclosure should fire.
+# If these grow a "Showing N of M" line, the fix over-corrected.
+Show all invoice lines for invoice ERS-53004-755598
+Show all lines for purchase order with POHeaderId 2144
+Show all lines for AR invoice with CustomerTransactionId 1002
+
+# Above the default cap (200) — must disclose, not assert.
+Show every invoice line for the invoice with the most lines
+Show every purchase order line for the purchase order with the most lines
+
+# The same question from the parent side, so the count is stated twice.
+Show invoice ERS-53004-755598 and all of its lines
+Show purchase order 55040 and all of its lines
+
+# A child that genuinely has none — must say "no lines", not "50 of 184".
+Show all invoice lines for supplier 999999999
+Show all lines for purchase order with POHeaderId 999999999
+

@@ -456,6 +456,7 @@ bundles:
   - tests/test_invoices_tool.py
   - tests/test_kg_loader.py
   - tests/test_kg_metadata.py
+  - tests/test_line_counts.py
   - tests/test_local_aggregation.py
   - tests/test_nl_parser.py
   - tests/test_nl_parser_capability.py
