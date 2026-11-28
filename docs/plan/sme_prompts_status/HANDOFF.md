@@ -13,7 +13,7 @@ Read this, then `FIX_PLAN.md`, then the latest `runNN_` file.
 | Latest run | run02 (2026-11-28), 40/40 prompts — **run03 is now overdue** |
 | Code score | 13 `OK`, 17 `REFUSED`, 0 `BADSQL` (run02, before #231) |
 | Environment blockers | 10 prompts (SP-003 ×6, SP-004 ×4) |
-| Open code defects | SP-001, SP-002, **SP-005 reopened**, SP-006 |
+| Open code defects | SP-001, SP-002, SP-006 — **SP-005 and AP-1 closed 2026-11-28** |
 | Not yet in a prompt row | **F-086** count not shown · **F-087** unmarked live tests · **F-088** p14 emits two answers |
 
 **Next window starts on a new branch off `master`, named

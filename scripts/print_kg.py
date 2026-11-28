@@ -63,7 +63,7 @@ TABLES: list[dict] = [
                "notes FROM kg_entity_field "
                "ORDER BY entity_name, field_name",
         "clob_cols": set(),
-        "expected_rows": 237,
+        "expected_rows": 239,
     },
     {
         "name": "kg_entity_sql",

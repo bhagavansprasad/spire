@@ -554,8 +554,9 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
 
     if isinstance(response, InvoiceResponse):
         _append_summary(lines, response)
-        rows = [
-            {
+        rows = []
+        for inv in response.invoices:
+            row = {
                 "Invoice": inv.invoice_number,
                 "InvoiceId": inv.invoice_id,
                 "Amount": inv.invoice_amount,
@@ -563,13 +564,28 @@ def _format_synthesized(response: Any, summary_only: bool = False) -> str:
                 "Date": inv.invoice_date,
                 "Supplier": inv.supplier_name,
             }
-            for inv in response.invoices
-        ]
+            # AP-1 (2026-11-28). Same conditional shape as the PO block's
+            # Site/Contact: a column earns its place only when some row
+            # carries a value, so a plain invoice list renders exactly as
+            # it did before. DueDate and the two statuses are fetched and
+            # were previously dropped between the row and the table — the
+            # reader asked, the tool returned, and no column appeared.
+            if inv.due_date:
+                row["Due"] = inv.due_date
+            if inv.paid_status:
+                row["Paid"] = inv.paid_status
+            if inv.approval_status:
+                row["Approval"] = inv.approval_status
+            rows.append(row)
+        cols = ["Invoice", "InvoiceId", "Amount", "Currency", "Date", "Supplier"]
+        for optional in ("Due", "Paid", "Approval"):
+            if any(row.get(optional) for row in rows):
+                cols.append(optional)
         lines.extend(
             _render_records(
                 "Invoices",
                 rows,
-                ["Invoice", "InvoiceId", "Amount", "Currency", "Date", "Supplier"],
+                cols,
                 "No invoices found.",
             )
         )

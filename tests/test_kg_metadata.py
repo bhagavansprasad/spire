@@ -366,10 +366,10 @@ async def test_kg_table_row_counts_match_v1_1():
         # 22->23, field 227->237, edge 17->18, edge tool 16->17,
         # entity_sql 22->23, sql_column 126->136, vocabulary 131->137.
         "kg_entity": 23,
-        "kg_entity_field": 237,
+        "kg_entity_field": 239,
         "kg_edge": 18,
         "kg_pattern": 3,
-        "kg_vocabulary": 137,
+        "kg_vocabulary": 138,
         "kg_pattern_binding": 3,
         "kg_entity_tool": 13,
         "kg_entity_filter": 37,

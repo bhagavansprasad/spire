@@ -26,7 +26,9 @@ a closed row, so the history stays readable.
 | SP-005 | `get_invoice_lines` silently truncates (184 → 50) | 1 | Spire | **Open — correctness** |
 | SP-006 | Genuine filter/parser gaps (9 sub-items) | 9 | Spire | Open — triage first |
 
-Code defects: **SP-001, SP-002, SP-005, SP-006**.
+Code defects: **SP-001, SP-002, SP-006**. **SP-005 is closed** (PR #231 data +
+PR #233 delivery; p13 states 184 on a restarted stack) and **AP-1 is closed**
+(Invoice `DueDate`, `Supplier`, `PaidStatus`, `ApprovalStatus` all render).
 Environment: **SP-003, SP-004** — not fixable in this repo.
 
 ---
@@ -333,8 +335,51 @@ coverage gap".
 | F-077 | AP invoice lines refused as "not in the API schema" | PR #225 | p13 refusal → 51 records (run02) |
 | F-078 | Tool args with no `FilterSpec` emitted `-- unmapped` SQL | PR #220 | 10 `BADSQL` → 0 (run02) |
 | F-082 | AR invoice *number* bound to `CUSTOMER_TRX_ID` | PR #221 | p22 0 → 1 row (run02) |
+| SP-005 | A child's page size stated as the collection total | PR #231 (data) + PR #233 (delivery) | p13 says **184** twice on a restarted stack |
+| AP-1 | Invoice's KG vocabulary was narrower than the tool projection | this branch | p12, p11, p14 all render `DueDate` / `Supplier` / statuses live |
 
 Full records for these are in `docs/fixes/FIX_PLAN.md`.
+
+## SP-005 and AP-1 — what the two closures actually changed
+
+Both were the same shape: a value the pipeline **already held** was not
+shown, so the refusal described a boundary that did not exist.
+
+**SP-005 needed two PRs, and the first one was recorded as fixed when it was
+not.** PR #231 made `total_available` truthful — 184 instead of 50 — and the
+answer still said "50 line items", because an iterating step's truncation
+metadata reached `metadata_by_step` and never `truncation_by_step`, which is
+the map the model's prompt is built from. PR #233 closed it. The lesson is in
+F-086's S8: the run scores by row count, so it has no slot for narration —
+which is why a rule already in `WORKING_STYLE.md` ("a page count is not a
+total") did not prevent five tools from doing it.
+
+**AP-1 needed three layers, and each one alone would have looked like a fix:**
+the KG had to accept the name (2 `kg_entity_field` rows + the `supplier name`
+synonym), `InvoiceRecord` had to carry the value (`due_date`, `paid_status`,
+`approval_status`), and the renderer had to print a column when one exists.
+Adding only the KG rows would have moved the refusal from the parser to the
+record; adding only the record would have left the parser refusing.
+
+Live evidence, dev49, 2026-11-28, after `./spire-host.sh --restart dev`:
+
+```
+p12  fields: ['Supplier','InvoiceDate','DueDate','InvoiceAmount',
+             'InvoiceCurrency','PaidStatus']
+     table: Supplier | InvoiceDate | DueDate | InvoiceAmount |
+            InvoiceCurrency | PaidStatus
+     only 'BusinessUnit' still refused
+
+p11  table: InvoiceNumber | Supplier | InvoiceDate | InvoiceAmount |
+            ApprovalStatus | PaidStatus
+     "supplier name" and "status" both resolve now
+
+p14  table: InvoiceNumber | InvoiceDate | DueDate | InvoiceAmount
+     only 'remaining balance' still refused — that is AP-2, not AP-1
+```
+
+`Available columns` now lists 15 Invoice fields, including `DueDate` and
+`Supplier`, so a refusal at least hands the reader a real menu.
 
 ## Recommended order
 
