@@ -63,11 +63,71 @@ _PROJECTED_FIELDS = [
     "PaidStatus",
     "ApprovalStatus",
     "PurchaseOrderNumber",
+    # R1a (2026-11-28). Four fields the /invoices row already carries and
+    # this projection was discarding. A direct probe of ERS-53004-755598
+    # returned 101 fields including these, so nothing new is fetched — they
+    # were fetched all along and then dropped here, which is why p14/p16/p18
+    # read as "the pod does not have it". AmountPaid is also the input to
+    # OutstandingAmount below.
+    "AmountPaid",
+    "ValidationStatus",
+    "AccountingStatus",
     "CreatedBy",
     "CreationDate",
     "LastUpdatedBy",
     "LastUpdateDate",
 ]
+
+
+def _derive_invoice_fields(row: dict) -> dict:
+    """Add the two computed Invoice columns to one projected row.
+
+    The KG declares `OutstandingAmount` and `OverdueDays` on Invoice so the
+    parser can resolve a request for them, but the pod exposes no carrier
+    column for either — there is nothing for `item.get()` to read. They are
+    computed here, at the one place that holds both the row and today's
+    date, and they are written back onto the row so the projection prints
+    them like any other column.
+
+    OutstandingAmount = InvoiceAmount - AmountPaid, floored at 0. The floor
+    matters: a credit or a prepayment can leave AmountPaid above
+    InvoiceAmount, and a negative "still owed" is not an answer a reader can
+    use. It mirrors the GREATEST(..., 0) the outstanding-by-supplier
+    aggregation applies, so the item view and the ranking cannot disagree.
+
+    OverdueDays is days past DueDate, and its two non-positive cases are
+    deliberately different values:
+      - not yet due -> 0, because "0 days overdue" is true and readable.
+      - already Paid -> None, because a paid invoice is not overdue at all.
+        Reporting a large overdue count against settled money would be
+        wrong; the em dash the renderer prints for None says "not
+        applicable", which is the honest answer.
+
+    Anything unparseable (a missing or malformed date, a null amount) leaves
+    the derived key absent rather than guessing, so the column prints as an
+    em dash instead of a fabricated number.
+    """
+    from datetime import date as _date
+
+    amount = row.get("InvoiceAmount")
+    paid = row.get("AmountPaid")
+    if isinstance(amount, (int, float)) and isinstance(paid, (int, float)):
+        row["OutstandingAmount"] = max(float(amount) - float(paid), 0.0)
+    elif isinstance(amount, (int, float)) and paid is None:
+        # A null AmountPaid means nothing has been paid yet.
+        row["OutstandingAmount"] = float(amount)
+
+    due = row.get("DueDate")
+    if isinstance(due, str) and due:
+        try:
+            due_date = _date.fromisoformat(due[:10])
+        except ValueError:
+            return row
+        if row.get("PaidStatus") == "Paid":
+            row["OverdueDays"] = None
+        else:
+            row["OverdueDays"] = max((_date.today() - due_date).days, 0)
+    return row
 
 
 # The totalResults probe lives on FusionClient — client.total_results.
@@ -258,7 +318,10 @@ async def search_invoices(
 
     filtered = [item for item in items if matches(item)]
     final_items = filtered[:limit]
-    projected = [{k: item.get(k) for k in _PROJECTED_FIELDS} for item in final_items]
+    projected = [
+        _derive_invoice_fields({k: item.get(k) for k in _PROJECTED_FIELDS})
+        for item in final_items
+    ]
 
     # 'unpaid' is the union of Unpaid + Partially paid, fetched as two
     # single-clause calls and merged above. The server-clause total

@@ -625,6 +625,33 @@ INSERT INTO kg_entity_field VALUES ('Invoice', 'CreationDate',   'projection', '
 INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdatedBy',  'projection', 'string',   'User who last updated the record. WHO column; projectable, display-only.');
 INSERT INTO kg_entity_field VALUES ('Invoice', 'LastUpdateDate', 'projection', 'iso_date', 'When the record was last updated. WHO column; projectable, display-only.');
 
+-- AP-2/follow-up (R1a, 2026-11-28). Five fields the AP litmus asks for by
+-- name and the KG did not carry, so the parser moved every one of them to
+-- unresolved_fields and the answer shipped without them:
+--
+--   p14  "remaining balance"      -> OutstandingAmount
+--   p16  "outstanding amount"     -> OutstandingAmount, "overdue days" -> OverdueDays
+--   p18  "validation status"      -> ValidationStatus
+--        "accounting status"      -> AccountingStatus
+--
+-- The first three below are REAL REST fields on /invoices — confirmed by a
+-- direct probe of ERS-53004-755598 on 2026-11-28 (101 fields returned on the
+-- row). They were simply never projected, which is why this looked at first
+-- like three missing entities (a Payment entity, an InvoiceHold entity, an
+-- Accounting entity). It was one missing projection plus two missing derived
+-- columns.
+--
+-- OutstandingAmount and OverdueDays are DERIVED, not carrier columns: the
+-- pod exposes no single field for either. search_invoices computes them from
+-- InvoiceAmount, AmountPaid and DueDate. They are declared here so the
+-- parser can resolve the request and the projection can print it; the
+-- arithmetic lives in the tool, next to the data.
+INSERT INTO kg_entity_field VALUES ('Invoice', 'AmountPaid',       'amount',   'number',   'Amount already paid against the invoice, from the /invoices row. Paired with InvoiceAmount it yields the outstanding balance: InvoiceAmount - AmountPaid.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'ValidationStatus', 'status',   'string',   'Invoice validation outcome (e.g. ''Validated'', ''Needs revalidation''). A plain field on the invoice row, not a child resource.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'AccountingStatus', 'status',   'string',   'Invoice accounting outcome (e.g. ''Accounted'', ''Not accounted''). A plain field on the invoice row, not a child resource.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'OutstandingAmount','amount',   'number',   'DERIVED: InvoiceAmount - AmountPaid, floored at 0. What is still owed on the invoice. Computed by search_invoices; the pod has no single carrier column for it.');
+INSERT INTO kg_entity_field VALUES ('Invoice', 'OverdueDays',      'projection','integer',  'DERIVED: days past DueDate as of today, 0 when not yet due and NULL when the invoice is already Paid. Computed by search_invoices; the pod has no carrier column for it. Role is ''projection'' because CHK_KG_ENTITY_FIELD_ROLE has no numeric role and this is a display-only derived value, never a filter.');
+
 -- POSchedule (P5): received-vs-ordered. Fusion records what was actually
 -- received/billed on the schedule row, alongside the ordered Quantity and
 -- Amount. This is the source for "how much of PO X was received" — the
@@ -808,7 +835,7 @@ INSERT INTO kg_entity_field VALUES ('Address', 'Address1', 'projection', 'string
 INSERT INTO kg_entity_field VALUES ('Address', 'City', 'projection', 'string', 'City (HZ_LOCATIONS.CITY). SQL-only.');
 INSERT INTO kg_entity_field VALUES ('Address', 'State', 'projection', 'string', 'State (HZ_LOCATIONS.STATE). SQL-only.');
 
-PROMPT Seeded kg_entity_field (239 rows).
+PROMPT Seeded kg_entity_field (244 rows).
 
 -- ============================================================
 -- STEP 5: Seed kg_edge
@@ -1072,6 +1099,22 @@ INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor name', 'Supplier', 'L
 -- litmus asks for it in those words (p11).
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'supplier name', 'Supplier', 'Everyday phrasing of vendor name -> the invoice row''s Supplier display name.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'vendor number', 'SupplierNumber', 'Legacy EBS: vendor number -> SupplierNumber.');
+-- R1a (2026-11-28). The everyday phrasings the AP litmus uses for the two
+-- derived invoice amounts and the two status outcomes. Without these the
+-- parser holds the words verbatim, the KG lookup misses, and the column
+-- lands in unresolved_fields — which for p18 was ALL of the requested
+-- columns, so the answer shipped as a note and a row count.
+--
+-- Each target is a single unambiguous Invoice column, so the global
+-- single-field rule applies (the table comment below asks for exactly
+-- that).
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'remaining balance', 'OutstandingAmount', 'p14: what is still owed on the invoice -> the derived Invoice.OutstandingAmount.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'balance',           'OutstandingAmount', 'Everyday phrasing of the outstanding amount on one document.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'outstanding balance','OutstandingAmount', 'AR/AP phrasing: outstanding balance on a document.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'overdue days',      'OverdueDays',       'p16: how many days past due -> the derived Invoice.OverdueDays.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'number of overdue days', 'OverdueDays',   'p16 word-for-word phrasing.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'validation status', 'ValidationStatus',  'p18: the invoice''s validation outcome.');
+INSERT INTO kg_vocabulary VALUES ('field_synonym', 'accounting status', 'AccountingStatus',  'p18: the invoice''s accounting outcome.');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx', 'TransactionNumber', 'Legacy EBS: trx -> TransactionNumber (AR).');
 INSERT INTO kg_vocabulary VALUES ('field_synonym', 'trx number', 'TransactionNumber', 'Legacy EBS: trx number -> TransactionNumber (AR).');
 
