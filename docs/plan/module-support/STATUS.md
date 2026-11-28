@@ -14,6 +14,9 @@ invoice-line support landed independently on `master` while this was parked.
   points, verification. SQL deferred.
 - [`MODULE_SUPPORT_MEETING_MINUTES.md`](./MODULE_SUPPORT_MEETING_MINUTES.md) —
   one shared record of discussions, newest first.
+- [`AP_COVERAGE_ASSESSMENT.md`](./AP_COVERAGE_ASSESSMENT.md) — the first
+  module's measured boundary: per-prompt verdicts, six defects (AP-1…AP-6),
+  and the gate effect. Read this before deciding the AP MVP.
 
 ## Decisions captured
 

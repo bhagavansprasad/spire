@@ -91,6 +91,7 @@ bundles:
   - docs/plan/module-support/MODULE_SUPPORT_ROADMAP.md
   - docs/plan/module-support/MODULE_SUPPORT_PLAYBOOK.md
   - docs/plan/module-support/MODULE_SUPPORT_MEETING_MINUTES.md
+  - docs/plan/module-support/AP_COVERAGE_ASSESSMENT.md
 
   # ── the historical record ──
   # Past sessions, findings, fixes, evidence, log-analysis runs.
