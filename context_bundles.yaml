@@ -74,6 +74,8 @@ bundles:
   - docs/plan/sme_prompts_status/FIX_PLAN.md
   - docs/fixes/FIX_PLAN.md
   - docs/plan/sme_prompts_status/COMPARISON.md
+  - docs/plan/module-support/README.md
+  - docs/plan/module-support/PORTFOLIO_STATUS.md
   - docs/plan/module-support/STATUS.md
   - docs/plan/WORKING_STYLE.md
   - docs/plan/PENDING_KG_SCHEMA_CORPUS.md
@@ -92,6 +94,7 @@ bundles:
   - docs/plan/module-support/MODULE_SUPPORT_PLAYBOOK.md
   - docs/plan/module-support/MODULE_SUPPORT_MEETING_MINUTES.md
   - docs/plan/module-support/AP_COVERAGE_ASSESSMENT.md
+  - docs/plan/module-support/PROBE_CATALOGUE.md
 
   # ── the historical record ──
   # Past sessions, findings, fixes, evidence, log-analysis runs.
