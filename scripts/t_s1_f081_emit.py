@@ -1,7 +1,7 @@
 """Rebuild each plan from the run log and re-emit UNWRAPPED SQL.
 
 Why: promptkit's SQL diagnostic block is hard-wrapped (and truncates) at
-80 columns by the logger, so the SQL in t_f081_litmus_run.txt cannot be
+80 columns by the logger, so the SQL in evidence/t_f081_litmus_run.txt cannot be
 executed verbatim. The Plan block, however, is short and intact. The
 emitter is a pure function of (plan, overlay), so re-emitting from the
 recovered plan reproduces the same SQL without another LLM run.
@@ -14,10 +14,11 @@ from spire.rendering.sql_emitter import emit_sql
 from spire.planner.models import Step
 
 ROOT = Path("/home/bhagavan/aura/spire")
-OUT = ROOT / "t_f081_sql"
-OUT.mkdir(exist_ok=True)
+EVIDENCE = ROOT / "evidence"
+OUT = EVIDENCE / "t_f081_sql"
+OUT.mkdir(parents=True, exist_ok=True)
 
-log = (ROOT / "t_f081_litmus_run.txt").read_text(errors="replace")
+log = (EVIDENCE / "t_f081_litmus_run.txt").read_text(errors="replace")
 blocks = re.split(r"^={60,}\n\[(\d+) of 40\]\n", log, flags=re.M)
 
 rows = []

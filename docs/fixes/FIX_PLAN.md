@@ -19,6 +19,14 @@ statement REST can compare agrees with it.
 **This queue is empty.** F-076 and F-077 were the last two, both fixed
 2026-11-27.
 
+**Evidence-path note (2026-11-28).** All 400+ scratch evidence artifacts were
+moved out of the repo root into `evidence/`, which is gitignored. Citations
+below that read `t_f081_litmus_run.txt` or `t_f081_sql/pNN.sql` refer to
+`evidence/t_f081_litmus_run.txt` and `evidence/t_f081_sql/pNN.sql`. The
+`evidence/` prefix is omitted in the body text so the original citations stay
+readable; the filenames themselves are unchanged. Per-run SME results,
+comparison and the live queue now live in `docs/plan/sme_prompts_status/`.
+
 **Full status snapshot:** `docs/plan/SESSION_STATUS_2026-11-19.md`
 **Scope:** Deferred test failures recorded here so they are not lost, plus
 the live KG-schema-corporus queue (tracked in `docs/plan/PENDING_KG_SCHEMA_CORPUS.md`).
