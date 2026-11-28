@@ -1,7 +1,7 @@
 # Adding a Fusion module to Spire — REST-first playbook
 
 **Status:** Reusable method document. Grounded in the code on `master` at
-`a1364e4` (2026-11-27). No module has been delivered through it yet, so it
+`d6098d2` (2026-11-28). No module has been delivered through it yet, so it
 is a *proposed* procedure with verified inputs — not a proven one. Update it
 after the first module (AP) finishes, using evidence rather than tidying.
 
@@ -18,6 +18,45 @@ The roadmap's Gate 4 ("Data and workflow model") and Gate 5 ("Spire design")
 are one paragraph each there; this document is what those paragraphs expand
 to. Where the two disagree, the roadmap owns intent and this document owns
 mechanics — record the conflict rather than silently preferring one.
+
+### The pipeline this document modifies
+
+```
+Prompt
+  → route        module classification          router.py            KG → generated menu
+  → parse        natural language → Intent      parser.py            KG menu + context blocks
+  → plan         Intent → Plan (tool steps)     planner.py           KG filters, registries
+  → execute      Plan → MCP tools → Fusion REST executor.py          tools/*.py
+  → synthesize   rows → structured response     synthesizer.py
+```
+
+And beside it, **not after it**:
+
+```
+  → project      Plan → Oracle SQL              sql_emitter.py       KG carriers, overlay
+```
+
+**The SQL projection is a function of the plan, not of the result.** It is
+emitted when the plan exists — `api/server.py` returns it in the response
+envelope and `promptkit.py` prints it as a diagnostic — and it runs in
+parallel with execution. Nothing it produces feeds the answer, and it opens no
+database connection. A run log therefore reads `Plan:`, then `SQL projection:`,
+then `Outputs:`.
+
+Two consequences worth holding on to:
+
+- **A SQL defect cannot corrupt a REST answer.** They are separate paths over
+  the same plan. That is why AP could answer 8 of 10 prompts correctly while
+  10 of 22 emitted statements were invalid (F-078) — and why "the SQL is wrong"
+  is not, by itself, a reason to withhold a REST-backed answer.
+- **A module can be complete for REST and emit nothing for SQL**, because the
+  emitter needs its own rows (§6.11). Deferred by design, not forgotten.
+
+Note that `docs/design/` does **not** describe this pipeline.
+`docs/design/ARCHITECTURE.md` is the semantic-cache design (three-stage
+exact/vector/verify) plus context bundles, despite its name; the orchestration
+it does not cover is in `src/spire/graph/pipeline.py`'s module docstring and
+`docs/design/diagrams/spire_design_3_graph_guided_orchestration.svg`.
 
 ---
 
@@ -413,8 +452,8 @@ whether it blocks REST delivery: `REST` = required for prompt→results,
 | 10 | Intent KG | `…kg_schema.sql` STEP 7 | `kg_vocabulary` — `entity_synonym`, `field_synonym`, controlled values | REST | §6.3 |
 | 11 | Intent KG | `…kg_schema.sql` STEP 6 + 8 | `kg_pattern` + `kg_pattern_binding` — **only** if reusing a named pattern | REST | §6.3 |
 | 12 | Intent KG | `…kg_schema.sql` STEP 12 | `kg_entity_sql`, `kg_sql_column`, `kg_derived_projection` | SQL | §6.3, §6.11 |
-| 13 | KG runtime | `scripts/rebuild_kg.py` | rebuild after any seed change | REST | §6.4 |
-| 14 | KG runtime | `scripts/build_classifier_context.py` | regenerate `routing/classifier_menu.sysprompt` | REST | §6.4 |
+| 13 | KG runtime | `scripts/rebuild_kg.py` | rebuild after any seed change | REST | §6.15 |
+| 14 | KG runtime | `scripts/build_classifier_context.py` | regenerate `routing/classifier_menu.sysprompt` | REST | §6.15 |
 | 15 | Parser | `src/spire/nl_parser/context/<module>/` | one `b_*.sysprompt` per filter/teaching block | REST | §6.4 |
 | 16 | Parser | `src/spire/nl_parser/context/order.manifest` | append every new block — unlisted blocks are never sent | REST | §6.4 |
 | 17 | Parser | `src/spire/nl_parser/context_assembly.py` | `KNOWN_MODULES` | REST | §6.1 |
@@ -426,7 +465,7 @@ whether it blocks REST delivery: `REST` = required for prompt→results,
 | 23 | Synthesizer | `src/spire/synthesizer/synthesizer.py` | `target_entity` dispatch branch | REST | §6.6 |
 | 24 | Refusals | `src/spire/nl_parser/capability.py` | message text for any new unanswerable kind | REST | §6.14 |
 | 25 | Rendering | `src/spire/rendering/formatters.py` | the entity's block; `_render_records` itself is generic | REST | §6.14 |
-| 26 | SQL overlay | `src/spire/kg/sql_overlay.py` | `_ENTITIES`, `_FILTERS`, `_JOINS`, `_LITERALS`, `aggregations`, `not_expressible` | SQL | §6.11 |
+| 26 | SQL overlay | `src/spire/kg/sql_overlay.py` | `_ENTITIES`, `_FILTERS`, `_JOINS`, `_LITERALS`, `aggregations`, `not_expressible` — **KG rows win where both exist** | SQL | §6.11 |
 | 27 | Validation | `scripts/validate_kg_schema.py`, `scripts/validate_sql_coverage.py` | must pass; they catch seed/overlay drift | both | §6.12 |
 | 28 | Tests | `tests/test_kg_metadata.py`, `tests/test_router.py`, new tests | bump count tripwires; add behaviour tests | both | §6.2 |
 | 29 | Docs | `docs/README.md`, `context_bundles.yaml` | index row + bundle membership | both | §6.8 |
@@ -624,16 +663,23 @@ Where this record lives: the module's acceptance note or a handover section,
 not a new file per module. `docs/plan/KG_ROLE_MAPS.md` is the existing
 append-only home for role maps.
 
-### 6.11 SQL overlay — the second place a module is declared
+### 6.11 SQL overlay — the fallback, not a peer of the KG
 
 **Deferred for delivery, still a real touchpoint.** `src/spire/kg/sql_overlay.py`
-is a hand-authored overlay beside the KG, not derived from it, so a new entity
-can be fully wired for REST and still have no SQL. That is acceptable while SQL
-is deferred — but it must not be mistaken for "nothing to do", because
-`scripts/validate_sql_coverage.py` checks the overlay against tool signatures
-and will report the gap.
+is a hand-authored overlay, so a new entity can be fully wired for REST and
+still emit no SQL. That is acceptable while SQL is deferred — but it must not
+be mistaken for "nothing to do", because `scripts/validate_sql_coverage.py`
+checks the overlay against tool signatures and will report the gap.
 
-What lives there:
+**The two are not peers, and the precedence is the thing to get right.**
+`sql_emitter.py` builds a KG-backed overlay first: if `kg_entity_sql` has rows
+for an entity, its `select_columns` is **replaced** by `kg_sql_column WHERE
+is_default_projection='Y'`. The hand-authored `_ENTITIES` spec survives only as
+a fallback for entities with no KG carrier rows. So a projection written into
+the wrong one of the two silently loses — this is a precedence relationship,
+not two independent declarations.
+
+What lives in `sql_overlay.py`:
 
 | Registry | Contents |
 |---|---|
@@ -702,6 +748,96 @@ Two small surfaces, both user-visible:
   rows, columns, empty text), so most entities need only a block that chooses
   the columns. Do not add a second table renderer; the per-entity bullet blocks
   were removed for that reason.
+
+### 6.15 Populating the KG and editing `kg_schema.sql`
+
+This is the step a new module spends most of its effort in. The KG is the
+intent graph: what entities exist, what each can be filtered by, which tool
+fetches it, how it joins, and what the user's words mean.
+
+#### The loop
+
+```
+edit  scripts/sql/kg_schema.sql
+  →   python scripts/rebuild_kg.py             # DROP + CREATE + seed, over oracledb
+  →   python scripts/build_classifier_context.py   # regenerate the committed menu
+  →   python scripts/validate_kg_schema.py && python scripts/validate_sql_coverage.py
+  →   ./spire-host.sh --stop && ./spire-host.sh --start dev
+```
+
+`rebuild_kg.py` connects over the network using the same credentials as the app
+(env `SPIRE_DB_*` → the `oracle` block in `personas.yaml`), splits the file into
+statements, skips sqlplus-only directives, and executes them in order. It drops
+every KG table first, so a partially-edited file leaves the KG empty rather
+than half-updated — run the validators before restarting anything.
+
+#### Two consumption paths, and why the restart is not enough
+
+| Consumer | Reads | Freshness after an edit |
+|---|---|---|
+| Parser menu (`vocabulary.load_kg_menu`) | live DB query | at next import (restart) |
+| Planner filter defs (`planner.kg_db`) | live DB query, lazily cached | at next process start |
+| SQL emitter (`kg.kg_sql_loader.load_sql_carriers`) | live DB query, cached per process | at next process start |
+| Classifier menu (`context/routing/classifier_menu.sysprompt`) | **a generated file** | **only after `build_classifier_context.py`** |
+
+That last row is the trap. Three consumers query the database; the classifier
+reads a committed file. Edit the KG, rebuild, restart — and the router still
+classifies against the old menu until the generator is re-run. The symptom is a
+module that exists in the KG and never routes to.
+
+#### Where each row goes in the file
+
+Twelve steps, in dependency order. Steps 3–12 are seeds; the ordering is
+load-bearing because of foreign keys.
+
+| Step | Table | Depends on |
+|---:|---|---|
+| 3 | `kg_entity` | — |
+| 4 | `kg_entity_field` | `kg_entity` |
+| 5 | `kg_edge` | `kg_entity`, both ends |
+| 6 | `kg_pattern` | — |
+| 7 | `kg_vocabulary` | — (no FK; orphans found by the menu generator) |
+| 8 | `kg_pattern_binding` | `kg_entity`, `kg_pattern` |
+| 9 | `kg_entity_tool` | `kg_entity` |
+| 10 | `kg_edge_tool` | `kg_edge` |
+| 11 | `kg_entity_filter` | `kg_entity` (plus an unvalidated `target_entity` string) |
+| 12 | `kg_entity_sql`, `kg_sql_column`, `kg_derived_projection` | `kg_entity`, `kg_entity_field` |
+
+A typical module touches **3, 4, 9, 11**; add **5 + 10** for traversals and
+**7** for synonyms. Step 12 is SQL-only (§6.11).
+
+#### Editing hazards
+
+- **`kg_entity` inserts are positional.** Adding a column to the table breaks
+  all 23 rows at once. `scripts/add_entity_module.py` exists solely to patch
+  every insert when the `module` column was added — re-read it rather than
+  adding a column by hand.
+- **Three CHECK lists each need the new module name**: `kg_entity.module`,
+  `kg_vocabulary.vocab_kind`, `kg_entity_field.field_role`. A value outside a
+  CHECK fails at rebuild, which is the good case; the bad case is a module name
+  added to `KNOWN_MODULES` and forgotten here, which fails at query time.
+- **CLOB columns must be read while the connection is open.** `parameters` and
+  `mechanics` are CLOBs; reading one after the `async with` closes raises
+  `DPY-1001`.
+- **Uniqueness is not free.** `kg_vocabulary` is keyed on
+  `(vocab_kind, term)` — the same term may exist under two kinds deliberately
+  (`'CreationDate'` as a field name and `'created date'` as its synonym), so
+  check both before deciding a row is a duplicate.
+- **Descriptions are prompt text.** `kg_entity.description` and
+  `kg_entity_field.notes` are read into the parser and classifier menus. Write
+  them for the model ("exposes SupplierNumber, not SupplierId"), not for a
+  human reader.
+
+#### Verifying the seed took
+
+```
+python scripts/print_kg.py          # row counts against pinned expectations (23 entities)
+```
+
+The counts are tripwires, not decoration (§6.2). If `kg_entity` is 23 and you
+expected 24, the new insert is in the wrong step or was dropped by a
+statement-splitting problem — check for a missing trailing `;` first, because
+`rebuild_kg.py` needs one to terminate a statement.
 
 ---
 
