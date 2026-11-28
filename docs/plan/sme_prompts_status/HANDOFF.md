@@ -3,18 +3,20 @@
 Everything a new window needs to pick this work up without re-deriving it.
 Read this, then `FIX_PLAN.md`, then the latest `runNN_` file.
 
-**Last updated:** 2026-11-28 (after run02, and after this folder landed).
+**Last updated:** 2026-11-28 (after run02; merged to `master` as `41621e5`).
 
 ## Where things stand
 
 | | |
 |---|---|
-| Base | `master` @ `f1a528a` |
-| This work | branch `Phase3-SME-Prompt-Status` — `80d6a86`, `75f4422`, `8429cfa` |
+| Base | `master` @ `41621e5` (all SME-status work merged; branch deleted) |
 | Latest run | run02 (2026-11-28), 40/40 prompts |
 | Code score | 13 `OK`, 17 `REFUSED`, 0 `BADSQL` |
 | Environment blockers | 10 prompts (SP-003 ×6, SP-004 ×4) |
 | Open code defects | SP-001, SP-002, SP-005, SP-006 |
+
+**Next window starts on a new branch off `master`** — not on
+`Phase3-SME-Prompt-Status`, which no longer exists.
 
 **Read this first if you have 60 seconds:** the code work from the F-07x
 batch landed — F-077, F-078 and F-082 are all proven fixed by run02. The
@@ -154,9 +156,9 @@ disagreement *is* the finding; record it, do not silently prefer either.
 | PR #226 (F-076) | AR receipt SQL scoped to REST-visible data |
 | PR #227 | SME prompt folders renamed to `sme_qei/` + `sme_module_a/` |
 | PR #228 | Bundle manifest reconciled, drift guards re-armed |
-| `80d6a86` | `scripts/promptkit.py` — an unprojectable plan no longer aborts the batch |
-| `75f4422` | 321 `t_*` evidence files moved out of the root into `evidence/` |
-| `8429cfa` | this folder, plus the `plan`-bundle entries and the queue header |
+| PR #229 | this folder; `promptkit.py` resilience; `t_*` → `evidence/` |
+| PR #230 | the two working-style docs merged into `docs/plan/WORKING_STYLE.md` |
+| `41621e5` | deleted `SQL-EMITTER-FILES.md`; dated snapshot + Phase 1 handover moved to `history` |
 
 `75f4422` matters more than it looks: the root went from 433 entries to 33,
 and one `/evidence/` gitignore rule replaced eleven root-anchored patterns.
@@ -164,6 +166,12 @@ Evidence filenames did not change, so any citation in
 `docs/fixes/FIX_PLAN.md` still resolves with an `evidence/` prefix.
 `scripts/t_s1_f081_emit.py` and `scripts/t_s1_f081_run_sql.sh` take the new
 path.
+
+The working style was merged because the two files contradicted each other:
+`.github/copilot-instructions.md` called `WORKING_STYLE.md` the source of
+truth while telling Copilot not to produce the heredoc paste cells that same
+file mandated. **Section numbers cited in handovers older than 2026-11-28 no
+longer map** — read the new file by heading, not by §.
 
 ## Known-wrong answers still being produced
 
