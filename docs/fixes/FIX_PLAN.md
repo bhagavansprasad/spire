@@ -1986,7 +1986,96 @@ already worked — a useful control that kept this defect visible).
 
 ---
 
-### F-086 — five child tools stated a page size as the collection total (S1, REOPENED)
+### F-086 — five child tools stated a page size as the collection total (S1, FIXED — verified)
+
+**Fixed on `Payables-Line-Count-Display`, 2026-11-28.** The R2 reopen below
+was correct at the time: the data fix had landed and the answer still said
+50. The two remaining causes are now closed, and the fix is verified end to
+end rather than at tool level.
+
+**R3 (reproduce after the SECOND fix — the step that was missing twice).**
+Dev stack restarted on the branch (`./spire-host.sh --restart dev`, MCP PID
+97302), p13 run twice:
+
+```
+run 1:  invoiceline: 184 record(s)
+        "The invoice contains 184 line items detailing itemized services
+         and calculated tax entries."
+run 2:  invoiceline: 184 record(s)
+        "The invoice has a payment status of Unpaid and includes 184 line
+         items comprising both service and tax lines."
+```
+
+Both state 184. The wording differs, which is expected — it is generated text
+over correct data — but the *number* is now present, correct, and in both
+runs. Under R2 the same prompt produced "50" once and no line count at all
+the next time.
+
+**The mechanism, found by reading the executor rather than the tool.** PR #231
+fixed the layer below the bug. `execute_plan` filled `truncation_by_step` only
+for **non-iterating** steps:
+
+```python
+if truncation and truncation.get("truncated"):
+    truncation_by_step[step.output_name] = truncation     # non-iterating
+...
+else:
+    items, metadata = await _execute_iterating_step(...)
+    if metadata:
+        metadata_by_step[step.output_name] = metadata     # iterating only
+```
+
+`_build_synthesis_prompt` builds the model's truncation block from
+`truncation_by_step`, and its metadata branch read exactly one hardcoded
+bucket name (`account_receipt_applications`) — an earlier band-aid for the
+same class of bug, on one bucket. So `total_available=184` reached the
+executor, stopped there, and the model was given 50 rows and nothing else.
+That is why the count was model prose: it was the only source of a count the
+model had.
+
+p13 could not take a deterministic path either: `plain_invoice_bucket`
+returns `None` for a multi-bucket shape (`p2p.py:1190-1201`), p13 has two
+buckets (`invoices`, `invoiceline`), and `InvoiceResponse` has no field for
+line items. The LLM fallback is the only path.
+
+**The fix, in three parts.**
+
+1. `src/spire/executor/executor.py` — a capped iterating step now fills
+   `truncation_by_step` as well as `metadata_by_step`. Both maps are kept
+   because they serve different readers: the prompt block and the local
+   summary builders.
+2. `src/spire/mcp_server/server.py:607` — wrapper default `limit: 50 → 200`,
+   matching the tool. This was the divergence: only **one** wrapper
+   diverged (audited all of them; the other four child tools match their
+   tools at 25/25).
+3. `src/spire/synthesizer/prompts.py` — the hardcoded
+   `account_receipt_applications` branch is replaced by a general block that
+   lists every step whose known total exceeds the rows shown and which the
+   truncation block does not already carry. The exclusion is not cosmetic:
+   without it the same split is stated twice.
+
+**S5b (evidence).** `tests/test_f086_child_count_reaches_prompt.py` — 7
+tests: a capped iterating step reaches both maps, an uncapped one does not,
+the prompt states the total, does **not** repeat a total the truncation block
+carries, still covers the case the hardcoded branch existed for, omits a
+total equal to the row count, and adds nothing when there is no metadata.
+
+**S10 (what R3 did not check).** Whether an iterating step over MANY parents
+should report the first parent's total as the set's total — the existing
+"assume all iterations share the same total_available" comment is inherited
+and is arguably wrong for a multi-parent iteration; it is unchanged here.
+Whether the p14 count difference (827 now, 935 in an earlier same-day run)
+is pod drift, a different fetch shape, or the documented "total in source is
+loose on a filtered query" looseness — see the observation below.
+
+---
+
+**Earlier record, kept because the reopen was correct.**
+
+**Reopened 2026-11-28, then fixed again.** The first fix (PR #231) landed the
+data layer and was recorded as `Candidate→Fixed`. That was wrong: the ANSWER
+still stated a page size, which is the harm S1 names. A status is a claim
+about the harm, not about the patch.
 
 Recorded as **SP-005** in `docs/plan/sme_prompts_status/FIX_PLAN.md`; that
 file is the prompt-set view and carries the per-prompt disposition. This entry
@@ -2333,7 +2422,6 @@ it once the cause is known, so the guard and the reproducer live together.
 ---
 
 ### Observation — the emitted SQL repeats one join (no harm named)
-
 `p14`'s SQL emits the same join twice:
 
 ```sql
@@ -2354,3 +2442,36 @@ before a harm is shown.
 
 Worth a look when the emitter is next touched: a duplicated join implies the
 join assembly does not deduplicate by `(left, right, alias)`.
+
+---
+
+### Observation — p14's "total in source" moved from 935 to 827 in one day (no harm named yet)
+
+Two runs of p14 on 2026-11-28 report different denominators for the same
+answer:
+
+```
+earlier, same day, before the branch:   Showing 25 of 935 invoices.
+after the branch (twice):               Showing 25 of 827 invoices.
+```
+
+827 twice, so it is stable on this code — the difference is between runs, not
+within them.
+
+**Not called a defect, because no harm is shown yet.** Three explanations fit
+and none is excluded: pod data genuinely changed (unpaid invoices were paid);
+the fetch shape differs because the supplier clause is client-side and the
+server clause is the status one; or the number is pod-wide rather than
+supplier-scoped. `_local_truncation`'s own docstring warns about the third:
+*"'total in source' is inherited and is loose on a filtered query — it reads
+as unfiltered when the fetch was scoped."*
+
+The falsifier is cheap and was not run: `./runsql.sh` for
+`COUNT(*) FROM AP_INVOICES_ALL WHERE PAYMENT_STATUS_FLAG IN ('N','P')`
+combined with, and separately from, the Staffing Services vendor filter. If
+827 matches the **unfiltered** count, the denominator is pod-wide and the
+harm is "the truncation note overstates what was examined" — which is a
+finding, not an observation.
+
+Recorded so the next session does not discover it from scratch. One probe
+settles it.
